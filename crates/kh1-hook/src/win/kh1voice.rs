@@ -99,6 +99,23 @@ pub unsafe fn dodge_roll(actor: usize) {
     play(actor, SWING_GROUP);
 }
 
+/// KH1 lines standing in for a KH2 voice (its frame trigger 13 / 14) on a KH2 move KH1 gives no
+/// voice of its own: (KH2 motion, KH2 voice, what plays). KH1 plays Sora's battle voice only from
+/// code (attack rows, spells, hits, summons), never from a motion, and its roll has none
+/// (`docs/kh1-voice.md`, Checked (decomp + files)); a move with an attack row already has KH1's row
+/// voice, so only row-less moves are here.
+/// - KH2's dodge roll (motion 209, voice 7 at frame 0, Checked (files)): a swing grunt (group 4),
+///   the user's pick for it before ("one of the grunts during his first keyblade swing").
+const STAND_INS: [(u16, i16); 1] = [(character_core::motion::DODGE_ROLL, 7)];
+
+/// A KH2 voice key of a baked slot fired with Battle Quotes KH1 (`kh2slots::sound_event`): KH1's
+/// stand-in line, if the move has one (`STAND_INS`), on KH1's motion pass as the KH2 voice would be.
+pub unsafe fn stand_in(actor: usize, motion: u16, voice: i16) {
+    if STAND_INS.iter().any(|&(m, v)| m == motion && v == voice) {
+        dodge_roll(actor);
+    }
+}
+
 /// Reflect's finisher with Battle Quotes KH1 (the tester: "the finisher will say "defence!" its
 /// one of the lines he picks when casting aero"): KH1's Aero clip, through KH1's clip play.
 pub unsafe fn defense(actor: usize) {

@@ -333,7 +333,7 @@ Checked (decomp); the constant drift is `character_core::npc`'s reading of KH2's
 `docs/combat-model.md`). Not done: KH2's turn of the flinched body (`0x1403D3840` faces it along
 the push, negated from the front); KH1's air flinch keeps its facing.
 
-## 5. Small blows (t721, the user after the Fire log)
+## 5. Small blows (t721, the user after the Fire log; replaced by t741, §7)
 
 **Why.** KH2's Fire is a chain of blows (reaction group 4) with tiny numbers: up 1 to 6 a frame, 0
 sideways, so a lift of 1 to 23 units (**Checked (files)**, `00battle.bin` ATKP 502; its last hit of a
@@ -377,3 +377,64 @@ therefore only push a big body; the finisher (6 / 7) still staggers it. `combat:
 applies it to an enemy `Body` measured big (Assumption: that measure stands for KH2's big flag),
 makes no launch or small blow, and sets KH1's record kind to 2 (push only) or 3 (flinch).
 Not checked in game: what kind 2 looks like on each big enemy; an enemy never measured counts small.
+
+## 7. Every KH2 blow is KH1's airborne knock-back (t741)
+
+**Why.** t721 split KH2's one blow reaction at a 25-unit arc that is ours, not KH2's: Fire's hits
+became KH1's knock-back, Guard Break and Thunder's burst stayed KH1's launch (its 0x52 motion and
+lying-down time), and on the ground Fire's lift was dropped (KH1's 0x4C stagger stays in place). KH2
+plays the same reaction for every group-4 hit, whatever its height: blow motion 16 (front) / 18
+(behind), then the landing motion +1 (Steam KH2 `0x1403CE980` / `0x1403D2FE0` case 4, **Checked
+(decomp)**). The Small Blows toggle was neither KH1 nor KH2 (off was t602).
+
+**KH1's knock-back, read in the Steam exe (`0x1402B77D0`, Checked (exe)).**
+- An enemy lying down (motion `+0x164` = base `+0x3EA` + 3 or + 8) gets KH1's flinch push
+  `0x1402B7E60`.
+- `0x1402B1AE0` (state 0x17, or its class in the state table `0x142DB3840` is 2) or not
+  `0x1402B1B10` (in the air: states 2, 11, 16, 17, 20, 22, or class 1): the ground branch
+  `0x1402B8CC0`, motion 0x4C / 0x4D in place; no 0x4C: its launch (0x52) if it has one, else a flinch.
+- In the air: motion 0x50 / 0x51 (`0x14029F980`, the first entry of the motion queue, `+0x17C`), the
+  facing, `+0x3C0` = the record's direction x btltbl `+0x3C`, a hop of 20 (`0x1402AF960`, `0x14042F968`);
+  no 0x50: the air launch (0x5C) if it has one, else the air flinch `0x1402B8B90`.
+- The enemy think `0x1402B7260` lands an enemy on its launch's +2 / +3 (or +7 / +8, and lies) only
+  when its motion is its launch's; any other motion lands on `+0x3D0` + 7, which the hop zeroes, and
+  does not lie down.
+- Actor kind (byte `+0x6`) 3 gets that think; 4, 5, 9 and 10 the object think `0x1402C2C90`, which
+  hands records to the script (the think picker at `0x140297B5A`).
+
+**What changed (`combat::scale_record`, `combat::knocked_back`).**
+- Every KH2 blow on an enemy of kind 3 is KH1's kind 4, whatever its arc. Scripted enemies (kinds
+  4 / 5 / 9 / 10) keep kind 5, which their scripts run through KH1's scripted launch with KH2's numbers
+  (`script_launched`, unchanged); a target we don't know keeps kind 5 too.
+- Before KH1's knock-back runs on such a record, a grounded enemy that KH1 would answer with its ground
+  branch (not lying down, not class 2, not in the air) and that has motion 0x50 is lifted by KH1's own
+  hop (`0x1402AF960`, 20). KH1's knock-back then takes its airborne branch itself (0x50 / 0x51, its
+  hop), and the arc and sideways speed become KH2's blow, flown as before (`knockback::fly_blow`).
+  The air-state table's class for state 2 is checked first (not 2), and the four KH1 functions'
+  first bytes are checked once (Steam only).
+- The airborne branch is told by air state 2 with motion 0x50 / 0x51 first in the motion queue (not
+  by the float of its hop any more).
+- Enemies without 0x50 keep KH1's own answer: on the ground 0x4C in place, or its launch (0x52) with
+  KH2's numbers; in the air its air launch (0x5C) with KH2's numbers, or its air flinch.
+- Small Blows (Config > Combat > Tweaks, ini `small_blows`) is gone; an old ini line is ignored.
+
+**Assumptions / not checked.**
+- That KH1's 0x50 / 0x51 looks like KH2's 16 / 18 on each enemy, also held through a long arc
+  (Guard Break 117 high, Thunder's burst 190 and up): the motion may end before the enemy lands.
+- KH2's blow has no down timer in its reaction routine (Steam KH2 `0x1403D31BD`, case 4: motion 0x10 front /
+  0x12 behind through `0x1403C86A0`, the blow's speeds from `0x1403CEA00`; **Checked (exe)**). Any lying down
+  would be in motion 17 / 19's own animation or the enemy's AI (not checked).
+- What each enemy's motion `+0x3D0` + 7 landing looks like.
+- Not checked in game; no trace yet.
+
+**Checked after t741 (exe, no code change).**
+- KH1's air state 2 is registered with flags 0x3D (`0x1402AF2E0` -> `0x1402B1B80`, state table `+0x0`): class 1,
+  so `0x1402B1AE0` is false and `0x1402B1B10` true for a lifted enemy; the knock-back takes its airborne branch.
+- `0x1402B1960` (state change) keeps the previous state in `+0x378` and sets flag 0x400; the think lands an
+  enemy whose previous state was 2 or 3 (state now 0) on `+0x3D0` + 7.
+- KH2 sets `+0x124` bit 0x20000 (a "strong blow") for reactions 6, 7, 10 and 11 (`0x1403CEDC0`). Read only by
+  `0x1401CBF4C` (a check against one object) and `0x140536BE6` (a script query that returns it as an int):
+  enemy AI can ask for it. Not ported; reported to the user.
+- KH1's reaction path reads no size or armor flag: per enemy only its weight (stats `+0xC4`) and which
+  reaction motions it has (0x4C, 0x50, 0x52, 0x5C). The hit accept `0x1402B7B90` refuses on actor flags
+  `& 0x1000088`, `+0x374` bit 0x80000 and two global bits, and reads stats `+0xD6` (a hit voice id).

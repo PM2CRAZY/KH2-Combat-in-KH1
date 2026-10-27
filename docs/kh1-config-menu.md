@@ -474,7 +474,7 @@ The QoL list has a fourth row, In-game Scene Skip (Off | On, ini `ingame_skip`, 
 
 ### 6.z6 Chest Opening in Tweaks
 
-The Tweaks list has a thirteenth row (after t721's Small Blows), Chest Opening (KH1 | KH2, ini `chest_style`, KH1 by default):
+The Tweaks list had a thirteenth row (after t721's Small Blows), Chest Opening (KH1 | KH2, ini `chest_style`, KH1 by default; moved to QoL at t727, and t741 removed Small Blows, so Tweaks has eleven rows):
 at KH2 Sora is free as soon as a plain chest is opened and what it held shows in KH1's notice box,
 with no window to close. New text ids `0x7F000225` / `0x7F000226`. How it works and what is
 checked: `docs/kh1-chest.md`. **Assumption** until seen: thirteen rows at the list's smaller scale

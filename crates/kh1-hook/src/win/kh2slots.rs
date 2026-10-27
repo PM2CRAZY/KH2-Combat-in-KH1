@@ -2555,6 +2555,13 @@ unsafe extern "system" fn sound_event(actor: usize, a: i32, b: i32, c: u32) {
             // `form::effect` → `formmagic::effect`.)
             super::kh2sound::event(motion, e);
             super::kh2fx::event(motion, e);
+            // (t742: Battle Quotes KH1, a KH2 voice of a move KH1 has no voice of its own for: KH1's
+            // stand-in line, `kh1voice::stand_in`.)
+            if let EventKind::Voice(v) = e {
+                if !super::kh2sound::kh2_voice() {
+                    super::kh1voice::stand_in(actor, motion, v);
+                }
+            }
             static N: AtomicU32 = AtomicU32::new(0);
             if super::log_on(super::LogCat::Animation) && N.fetch_add(1, Ordering::Relaxed) < 40 {
                 log!(Animation, "KH2 slots: KH1's motion pass fired KH2 motion {motion}'s {e:?} at KH1's time {:.2}", rd::<f32>(actor + TIME_NOW));

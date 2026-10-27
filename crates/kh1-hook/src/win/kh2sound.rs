@@ -493,7 +493,12 @@ const ROW_IN_STATE: usize = 0x40;
 /// where the swing has only its own line. Before, KH1's grunt took Sora's voice channel first, and
 /// KH1's priority rule then kept every KH2 quote out (the t544 logs: "KH1 kept the line playing"
 /// on every one). KH1's other voices of Sora (hurt lines, spells, scripts) are untouched.
-pub unsafe fn holds_back(actor: usize, from: usize) -> bool {
+///
+/// t743: a row that plays KH1's own motion (its move at the KH1 style) has no KH2 quote of its own:
+/// its KH1 group is said as KH2's voice of the same kind instead (`KH1_TO_KH2`), at the moment KH1
+/// says its own (the row's start, where KH2's quote is too: frame 0 of KH2's swings, Checked
+/// (files)). A group with no KH2 counterpart stays KH1's.
+pub unsafe fn holds_back(actor: usize, group: i32, from: usize) -> bool {
     if from != ROW_VOICE_RETURN_STEAM || super::addr::Build::current() != super::addr::Build::Steam || !kh2_voice() {
         return false;
     }
@@ -515,8 +520,28 @@ pub unsafe fn holds_back(actor: usize, from: usize) -> bool {
     if held && N.fetch_add(1, std::sync::atomic::Ordering::Relaxed) < 20 {
         log!(Sound, "KH2 quotes: KH1's swing voice of row {row} (request {request:#x}) left out; the KH2 motion's quote takes its place");
     }
-    held
+    if held {
+        return true;
+    }
+    // (t743: KH1's own motion on the row: KH2's line of the same kind in place of KH1's group.)
+    let Some(&(_, v)) = KH1_TO_KH2.iter().find(|(g, _)| *g == group) else { return false };
+    let said = LOADED.try_lock().ok().and_then(|g| g.as_ref().and_then(|l| l.voices.get(&v)).and_then(|c| c.say()));
+    static M: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+    if M.fetch_add(1, std::sync::atomic::Ordering::Relaxed) < 20 {
+        match said {
+            Some(clip) => log!(Sound, "KH2 quotes: KH1's motion on row {row} (request {request:#x}): KH1's voice group {group} said as KH2's voice {v} (clip {clip})"),
+            None => log!(Sound, "KH2 quotes: KH1's motion on row {row} (request {request:#x}): KH2's voice {v} not loaded, KH1's group {group} stays"),
+        }
+    }
+    said.is_some()
 }
+
+/// KH1's row voice groups and KH2's voices of the same kind (t743): Sora's combo swings (KH1 group
+/// 4, KH2 voice 4 on KH2's swings 151..153), finishers (5, KH2's 154 / 155) and air finishers (6,
+/// KH2's 165..167). Checked (files): KH1's `btltbl.bin` groups by the rows that call them
+/// (`docs/kh1-voice.md`), KH2's voice triggers in `P_EX100.mset`. Which line each KH2 voice set
+/// holds is KH2's own pick, as in KH2.
+const KH1_TO_KH2: [(i32, i16); 3] = [(4, 4), (5, 5), (6, 6)];
 
 /// Sora's `motion` reached a KH2 event: its sound, if it has one.
 pub unsafe fn event(motion: u16, kind: character_core::EventKind) {

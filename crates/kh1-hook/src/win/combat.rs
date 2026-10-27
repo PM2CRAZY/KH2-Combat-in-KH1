@@ -27,7 +27,7 @@ use combat_core::{first_overlap, AttackVolume, HitRecord, Shape};
 use kh2_formats::battle::Battle;
 use kh2_rig::RigAnim;
 use std::collections::{HashMap, HashSet};
-use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU8, AtomicUsize, Ordering};
 
 const EXEC_RVA: Rva = Rva(0x2A4760);
 /// KH1's menu sounds (`0x140177F60 (n)`; 4: can't).
@@ -2951,20 +2951,23 @@ pub unsafe fn scale_record(rec: usize, attack: usize, target: usize) {
             log!(Combat, "KH1's row of ours hit: KH2's ATKP {} (power {}, reaction {}, {}) on record {rec:#x}", a.id, a.power, a.enemy_reaction, if own_launch.is_some() { "KH2's launch" } else { "no launch" });
         }
     }
-    // A KH2 launch: KH1's launch reaction (kind 5) with KH2's numbers once it runs. A blow with a
-    // small arc (Small Blows on) is KH1's knock-back (kind 4) instead, with KH2's numbers once it runs.
+    // A KH2 blow (reaction group 4, every arc: KH2 plays its one blow reaction for any height, Steam
+    // KH2 `0x1403D2FE0`, Checked (decomp)): KH1's knock-back (kind 4), which `knocked_back` sends
+    // into its airborne branch (motion 0x50 / 0x51, no lying down) with KH2's arc and sideways speed.
+    // An enemy whose think is its script (`scripted`) keeps KH1's launch (kind 5), which its script
+    // runs with KH2's numbers (`script_launched`).
     if let Some(l) = own_launch.or_else(|| if own.is_some() || softened { None } else { PENDING.lock().ok().and_then(|g| *g) }) {
-        let small = super::knockback::small_blows() && pose::kh2().is_some_and(|k| l.apex(&k.character.reaction).0 <= SMALL_BLOW_MAX);
-        if small {
+        let who = if own.is_some() { target } else { TARGET.load(Ordering::Relaxed) };
+        if who > 0x10000 && !scripted(who) {
             wr(rec + 0xC, (rd::<u32>(rec + 0xC) & !0x1F) | 4);
-            if let Ok(mut v) = SMALLS.lock() {
+            if let Ok(mut v) = BLOWS.lock() {
                 let now = takeover_ms();
                 v.retain(|(r, _, t)| *r != rec && now.saturating_sub(*t) < LAUNCH_FRESH_MS);
                 v.push((rec, l, now));
             }
             static S: AtomicU32 = AtomicU32::new(0);
             if super::log_on(super::LogCat::Combat) && S.fetch_add(1, Ordering::Relaxed) < 40 {
-                log!(Combat, "KH2 small blow asked: record {rec:#x} made a knock-back, KH1's kind 4 (KH2's start: up {:.0}, sideways {:.0} a frame)", l.up, l.speed);
+                log!(Combat, "KH2 blow asked: record {rec:#x} made a knock-back, KH1's kind 4 (KH2's start: up {:.0}, sideways {:.0} a frame)", l.up, l.speed);
             }
         } else {
             wr(rec + 0xC, (rd::<u32>(rec + 0xC) & !0x1F) | 5);
@@ -2975,7 +2978,7 @@ pub unsafe fn scale_record(rec: usize, attack: usize, target: usize) {
             }
             static N: AtomicU32 = AtomicU32::new(0);
             if super::log_on(super::LogCat::Combat) && N.fetch_add(1, Ordering::Relaxed) < 40 {
-                log!(Combat, "KH2 launch asked: record {rec:#x} made a launch (KH2's start: up {:.0}, sideways {:.0} a frame)", l.up, l.speed);
+                log!(Combat, "KH2 launch asked: record {rec:#x} made a launch for {} (KH2's start: up {:.0}, sideways {:.0} a frame)", if who > 0x10000 { "a scripted enemy" } else { "an unknown target" }, l.up, l.speed);
             }
         }
     } else if let Some(h) = hit.filter(|_| softened) {
@@ -3185,58 +3188,134 @@ unsafe fn kh2_launch(actor: usize, l: Launch, bases: &[u16], via: &str) {
     }
 }
 
-/// The highest apex (units above the start, the blow flown as `Launch::apex` does) a KH2 blow can have
-/// and still be a "small blow" (Small Blows on): Fire's hits are up 1 to 6 a frame, 1 to 23 high;
-/// Guard Break (20 up) is 117 and Thunder's burst (30 and more) 190 and up. **Assumption:** 25 is
-/// where a lift stops being a stagger; it is picked to put every Fire hit under it, not read from
-/// KH2 (KH2 plays its blow motion for any arc).
-const SMALL_BLOW_MAX: f32 = 25.0;
-/// Records made with a small blow: (record, launch, when). Taken by the knock-back hook.
-static SMALLS: std::sync::Mutex<Vec<(usize, Launch, u64)>> = std::sync::Mutex::new(Vec::new());
+/// Records made with a KH2 blow on an enemy KH1's own think runs: (record, launch, when). Taken by
+/// the knock-back hook.
+static BLOWS: std::sync::Mutex<Vec<(usize, Launch, u64)>> = std::sync::Mutex::new(Vec::new());
 
-/// A fresh small blow for `rec` (`scale_record`), taken off the list.
-fn take_small(rec: usize) -> Option<Launch> {
+/// A fresh KH2 blow for `rec` (`scale_record`), taken off the list.
+fn take_blow(rec: usize) -> Option<Launch> {
     let now = takeover_ms();
-    SMALLS.lock().ok().and_then(|mut v| {
+    BLOWS.lock().ok().and_then(|mut v| {
         v.retain(|(_, _, t)| now.saturating_sub(*t) < LAUNCH_FRESH_MS);
         v.iter().position(|(r, _, _)| *r == rec).map(|i| v.remove(i).1)
     })
 }
 
+/// Whether `rec` has a fresh KH2 blow waiting (left on the list).
+fn has_blow(rec: usize) -> bool {
+    let now = takeover_ms();
+    BLOWS.lock().ok().is_some_and(|v| v.iter().any(|(r, _, t)| *r == rec && now.saturating_sub(*t) < LAUNCH_FRESH_MS))
+}
+
+/// Whether `actor`'s think is KH1's object think, its hit records handed to its script: actor kind
+/// (byte `+0x6`) 4, 5, 9 or 10 (Steam `0x140297B5A`, the think picker: kind 3 gets the enemy think
+/// `0x1402B7260`, 4 / 5 / 9 / 10 the object think `0x1402C2C90`; Checked (exe)).
+unsafe fn scripted(actor: usize) -> bool {
+    matches!(rd::<u8>(actor + 0x6), 4 | 5 | 9 | 10)
+}
+
 /// KH1's enemy knock-back reaction (Steam `0x1402B77D0 (actor, record)`, kind 4 of the hit pass; also
-/// where KH1's launch falls back when the enemy has no launch motion; Checked (decomp)):
-/// - on the ground and not in a class-2 movement state: motion 0x4C / 0x4D, staying put (no arc, no
-///   velocity); an enemy with no 0x4C plays its launch (0x52) instead, else a flinch;
-/// - in the air: motion 0x50 / 0x51, a hop of 20 (`0x1402AF960`) and `+0x3C0` = the record's direction
-///   times btltbl's `+0x3C`.
+/// where KH1's launch falls back when the enemy has no launch motion; Checked (exe)):
+/// - lying down (motion `+0x164` = base `+0x3EA` + 3 or + 8): KH1's flinch push `0x1402B7E60`;
+/// - in a class-2 state (`0x1402B1AE0`) or not in the air (`0x1402B1B10`: states 2, 11, 16, 17, 20,
+///   22, or the state table's class 1): `0x1402B8CC0`, motion 0x4C / 0x4D in place; with no 0x4C
+///   its launch (0x52), else a flinch;
+/// - in the air: motion 0x50 / 0x51 (`0x14029F980`, the motion queue's first entry `+0x17C`), a hop
+///   of 20 (`0x1402AF960`) and `+0x3C0` = the record's direction times btltbl's `+0x3C`; with no 0x50
+///   its air launch (0x5C), else its air flinch `0x1402B8B90`.
+/// The enemy think (`0x1402B7260`) lands an enemy whose motion is not its launch's on motion
+/// `+0x3D0` + 7, which the hop zeroes: no lying down (Checked (exe)).
 /// `push rbx; push rsi; sub rsp, 0x68` (Checked (exe), the bytes at this address in the user's Steam exe).
 const KNOCK_BACK_STEAM: usize = 0x2B77D0;
 const KNOCK_BACK_PROLOGUE: [u8; 7] = [0x40, 0x53, 0x56, 0x48, 0x83, 0xEC, 0x68];
 static ORIG_KNOCK_BACK: AtomicUsize = AtomicUsize::new(0);
-/// The hop KH1's airborne knock-back sets (`0x41A00000` = 20.0 into `0x1402AF960`).
+/// KH1's (Steam, Checked (exe)) "has this motion" `0x14029F010 (actor, motion) -> nonzero`, its
+/// class-2 state test `0x1402B1AE0 (actor)`, its in-the-air test `0x1402B1B10 (actor)` and its
+/// hop `0x1402AF960 (actor, height)` (air state 2, a fresh rise of `height` from where it is).
+const HAS_MOTION_STEAM: usize = 0x29F010;
+const CLASS2_STEAM: usize = 0x2B1AE0;
+const AIRBORNE_STEAM: usize = 0x2B1B10;
+const HOP_STEAM: usize = 0x2AF960;
+/// KH1's movement state table, read by `0x1402B1AE0` / `0x1402B1B10` (Checked (exe)).
+const STATE_TABLE_STEAM: usize = 0x2DB3840;
+/// Their first bytes (Checked (exe)): `mov [rsp+8], rbx` / `movsxd rax, [rcx+0x70]` /
+/// `movsxd rdx, [rcx+0x70]` / `push rbx; sub rsp, 0x30`.
+const HAS_MOTION_BYTES: [u8; 5] = [0x48, 0x89, 0x5C, 0x24, 0x08];
+const CLASS2_BYTES: [u8; 4] = [0x48, 0x63, 0x41, 0x70];
+const AIRBORNE_BYTES: [u8; 4] = [0x48, 0x63, 0x51, 0x70];
+const HOP_BYTES: [u8; 6] = [0x40, 0x53, 0x48, 0x83, 0xEC, 0x30];
+/// KH1's airborne knock-back motions (front / back).
+const AIR_KNOCK_BACK: [u32; 2] = [0x50, 0x51];
+/// The hop KH1's airborne knock-back sets (`0x14042F968` = 20.0), and ours to lift a grounded enemy into it.
 const KNOCK_BACK_HOP: f32 = 20.0;
+/// The four KH1 functions above, checked once: 0 not yet, 1 refused, 2 matched.
+static KNOCK_BACK_FNS: AtomicU8 = AtomicU8::new(0);
 
-/// KH1's knock-back (Steam): KH1's, then KH2's arc and sideways speed for a small blow's record, when
-/// KH1 hopped the enemy (the airborne branch).
+unsafe fn knock_back_fns() -> bool {
+    match KNOCK_BACK_FNS.load(Ordering::Relaxed) {
+        0 => {
+            let base = BASE.load(Ordering::Relaxed);
+            let same = |rva: usize, b: &[u8]| base != 0 && std::slice::from_raw_parts((base + rva) as *const u8, b.len()) == b;
+            let ok = same(HAS_MOTION_STEAM, &HAS_MOTION_BYTES) && same(CLASS2_STEAM, &CLASS2_BYTES) && same(AIRBORNE_STEAM, &AIRBORNE_BYTES) && same(HOP_STEAM, &HOP_BYTES);
+            if !ok {
+                log!(Combat, "KH2 blows: KH1's motion / state / hop functions don't match the Steam exe; grounded blows stay KH1's ground knock-back");
+            }
+            KNOCK_BACK_FNS.store(1 + ok as u8, Ordering::Relaxed);
+            ok
+        }
+        v => v == 2,
+    }
+}
+
+/// Lifts a grounded enemy for a KH2 blow so KH1's knock-back takes its own airborne branch (KH2's
+/// blow lifts the enemy at any height): only an enemy KH1's knock-back would answer on the ground
+/// (not lying down, not in a class-2 state, not in the air) that has the airborne knock-back motion
+/// 0x50; otherwise KH1's ground branch runs as KH1 does.
+unsafe fn lift_for_blow(actor: usize) -> bool {
+    if !knock_back_fns() {
+        return false;
+    }
+    let base = BASE.load(Ordering::Relaxed);
+    let since = rd::<i32>(actor + 0x164) - rd::<u16>(actor + 0x3EA) as i32;
+    if (0..=9).contains(&since) && since % 5 == 3 {
+        return false;
+    }
+    let class2: unsafe extern "system" fn(usize) -> i32 = std::mem::transmute(base + CLASS2_STEAM);
+    let airborne: unsafe extern "system" fn(usize) -> i32 = std::mem::transmute(base + AIRBORNE_STEAM);
+    let has_motion: unsafe extern "system" fn(usize, u32) -> i32 = std::mem::transmute(base + HAS_MOTION_STEAM);
+    // KH1's state table (`0x142DB3840`, 0x40 bytes a state, the low 2 bits its class) must not make
+    // air state 2 a class-2 state, or the lifted enemy would still take the ground branch.
+    let air_class2 = rd::<u32>(base + STATE_TABLE_STEAM + 2 * 0x40) & 3 == 2;
+    if air_class2 || class2(actor) != 0 || airborne(actor) != 0 || has_motion(actor, AIR_KNOCK_BACK[0]) == 0 {
+        return false;
+    }
+    let hop: unsafe extern "system" fn(usize, f32) -> f32 = std::mem::transmute(base + HOP_STEAM);
+    hop(actor, KNOCK_BACK_HOP);
+    true
+}
+
+/// KH1's knock-back (Steam): for a KH2 blow's record, a grounded enemy lifted first (`lift_for_blow`),
+/// KH1's, then KH2's arc and sideways speed once KH1 took its airborne branch.
 unsafe extern "system" fn knocked_back(actor: usize, rec: usize) {
     let f: unsafe extern "system" fn(usize, usize) = std::mem::transmute(ORIG_KNOCK_BACK.load(Ordering::Acquire));
+    let lifted = has_blow(rec) && actor > 0x10000 && lift_for_blow(actor);
     f(actor, rec);
-    let Some(l) = take_small(rec) else { return };
+    let Some(l) = take_blow(rec) else { return };
     let state = rd::<i32>(actor + 0x70);
     let motion = rd::<u16>(actor + 0x3EA);
     static N: AtomicU32 = AtomicU32::new(0);
     let log_on = super::log_on(super::LogCat::Combat) && N.fetch_add(1, Ordering::Relaxed) < 40;
-    // The airborne branch's mark: air state 2 with a fresh arc of exactly its hop.
-    let hopped = state == 2 && rd::<f32>(actor + 0x3B0) == 0.0 && rd::<f32>(actor + 0x3BC) == -KNOCK_BACK_HOP;
+    // The airborne branch's mark: air state 2 with its motion first in the queue.
+    let hopped = state == 2 && rd::<i32>(actor + 0x178) >= 1 && AIR_KNOCK_BACK.contains(&(rd::<u32>(actor + 0x17C) & 0xFFFF));
     if !hopped {
         if state == 2 && (motion == 0x52 || motion == 0x5C) {
-            // (No 0x4C motion: KH1 fell back to its launch; KH2's numbers go in it as for any launch.)
+            // (No 0x50 / 0x4C motion: KH1 fell back to its launch; KH2's numbers go in it as for any launch.)
             if log_on {
-                log!(Combat, "KH1's knock-back on {actor:#x} fell back to its launch (no 0x4C motion): KH2's numbers in it");
+                log!(Combat, "KH1's knock-back on {actor:#x} fell back to its launch (motion base {motion:#x}): KH2's numbers in it");
             }
             kh2_launch(actor, l, &[0x52, 0x5C], "KH1's knock-back");
         } else if log_on {
-            log!(Combat, "KH1's knock-back on {actor:#x} for a small blow (up {:.0}, sideways {:.0}): KH1's own ground stagger, nothing of KH2's to put in it (motion {motion:#x}, state {state})", l.up, l.speed);
+            log!(Combat, "KH1's knock-back on {actor:#x} for a KH2 blow (up {:.0}, sideways {:.0}): KH1's own reaction, not its airborne one (state {state}, motion {:#x}{})", l.up, l.speed, rd::<u32>(actor + 0x17C) & 0xFFFF, if lifted { ", lifted" } else { "" });
         }
         return;
     }
@@ -3254,7 +3333,7 @@ unsafe extern "system" fn knocked_back(actor: usize, rec: usize) {
     wr(actor + 0x3C0, [dx * l.speed, 0.0, dz * l.speed, l.speed.abs()]);
     super::knockback::fly_blow(actor, [dx * l.speed, dz * l.speed], l.up, t, h);
     if log_on {
-        log!(Combat, "KH2 small blow on {actor:#x} (KH1's airborne knock-back): up {:.0} / sideways {:.1} a frame (weight x{k:.2}): up {h:.0} in {t:.0} frames", l.up, l.speed);
+        log!(Combat, "KH2 blow on {actor:#x} (KH1's airborne knock-back{}): up {:.0} / sideways {:.1} a frame (weight x{k:.2}): up {h:.0} in {t:.0} frames", if lifted { ", lifted from the ground" } else { "" }, l.up, l.speed);
     }
 }
 
@@ -3270,7 +3349,7 @@ pub unsafe fn install() {
     hook::install(base + LAUNCH_RVA, &LAUNCH_PROLOGUE, launched as *const () as usize, &ORIG_LAUNCH, "enemy launch reaction");
     if super::addr::Build::current() == super::addr::Build::Steam {
         hook::install(base + SCRIPT_LAUNCH_STEAM, &SCRIPT_LAUNCH_PROLOGUE, script_launched as *const () as usize, &ORIG_SCRIPT_LAUNCH, "enemy scripted launch (KH2's blows)");
-        hook::install(base + KNOCK_BACK_STEAM, &KNOCK_BACK_PROLOGUE, knocked_back as *const () as usize, &ORIG_KNOCK_BACK, "enemy knock-back (KH2's small blows)");
+        hook::install(base + KNOCK_BACK_STEAM, &KNOCK_BACK_PROLOGUE, knocked_back as *const () as usize, &ORIG_KNOCK_BACK, "enemy knock-back (KH2's blows)");
     }
     if hook::install(base + EXEC_RVA, &EXEC_PROLOGUE, exec as *const () as usize, &ORIG_EXEC, "execute attack row").is_some() {
         EXEC_IN.store(true, Ordering::Release);

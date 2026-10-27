@@ -167,7 +167,7 @@ unsafe extern "system" fn voice_group(actor: usize, group: i32, other: usize) ->
         return 0;
     }
     // (KH1's swing voice under KH2's quotes, `kh2sound::holds_back`.)
-    let held = super::kh2sound::holds_back(actor, caller_rva());
+    let held = super::kh2sound::holds_back(actor, group, caller_rva());
     if live() {
         let from = caller();
         let with = if other == 0 { String::new() } else { format!(", other {}", who(other)) };

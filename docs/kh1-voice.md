@@ -110,3 +110,30 @@ decomp.
   quote). KH2's own voices on a KH2 clip are its frame triggers 13 / 14, baked as `KH2_VOICE`
   keys and played with Battle Quotes KH2.
 - Not checked: which of KH2's clips (the roll, Quick Run) carry a voice trigger.
+
+## Mixing: KH1's animations with KH2's voices and the other way (t742, t743)
+
+Battle Quotes picks whose voice Sora has; each move's style picks whose animation plays. The four
+cases:
+
+- **KH1 animation, Battle Quotes KH1**: KH1's own (row voices, spells, hits). Nothing of ours.
+- **KH2 animation, Battle Quotes KH2**: the KH2 clip's own voices (`KH2_VOICE` keys); KH1's row
+  grunt left out on those rows (`kh2sound::holds_back`).
+- **KH2 animation, Battle Quotes KH1**: KH1's row voice on moves with a row. A row-less KH2 move
+  with a KH2 voice gets KH1's stand-in from its `KH2_VOICE` key (t742, `kh1voice::STAND_INS`): the
+  dodge roll (KH2 voice 7) says a swing grunt (group 4). Quick Run (KH2 voice 36) stays silent.
+- **KH1 animation, Battle Quotes KH2** (t743): the row's KH1 group is said as KH2's voice of the
+  same kind (`kh2sound::KH1_TO_KH2`: 4 -> 4 swings, 5 -> 5 finishers, 6 -> 6 air finishers, from
+  KH1's `btltbl.bin` groups and KH2's `P_EX100.mset` triggers, Checked (files)); other groups stay
+  KH1's.
+
+KH2's voice triggers on Sora's moves (`P_EX100.mset`, battle slots, Checked (files)): swings 151..153,
+161..164, 169..172, 181 / 182, 191..193, 196 voice 4; finishers 154 / 155, 183 / 184, 194 voice 5; air
+finishers 165..167 voice 6 (194 and 197 add 6 later); the roll 209 and 40 / 173 voice 7; Quick Run 203
+voice 36; the hurt motions 10..15 voices 29 / 30; the Aerial Dodge 202 and the Quick Run stop 204
+none.
+
+Not covered yet: KH1's roll (Dodge Roll style KH1) with Battle Quotes KH2. KH1 starts it with no
+voice call and its motion has no voice key, so there is no KH1 point to say KH2's voice 7 from but
+our own call of KH1's roll start (`takeover`) or a new hook on it. Spells with Battle Quotes KH2
+keep KH1's spell groups (7..13).
