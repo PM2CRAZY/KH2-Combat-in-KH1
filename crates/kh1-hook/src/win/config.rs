@@ -10,8 +10,8 @@
 //! scale (answer 3a) so the ninth row fits. The button opens KH1 windows of our own, the way the
 //! Config rows 0..2 open their pad diagrams (KH1's window manager, sounds, cursor):
 //!
-//! - KH1 in KH2: Camera, Combat, Movement, QoL, Cosmetics, Misc;
-//! - Camera: Camera Style, R2 Camera Hold, L2 Stick Menu; Combat: Physics, Base Combo, Aerial Base Combo, Magic, its own list, and Tweaks, its own list
+//! - KH1 in KH2: Camera, Combat, Movement, Command Menu, QoL, Cosmetics, Misc;
+//! - Camera: Camera Style, R2 Camera Hold; Command Menu (t705, the user): L2 Stick Menu, moved from Camera; Combat: Physics, Base Combo, Aerial Base Combo, Magic, its own list, and Tweaks, its own list
 //!   (answer 1): Fire, Blizzard, Thunder, Cure, Air Physics and Animations, its own list (Blizzard, Thunder, Cure,
 //!   Gravity, Stop, Aero: m19 of kh2-effects-in-kh1s-own-effect-system); Movement: Jump, Glide, Dodge Roll, Misc Animations (Guard Repel is part of Combat's Recoil); Misc:
 //!   Battle Quotes, Debug Menu (answer 5a); Combat > Tweaks: KH1 Ability Chance
@@ -271,8 +271,10 @@ enum List {
     QoL,
     /// Cosmetics: how things look, not how they play (the user, t704).
     Cosmetics,
+    /// Command Menu: options for the command menu (the user, t705).
+    CommandMenu,
 }
-const LISTS: [List; 10] = [List::Top, List::Camera, List::Combat, List::Magic, List::Movement, List::Misc, List::MagicAnim, List::Tweaks, List::QoL, List::Cosmetics];
+const LISTS: [List; 11] = [List::Top, List::Camera, List::Combat, List::Magic, List::Movement, List::Misc, List::MagicAnim, List::Tweaks, List::QoL, List::Cosmetics, List::CommandMenu];
 
 impl List {
     fn index(self) -> usize {
@@ -308,6 +310,7 @@ impl List {
             List::Tweaks => &TWEAKS,
             List::QoL => &QOL,
             List::Cosmetics => &COSMETICS,
+            List::CommandMenu => &COMMAND_MENU,
         }
     }
 }
@@ -316,14 +319,18 @@ const KH: [u32; 2] = [0x7F00_0002, 0x7F00_0003];
 const fn kh(label: u32, help: u32) -> [u32; 4] {
     [label, KH[0], KH[1], help]
 }
-const TOP: [Item; 6] = [
+const TOP: [Item; 7] = [
     Item::Open(0x7F00_0203, 0x7F00_0204, List::Camera),
     Item::Open(0x7F00_0205, 0x7F00_0206, List::Combat),
     Item::Open(0x7F00_0209, 0x7F00_020A, List::Movement),
+    Item::Open(0x7F00_0219, 0x7F00_021A, List::CommandMenu),
     Item::Open(0x7F00_0211, 0x7F00_0212, List::QoL),
     Item::Open(0x7F00_0213, 0x7F00_0214, List::Cosmetics),
     Item::Open(0x7F00_020B, 0x7F00_020C, List::Misc),
 ];
+// (Command Menu: the user, t705: "another config menu called command menu and put l2 stick menu in
+// there"; L2 Stick Menu moved from Camera.)
+const COMMAND_MENU: [Item; 1] = [Item::Set([0x7F00_0123, 0x7F00_011D, 0x7F00_011E, 0x7F00_0124], Row::L2Dpad)];
 // (QoL: the user, t704: "make a qol (Quality of life) section in the config menu, put gummi skip in
 // there".)
 const QOL: [Item; 1] = [Item::Set([0x7F00_0111, 0x7F00_0113, 0x7F00_0114, 0x7F00_0112], Row::Gummi)];
@@ -352,10 +359,9 @@ const TWEAKS: [Item; 11] = [
     Item::Set([0x7F00_014B, 0x7F00_011D, 0x7F00_011E, 0x7F00_014C], Row::PartyCriticals),
     Item::Set(kh(0x7F00_0172, 0x7F00_0173), Row::Style(Kind::Recoil)),
 ];
-const CAMERA: [Item; 3] = [
+const CAMERA: [Item; 2] = [
     Item::Set(kh(0x7F00_0001, 0x7F00_0004), Row::Camera),
     Item::Set([0x7F00_0121, 0x7F00_011D, 0x7F00_011E, 0x7F00_0122], Row::R2Hold),
-    Item::Set([0x7F00_0123, 0x7F00_011D, 0x7F00_011E, 0x7F00_0124], Row::L2Dpad),
 ];
 // (Tweaks inside Combat, after Magic: the tester, combo row selection m22 answer 1 (b).)
 const COMBAT: [Item; 5] = [
@@ -411,7 +417,7 @@ const BUTTON_HELP: u32 = 0x7F00_0202;
 /// Misc's help, and the same without the debug menu (its row isn't there without the debug tools).
 const MISC_HELP: u32 = 0x7F00_020C;
 const MISC_HELP_NO_DEBUG: &str = "Battle quotes.";
-const STRINGS: [(u32, &str); 104] = [
+const STRINGS: [(u32, &str); 106] = [
     (0x7F00_0201, "KH1 in KH2"),
     (0x7F00_0202, "Choose KH1's or KH2's camera, combat, movement and more."),
     (0x7F00_0203, "Camera"),
@@ -445,6 +451,8 @@ const STRINGS: [(u32, &str); 104] = [
     (0x7F00_020A, "Choose KH1's or KH2's jump, glide, dodge roll and animations for Sora."),
     (0x7F00_020B, "Misc"),
     (0x7F00_020C, "Battle quotes and the debug menu."),
+    (0x7F00_0219, "Command Menu"),
+    (0x7F00_021A, "Options for the command menu."),
     (0x7F00_0211, "QoL"),
     (0x7F00_0212, "Quality of life: Gummi routes."),
     (0x7F00_0213, "Cosmetics"),

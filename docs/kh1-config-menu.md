@@ -439,6 +439,15 @@ until seen in game: the Tweaks list's eleven rows at the smaller scale read well
 box (the scale is the same rule Combat's twelve rows were drawn with). The Keyblade Trail row's
 mechanism is in `docs/kh1-cosmetics.md`.
 
+### 6.z2 The Command Menu list (t705)
+
+The user: "another config menu called command menu and put l2 stick menu in there". KH1 in KH2 is
+now Camera, Combat, Movement, Command Menu, QoL, Cosmetics, Misc (`List::CommandMenu`, parent the
+KH1 in KH2 list, text ids `0x7F000219` / `0x7F00021A`). Its one row is L2 Stick Menu (Off | On,
+`camera::L2_DPAD`, same ini key and help as before), moved from Camera, which keeps Camera Style
+and R2 Camera Hold. Seven top rows at KH1's size end at about y 265 (rows step by KH1's row height
+plus gap), above the help box; **Assumption** until seen.
+
 ### 6.x A three-value row (Knock-back Numbers)
 
 KH1's Config rows all have two values. `config::Item::Pick` draws a row with three: the label as
