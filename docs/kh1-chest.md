@@ -67,6 +67,38 @@ Anything else stays KH1's: event chests (kind 5), reward records that aren't ite
 stock, Trinity chests (they are scripts of the room, not this handler), any other script in those
 contexts.
 
+## Round 2: what still held Sora (t725 trace), and the release
+
+- **The trace.** The tester's three Select + Triangle traces (t725, the row on KH2): on the frame after
+  the Open, Sora's actor flags go from `0x0000c003` to `0x0130c0c3` and KH1's motion request to `0xA6`
+  (the open motion, 81 frames); he stays put with the stick held until 132 frames after the Open, when
+  the flags drop back to `0x0000c003` and he walks off. Checked (trace). The bits are KH1's actor
+  actions 0x24 (`0x1000000`, the script hold the mod's takeover reads as "KH1's script moves him"),
+  0x26 (`0x200000`) and 0x2B (`0x40`), and their clears 0x23 / 0x25 / 0x2A (`0x14028E6E0`, Checked
+  (decomp)): the treasure script queues them on Sora; action 0x10 sets the `+0x444` lock t724 cleared,
+  so the script could lock him again. Assumption: which of them the script queues (its file is in
+  `kh1_first.pkg`, still out of reach this session); the flags say at least 0x24, 0x26, 0x2B.
+- **KH1's actions.** Event functions queue actions with `0x1401A5030 (record)` on a ring of 256
+  records of `0x20` at `0x1423CFE10` (write index `0x1423CFE08`, read `0x1423CFDFC`): `+0` kind |
+  argument << 8, `+4` the actor's id (most functions push the context's own, `*ctx`), the rest by kind.
+  `0x14028E6E0` runs them (actor by id, `0x140291D30`: actor `+4`); every kind but 0, 1 and 0x28 needs
+  an actor (table `0x140528368`), and one whose actor isn't found goes straight into the done queue
+  (`0x1401A4F20`, ring at `0x1423D1E10`). The script runner (`0x1401A2CF0`) clears a context's move /
+  turn waits (`+0x33C` bit 0 for kind 2, bit 1 for kinds 4 / 0x15 / 0x16) from the done records with
+  its actor. Event function 103 (`0x1401A96F0`) waits for the context's actor's (`ctx + 8`) motion to
+  end (`0x14029EFC0`). Checked (decomp + exe).
+- **The script machine's class table** is `0x1404E5DB0` (8-byte handlers by class, loaded by `lea` in
+  `0x1401A3517`, `0x1401A4658`, `0x1401A4917`); class 0x18's handler `0x1401B3530 (ctx, number)` jumps
+  to the event table's entry. Checked (exe).
+- **The release (KH2 setting).** At a fast open, our handler takes class 0x18's place in that table
+  (one data word; KH1's is put back at the first call after the open's 8 s). From a treasure context it
+  calls KH1's function, then moves the actions that call queued on Sora into the done queue with KH1's
+  own push (the others stay in order), and it lets function 103 on Sora go on at once. So the script
+  runs whole (lid, sounds, give, flags) and its own waits end as if Sora had done what it asked, but he
+  is never held, locked, turned or animated by it. Off (KH1): nothing installed. Lines: "Chest Opening:
+  treasure script: action 0x.. (argument ..) on Sora from function N done at once", "... its wait on
+  Sora's motion (function 103 ...) goes on", "the open's time is over (...)" (Cutscenes & Events log).
+
 ## Not checked (Assumption)
 
 - KH2's own timings: KH2's treasure-box code (its BDX trap `trap_treasure_get`) wasn't in the
