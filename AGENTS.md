@@ -1,3 +1,6 @@
+### 2026-10-27: Stage 732 (testing branch: Wisdom's Square is its Quick Run)
+- **Wisdom's Square is its Quick Run.** The tester (drive-forms): "you dodge roll instead of quick run". Trace f17582: KH1's own roll (0xDC). `quickrun::built()` refused every Drive Form (a t501 rule), so KH1's menu step (Steam `0x1402937F0`, pressed `0x10` -> command `0x4000000`) led to KH1's roll in `0x1402A7B30` (ability bit 0x20 of `0x142D5EC10`, set by `0x1402A6380`) (Checked (decomp)). Native Wisdom now takes KH1's Quick Run state. Not checked in game.
+
 ### 2026-10-27: Stage 731 (testing branch: Chest Opening: the notice at the top left)
 - **The notice sits at the top left.** Mr Bugs: "1. (b)" (the notice at the top like KH2's info bar). KH1's box updater `0x140272F10` (boxes `0x14283B390`) stacks columns from 0x10 below the top, from the left (Checked (exe)), where KH2's info bar sits; the row's help text says so. Not built: KH2's own info-bar art and timing (needs a KH2 2D layout reader on testing; the give path `trap_treasure_get` `0x1404317F0` -> `0x1401595B0` not traced).
 

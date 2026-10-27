@@ -119,10 +119,15 @@ fn note(s: impl FnOnce() -> String) {
     }
 }
 
-/// Our motions' requests are built (`kh1rows`, `kh2slots`) and base Sora can take them.
+/// Our motions' requests are built (`kh1rows`, `kh2slots`) and Sora can take them: base Sora, or
+/// a Drive Form on KH1's own states whose growth ability is Quick Run (Wisdom: its own 203 / 204
+/// on our rows, `kh2slots::FORM_SLOTS`). The tester (drive-forms: "you dodge roll instead of quick
+/// run"): t501's `!in_form()` dated from the forms on KH2's controller and turned Wisdom's Square
+/// down here, so KH1's own roll (motion 0xDC) took the press (their trace f17582). KH2's Wisdom
+/// (Steam KH2 `0x1403A81F0`, t689, Checked (decomp)): Square is its Quick Run.
 pub fn built() -> bool {
     Build::current() == Build::Steam
-        && !super::form::in_form()
+        && (!super::form::in_form() || super::form::native_form() == Some(super::form::Kind::Wisdom))
         && super::kh1rows::installed()
         && [RUN_MOTION, STOP_MOTION].iter().all(|&m| super::kh1rows::by_motion(m).is_some_and(|n| super::kh2slots::has(super::kh1rows::request(n) as usize, m)))
 }
