@@ -161,12 +161,10 @@ pub enum Owner {
 pub enum Effect {
     /// `high_jump`: its growth level by Sora's level (`high_jump_level`).
     HighJump,
-    /// `glide`: LV1 to LV3 by Sora's level (`glide_level`).
+    /// `glide`: LV1, higher only from Final's form level (KH1's Glide, and KH1's Superglide too
+    /// since the tester's m18 answer 3 (b)).
     Glide,
-    /// `glide` MAX.
-    GlideMax,
-    /// KH2's own Glide (`ours::GLIDE`): LV1 to LV3 by Sora's level, MAX once Chernabog is
-    /// beaten (KH1's Superglide point).
+    /// KH2's own Glide (`ours::GLIDE`): LV1, higher only from Final's form level.
     Kh2Glide,
     /// `guard`, and KH2's Guard in `equipped`.
     Guard,
@@ -224,7 +222,9 @@ pub const KH1_ABILITIES: [Kh1Ability; 65] = [
     k(1, "High Jump", Kh2(Effect::HighJump)),
     k(2, "Mermaid Kick", Kh1Own),
     k(3, "Glide", Kh2(Effect::Glide)),
-    k(4, "Superglide", Kh2(Effect::GlideMax)),
+    // (KH2's Glide LV1, raised only by Final: the tester, what-is-still-missing after m18,
+    // answer 3 (b), "treat it as LV1 so only Final raises Glide".)
+    k(4, "Superglide", Kh2(Effect::Glide)),
     k(5, "Treasure Magnet", Kh1Own),
     k(6, "Combo Plus", Kh2(Effect::ComboPlus)),
     k(7, "Air Combo Plus", Kh2(Effect::AirComboPlus)),
@@ -423,16 +423,6 @@ pub fn quick_run_name(l: u8) -> String {
 /// (as the Archipelago KH1 client reads it, gaithern's KH-1FM-AP-LUA, MIT).
 pub const CHERNABOG: BossGift = BossGift { boss: "Chernabog", world: 11, progress: 0x33, ability: kh1::SUPERGLIDE };
 
-/// KH2's own Glide's level (`ours::GLIDE`, which stands for KH1's Glide and Superglide at the
-/// Glide style KH2): LV1, MAX once Chernabog is beaten (where KH1 gives Superglide, which is
-/// KH2's Glide MAX, `Effect::GlideMax`).
-pub fn kh2_glide_level(progress: &[u8]) -> u8 {
-    if beaten(progress, &CHERNABOG) {
-        4
-    } else {
-        1
-    }
-}
 
 /// The shared list for the Glide style (t323): at KH2 (`kh2`), KH1's Glide and Superglide taken
 /// out and KH2's own Glide (`ours::GLIDE`) in the place of the first of them, on if either was;
@@ -726,10 +716,9 @@ impl Kh1Sora {
         };
         match e {
             // (LV1 from the ability, higher only from the Drive Forms' levels; KH1's Superglide is
-            // KH2's Glide MAX.)
+            // KH2's Glide LV1 too, after m18 answer 3 (b).)
             Effect::HighJump => out.high_jump = out.high_jump.max(self.high_jump_now()),
             Effect::Glide => out.glide = out.glide.max(self.form_growth.glide.max(1)),
-            Effect::GlideMax => out.glide = 4,
             Effect::Kh2Glide => out.glide = out.glide.max(self.kh2_glide_now()),
             Effect::Guard => {
                 out.guard = true;
@@ -758,9 +747,11 @@ impl Kh1Sora {
         self.form_growth.quick_run.max(1)
     }
 
-    /// KH2's own Glide's level (`ours::GLIDE`): LV1 (MAX past Chernabog), or Final's.
+    /// KH2's own Glide's level (`ours::GLIDE`, which stands for KH1's Glide and Superglide at the
+    /// Glide style KH2): LV1, or Final's form level (no longer MAX past Chernabog: after m18,
+    /// answer 3 (b)).
     pub fn kh2_glide_now(&self) -> u8 {
-        kh2_glide_level(&self.progress).max(self.form_growth.glide)
+        self.form_growth.glide.max(1)
     }
 
     /// KH2's controller's abilities from KH1's menu and Sora's level: every equipped ability
@@ -1124,14 +1115,16 @@ mod tests {
         assert!(has(&back, kh1::GLIDE));
     }
 
+    /// KH2's own Glide is LV1, raised only by Final's level; Chernabog no longer makes it MAX
+    /// (after m18, answer 3 (b)).
     #[test]
-    fn kh2_glide_max_at_chernabog() {
+    fn kh2_glide_only_from_final() {
         let mut s = sora(99, &[], &[ours::GLIDE]);
+        assert_eq!(s.kh2().glide, 1);
+        s.progress[11] = 0x33;
         assert_eq!(s.kh2().glide, 1);
         s.form_growth.glide = 3;
         assert_eq!(s.kh2().glide, 3);
-        s.progress[11] = 0x33;
-        assert_eq!(s.kh2().glide, 4);
         // Off: nothing; and never given on its own.
         assert_eq!(sora(60, &[], &[ours::GLIDE | 0x80]).kh2().glide, 0);
         assert!(!sora(99, &[], &[kh1::GLIDE]).grants().iter().any(|a| a.id == ours::GLIDE));
@@ -1163,10 +1156,15 @@ mod tests {
         assert_eq!((a.dodge_roll, a.combo_plus, a.air_combo_plus, a.high_jump, a.glide), (1, 2, 1, 1, 1));
         // KH1's modifiers are KH1's own: nothing for KH2 (hooks).
         assert_eq!(a.equipped, vec![kh2::GUARD]);
-        // Glide doesn't grow with Sora's level; KH1's Superglide is MAX.
+        // Glide doesn't grow with Sora's level; KH1's Superglide is LV1 too (after m18, answer 3
+        // (b)): only Final's level raises either.
         assert_eq!(sora(99, &[], &[kh1::GLIDE]).kh2().glide, 1);
-        assert_eq!(sora(1, &[], &[kh1::GLIDE, kh1::SUPERGLIDE]).kh2().glide, 4);
+        assert_eq!(sora(1, &[], &[kh1::GLIDE, kh1::SUPERGLIDE]).kh2().glide, 1);
+        assert_eq!(sora(1, &[], &[kh1::SUPERGLIDE]).kh2().glide, 1);
         assert_eq!(sora(1, &[], &[kh1::GLIDE, kh1::SUPERGLIDE | 0x80]).kh2().glide, 1);
+        let mut f = sora(1, &[], &[kh1::GLIDE, kh1::SUPERGLIDE]);
+        f.form_growth.glide = 2;
+        assert_eq!(f.kh2().glide, 2);
     }
 
     #[test]
@@ -1311,7 +1309,7 @@ mod tests {
         assert!(after.shared.contains(&kh1::SUPERGLIDE));
         // KH2 sees the same moves as before the split.
         assert!(after.kh2().equipped.contains(&kh2::EXPLOSION) && !after.kh2().equipped.contains(&kh2::FLASH_STEP));
-        assert_eq!(after.kh2().glide, 4);
+        assert_eq!(after.kh2().glide, 1);
         // Once is enough: nothing more to do.
         let again = migrate(&after);
         assert!(again.lines.is_empty());

@@ -51,7 +51,7 @@ rows are `KH1_ABILITIES`, and ours are `MENU`.
 | 1 | High Jump | `Kh2`: KH2's High Jump LV1, higher only from Valor's form level |
 | 2 | Mermaid Kick | `Kh1Own` (KH1's swimming) |
 | 3 | Glide | `Kh2`: KH2's Glide LV1, higher only from Final's form level |
-| 4 | Superglide | `Kh2`: KH2's Glide MAX |
+| 4 | Superglide | `Kh2`: KH2's Glide LV1, higher only from Final's form level (after m18, answer 3 (b)) |
 | 5 | Treasure Magnet | `Kh1Own` |
 | 6 | Combo Plus | `Kh2`: Combo Plus, one per copy |
 | 7 | Air Combo Plus | `Kh2`: Air Combo Plus, one per copy |
@@ -139,7 +139,7 @@ starts with "KH2's" so that they can be told apart in the menu.
   ability id, so ids past 65 are only ever looked up in the table.
 - **KH2's values** (`Kh1Sora::kh2`). Every equipped ability whose KH2 side is `Kh2(effect)`,
   KH1's or ours, sets that value in `Abilities`. Two copies of Combo Plus give 2. Growth levels
-  take the highest: KH1's Glide gives LV1 (or Final's level), and Superglide gives MAX.
+  take the highest: KH1's Glide and Superglide each give LV1 (or Final's level).
 - **The hooks** (`Kh1Sora::kh1_hooks`, `kh2_hooks`). An ability that is on but has no meaning on
   the side that has Sora is logged ("abilities on with nothing on the other side yet: ...").
 - **Progression is KH1's vanilla one** (the tester, what-is-still-missing after m17: "make it all
@@ -161,8 +161,10 @@ starts with "KH2's" so that they can be told apart in the menu.
   (`Kh1Sora::form_growth`). Sora's level and bosses give none. KH1's own High Jump and Glide count
   as KH2's LV1 once KH1 has given them (Assumption taken: the tester's question 3 after m17
   wasn't answered); a form's level no longer puts KH1's High Jump or Glide in his list (KH1's
-  list stays vanilla). KH1's Superglide is KH2's Glide MAX, and KH2's own Glide (88) is MAX past
-  Chernabog, where KH1 gives Superglide. Dodge Roll and Aerial Dodge stay LV1: in KH2 they grow
+  list stays vanilla). KH1's Superglide is KH2's Glide LV1 too, and KH2's own Glide (88) is LV1
+  past Chernabog as before it: only Final's level raises Glide (the tester, what-is-still-missing
+  after m18, answer 3 (b): "treat it as LV1 so only Final raises Glide"; until t721 both were
+  MAX). Dodge Roll and Aerial Dodge stay LV1: in KH2 they grow
   with Limit and Master, which aren't on KH1's states here. The debug menu's growth rows still
   override all of this.
 - **The fmlv rows' abilities** (KH2's own form level-up rule, not the mod's progression; kept):

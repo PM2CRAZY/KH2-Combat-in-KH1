@@ -158,7 +158,7 @@ pub unsafe fn glide_style_now(base: usize) {
     let changed = glide_style_list(save, &now, kh2);
     if let Some(after) = Growth::kh1(base) {
         if kh2 && growth::has(&after.shared, growth::ours::GLIDE) {
-            set_glide_name(growth::kh2_glide_level(&after.progress).max(after.form_growth.glide));
+            set_glide_name(after.kh2_glide_now());
         }
         log!(Menus,
             "abilities: Glide style {} set in the Config menu: shared list {} now ({:?})",
@@ -784,8 +784,8 @@ impl Growth {
                 }
                 self.hj_level = Some(l);
             }
-            // KH2's own Glide (t323, Glide style KH2): its menu name and a box as it grows, MAX
-            // at Chernabog. At KH1 KH1's Glide and Superglide are vanilla: no boxes of ours.
+            // KH2's own Glide (t323, Glide style KH2): its menu name and a box as it grows (only
+            // from Final's level since m18 answer 3 (b)). At KH1 KH1's Glide and Superglide are vanilla: no boxes of ours.
             let l = if growth::has(&now.shared, growth::ours::GLIDE) { now.kh2_glide_now() } else { 0 };
             self.name(1, l);
             if self.gl_level != Some(l) {
