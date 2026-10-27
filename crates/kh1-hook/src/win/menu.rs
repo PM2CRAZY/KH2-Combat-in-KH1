@@ -280,12 +280,26 @@ unsafe fn stats_inner(member: i32, out: usize) {
     let base = super::sys::GetModuleHandleA(std::ptr::null()) as usize;
     let Some(sora) = Growth::kh1(base) else { return };
     let bonus = growth::bonus_ap(&sora);
+    // The abilities the Drive Forms' levels gave him bring their own AP too (KH1's AP for each,
+    // byte +0 of its entry in KH1's ability table; the tester, after m16, answer 7 (a)), while he
+    // still has a copy of it.
+    let table = rd::<u64>(base + TABLE_PTR_RVA) as usize;
+    let mut forms = 0u32;
+    if table >= 0x10000 {
+        let mut left_a: Vec<u8> = sora.abilities.iter().map(|b| b & 0x7F).collect();
+        for id in super::formexp::rewards_given() {
+            if let Some(i) = left_a.iter().position(|b| *b == id) {
+                left_a[i] = 0;
+                forms += rd::<u8>(table + (id as usize - 1) * 12) as u32;
+            }
+        }
+    }
     let ap = rd::<i32>(out + 0xE4);
-    let now = (ap + bonus as i32).min(100);
+    let now = (ap + bonus as i32 + forms as i32).min(100);
     std::ptr::write_unaligned((out + 0xE4) as *mut i32, now);
     static LAST: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(-1);
     if LAST.swap(now, std::sync::atomic::Ordering::Relaxed) != now {
-        log!(Menus, "Sora's AP: {ap} (KH1's) + {bonus} (KH2 abilities learned) = {now}");
+        log!(Menus, "Sora's AP: {ap} (KH1's) + {bonus} (KH2 abilities learned) + {forms} (form level abilities) = {now}");
     }
 }
 

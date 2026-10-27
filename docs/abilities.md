@@ -150,8 +150,11 @@ starts with "KH2's" so that they can be told apart in the menu.
   form's (Valor High Jump, Wisdom Quick Run, Final Glide: LV1 / 2 / 3 at form LV3 / 5 / 7,
   `Kh1Sora::form_growth`); the higher of that and his own level's counts, and without the
   ability it is learned (High Jump in the shared list, on; Quick Run off, its AP in the bonus).
-  The fmlv rows' abilities come as KH1's own: Combo Plus, Air Combo Plus, MP Rage (off, "New
-  Ability" box); the Auto forms, MP Haste and Form Boost have none yet. Details in
+  The fmlv rows' abilities come as KH1's own: Combo Plus, Air Combo Plus, MP Rage, MP Haste
+  (Wisdom LV6, KH1's own MP Haste, t714; it becomes MP Charge's MP Haste once a KH2 MP system is
+  a Config setting) (off, "New Ability" box); each one he still has adds KH1's AP for it to his
+  max AP (t715, `formexp::rewards_given`, `menu::stats`). The Auto forms (to be built natively
+  later) and Form Boost (waits for the Drive gauge) have none yet. Details in
   `docs/kh1-drive-forms-native.md` §9. `abilities = kh1` only.
 - **Growth boxes.** KH1's High Jump, Glide and Dodge Roll keep KH1's names in the menu. When KH2's
   level for them grows, an "Ability Up" box still says so ("High Jump LV2"). This is KH2's side
