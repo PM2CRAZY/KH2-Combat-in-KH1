@@ -1855,7 +1855,21 @@ pub mod physics {
         if !v.iter().all(|x| x.is_finite()) {
             v = [0.0; 2];
         }
-        if !action && speed > 0.01 && dir.iter().all(|x| x.is_finite()) {
+        // A Drive Form's air attack or cast in its clip's allow-movement range (range id 41: Wisdom's
+        // 181 all through, its air casts from 24, Reflect's 73 0..10 and from 50; Checked (files)):
+        // steered with the stick as in a jump (the OG rewrite's `air_control` for an Attack in the
+        // air and for Magic with the range open, `character_core::Controller::physics`; KH1 doesn't
+        // steer its actions, so the pad's stick, as `ground_inertia` reads it). The tester
+        // (drive-forms): "air attacks movements seem off", "all the air magics movement and physics
+        // aren't proper"; their trace f46520: 181 dragged on with the stick held, no steering.
+        let form_steer = action && super::super::kh2slots::form_air_steer(actor);
+        let stick = if form_steer { super::super::takeover::stick_now(actor) } else { [0.0; 2] };
+        let tilt = stick[0].hypot(stick[1]);
+        if form_steer && tilt > 1e-3 {
+            let s = if tilt >= 0.8 { n.run } else { n.walk };
+            let t = [stick[0] / tilt * s, stick[1] / tilt * s];
+            v = [v[0] * air_keep + t[0] * (1.0 - air_keep), v[1] * air_keep + t[1] * (1.0 - air_keep)];
+        } else if !action && speed > 0.01 && dir.iter().all(|x| x.is_finite()) {
             let s = if speed >= kh1_run - 0.01 { n.run } else { n.walk };
             let t = [dir[0] * s, dir[2] * s];
             v = [v[0] * air_keep + t[0] * (1.0 - air_keep), v[1] * air_keep + t[1] * (1.0 - air_keep)];
@@ -1867,7 +1881,8 @@ pub mod physics {
         wr(actor + VEL_Y, -up);
         d[0] = v[0] * dt;
         d[2] = v[1] * dt;
-        if let Some(rt) = root {
+        // (A Drive Form's air move: its root travel outside the hold too, `kh2slots::air_root_form`.)
+        if let Some(rt) = root.or_else(|| if held { None } else { super::super::kh2slots::air_root_form(actor, dt) }) {
             add_root(actor, disp, rt);
         }
         r

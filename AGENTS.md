@@ -1,3 +1,6 @@
+### 2026-10-27: Stage 738 (testing branch: Form air moves steer and take their root)
+- **Form air attacks and casts steer and take their root.** The tester (drive-forms): "air fires physics are wrong", "all the air magics movement and physics aren't proper", "air attacks movements seem off". Trace f46520: 181 dragged with the stick held. In a form action's allow-movement range (id 41) KH1's air step steers as in a jump, and the clip's root is added on every air frame (`air_root_form`; 219 of air Fire 58's 383 come before its no-gravity range 16..36). Source: the OG rewrite's action step (Assumption: not re-traced in the Steam KH2 decomp). Base Sora unchanged. Not checked in game.
+
 ### 2026-10-27: Stage 737 (testing branch: Wisdom's Fire dashes)
 - **Wisdom's Fire carries him.** The tester (drive-forms): "fires physics are missing". Checked (files): Wisdom's 56 / 57 / 58 travel 384 / 836 / 383 (base Sora's casts none). A form's ground cast with root travel is baked with it and its request gets KH1's travel bit 15 in `redirect`. Not checked in game.
 

@@ -1153,6 +1153,29 @@ pub unsafe fn air_root(actor: usize, dt: f32) -> Option<[f32; 3]> {
     root_travel(clip, t, dt, rd(actor + 0x3C))
 }
 
+/// A Drive Form's slot playing on `actor` outside its no-gravity range: its root travel over the
+/// next `dt` 60 Hz frames as `air_root` gives it in the range (the tester, drive-forms: "air fires
+/// physics are wrong"). The OG rewrite's action step adds the clip's root to the move on every
+/// frame of an action (`character_core::Controller`'s `fo.root`), with gravity or without; Wisdom's
+/// air Fire 58 goes 383 forward, 219 of it before its no-gravity range (16..36), Valor's air
+/// finishers 183 / 184 600 / 220 (Checked (files)). Base Sora's air motions are left as they were
+/// (none of his has root travel outside such a range, Checked (files) `P_EX100.mset`).
+pub unsafe fn air_root_form(actor: usize, dt: f32) -> Option<[f32; 3]> {
+    if no_gravity(actor) || !(dt > 0.0) {
+        return None;
+    }
+    let m = current(actor).filter(|m| m.form.is_some())?;
+    let clip = clip_of(m)?;
+    let t: f32 = rd(actor + TIME_NOW);
+    root_travel(clip, t, dt, rd(actor + 0x3C))
+}
+
+/// A Drive Form's slot playing on `actor` is in its allow-movement range now (range id 41): KH2
+/// steers the air move with the stick there, as in a jump (`shared::physics`'s air step).
+pub unsafe fn form_air_steer(actor: usize) -> bool {
+    current(actor).is_some_and(|m| m.form.is_some()) && allow_movement(actor) == Some(true)
+}
+
 /// A clip's root travel from its frame `t` over `dt` 60 Hz frames, in the world (KH2's y up),
 /// turned by the yaw as `air_root` turns it. `None` with none.
 fn root_travel(clip: &character_core::Clip, t: f32, dt: f32, yaw: f32) -> Option<[f32; 3]> {
