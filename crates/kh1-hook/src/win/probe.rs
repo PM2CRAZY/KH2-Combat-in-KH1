@@ -319,6 +319,13 @@ unsafe extern "system" fn pad(src: usize, out: usize, cfg: usize) {
         std::ptr::write_unaligned(out as *mut u16, now | d);
         std::ptr::write_unaligned((out + 2) as *mut [u8; 4], [0x80, 0x80, sticks[2], sticks[3]]);
     }
+    // L2 + R3: KH2's confirm with the L2 Stick Menu (`camera::l2_r3`, `cmdmenu::pre_step`); KH1
+    // doesn't see that R3.
+    if super::camera::l2_r3(b_all) {
+        super::cmdmenu::R3_CONFIRM.store(true, Ordering::Relaxed);
+        let now: u16 = rd(out);
+        std::ptr::write_unaligned(out as *mut u16, now & !0x4);
+    }
     // Select + Triangle writes Sora's trace (`trace`): with Triangle held KH1 doesn't see Select,
     // its first-person view.
     if super::trace::hides_select(b_all) {

@@ -3379,20 +3379,24 @@ const RECORD_RVA: Rva = Rva(0x28D7D0);
 /// The menu chain's top (`[top - 8]` is the list under it), and its first slot (the top level).
 const CHAIN_RVA: Rva = Rva(0x2D54450);
 const MENU_ROOT_RVA: Rva = Rva(0x2D543F0);
-/// The Summon list (menu 3, `docs/kh1-drive.md`; on the Drive page it holds the forms).
-const SUMMON_MENU_RVA: Rva = Rva(0x5296A8);
 static ORIG_RUN_ENTRY: AtomicUsize = AtomicUsize::new(0);
 
-/// KH2's menu takes a spell only when the move playing can be cut by one; before that the
-/// press does nothing and the Magic menu stays open (the user: "in kh2 the game won't let you
-/// select a magic until the game lets you, keeping you in the menu until you back out"). So
-/// a spell is never chosen to wait, and an Attack pressed meanwhile is the combo's.
+/// KH2's menu takes a command only when Sora can act on it; before that the press does nothing
+/// and the list stays open (the user: "in kh2 the game won't let you select a magic until the game
+/// lets you, keeping you in the menu until you back out"): the Command Menu's Command Lock row
+/// (`cmdmenu::locked`, t755). A command taken: the Cursor Memory row's resets
+/// (`cmdmenu::command_taken`, t754).
 unsafe extern "system" fn run_entry(menu: usize, entry: i32) -> u64 {
     let f: unsafe extern "system" fn(usize, i32) -> u64 = std::mem::transmute(ORIG_RUN_ENTRY.load(Ordering::Acquire));
     if spell_not_yet(menu, entry) {
         return 0;
     }
-    f(menu, entry)
+    let open = super::cmdmenu::open_lists();
+    let r = f(menu, entry);
+    if r != 0 {
+        super::cmdmenu::command_taken(&open);
+    }
+    r
 }
 
 /// The list under the menu chain's top (a party target list's parent).
@@ -3494,47 +3498,19 @@ unsafe fn spell_not_yet(menu: usize, entry: i32) -> bool {
         }
         return true;
     }
-    if !super::settings::get().commands || !takeover::ON.load(Ordering::Relaxed) || !takeover::kh2_has() || takeover::kh1_casting() {
-        return false;
-    }
-    // The Items and Summon lists as the Magic list (the user: "the item and summon sub menus
-    // should follow the same rules as the magic sub menu where if sora isn't available to input
-    // that action then the submenu doesn't go away with the confirm button"): KH2's move playing
-    // can't be cut by a command (`can_take_command`, what `command` would have made it wait
-    // for), or one KH1 refuses in the air: the press does nothing and the list stays open (no
-    // waiting command). A target list opening is let through; its own entry is the press.
-    let summon_list = base + SUMMON_MENU_RVA;
-    let from_summons = menu == summon_list || (rd::<u32>(menu) == 4 && entry_parent(base) == Some(summon_list));
-    if (kind == ITEM_COMMAND_TYPE || from_summons) && (rd::<u32>(menu) == 4 || sub <= 0) {
-        let what = if kind == ITEM_COMMAND_TYPE { "item" } else { "summon" };
+    // Command Lock (`cmdmenu::locked`, t755; before, KH2's controller's own windows only, while it
+    // had Sora): a spell, an item or a summon (a shortcut's too) only when Sora can act on it, else
+    // the press does nothing and the list stays open, nothing waiting. Not Attack (KH1's own combo
+    // input takes it), not a list opening (a target list's own entry is the press).
+    if kind != 1 && !(rd::<u32>(menu) != 4 && sub > 0) {
         let sora = rd::<u64>(base + PARTY_RVA) as usize;
-        // (`command`'s own air refusal, before the menu closes.)
-        if !matches!(kind, 0 | 1 | 2 | 99 | 0x47) && (takeover::kh2_airborne() || (sora > 0x10000 && rd::<i32>(sora + 0x70) == 2)) {
-            let sound: unsafe extern "system" fn(i32) = std::mem::transmute(base + SOUND_RVA);
-            sound(4);
-            cmd_log(|| format!("{what} (command {kind:#x}) refused in the air; the list stays open"));
-            return true;
-        }
-        if takeover::with_kh2(|c, _| c.can_take_command()) == Some(false) {
-            static M: AtomicU32 = AtomicU32::new(0);
-            if M.fetch_add(1, Ordering::Relaxed) % 30 == 0 {
-                cmd_log(|| format!("{what} (command {kind:#x}) not taken yet: KH2's move (motion {}) can't be cut by a command now; the list stays open", takeover::KH2_MOTION.load(Ordering::Relaxed)));
+        if super::cmdmenu::locked(sora) {
+            static N: AtomicU32 = AtomicU32::new(0);
+            if N.fetch_add(1, Ordering::Relaxed) % 30 == 0 {
+                cmd_log(|| format!("command {kind:#x} (arg {arg}) not taken yet: Sora can't act on it on this frame; the list stays open (Command Lock KH2)"));
             }
             return true;
         }
-        return false;
     }
-    // Only spells (Reflect's too); a target list opening is no cast.
-    if kind != 2 || (rd::<u32>(menu) != 4 && sub > 0) {
-        return false;
-    }
-    let free = takeover::with_kh2(|c, _| c.can_cast());
-    if free != Some(false) {
-        return false;
-    }
-    static N: AtomicU32 = AtomicU32::new(0);
-    if N.fetch_add(1, Ordering::Relaxed) % 30 == 0 {
-        cmd_log(|| format!("spell {arg} not taken yet: KH2's move (motion {}) can't be cut by magic now; the menu stays open", takeover::KH2_MOTION.load(Ordering::Relaxed)));
-    }
-    true
+    false
 }

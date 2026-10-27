@@ -203,6 +203,8 @@ pub fn start() {
         // Wisdom Form's (its shots', `form`), and the revert's (Sora's elements, `form::revert_fx`).
         spell.extend(super::form::element_sounds(kh2));
         events.extend(super::form::REVERT_ELEMENTS.map(character_core::EventKind::Effect));
+        // (t753) KH2's menu sounds KH1 has none of (`cmdmenu`: the page flip).
+        events.extend(MENU_SOUNDS.map(character_core::EventKind::Sound));
         match load(&events, &spell, &mut job) {
             Ok(map) => {
                 log!(Sound,
@@ -477,6 +479,27 @@ fn vtbl(bar: &[u8]) -> Vec<(u8, u8, u8, Vec<(i8, i8)>)> {
         .collect()
 }
 
+/// KH2's command menu page flip (t753): KH2's system sound 0x14 (`0x1401DD170 (0x14)` from the menu's
+/// input step `0x1403F2470`; system sounds are bank 2, `se/se000.win32.scd`, loaded by `0x1401DC770`;
+/// Checked (decomp)). KH1 has no sound for a page flip (the user: "for when kh1 doesn't have a sound
+/// that covers functionality thats in kh2 then we add another sound e.g the sound for when you flip
+/// to page 2"). Assumption: bank 2's sound 0x14 is se000's id record 20, the numbering KH2's effect
+/// sound ids use (169 = se000's 169); se000's 20 is a one-track sound of 997 ms (Checked (files)).
+pub const PAGE_FLIP: u32 = 20;
+/// KH2's menu sounds loaded with the others.
+const MENU_SOUNDS: [u32; 1] = [PAGE_FLIP];
+
+/// KH2's page flip sound through KH1's effect queue (`cmdmenu`): `false` when it isn't loaded (yet)
+/// or KH1 can't take it now.
+pub unsafe fn page_flip() -> bool {
+    let Ok(g) = LOADED.try_lock() else { return false };
+    let Some(s) = g.as_ref().and_then(|l| l.sounds.get(&PAGE_FLIP)).copied() else { return false };
+    drop(g);
+    let ok = super::kh1bank::play(s.kh1, s.ms);
+    note_play(|| format!("the command menu's page flip (KH2 sound {PAGE_FLIP}){}", if ok { "" } else { ": KH1 couldn't take it" }));
+    ok
+}
+
 /// Whether KH2's own sounds stand in for KH1's (its swing voice) on `motion`.
 pub fn covers(motion: u16) -> bool {
     // (Every move with KH2's quotes on: KH1's swing grunts don't mix with KH2's lines.)
@@ -552,7 +575,7 @@ const SPELL_VOICE_RETURN_STEAM: usize = 0x2A3666;
 /// (files)): voice 7, a grunt, on a cast; on the combo's finisher cast (its KH2 finisher motion
 /// picked for the ground request, `kh2slots::finisher_picked`; KH2 has none in the air) the spell's
 /// line: Fire 11, Blizzard 12, Thunder 13; Gravity and Stop, which KH2 doesn't have, KH2's base
-/// finisher swing line (voice 5); Aero KH1's own "Defense!" (`kh1voice::defense`, KH1's Aero clip).
+/// finisher swing line (voice 5); Aero KH2's Reflect finisher line on every cast (voice 25, t750).
 /// Cure: KH2's self-cure line (voice 23) on every cast. True when it was said in KH1's place.
 pub unsafe fn spell_line(actor: usize, group: i32, from: usize) -> bool {
     if from != SPELL_VOICE_RETURN_STEAM || super::addr::Build::current() != super::addr::Build::Steam || !kh2_voice() {
@@ -567,10 +590,16 @@ pub unsafe fn spell_line(actor: usize, group: i32, from: usize) -> bool {
     let finisher = super::formmagic::cast_last().unwrap_or(!air && super::kh2slots::finisher_picked(0x36 + spell));
     let v: i16 = match (spell, finisher) {
         (3, _) => 23,
-        // (t749: Aero isn't part of the combo, as Cure: "Defense!" on every cast.)
+        // (t749: Aero isn't part of the combo, as Cure: its line on every cast. t750, the user:
+        // "it should be a line from reflect": KH2's Reflect finisher voice, MAGC Reflect's
+        // `voice_finisher` 25, VTBL clip 31 "Protect!" (Checked (files)), loaded whatever Battle
+        // Quotes says (`REFLECT_VOICES`), in place of KH1's "Defense!".)
         (6, _) => {
-            super::kh1voice::defense(actor);
-            log!(Sound, "KH2 quotes: KH1's Aero: KH1's \"Defense!\" in place of KH1's group {group}");
+            reflect_voice(REFLECT_FINISHER_VOICE);
+            static A: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+            if A.fetch_add(1, std::sync::atomic::Ordering::Relaxed) < 20 {
+                log!(Sound, "KH2 quotes: KH1's Aero: KH2's Reflect line (voice {REFLECT_FINISHER_VOICE}) in place of KH1's group {group}");
+            }
             return true;
         }
         (0, true) => 11,

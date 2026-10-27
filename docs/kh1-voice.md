@@ -154,8 +154,9 @@ finisher cast; Magnet 24, no finisher cast. KH2's Drive motion 52: voice 8 (clip
   finisher name calls were silent).
 - **Battle Quotes KH2, a KH1 spell** (t746, `kh2sound::spell_line`, in place of KH1's command-step
   line): voice 7 on a cast; on the combo's finisher Fire 11, Blizzard 12, Thunder 13, Gravity and
-  Stop 5 (KH2's base finisher swing line); Aero KH1's "Defense!" (clip 46) and Cure 23 on every cast
-  (t749: Aero isn't part of the combo).
+  Stop 5 (KH2's base finisher swing line); Aero and Cure their line on every cast (t749: Aero
+  isn't part of the combo). Aero's line is KH2's Reflect finisher line since t750 (MAGC Reflect
+  voice 25, VTBL clip 31 "Protect!", Checked (files)); t746..t749 played KH1's clip 46 instead.
 
 - **Battle Quotes KH1, KH1's Gravity or Stop on KH2's cast animation** (t747): a swing grunt
   (group 4) on a cast, the spell's own group on the combo's finisher (`kh2sound::kh1_spell_group`).

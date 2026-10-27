@@ -127,6 +127,19 @@ r2_camera_hold = off\r\n\
 ; l2_stick_menu: on = while L2 is held the right stick moves the command menu like the d-pad and\r\n\
 ;   doesn't move the camera (KH1's or KH2's), as in KH2 (the Config menu's Camera row too); off = not\r\n\
 l2_stick_menu = off\r\n\
+; drive_page: 1 = Drive on the battle menu's page 1 (Attack, Magic, Items, Drive) and Summon on\r\n\
+;   page 2 (Attack, Summon, Party, Limit), as in KH2; 2 = Summon on page 1 (KH1's row), Drive on page\r\n\
+;   2 (the Config menu's Command Menu list too)\r\n\
+drive_page = 1\r\n\
+; dpad_left: kh2 = d-pad left at the battle menu's top flips page 1 / page 2, as in KH2; kh1 = it\r\n\
+;   moves the cursor to Attack and there is no page 2, as in KH1\r\n\
+dpad_left = kh2\r\n\
+; cursor_memory: kh2 = after a command every open list and the top go back to their first row,\r\n\
+;   a cursor follows its command when a list changes, as in KH2; kh1 = KH1's (lists keep their row)\r\n\
+cursor_memory = kh2\r\n\
+; command_lock: kh2 = a spell, item or summon is taken only when Sora can act on it, the list stays\r\n\
+;   open until then and nothing greys for what Sora is doing, as in KH2; kh1 = KH1's\r\n\
+command_lock = kh2\r\n\
 ; config_row: on = the Config menu's Camera Style row; off = no row (the ini alone switches)\r\n\
 config_row = on\r\n\
 ; shortcuts: 4 = KH2's four shortcuts (L1 + the cancel button is the fourth; set it in\r\n\
@@ -370,6 +383,15 @@ pub struct Settings {
     pub r2_camera_hold: bool,
     /// L2 + the right stick is the d-pad (`l2_stick_menu = on`, `camera::L2_DPAD`).
     pub l2_stick_menu: bool,
+    /// Drive on the battle menu's page 2, Summon on page 1 (`drive_page = 2`; `cmdmenu`). KH2's:
+    /// Drive on page 1.
+    pub drive_page2: bool,
+    /// D-pad left at the battle menu's top flips the page (`dpad_left = kh2`, the default; `cmdmenu`).
+    pub dpad_left_kh2: bool,
+    /// KH2's cursor rules in the battle menu (`cursor_memory = kh2`, the default; `cmdmenu`).
+    pub cursor_memory_kh2: bool,
+    /// KH2's command lock (`command_lock = kh2`, the default; `cmdmenu`).
+    pub command_lock_kh2: bool,
     pub config_row: bool,
     /// KH2's fourth shortcut (`shortcuts = 4`).
     pub four_shortcuts: bool,
@@ -576,6 +598,10 @@ fn load(first: bool) -> Option<Settings> {
         // its choice, now on R2.)
         r2_camera_hold: on(&text, "r2_camera_hold", "on", on(&text, "l2_camera_hold", "on", false)),
         l2_stick_menu: on(&text, "l2_stick_menu", "on", false),
+        drive_page2: setting(&text, "drive_page").as_deref() == Some("2"),
+        dpad_left_kh2: setting(&text, "dpad_left").as_deref() != Some("kh1"),
+        cursor_memory_kh2: setting(&text, "cursor_memory").as_deref() != Some("kh1"),
+        command_lock_kh2: setting(&text, "command_lock").as_deref() != Some("kh1"),
         kh2_effects: match setting(&text, "kh2_effects").as_deref() {
             Some("off") | Some("0") | Some("no") => None,
             Some("all") => Some(None),

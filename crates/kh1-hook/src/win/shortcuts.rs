@@ -161,7 +161,7 @@ pub fn fill_hooked() -> bool {
 }
 static ORIG_STEP: AtomicUsize = AtomicUsize::new(0);
 
-/// The command step is hooked here (`shortcuts = 4`): `drive` runs its page flip in it.
+/// The command step is hooked here (`shortcuts = 4`): `drive` and `cmdmenu` run their parts in it.
 pub fn step_hooked() -> bool {
     ORIG_STEP.load(Ordering::Acquire) != 0
 }
@@ -579,8 +579,10 @@ unsafe extern "system" fn fill(a: usize, b: usize) {
 unsafe extern "system" fn step() -> u64 {
     let f: unsafe extern "system" fn() -> u64 = std::mem::transmute(ORIG_STEP.load(Ordering::Acquire));
     let base = base();
-    // The second page (D-pad left, `drive`).
+    // A form's confirm kept from KH1 (`drive`); the page flip, L2 + R3 and Cursor Memory
+    // (`cmdmenu`).
     super::drive::pre_step();
+    super::cmdmenu::pre_step();
     // On the shortcut menu (L1 held since last frame), cancel is the fourth shortcut, not KH1's
     // jump (its jump check comes first and ends the step), so KH1 doesn't see it.
     let pressed = base + PRESSED_RVA;
@@ -589,6 +591,7 @@ unsafe extern "system" fn step() -> u64 {
         wr(pressed, rd::<u32>(pressed) & !CANCEL);
     }
     let r = f();
+    super::cmdmenu::post_step();
     if !want || rd::<u64>(base + ROOT_RVA) as usize != base + MENU_RVA {
         return r;
     }

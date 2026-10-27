@@ -6,6 +6,7 @@ mod addr;
 mod bodyhits;
 mod camera;
 mod chest;
+mod cmdmenu;
 mod combat;
 mod combomods;
 mod config;
@@ -440,6 +441,7 @@ pub unsafe extern "system" fn DllMain(_inst: *mut c_void, reason: u32, _reserved
         formexp::install(base);
         mpcost::install();
         drive::install();
+        cmdmenu::install();
         tint::install();
         leftblade::install();
         cosmetics::install();

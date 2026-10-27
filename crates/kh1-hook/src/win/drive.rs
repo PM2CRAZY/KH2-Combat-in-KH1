@@ -2,19 +2,24 @@
 //! essentially a second command menu (like how it is in KH2), and have a drive menu at the
 //! bottom of the second command menu"; for now Wisdom Form).
 //!
+//! Which page holds Drive, and the page flip itself, are `cmdmenu`'s (t752, the Command Menu rows:
+//! KH2's Drive is on page 1, its Summon on page 2; `docs/kh1-kh2-command-menu.md`). Here: Drive's
+//! row and list on whichever page shows it (`cmdmenu::drive_shown`).
+//!
 //! KH1's top-level command menu (menu 0, `0x140529600`, 0x38-byte menu structs) is rebuilt every
 //! frame by `0x140292090`: Attack, Magic, Items, and a fourth row that is not one of its entries:
 //! drawn (`0x1402769D0`) and run (the step `0x140291660`) from the magic list's last entry when
-//! that is Summon (command 6, whose record opens the summon list, menu 3 `0x1405296A8`). So the
-//! second page is that same row turned into Drive (`docs/kh1-drive.md`):
-//! - D-pad left (KH1's logical `0x80`, pressed `0x14298D4A8`) at the top level flips the page
-//!   (`pre_step`, before KH1's step, which would otherwise move the cursor to Attack);
-//! - on page 2, after KH1's fill (`fill`): the magic list ends in Summon (appended when KH1 had
-//!   none to append), its availability is Drive's, and menu 3 holds our form commands instead
-//!   of the summons; command 6's name (word 6) reads "Drive" (`word`);
+//! that is Summon (command 6, whose record opens the summon list, menu 3 `0x1405296A8`). Drive is
+//! that command 6 named "Drive", with menu 3 holding the forms (`docs/kh1-drive.md`):
+//! - Drive on page 1 (`cmdmenu::drive_in_row4`): after KH1's fill (`fill`) the magic list ends in
+//!   Summon (appended when KH1 had none to append), its availability is Drive's: KH1's own row 4;
+//! - Drive on page 2 (`cmdmenu::drive_in_page2`): command 6 is page 2's second row
+//!   (`cmdmenu::page2_rows`), opening the same menu 3;
+//! - menu 3 holds our form commands instead of the summons; command 6's name (word 6) reads
+//!   "Drive" (`word`);
 //! - a form's command record (`0x7E`.., a spell-type record with an argument KH1 has no spell
 //!   for) arrives at `combat::command` as magic, argument `0x10 + form`, and comes to `chosen`.
-//! KH1 rebuilds all of it each frame, so page 1 is KH1's own again as soon as the page flips.
+//! KH1 rebuilds all of it each frame, so the other page is KH1's own again as soon as it flips.
 
 use super::addr::Rva;
 use super::{hook, log};
@@ -34,21 +39,15 @@ const SUMMON_OUT: u8 = 0x4F;
 const MENU_RVA: Rva = Rva(0x529600);
 const MAGIC_MENU_RVA: Rva = Rva(0x529638);
 const SUMMON_MENU_RVA: Rva = Rva(0x5296A8);
-const ROOT_RVA: Rva = Rva(0x2D543F0);
-const LEVEL_RVA: Rva = Rva(0x2D54450);
-const PRESSED_RVA: Rva = Rva(0x298D4A8);
 const SUMMON_OUT_RVA: Rva = Rva(0x298D1A0);
 const RECORD_RVA: Rva = Rva(0x28D7D0);
 const SOUND_RVA: Rva = Rva(0x177F60);
-const DPAD_LEFT: u32 = 0x80;
 /// KH1's battle button state (`+4` held, `+8` pressed, `+0x10` / `+0x14` repeats) and the
 /// confirm button's logical bits (the button swap applied).
 const BUTTONS_RVA: Rva = Rva(0x298D4A0);
 const CONFIRM_MASK_RVA: Rva = Rva(0x546390);
 
 static BASE: AtomicUsize = AtomicUsize::new(0);
-/// The second page is up.
-static PAGE2: AtomicBool = AtomicBool::new(false);
 static ON: AtomicBool = AtomicBool::new(false);
 static NAMES: OnceLock<(usize, Vec<usize>, usize)> = OnceLock::new();
 /// A form or Revert was just chosen: confirm is KH1's again only once let go (the user: still
@@ -69,9 +68,15 @@ pub fn on() -> bool {
     ON.load(Ordering::Relaxed)
 }
 
-/// The menu run is the Drive row (`combat::run_entry`: the magic list, its last entry, on page 2).
+/// The menu run is the Drive row (`combat::run_entry`): the magic list's last entry with Drive in
+/// row 4, the top level's second entry with Drive on page 2.
 pub unsafe fn is_drive_row(menu: usize, id: u8) -> bool {
-    on() && PAGE2.load(Ordering::Relaxed) && menu == base() + MAGIC_MENU_RVA && id == SUMMON
+    on() && id == SUMMON && (menu == base() + MAGIC_MENU_RVA && super::cmdmenu::drive_in_row4() || menu == base() + MENU_RVA && super::cmdmenu::drive_in_page2())
+}
+
+/// A form can be chosen now (page 2's Drive row's availability, `cmdmenu::page2_rows`).
+pub unsafe fn any_usable(actor: usize) -> bool {
+    on() && (0..FORMS.len()).any(|k| usable(actor, k))
 }
 
 /// In the form the Drive row is Revert itself (the user: "selecting return should cause the
@@ -99,8 +104,8 @@ pub unsafe fn revert_row(actor: usize) -> bool {
     true
 }
 
-/// Before KH1's command step (`shortcuts::step`, or ours when that isn't hooked): D-pad left at
-/// the top level flips the page.
+/// Before KH1's command step (`shortcuts::step`, or ours when that isn't hooked): a form's confirm
+/// press kept from KH1 until let go. (The page flip is `cmdmenu::pre_step`'s, t752.)
 pub unsafe fn pre_step() {
     let base = base();
     if !on() || base == 0 {
@@ -117,24 +122,6 @@ pub unsafe fn pre_step() {
             }
         }
     }
-    let pressed = base + PRESSED_RVA;
-    if rd::<u32>(pressed) & DPAD_LEFT == 0 {
-        return;
-    }
-    // The top level of the battle menu (not the L1 shortcut menu, not a submenu), no summon out.
-    let root = rd::<u64>(base + ROOT_RVA) as usize;
-    let level = rd::<u64>(base + LEVEL_RVA) as usize;
-    if root != base + MENU_RVA || level != base + ROOT_RVA || rd::<u32>(base + SUMMON_OUT_RVA) & 8 != 0 {
-        return;
-    }
-    wr(pressed, rd::<u32>(pressed) & !DPAD_LEFT);
-    let now = !PAGE2.load(Ordering::Relaxed);
-    PAGE2.store(now, Ordering::Relaxed);
-    // The summon list's cursor back to its top (the list changes under it).
-    wr(base + SUMMON_MENU_RVA + 0xC, 0i32);
-    let sound: unsafe extern "system" fn(i32) = std::mem::transmute(base + SOUND_RVA);
-    sound(1);
-    log!(Forms, "command menu: page {}", if now { "2 (Attack, Magic, Items, Drive)" } else { "1" });
 }
 
 /// Our records for the forms (a self-cast spell record, as Reflect's), written over empty ones.
@@ -166,7 +153,8 @@ unsafe fn usable(actor: usize, k: usize) -> bool {
     super::form::Kind::ALL.get(k).is_some_and(|&kind| super::form::usable(actor, kind))
 }
 
-/// After KH1's battle-menu fill (and Reflect's entry): page 2's Drive row and list.
+/// After KH1's battle-menu fill (and Reflect's entry): Drive's row 4 (Drive on page 1) and its
+/// list (whichever page shows Drive).
 pub unsafe fn fill(actor: usize, _flags: usize) {
     // (KH1's Counterattack command in Attack's place during KH2's guard repel, whatever the
     // Drive setting: `combomods::counter_entry`.)
@@ -177,8 +165,8 @@ pub unsafe fn fill(actor: usize, _flags: usize) {
     }
     // In Valor Form the top's Magic row greyed and blocked, on both pages (the user: "when in
     // valor form magic command menu should be unselectable"). KH1 keeps the same bit (1) set
-    // when Sora has no spell, so the list doesn't open; page 2's Drive row is drawn from the
-    // magic list's own bit (`fill` below), so Revert stays usable.
+    // when Sora has no spell, so the list doesn't open; Drive's row 4 is drawn from the magic
+    // list's own bit (`drive_row4`), page 2's from the forms (`cmdmenu`), so Revert stays usable.
     if super::form::in_valor() {
         let top = base + MENU_RVA;
         if rd::<u8>(top + 0x14 + 1) == 2 {
@@ -187,24 +175,37 @@ pub unsafe fn fill(actor: usize, _flags: usize) {
             }
         }
     }
-    if !PAGE2.load(Ordering::Relaxed) || rd::<u32>(base + SUMMON_OUT_RVA) & 8 != 0 || !ensure_records(base) {
+    if !super::cmdmenu::drive_shown() || !ensure_records(base) {
         return;
+    }
+    // (Page 2's Drive row is `cmdmenu::page2_rows`, a top-level entry: only the list here.)
+    if super::cmdmenu::drive_in_row4() && !drive_row4(base, actor) {
+        return;
+    }
+    forms_list(base, actor);
+}
+
+/// Drive as KH1's row 4: the magic list's hidden last entry (Summon's command, named "Drive").
+/// `false`: no row 4 now (a summon out keeps KH1's own row 4, or the list is full).
+unsafe fn drive_row4(base: usize, actor: usize) -> bool {
+    if rd::<u32>(base + SUMMON_OUT_RVA) & 8 != 0 {
+        return false;
     }
     let magic = base + MAGIC_MENU_RVA;
     let n = rd::<i32>(magic + 0x10);
     if !(0..=15).contains(&n) {
-        return;
+        return false;
     }
     let last = (n > 0).then(|| rd::<u8>(magic + 0x14 + n as usize - 1));
     if last == Some(SUMMON_OUT) {
-        return;
+        return false;
     }
     // The magic list ends in Summon, which row 4 shows (KH1 appends it once Sora has a summon).
     let n = if last == Some(SUMMON) {
         n
     } else {
         if n >= 15 || (n >= 8 && !super::reflect::eight_rows_pub(base)) {
-            return;
+            return false;
         }
         wr(magic + 0x14 + n as usize, SUMMON);
         wr(magic + 0x10, n + 1);
@@ -225,7 +226,11 @@ pub unsafe fn fill(actor: usize, _flags: usize) {
             wr(top + off, rd::<u32>(top + off) | 2);
         }
     }
-    // The summon list as the forms.
+    true
+}
+
+/// Menu 3 (KH1's summon list) as the forms.
+unsafe fn forms_list(base: usize, actor: usize) {
     let list = base + SUMMON_MENU_RVA;
     let mut grey = 0u32;
     for (k, &(id, _, _)) in FORMS.iter().enumerate() {
@@ -249,7 +254,7 @@ pub fn word(index: i32) -> Option<usize> {
         return None;
     }
     let (drive, forms, revert) = NAMES.get()?;
-    if index == SUMMON as i32 && PAGE2.load(Ordering::Relaxed) {
+    if index == SUMMON as i32 && super::cmdmenu::drive_shown() {
         // (In the form the row is KH2's Revert.)
         return Some(if super::form::in_form() { *revert } else { *drive });
     }
@@ -279,8 +284,11 @@ pub unsafe fn chosen(actor: usize, k: usize) {
 static ORIG_STEP: AtomicUsize = AtomicUsize::new(0);
 unsafe extern "system" fn step() -> u64 {
     pre_step();
+    super::cmdmenu::pre_step();
     let f: unsafe extern "system" fn() -> u64 = std::mem::transmute(ORIG_STEP.load(Ordering::Acquire));
-    f()
+    let r = f();
+    super::cmdmenu::post_step();
+    r
 }
 
 /// KH1's list draw (`0x140277F40 (kind, menu, _, _, layout, x, y, alpha)`, called by
@@ -318,7 +326,7 @@ static BLANK_HEADER: OnceLock<usize> = OnceLock::new();
 
 /// The Drive list is the summon list's contents now.
 unsafe fn drive_list_shown(base: usize, menu: usize) -> bool {
-    PAGE2.load(Ordering::Relaxed)
+    super::cmdmenu::drive_shown()
         && menu == base + SUMMON_MENU_RVA
         && rd::<u32>(base + SUMMON_OUT_RVA) & 8 == 0
         && rd::<u8>(menu + 0x14) == FORMS[0].0
@@ -491,5 +499,5 @@ pub unsafe fn install() {
     ON.store(true, Ordering::Release);
     static N: AtomicU32 = AtomicU32::new(0);
     N.fetch_add(1, Ordering::Relaxed);
-    log!(Forms, "Drive: D-pad left at the battle menu's top flips to page 2 (Attack, Magic, Items, Drive: {})", FORMS.iter().map(|f| f.2).collect::<Vec<_>>().join(", "));
+    log!(Forms, "Drive: the Drive row and list ({}), on the page the Command Menu rows put it (`cmdmenu`)", FORMS.iter().map(|f| f.2).collect::<Vec<_>>().join(", "));
 }

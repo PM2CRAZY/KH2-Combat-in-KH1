@@ -11,7 +11,7 @@
 //! Config rows 0..2 open their pad diagrams (KH1's window manager, sounds, cursor):
 //!
 //! - KH1 in KH2: Camera, Combat, Movement, Command Menu, QoL, Cosmetics, Misc;
-//! - Camera: Camera Style, R2 Camera Hold; Command Menu (t705, the user): L2 Stick Menu, moved from Camera; Combat: Physics, Base Combo, Aerial Base Combo, Magic, its own list, and Tweaks, its own list
+//! - Camera: Camera Style, R2 Camera Hold; Command Menu (t705, the user): L2 Stick Menu, moved from Camera; then (t751) Drive Page, D-Pad Left, Cursor Memory, Command Lock before it (`cmdmenu`); Combat: Physics, Base Combo, Aerial Base Combo, Magic, its own list, and Tweaks, its own list
 //!   (answer 1): Fire, Blizzard, Thunder, Cure, Air Physics and Animations, its own list (Blizzard, Thunder, Cure,
 //!   Gravity, Stop, Aero: m19 of kh2-effects-in-kh1s-own-effect-system); Movement: Jump, Glide, Dodge Roll, Misc Animations (Guard Repel is part of Combat's Recoil); Misc:
 //!   Battle Quotes, Debug Menu (answer 5a); Combat > Tweaks: KH1 Ability Chance
@@ -227,6 +227,14 @@ enum Row {
     IngameSkip,
     /// QoL > Chest Opening (KH1 | KH2, `chest`).
     Chest,
+    /// Command Menu > Drive Page (Page 1 | Page 2, `cmdmenu::drive_page2`).
+    DrivePage,
+    /// Command Menu > D-Pad Left (KH1 | KH2, `cmdmenu::dpad_kh2`).
+    DpadLeft,
+    /// Command Menu > Cursor Memory (KH1 | KH2, `cmdmenu::memory_kh2`).
+    CursorMemory,
+    /// Command Menu > Command Lock (KH1 | KH2, `cmdmenu::lock_kh2`).
+    CommandLock,
 }
 
 /// A row of one of our lists: a setting (label, left value, right value, help, what it switches),
@@ -340,7 +348,17 @@ const TOP: [Item; 7] = [
 ];
 // (Command Menu: the user, t705: "another config menu called command menu and put l2 stick menu in
 // there"; L2 Stick Menu moved from Camera.)
-const COMMAND_MENU: [Item; 1] = [Item::Set([0x7F00_0123, 0x7F00_011D, 0x7F00_011E, 0x7F00_0124], Row::L2Dpad)];
+// (Drive Page, D-Pad Left, Cursor Memory, Command Lock: the user, t751: "any features that are different
+// between the two (remembering commands on sub menus, locking your command until your actionable etc) are
+// in the command menu config"; then "a toggle where you can switch summons or drive either on page 1 or 2"
+// and "(b) but you can add a config in the menu for vanilla kh1 behavior".)
+const COMMAND_MENU: [Item; 5] = [
+    Item::Set([0x7F00_0227, 0x7F00_0228, 0x7F00_0229, 0x7F00_022A], Row::DrivePage),
+    Item::Set(kh(0x7F00_022B, 0x7F00_022C), Row::DpadLeft),
+    Item::Set(kh(0x7F00_022D, 0x7F00_022E), Row::CursorMemory),
+    Item::Set(kh(0x7F00_022F, 0x7F00_0230), Row::CommandLock),
+    Item::Set([0x7F00_0123, 0x7F00_011D, 0x7F00_011E, 0x7F00_0124], Row::L2Dpad),
+];
 // (QoL: the user, t704: "make a qol (Quality of life) section in the config menu, put gummi skip in
 // there".)
 // (Soft Reset: the user, t707: "in qol you can quick reset the game", then "the combo does not work in the pc
@@ -441,7 +459,7 @@ const BUTTON_HELP: u32 = 0x7F00_0202;
 /// Misc's help, and the same without the debug menu (its row isn't there without the debug tools).
 const MISC_HELP: u32 = 0x7F00_020C;
 const MISC_HELP_NO_DEBUG: &str = "Battle quotes.";
-const STRINGS: [(u32, &str); 116] = [
+const STRINGS: [(u32, &str); 126] = [
     (0x7F00_0201, "KH1 in KH2"),
     (0x7F00_0202, "Choose KH1's or KH2's camera, combat, movement and more."),
     (0x7F00_0203, "Camera"),
@@ -476,7 +494,17 @@ const STRINGS: [(u32, &str); 116] = [
     (0x7F00_020B, "Misc"),
     (0x7F00_020C, "Battle quotes and the debug menu."),
     (0x7F00_0219, "Command Menu"),
-    (0x7F00_021A, "Options for the command menu."),
+    (0x7F00_021A, "The battle menu's pages, cursor, command lock and L2 stick menu."),
+    (0x7F00_0227, "Drive Page"),
+    (0x7F00_0228, "Page 1"),
+    (0x7F00_0229, "Page 2"),
+    (0x7F00_022A, "Page 1: Drive is the fourth row and Summon is on page 2, as in KH2.\nPage 2: Summon is the fourth row, as in KH1, and Drive is on page 2."),
+    (0x7F00_022B, "D-Pad Left"),
+    (0x7F00_022C, "KH2: d-pad left at the battle menu's top flips page 1 and page 2.\nKH1: it moves the cursor to Attack and there is no page 2."),
+    (0x7F00_022D, "Cursor Memory"),
+    (0x7F00_022E, "KH2: after a command every list goes back to its top row, and a\ncursor stays on its command when a list changes. KH1: KH1's."),
+    (0x7F00_022F, "Command Lock"),
+    (0x7F00_0230, "KH2: a spell, item or summon is taken only once Sora can act, the\nlist stays open until then and nothing greys while he acts. KH1: KH1's."),
     (0x7F00_0211, "QoL"),
     (0x7F00_0212, "Quality of life: Gummi routes, Soft Reset, Cutscene Skip, In-game Scene Skip."),
     (0x7F00_021B, "Soft Reset"),
@@ -512,7 +540,7 @@ const STRINGS: [(u32, &str); 116] = [
     (0x7F00_0121, "R2 Camera Hold"),
     (0x7F00_0122, "While R2 is held, the right stick doesn't move KH2's camera\nand R3 doesn't reset it."),
     (0x7F00_0123, "L2 Stick Menu"),
-    (0x7F00_0124, "While L2 is held, the right stick moves the command menu\nlike the d-pad, with either camera, as in KH2."),
+    (0x7F00_0124, "While L2 is held, the right stick moves the command menu like\nthe d-pad and R3 confirms, with either camera, as in KH2."),
     (0x7F00_0119, "Physics"),
     (0x7F00_011A, "Choose KH1's or KH2's physics for Sora's moves. Air casts:\nCombat > Magic > Air Physics. Drive Forms keep their own."),
     (0x7F00_0101, "Base Combo"),
@@ -583,6 +611,10 @@ fn value(what: Row) -> bool {
         Row::SoftReset => super::softreset::enabled(),
         Row::IngameSkip => super::ingameskip::enabled(),
         Row::Chest => super::chest::kh2(),
+        Row::DrivePage => super::cmdmenu::drive_page2(),
+        Row::DpadLeft => super::cmdmenu::dpad_kh2(),
+        Row::CursorMemory => super::cmdmenu::memory_kh2(),
+        Row::CommandLock => super::cmdmenu::lock_kh2(),
     }
 }
 
@@ -619,6 +651,10 @@ fn set(what: Row, v: bool) {
         Row::SoftReset => super::softreset::set(v),
         Row::IngameSkip => super::ingameskip::set(v),
         Row::Chest => super::chest::set(v),
+        Row::DrivePage => super::cmdmenu::set_drive_page2(v),
+        Row::DpadLeft => super::cmdmenu::set_dpad_kh2(v),
+        Row::CursorMemory => super::cmdmenu::set_memory_kh2(v),
+        Row::CommandLock => super::cmdmenu::set_lock_kh2(v),
     }
 }
 

@@ -65,6 +65,8 @@ const RAW_HELD_STEAM: usize = 0x298C9B4;
 const RAW_R2: u32 = 0x200;
 /// L2 in the PS2 order (the L2 Stick Menu row, `l2_held`).
 const RAW_L2: u32 = 0x100;
+/// R3 in a pad record's buttons (PS2 order: Select 1, L3 2, R3 4, Start 8).
+const RAW_R3: u32 = 0x4;
 /// Steam only: KH1 PC's mouse, the same code as KH2 PC's (`0x1404e51f0` there):
 /// `0x140138b30 (x*, y*, f32*, f32*, sensitivity u16*) -> moved`: the mouse record's motion this
 /// frame, each axis held to ±1 (y flipped), and the sensitivity setting (`0x1404D8614 + 0x24`).
@@ -172,6 +174,15 @@ pub fn dpad_from_stick(buttons_all: u16, rx: u8, ry: u8) -> Option<u16> {
         _ => {}
     }
     Some(d)
+}
+
+/// L2 + R3 (t756): KH2's confirm with L2 held (Steam KH2's field button table `0x1405C34F0`: raw L2
+/// + R3 is logical bit 33, which the menu reads as confirm with bit 2, `0x1403B11E0`; Checked (exe +
+/// decomp)), with the L2 Stick Menu row on. Given one pad record's buttons (PS2 order): `true` when
+/// R3 is held with L2; the caller takes R3 out of that record (KH2 gives R3 no other use with L2
+/// held) and `cmdmenu::pre_step` turns a fresh press into KH1's confirm.
+pub fn l2_r3(buttons_all: u16) -> bool {
+    L2_DPAD.load(Ordering::Relaxed) && buttons_all as u32 & RAW_L2 != 0 && buttons_all as u32 & RAW_R3 != 0 && !first_person()
 }
 
 /// The Config menu's R2 Camera Hold row: kept in the ini.
