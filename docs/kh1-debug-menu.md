@@ -127,6 +127,19 @@ The tester: "can you make it a setting in the debug where I can adjust the growt
   others (`form::form_abilities`), so an override doesn't show in a form; Sora's own (with the
   overrides) come back on revert. A change made during a form is kept for after it.
 
+## Anim Display row (t763)
+
+The tester: the animation readout Frame Advance shows, as a toggle whether or not Frame Advance
+is on.
+
+- Main page > **Anim Display** `< On / Off >`. On draws the Frame Advance info panel (`fapanel`:
+  the animation, how it is drawn, the frame within it of its length, loops, the trace frame) in
+  the top right corner on every frame, titled ANIMATION; Frame Advance on shows it as before,
+  titled FRAME ADVANCE, whatever this row says.
+- Not kept in the ini (starts off each launch, like Frame Advance); turned off with the Config
+  menu's Debug Menu row. The panel reads what the pose code already records for the trace
+  (`pose::drawn`), so it adds no hook; it is drawn only while on.
+
 ## Ledge Carry row (the what-is-still-missing thread, m14 answer 4)
 
 The tester: "(a) and can you make it in the debug" (KH2's ledge rule for its ground moves, in the

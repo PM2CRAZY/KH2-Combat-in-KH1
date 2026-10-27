@@ -41,6 +41,11 @@
 //!   Roll, Aerial Dodge and Glide each Normal (what his level and story give), Off, or LV1..MAX,
 //!   given whether or not he learned or equipped it; kept in the ini (`debug_high_jump` ..); see
 //!   `docs/kh1-debug-menu.md`.
+//! - **Anim Display** (main page; t763, the tester: the Frame Advance panel's animation readout as
+//!   a toggle "regardless if you're in frame advance mode or not"): On draws the panel (`fapanel`)
+//!   in the top right corner on any frame, Frame Advance on or off; Frame Advance on always draws
+//!   it. Not kept in the ini: it starts off each launch, like Frame Advance; off with the Config
+//!   menu's Debug Menu row.
 //! - **Ledge Carry** (main page; the what-is-still-missing thread, m14 answer 4): KH2's ground moves
 //!   whose motion holds him on the ground (no gravity or the edge stop) go on off a ledge, as KH2's
 //!   (`shared::physics::ground_next`), or are cut into KH1's fall, as KH1's. On by default; kept in
@@ -295,6 +300,21 @@ pub fn growth_override(i: usize) -> Option<u8> {
     crate::growth::growth_setting_level(growth_setting(i))
 }
 
+// ---- Anim Display (t763) ----
+
+/// The Anim Display row: the Frame Advance panel drawn without Frame Advance on.
+static ANIM_DISPLAY: AtomicBool = AtomicBool::new(false);
+
+/// Whether the animation panel is drawn: the Anim Display row, or Frame Advance (`fapanel`).
+pub fn anim_display() -> bool {
+    ANIM_DISPLAY.load(Ordering::Relaxed)
+}
+
+fn set_anim_display(on: bool) {
+    ANIM_DISPLAY.store(on, Ordering::Relaxed);
+    log!(Debug, "debug menu: Anim Display {}", if on { "on" } else { "off" });
+}
+
 // ---- Ledge Carry (the what-is-still-missing thread, m14 answer 4) ----
 
 /// The Ledge Carry row: 1 on, 0 off, `UNREAD` until the ini's is read.
@@ -350,6 +370,8 @@ enum Action {
     Kh1Cast(u8),
     /// KH2's ground moves carried off a ledge (`ledge_carry`).
     LedgeCarry,
+    /// The animation panel without Frame Advance (`anim_display`).
+    AnimDisplay,
     GroupRow(usize),
     Item(usize),
     Stat(usize),
@@ -439,6 +461,7 @@ pub fn set_enabled(on: bool) {
     // (t371) Frame Advance is a debug menu row: off with the menu, so the game isn't left held.
     if !on {
         super::frameadv::set_on(false);
+        ANIM_DISPLAY.store(false, Ordering::Relaxed);
     }
     log!(Debug, "Config menu: debug menu {} (this session)", if on { "on (L1 + R1 + Triangle)" } else { "off" });
 }
@@ -558,8 +581,8 @@ unsafe extern "system" fn frame_end(renderer: usize) {
 /// The end of the frame's drawing: the menu drawn into the frame's list first (once a frame).
 unsafe extern "system" fn draw_end(renderer: usize, a: usize, b: usize, c: usize) -> i32 {
     let base = BASE.load(Ordering::Relaxed);
-    // (The Frame Advance panel, `fapanel`, while Frame Advance is on, the menu open or not.)
-    if base != 0 && (OPEN.load(Ordering::Relaxed) || super::frameadv::on()) && !DRAWN.swap(true, Ordering::Relaxed) {
+    // (The Frame Advance panel, `fapanel`, while Frame Advance or Anim Display is on, the menu open or not.)
+    if base != 0 && (OPEN.load(Ordering::Relaxed) || super::frameadv::on() || anim_display()) && !DRAWN.swap(true, Ordering::Relaxed) {
         draw(base);
     }
     let f: unsafe extern "system" fn(usize, usize, usize, usize) -> i32 = std::mem::transmute(ORIG_DRAW_END.load(Ordering::Acquire));
@@ -579,6 +602,7 @@ unsafe fn rows(base: usize, page: Page) -> Vec<(String, Action)> {
             ("Frame Advance  >".into(), Action::Enter(Page::FrameAdvance)),
             ("KH1 Spells  >".into(), Action::Enter(Page::Spells)),
             ("Growth Abilities  >".into(), Action::Enter(Page::Growth)),
+            (format!("{:<16}< {} >", "Anim Display", on_off(anim_display())), Action::AnimDisplay),
             (format!("{:<16}< {} >", "Ledge Carry", on_off(ledge_carry())), Action::LedgeCarry),
             ("Exit".into(), Action::Exit),
         ],
@@ -852,6 +876,10 @@ unsafe fn step(base: usize) {
         }
         Action::LedgeCarry => {
             set_ledge_carry(!ledge_carry());
+            sound(1);
+        }
+        Action::AnimDisplay => {
+            set_anim_display(!anim_display());
             sound(1);
         }
         Action::GroupRow(i) if cross => {
@@ -1250,7 +1278,7 @@ unsafe fn draw(base: usize) {
     if OPEN.load(Ordering::Relaxed) {
         menu_quads(base, size, &mut q);
     }
-    if super::frameadv::on() {
+    if super::frameadv::on() || anim_display() {
         panel_quads(size, &mut q);
     }
     if q.is_empty() {

@@ -3,7 +3,8 @@
 //! ... a separate window pops up with the info", (a) "drawn on the game screen in a corner", (a)
 //! "the frame within the animation"). While Frame Advance is on, a small box in the screen's top
 //! right corner, apart from the debug menu's box (drawn whether the menu is open or not, in the
-//! same overlay pass, `debugmenu::draw_end`):
+//! same overlay pass, `debugmenu::draw_end`). (t763) Also drawn without Frame Advance when the
+//! debug menu's Anim Display row is on (`debugmenu::anim_display`), titled "ANIMATION":
 //!
 //! - the animation drawn: KH2's motion (battle or field) on KH1's slot, or KH1's own;
 //! - how it is drawn: baked into KH1's motion (KH1 plays it), live (our pose over KH1's), KH2's
@@ -100,7 +101,7 @@ pub fn anim() -> Anim {
 pub fn lines() -> Vec<String> {
     let a = anim();
     let mut v = Vec::with_capacity(6);
-    v.push("FRAME ADVANCE".to_string());
+    v.push(if super::frameadv::on() { "FRAME ADVANCE" } else { "ANIMATION" }.to_string());
     let what = match a.motion {
         Some(m) => format!("KH2 {} {}", if a.field { "field" } else { "battle" }, motion_name(m)),
         None if a.route == "kh2_controller" => "KH2 controller pose".to_string(),
