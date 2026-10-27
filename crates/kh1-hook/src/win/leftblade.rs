@@ -347,6 +347,7 @@ pub unsafe fn install() {
         TRAIL_HOOKED.store(true, Ordering::Relaxed);
         std::thread::spawn(load_trail_windows);
     }
+    install_blend(base);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -941,6 +942,12 @@ pub unsafe fn pose_holder(call: unsafe fn(usize, usize, f32, usize), world: usiz
         return;
     };
     let Some(h) = hold_instance() else { return };
+    // (A blend the holder was in ends as KH1 ends Sora's before a plain pass, `0x1402A0350`:
+    // KH1's own blend end on it first.)
+    if BLEND_ON.load(Ordering::Relaxed) && !heap_ok(h) {
+        return;
+    }
+    end_blend(h);
     // Sora's model slot (his bone count and bone table); the flags clear (no ground lift, no
     // look-at: only the weapon bones matter here).
     std::ptr::write_unaligned(h as *mut u64, rd::<u64>(inst));
@@ -948,6 +955,237 @@ pub unsafe fn pose_holder(call: unsafe fn(usize, usize, f32, usize), world: usiz
     call(world, h, time, holder);
     HOLD_FRAME.store(super::takeover::GAME_FRAME.load(Ordering::Relaxed), Ordering::Relaxed);
     log_n(&N, 3, || format!("holder motion {holder:#x} (for Sora's {motion:#x}) posed by KH1's pass at {time:.1} (its instance's motion {:#x})", rd::<u64>(h + INST_MOTION)));
+}
+
+// ---------------------------------------------------------------------------------------------
+// The holder motion through KH1's own motion blend (t713, the tester's (b))
+
+/// KH1's motion blend on a model instance (Steam, Checked (decomp)). The actor's pose step
+/// `0x1402A0350 (actor, world, slot, time, blend length)` starts a blend when a motion is set
+/// while one plays (actor `+0x160` bit 2) and the length is above one step: `0x140394080` when
+/// none runs (actor `+0x170` <= 0), else `0x140393B30` (a blend from the running blend). Both
+/// `(world, instance, time f32, new motion)`, each called only from there: they keep the pose so
+/// far as the blend's old side (local matrices `+0x1BC`, channels `+0x1C4`), pose the new motion
+/// with the plain pass (its local matrices `+0x1C0`, channels `+0x1C8`), list the IK chains of
+/// both (`+0x1CC`), every buffer a block of KH1's compacting heap (`0x14028DA20`, the instance's
+/// field as its owner). Each frame of the blend `0x1402A0620` runs the blend pass `0x140392560
+/// (world, instance, weight f32)` (elapsed / length), which mixes the two sides into the
+/// instance's pose. When the blend is over the step runs `0x140393F60 (instance)` (frees the five
+/// buffers, resets the channels) and the plain pass.
+const BLEND_START_STEAM: usize = 0x394080;
+const BLEND_AGAIN_STEAM: usize = 0x393B30;
+/// Both start `mov [rsp+18h], rbx; push rbp; push rsi; push rdi; push r12..r15` (Steam exe).
+const BLEND_PROLOGUE: [u8; 16] = [0x48, 0x89, 0x5C, 0x24, 0x18, 0x55, 0x56, 0x57, 0x41, 0x54, 0x41, 0x55, 0x41, 0x56, 0x41, 0x57];
+const BLEND_END_STEAM: usize = 0x393F60;
+const BLEND_END_PROLOGUE: [u8; 6] = [0x40, 0x53, 0x48, 0x83, 0xEC, 0x20];
+/// KH1's heap (Steam, Checked (decomp)): `0x14028DA20 (size, owner slot) -> block` (the owner
+/// gets the block's handle; the compactor `0x14028DC30` moves blocks and rewrites their owners'
+/// handles, and drops blocks whose owner is cleared by the free `0x14028DB70`); its block list
+/// `0x142B9C280` (record: `+8` block, `+0x10` size, `+0x18` owner slot, `+0x20` next). The heap is
+/// set up anew by `0x14028D9B0` from the game's mode starts (`0x1402845B0`), which forgets every
+/// block without telling the owners.
+const HEAP_ALLOC_STEAM: usize = 0x28DA20;
+const HEAP_ALLOC_PROLOGUE: [u8; 5] = [0x48, 0x89, 0x5C, 0x24, 0x08];
+const HEAP_LIST_STEAM: usize = 0x2B9C280;
+const HEAP_RECORDS_STEAM: (usize, usize) = (0x2B9C288, 0x2BA1260);
+/// The instance's blend fields (handles to heap blocks): old local matrices, new local matrices,
+/// old channels, new channels, the IK chain list.
+const INST_BLEND: [usize; 5] = [0x1BC, 0x1C0, 0x1C4, 0x1C8, 0x1CC];
+const INST_IK: usize = 0x1CC;
+
+type BlendStart = unsafe extern "system" fn(usize, usize, f32, usize);
+static ORIG_BLEND_START: AtomicUsize = AtomicUsize::new(0);
+static ORIG_BLEND_AGAIN: AtomicUsize = AtomicUsize::new(0);
+/// The holder goes through KH1's blend (`left_blade_blend = on` and every piece found).
+static BLEND_ON: AtomicBool = AtomicBool::new(false);
+/// Sora's blend start is running: its own plain pass inside it leaves the holder alone.
+static IN_BLEND: AtomicBool = AtomicBool::new(false);
+/// The holder is in a KH1 blend (its blend fields KH1's).
+static HOLD_BLENDING: AtomicBool = AtomicBool::new(false);
+/// Sora's motion his blend (and the holder's) went into.
+static BLEND_INTO: AtomicUsize = AtomicUsize::new(0);
+
+unsafe fn install_blend(base: usize) {
+    if !super::settings::get().left_blade_blend {
+        log!(Animation, "left Keyblade: its holder motion not blended (left_blade_blend = off: the hand's hold switches at once)");
+        return;
+    }
+    let bytes = |at: usize, want: &[u8]| std::slice::from_raw_parts((base + at) as *const u8, want.len()) == want;
+    if !bytes(BLEND_END_STEAM, &BLEND_END_PROLOGUE) || !bytes(HEAP_ALLOC_STEAM, &HEAP_ALLOC_PROLOGUE) {
+        log!(Animation, "left Keyblade: holder blend off (KH1's blend end or heap not where expected)");
+        return;
+    }
+    if super::hook::install(base + BLEND_START_STEAM, &BLEND_PROLOGUE, blend_start as *const () as usize, &ORIG_BLEND_START, "motion blend start (left Keyblade's holder)").is_none() {
+        log!(Animation, "left Keyblade: holder blend off (KH1's blend start not where expected)");
+        return;
+    }
+    if super::hook::install(base + BLEND_AGAIN_STEAM, &BLEND_PROLOGUE, blend_again as *const () as usize, &ORIG_BLEND_AGAIN, "motion blend restart (left Keyblade's holder)").is_none() {
+        // (The start's hook stays in and passes through: nothing of ours runs with BLEND_ON off.)
+        log!(Animation, "left Keyblade: holder blend off (KH1's blend restart not where expected)");
+        return;
+    }
+    BLEND_ON.store(true, Ordering::Relaxed);
+    log!(Animation, "left Keyblade: its holder motion blended by KH1's own motion blend");
+}
+
+/// Our holder instance (KH1's passes on it go straight to KH1's: `pose`'s hooks).
+pub fn is_holder(instance: usize) -> bool {
+    instance != 0 && instance == HOLD.load(Ordering::Relaxed)
+}
+
+/// Sora's blend start is running (`pose`: its inner plain pass doesn't pose the holder).
+pub fn in_blend_start() -> bool {
+    IN_BLEND.load(Ordering::Relaxed)
+}
+
+unsafe extern "system" fn blend_start(world: usize, instance: usize, time: f32, motion: usize) {
+    blend_hook(false, world, instance, time, motion);
+}
+
+unsafe extern "system" fn blend_again(world: usize, instance: usize, time: f32, motion: usize) {
+    blend_hook(true, world, instance, time, motion);
+}
+
+unsafe fn blend_hook(again: bool, world: usize, instance: usize, time: f32, motion: usize) {
+    let f: BlendStart = std::mem::transmute(if again { &ORIG_BLEND_AGAIN } else { &ORIG_BLEND_START }.load(Ordering::Acquire));
+    let sora = BLEND_ON.load(Ordering::Relaxed) && instance != 0 && instance == super::pose::SORA_INSTANCE.load(Ordering::Relaxed);
+    if !sora {
+        f(world, instance, time, motion);
+        return;
+    }
+    IN_BLEND.store(true, Ordering::Relaxed);
+    f(world, instance, time, motion);
+    IN_BLEND.store(false, Ordering::Relaxed);
+    holder_blend_start(again, world, time, motion);
+}
+
+/// After KH1 started a blend on Sora into `motion`: the same KH1 function on the holder with
+/// the holder motion of `motion`, so its old side is the holder's pose so far. A holder that
+/// wasn't posed lately (or no holder motion, or no heap room) is posed plain instead, as before.
+unsafe fn holder_blend_start(again: bool, world: usize, time: f32, motion: usize) {
+    static N: AtomicU32 = AtomicU32::new(0);
+    if !INSTALLED.load(Ordering::Relaxed) || !left_shown() || !super::form::native_now() || world < 0x10000 || !time.is_finite() {
+        return;
+    }
+    let plain = || pose_holder(super::pose::plain_pass, world, Some((motion, time)));
+    let Some(holder) = super::kh2slots::holder_motion(motion) else {
+        plain();
+        return;
+    };
+    let Some(h) = hold_instance() else { return };
+    let frame = super::takeover::GAME_FRAME.load(Ordering::Relaxed);
+    let at = HOLD_FRAME.load(Ordering::Relaxed);
+    let recent = at != u64::MAX && frame.saturating_sub(at) <= 2 && rd::<u64>(h + INST_MOTION) != 0;
+    if !recent || !heap_ok(h) {
+        plain();
+        return;
+    }
+    let inst = super::pose::SORA_INSTANCE.load(Ordering::Relaxed);
+    std::ptr::write_unaligned(h as *mut u64, rd::<u64>(inst));
+    std::ptr::write_unaligned((h + INST_FLAGS) as *mut u32, 0);
+    // KH1's own choice by the holder's own state: a blend from the running blend only while one
+    // runs on it (its IK list is there), else a fresh one.
+    let running = HOLD_BLENDING.load(Ordering::Relaxed) && rd::<u32>(h + INST_IK) != 0;
+    let restart = again && running;
+    let f: BlendStart = std::mem::transmute(if restart { &ORIG_BLEND_AGAIN } else { &ORIG_BLEND_START }.load(Ordering::Acquire));
+    f(world, h, time, holder);
+    HOLD_BLENDING.store(true, Ordering::Relaxed);
+    BLEND_INTO.store(motion, Ordering::Relaxed);
+    HOLD_FRAME.store(frame, Ordering::Relaxed);
+    log_n(&N, 6, || format!("holder blend: KH1's {} on the holder into {holder:#x} (for Sora's {motion:#x}) at {time:.1}", if restart { "blend restart 0x140393B30" } else { "blend start 0x140394080" }));
+}
+
+/// `pose`'s blend-pass hook, right after KH1's blend pass `0x140392560` ran on Sora with `weight`:
+/// the same pass on the holder while it is in its blend. False: not blending (the caller poses it
+/// plain at his actor's motion, as before).
+pub unsafe fn blend_holder(call: unsafe fn(usize, usize, f32), world: usize, weight: f32) -> bool {
+    static N: AtomicU32 = AtomicU32::new(0);
+    if !BLEND_ON.load(Ordering::Relaxed) || !HOLD_BLENDING.load(Ordering::Relaxed) {
+        return false;
+    }
+    if !INSTALLED.load(Ordering::Relaxed) || !left_shown() || !super::form::native_now() || world < 0x10000 || !weight.is_finite() {
+        return false;
+    }
+    let h = HOLD.load(Ordering::Relaxed);
+    if h == 0 || !heap_ok(h) || rd::<u32>(h + INST_IK) == 0 || !HOLD_BLENDING.load(Ordering::Relaxed) {
+        return false;
+    }
+    // (Sora's blend must be the one the holder's went into: the motion his instance last posed,
+    // `+8`, set by the plain pass inside KH1's blend start; his actor's slot `+0x168` is only
+    // written after the blend's first pass, `0x1402A0350`. Else KH1 changed his motion without a
+    // blend start, and the plain pose stands.)
+    let inst = super::pose::SORA_INSTANCE.load(Ordering::Relaxed);
+    if !readable(inst, INSTANCE_SIZE) || rd::<usize>(inst + INST_MOTION) != BLEND_INTO.load(Ordering::Relaxed) {
+        return false;
+    }
+    std::ptr::write_unaligned(h as *mut u64, rd::<u64>(inst));
+    std::ptr::write_unaligned((h + INST_FLAGS) as *mut u32, 0);
+    call(world, h, weight);
+    HOLD_FRAME.store(super::takeover::GAME_FRAME.load(Ordering::Relaxed), Ordering::Relaxed);
+    log_n(&N, 6, || format!("holder blend: KH1's blend pass on the holder at weight {weight:.2}"));
+    true
+}
+
+/// KH1's blend end `0x140393F60` on the holder, if it is in a blend (before a plain pass).
+unsafe fn end_blend(h: usize) {
+    if !HOLD_BLENDING.swap(false, Ordering::Relaxed) || !BLEND_ON.load(Ordering::Relaxed) {
+        return;
+    }
+    let f: unsafe extern "system" fn(usize) = std::mem::transmute(BASE.load(Ordering::Relaxed) + BLEND_END_STEAM);
+    f(h);
+}
+
+/// The holder's heap fields still name live blocks of KH1's heap it owns (the heap is set up anew
+/// at the game's mode starts, forgetting them). Stale blend fields are cleared; its local matrices
+/// (`+0x1B8`, which KH1's blend start hands to the blend's old side and frees later, so a block of
+/// KH1's heap as Sora's is after his first blend) are made a heap block when they aren't one.
+/// False: no block could be had (the holder isn't posed).
+unsafe fn heap_ok(h: usize) -> bool {
+    static N: AtomicU32 = AtomicU32::new(0);
+    let base = BASE.load(Ordering::Relaxed);
+    let slots: [usize; 6] = [INST_LOCAL, INST_BLEND[0], INST_BLEND[1], INST_BLEND[2], INST_BLEND[3], INST_BLEND[4]];
+    let want: [usize; 6] = slots.map(|s| match rd::<u32>(h + s) {
+        0 => 0,
+        hd => super::pose::ptr(hd),
+    });
+    let mut found = want.map(|p| p == 0);
+    let mut r = rd::<usize>(base + HEAP_LIST_STEAM);
+    let mut n = 0;
+    while r != 0 && n < 0x400 && !found.iter().all(|f| *f) {
+        // (Every record is in the exe's own table, `0x142B9C288..0x142BA1260`, 0x28 apart.)
+        if r < base + HEAP_RECORDS_STEAM.0 || r + 0x28 > base + HEAP_RECORDS_STEAM.1 {
+            break;
+        }
+        let p = rd::<usize>(r + 8);
+        let owner = rd::<usize>(r + 0x18);
+        for i in 0..6 {
+            if !found[i] && want[i] == p && owner == h + slots[i] {
+                found[i] = true;
+            }
+        }
+        r = rd::<usize>(r + 0x20);
+        n += 1;
+    }
+    if !found[1..].iter().all(|f| *f) {
+        for s in INST_BLEND {
+            std::ptr::write_unaligned((h + s) as *mut u32, 0);
+        }
+        HOLD_BLENDING.store(false, Ordering::Relaxed);
+        log_n(&N, 6, || "holder blend: its blend buffers aren't KH1's heap's any more (the heap was set up anew): cleared".into());
+    }
+    if found[0] && want[0] != 0 {
+        return true;
+    }
+    // Its local matrices as a block of KH1's heap, sized by the model's bone count.
+    let inst = super::pose::SORA_INSTANCE.load(Ordering::Relaxed);
+    let model = if readable(inst, 8) { rd::<usize>(inst) } else { 0 };
+    let bones = if readable(model, 8) && readable(rd::<usize>(model), 2) { rd::<i16>(rd::<usize>(model)) as i32 } else { SORA_BONES as i32 };
+    let bones = if bones > 0 { bones } else { SORA_BONES as i32 };
+    let alloc: unsafe extern "system" fn(i32, usize) -> usize = std::mem::transmute(base + HEAP_ALLOC_STEAM);
+    let p = alloc(bones << 6, h + INST_LOCAL);
+    let ok = p != 0 && rd::<u32>(h + INST_LOCAL) != 0;
+    log_n(&N, 6, || format!("holder blend: its local matrices made a block of KH1's heap ({p:#x}, {bones} bones){}", if ok { "" } else { ": failed" }));
+    ok
 }
 
 /// The left Keyblade's bones in KH1's world from KH1's pose of the holder motion, if it was posed

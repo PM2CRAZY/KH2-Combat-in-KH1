@@ -722,3 +722,68 @@ into Valor's moves so KH1's own animation drives them.
   relied on); nothing reads the pass's scratch globals between Sora's pass and the next actor's.
 - The first start after this version bakes the holder motions once (new cache keys).
 
+### 10.4.1 The holder through KH1's own motion blend (Steam, Checked (decomp, exe); not checked in game)
+
+The tester (what-is-still-missing, m16 Q2): "looks good but I wanna see how it looks with (b)", i.e.
+the holder motion also goes through KH1's own blend, so the left Keyblade's hold on the hand blends
+between two Valor moves as Sora's hand does, instead of switching to the new move at once.
+
+- **How KH1 blends a motion** (Checked (decomp)): the actor's pose step `0x1402A0350 (actor, world,
+  slot, time, blend length)` starts a blend when a motion is set while one plays (actor `+0x160`
+  bit 2) and the blend length is over one step (`0x14233FBDC × +0x284`):
+  - `0x140394080 (world, instance, time f32, motion)` when no blend runs (actor `+0x170` <= 0),
+    `0x140393B30` (same arguments) when one does; each is called only from there. They keep the
+    pose so far as the blend's old side (local matrices handed from `+0x1B8` to `+0x1BC`,
+    channels copied to `+0x1C4`), reset and pose the new motion with the plain pass `0x140391C70`
+    (local matrices `+0x1C0`, channels `+0x1C8`), and list both motions' IK chains (`+0x1CC`).
+    Every buffer is a block of KH1's heap.
+  - Each blend frame (also the first) `0x1402A0620` runs the blend pass `0x140392560 (world,
+    instance, weight f32)` with weight = elapsed / length (actor `+0x174` / `+0x170`): it mixes
+    the two sides into the instance's pose.
+  - At the end the step runs `0x140393F60 (instance)` (frees the five blend buffers, resets the
+    channels) and the plain pass. The actor's slot `+0x168` and time `+0x16C` are written after
+    the blend's first pass.
+- **KH1's heap** (Checked (decomp)): `0x14028DA20 (size, owner slot)` allocates a block and puts
+  its handle in the owner slot; `0x14028DB20` re-owns a block, `0x14028DB70` frees it (clears its
+  owner; both dereference a null record if the block isn't the heap's, so the blend start must
+  only see heap blocks); the compactor `0x14028DC30` (a task) moves blocks and rewrites their
+  owners' handles. Records: the list `0x142B9C280`, records in the table `0x142B9C288..
+  0x142BA1260` (`+8` block, `+0x10` size, `+0x18` owner slot, `+0x20` next). `0x14028D9B0` sets the
+  heap up anew from the game's mode starts (`0x1402845B0`), forgetting every block.
+- **The holder** (`leftblade::install_blend`, `blend_hook`, `holder_blend_start`, `blend_holder`,
+  `heap_ok`, `end_blend`):
+  - Hooks on `0x140394080` and `0x140393B30` (prologue `48 89 5C 24 18 55 56 57 41 54 41 55 41 56
+    41 57`, the same in both, Steam exe). For Sora's instance, after KH1's call, the same KH1
+    function runs on the holder instance with the holder motion of the motion Sora blends into, at
+    the same time and world. Which one is the holder's own state's choice, as KH1 chooses by the
+    actor's: the restart only while the holder is in a blend (its IK list there). Sora's plain
+    pass inside his blend start no longer poses the holder (the holder's own blend start does).
+  - The blend-pass hook (already in, `pose_ik`): after KH1's pass on Sora, KH1's blend pass on the
+    holder with the same weight, while the holder is in the blend Sora is in (his instance's `+8`,
+    the motion his plain pass last posed, is the one the holder's blend went into).
+  - Before a plain pass on the holder that was in a blend, KH1's blend end `0x140393F60` on it, as
+    KH1 does for Sora.
+  - The holder's local matrices (`+0x1B8`) are a block of KH1's heap (`0x14028DA20`, the model's
+    bone count × 0x40), since the blend start hands them to the old side and later frees them.
+    Before each pass on the holder its heap fields are checked against the heap's records; after
+    the heap is set up anew (stale handles) its blend fields are cleared and its local matrices
+    made again. `+0x1B0` / `+0x1B4` stay ours (KH1's blend functions don't touch them).
+  - KH1's passes on the holder instance (inside its blend start) go straight to KH1's in `pose`'s
+    hooks.
+  - A holder not posed in the last two game frames, a move without a holder motion, or no heap
+    block: the holder is posed plain at the new motion, as before (no blend for it).
+- **What changes on screen:** through KH1's blend the left Keyblade's hold on the hand goes from
+  the old move's to the new one's over the same frames and weights as Sora's own body.
+- **Toggle:** ini `left_blade_blend` (on by default; off = §10.4's switch at once, nothing of this
+  installed), so the two can be compared.
+- **Still ours each frame:** besides §10.4's, a walk of KH1's heap records (at most 0x200) per
+  pass on the holder, and the blend functions run on one more instance during a blend.
+- **Assumptions:** the holder motions carry no IK chains (their bone words' bits 21..22 clear,
+  so the list is empty), and if they do KH1's own IK code handles them on the holder with Sora's
+  model; the blend's scratch globals (`0x142EF1F50`, `0x142EF2F50..`) are only read within one
+  pass, as §10.4 assumed for the plain one.
+- Log lines: "left Keyblade: holder blend: KH1's blend start 0x140394080 on the holder into ...",
+  "... blend restart 0x140393B30 ...", "... KH1's blend pass on the holder at weight ...", "... its
+  local matrices made a block of KH1's heap ...", "... aren't KH1's heap's any more ...", and at
+  start "its holder motion blended by KH1's own motion blend" (or why it's off).
+

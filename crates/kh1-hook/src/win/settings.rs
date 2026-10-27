@@ -157,6 +157,9 @@ drive = on\r\n\
 ; valor_left_blade: on = in Valor Form, its Keyblade in Sora's left hand (KH1's own model of it);\r\n\
 ; off = nothing of it is installed (turn it off if it misbehaves)\r\n\
 valor_left_blade = on\r\n\
+; left_blade_blend: on = the left Keyblade's hold on the hand blends between two moves through\r\n\
+;   KH1's own motion blend, as Sora's hand does; off = it switches to the new move at once\r\n\
+left_blade_blend = on\r\n\
 ; physics: kh1 or kh2, whose physics move base Sora in every move but air casts (run speeds, jump arc,\r\n\
 ;   gravity, air drift, attack travel), whatever the move styles below (they choose the\r\n\
 ;   animations); Drive Forms always KH2's. The Config menu's Physics row switches it in game\r\n\
@@ -393,6 +396,8 @@ pub struct Settings {
     pub drive: bool,
     /// Valor's Keyblade drawn in his left hand (`valor_left_blade = on`, `leftblade`).
     pub valor_left_blade: bool,
+    /// The left Keyblade's holder motion through KH1's motion blend (`left_blade_blend = on`).
+    pub left_blade_blend: bool,
     /// KH2's (true) or KH1's moves per `styles::Kind`, in `Kind::EVERY`'s order.
     pub styles: [bool; super::styles::COUNT],
     /// How far KH2's hit reactions push base Sora (`knockback_numbers = kh2 | kh1 | scaled`, KH2's by
@@ -620,6 +625,7 @@ fn load(first: bool) -> Option<Settings> {
         physics_rule: crate::kh1phys::Rule::parse(setting(&text, "physics").as_deref()),
         drive: on(&text, "drive", "on", true),
         valor_left_blade: on(&text, "valor_left_blade", "on", true),
+        left_blade_blend: on(&text, "left_blade_blend", "on", true),
         styles: {
             // (The Magic / Aerial Magic rows before the per-spell rows, m19: the new rows' defaults
             // from them, so an ini from before keeps what it cast.)

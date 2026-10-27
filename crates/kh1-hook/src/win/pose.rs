@@ -2195,6 +2195,11 @@ fn is_sora(instance: usize) -> bool {
 
 unsafe extern "system" fn pose(world: usize, instance: usize, t: f32, motion: usize) {
     let f: Pose = std::mem::transmute(ORIG_POSE.load(Ordering::Acquire));
+    // (The left Keyblade's holder, posed by KH1's own blend start: KH1's pass alone.)
+    if super::leftblade::is_holder(instance) {
+        f(world, instance, t, motion);
+        return;
+    }
     if is_sora(instance) {
         super::kh2dpx::posed(false);
     }
@@ -2211,21 +2216,34 @@ unsafe extern "system" fn pose(world: usize, instance: usize, t: f32, motion: us
     }
     if is_sora(instance) {
         super::kh2dpx::posed(true);
-        // Valor's left Keyblade: its holder motion posed by this same pass (`leftblade`).
-        super::leftblade::pose_holder(plain_pass, used, Some((motion, t)));
+        // Valor's left Keyblade: its holder motion posed by this same pass (`leftblade`); inside
+        // KH1's blend start the holder gets KH1's blend start instead.
+        if !super::leftblade::in_blend_start() {
+            super::leftblade::pose_holder(plain_pass, used, Some((motion, t)));
+        }
     }
 }
 
 /// KH1's own plain pose pass (the original, past our hook): `leftblade` poses its holder motion
 /// with it.
-unsafe fn plain_pass(world: usize, instance: usize, t: f32, motion: usize) {
+pub unsafe fn plain_pass(world: usize, instance: usize, t: f32, motion: usize) {
     let f: Pose = std::mem::transmute(ORIG_POSE.load(Ordering::Acquire));
     f(world, instance, t, motion);
 }
 
-unsafe extern "system" fn pose_ik(world: usize, instance: usize, flags: f32) {
-    LAST_T.store(flags.to_bits(), Ordering::Relaxed);
+/// KH1's own blend pass (the original, past our hook): `leftblade` blends its holder with it.
+unsafe fn blend_pass(world: usize, instance: usize, weight: f32) {
     let f: PoseIk = std::mem::transmute(ORIG_POSE_IK.load(Ordering::Acquire));
+    f(world, instance, weight);
+}
+
+unsafe extern "system" fn pose_ik(world: usize, instance: usize, flags: f32) {
+    let f: PoseIk = std::mem::transmute(ORIG_POSE_IK.load(Ordering::Acquire));
+    if super::leftblade::is_holder(instance) {
+        f(world, instance, flags);
+        return;
+    }
+    LAST_T.store(flags.to_bits(), Ordering::Relaxed);
     super::glide::chain_source(instance);
     if is_sora(instance) {
         super::kh2dpx::posed(false);
@@ -2243,8 +2261,11 @@ unsafe extern "system" fn pose_ik(world: usize, instance: usize, flags: f32) {
     }
     if is_sora(instance) {
         super::kh2dpx::posed(true);
-        // (KH1's blend pass: the holder motion at his actor's motion and time.)
-        super::leftblade::pose_holder(plain_pass, used, None);
+        // (KH1's blend pass: the same pass on the holder while it is in KH1's blend, else the
+        // holder motion plain at his actor's motion and time.)
+        if !super::leftblade::blend_holder(blend_pass, used, flags) {
+            super::leftblade::pose_holder(plain_pass, used, None);
+        }
     }
 }
 
