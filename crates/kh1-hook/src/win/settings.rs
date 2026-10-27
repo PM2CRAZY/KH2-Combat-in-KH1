@@ -246,9 +246,9 @@ cutscene_seen =\r\n\
 ; pause menu can't skip) with KH1's own skip: items, abilities and story flags the scene gives are still given.\r\n\
 ; Talks, shops, scenes with a choice and the pause menu's skippable cutscenes are left alone (QoL > In-game Scene Skip)\r\n\
 ingame_skip = off\r\n\
-; chest_style: kh1 = KH1's chest opening (Sora stands still until the item window is closed); kh2 = as KH2: Sora\r\n\
-; is free at once and the item shows in KH1's notice box, no window to close (Combat > Tweaks > Chest Opening)\r\n\
-chest_style = kh1\r\n\
+; chest_style: kh1 = KH1's chest opening (Sora stands still until the item window is closed); kh2 = as KH2 (the\r\n\
+; default): Sora is free at once and the item shows at the top of the screen, no window to close (QoL > Chest Opening)\r\n\
+chest_style = kh2\r\n\
 ; trace: (debug tools: only with debug_menu = on) on = the last trace_seconds of Sora's frames (position, KH1's and KH2's states, the pad)\r\n\
 ; are kept and written to the kh1-kh2-traces folder on Select + Triangle, or on their own when\r\n\
 ; something looks wrong; always = every frame is also written to kh1-kh2.trace.csv; off = none\r\n\
@@ -680,7 +680,7 @@ fn load(first: bool) -> Option<Settings> {
         },
         cutscene_seen: setting(&text, "cutscene_seen").unwrap_or_default(),
         ingame_skip: on(&text, "ingame_skip", "on", false),
-        chest_kh2: on(&text, "chest_style", "kh2", false),
+        chest_kh2: on(&text, "chest_style", "kh2", true),
         shared: on(&text, "shared", "on", true),
         kh1_slots: match setting(&text, "kh1_slots").as_deref() {
             Some("off") | Some("0") | Some("no") => None,

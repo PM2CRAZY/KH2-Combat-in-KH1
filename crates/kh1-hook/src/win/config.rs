@@ -227,7 +227,7 @@ enum Row {
     SoftReset,
     /// QoL > In-game Scene Skip (Off | On, `ingameskip`).
     IngameSkip,
-    /// Tweaks > Chest Opening (KH1 | KH2, `chest`).
+    /// QoL > Chest Opening (KH1 | KH2, `chest`).
     Chest,
 }
 
@@ -351,11 +351,14 @@ const COMMAND_MENU: [Item; 1] = [Item::Set([0x7F00_0123, 0x7F00_011D, 0x7F00_011
 // dialog scenes you confirm line by line; skip the pause menu's skippable ones with the game's own function.)
 // (In-game Scene Skip: the user, t712: "you can make it a seperate config option in qol ... it skips that in game
 // cutscene fully, then if any flags give you an item the game gives you the item after the fact".)
-const QOL: [Item; 4] = [
+// (Chest Opening: the tester Mr Bugs, kh2-chest: "a config in the tweaks menu that lets use quickly open and
+// move from the chest opening animation like in kh2", then round 2: "(b) and move it in QOL", KH2 by default.)
+const QOL: [Item; 5] = [
     Item::Set([0x7F00_0111, 0x7F00_0113, 0x7F00_0114, 0x7F00_0112], Row::Gummi),
     Item::Set([0x7F00_021B, 0x7F00_011D, 0x7F00_011E, 0x7F00_021C], Row::SoftReset),
     Item::Pick([0x7F00_021D, 0x7F00_011D, 0x7F00_021E, 0x7F00_021F, 0x7F00_0220], Pick::CutsceneSkip),
     Item::Set([0x7F00_0221, 0x7F00_011D, 0x7F00_011E, 0x7F00_0222], Row::IngameSkip),
+    Item::Set(kh(0x7F00_0225, 0x7F00_0226), Row::Chest),
 ];
 // (Cosmetics: the user, t704: "a new menu called cosmetics and put a setting in there for keyblades to
 // always have their trail on".)
@@ -369,9 +372,7 @@ const COSMETICS: [Item; 1] = [Item::Set([0x7F00_0215, 0x7F00_0217, 0x7F00_0218, 
 // (Hit Reactions, Knock-back Numbers, Medium Hits, KH2 Damage, Criticals, Party Criticals and Recoil
 // moved here from Combat: the user, t704: "put recoil, critical, party critical, kh2 damage, medium
 // hits, knock back numbers, and hit reactions into the tweaks section".)
-// (Chest Opening: the tester Mr Bugs, kh2-chest: "a config in the tweaks menu that lets use quickly open and
-// move from the chest opening animation like in kh2".)
-const TWEAKS: [Item; 13] = [
+const TWEAKS: [Item; 12] = [
     Item::Set([0x7F00_0191, 0x7F00_011D, 0x7F00_011E, 0x7F00_0192], Row::AbilityChance),
     Item::Set([0x7F00_0193, 0x7F00_011D, 0x7F00_011E, 0x7F00_0194], Row::EnemyWeight),
     Item::Set([0x7F00_0223, 0x7F00_011D, 0x7F00_011E, 0x7F00_0224], Row::SmallBlows),
@@ -384,7 +385,6 @@ const TWEAKS: [Item; 13] = [
     Item::Set([0x7F00_0149, 0x7F00_011D, 0x7F00_011E, 0x7F00_014A], Row::Criticals),
     Item::Set([0x7F00_014B, 0x7F00_011D, 0x7F00_011E, 0x7F00_014C], Row::PartyCriticals),
     Item::Set(kh(0x7F00_0172, 0x7F00_0173), Row::Style(Kind::Recoil)),
-    Item::Set(kh(0x7F00_0225, 0x7F00_0226), Row::Chest),
 ];
 const CAMERA: [Item; 2] = [
     Item::Set(kh(0x7F00_0001, 0x7F00_0004), Row::Camera),

@@ -1,6 +1,6 @@
 # Chest Opening (KH1 | KH2)
 
-The Combat > Tweaks row Chest Opening (ini `chest_style = kh1 | kh2`, KH1 by default) asked by the
+The QoL row Chest Opening (ini `chest_style = kh1 | kh2`, KH2 by default since round 2; it was Combat > Tweaks, KH1 by default, in t724) asked by the
 tester Mr Bugs (thread kh2-chest): "quickly open and move from the chest opening animation like in
 kh2 ... open the chest, move then the pop up for the item plays at the top of the game letting you
 know what you got". Code: `crates/kh1-hook/src/win/chest.rs`.
