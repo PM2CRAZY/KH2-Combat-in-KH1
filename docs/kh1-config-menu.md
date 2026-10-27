@@ -471,3 +471,11 @@ The QoL list has a third row, Cutscene Skip (Off | Seen | All, ini `cutscene_ski
 ### 6.z5 In-game Scene Skip in QoL (t712)
 
 The QoL list has a fourth row, In-game Scene Skip (Off | On, ini `ingame_skip`, off by default): skips the in-game dialog scenes the pause menu can't skip, with KH1's own skip, so the items and flags they give are still given. Talks, shops, scenes with a choice and the pause menu's skippable cutscenes are left alone. New text ids `0x7F000221` / `0x7F000222`. How it works and what is checked: `docs/kh1-ingame-skip.md`.
+
+### 6.z6 Chest Opening in Tweaks
+
+The Tweaks list has a fourteenth row (after t721's Small Blows), Chest Opening (KH1 | KH2, ini `chest_style`, KH1 by default):
+at KH2 Sora is free as soon as a plain chest is opened and what it held shows in KH1's notice box,
+with no window to close. New text ids `0x7F000225` / `0x7F000226`. How it works and what is
+checked: `docs/kh1-chest.md`. **Assumption** until seen: fourteen rows at the list's smaller scale
+still clear the help box (`list_scale` sizes it).

@@ -5,6 +5,7 @@
 mod addr;
 mod bodyhits;
 mod camera;
+mod chest;
 mod combat;
 mod combomods;
 mod config;
@@ -445,6 +446,7 @@ pub unsafe extern "system" fn DllMain(_inst: *mut c_void, reason: u32, _reserved
         softreset::install();
         cutsceneskip::install();
         ingameskip::install();
+        chest::install();
         model::install();
         gates::install();
         // (Its voice group hook carries gameplay and always goes in; the log hooks only with the

@@ -227,6 +227,8 @@ enum Row {
     SoftReset,
     /// QoL > In-game Scene Skip (Off | On, `ingameskip`).
     IngameSkip,
+    /// Tweaks > Chest Opening (KH1 | KH2, `chest`).
+    Chest,
 }
 
 /// A row of one of our lists: a setting (label, left value, right value, help, what it switches),
@@ -367,7 +369,9 @@ const COSMETICS: [Item; 1] = [Item::Set([0x7F00_0215, 0x7F00_0217, 0x7F00_0218, 
 // (Hit Reactions, Knock-back Numbers, Medium Hits, KH2 Damage, Criticals, Party Criticals and Recoil
 // moved here from Combat: the user, t704: "put recoil, critical, party critical, kh2 damage, medium
 // hits, knock back numbers, and hit reactions into the tweaks section".)
-const TWEAKS: [Item; 12] = [
+// (Chest Opening: the tester Mr Bugs, kh2-chest: "a config in the tweaks menu that lets use quickly open and
+// move from the chest opening animation like in kh2".)
+const TWEAKS: [Item; 13] = [
     Item::Set([0x7F00_0191, 0x7F00_011D, 0x7F00_011E, 0x7F00_0192], Row::AbilityChance),
     Item::Set([0x7F00_0193, 0x7F00_011D, 0x7F00_011E, 0x7F00_0194], Row::EnemyWeight),
     Item::Set([0x7F00_0223, 0x7F00_011D, 0x7F00_011E, 0x7F00_0224], Row::SmallBlows),
@@ -380,6 +384,7 @@ const TWEAKS: [Item; 12] = [
     Item::Set([0x7F00_0149, 0x7F00_011D, 0x7F00_011E, 0x7F00_014A], Row::Criticals),
     Item::Set([0x7F00_014B, 0x7F00_011D, 0x7F00_011E, 0x7F00_014C], Row::PartyCriticals),
     Item::Set(kh(0x7F00_0172, 0x7F00_0173), Row::Style(Kind::Recoil)),
+    Item::Set(kh(0x7F00_0225, 0x7F00_0226), Row::Chest),
 ];
 const CAMERA: [Item; 2] = [
     Item::Set(kh(0x7F00_0001, 0x7F00_0004), Row::Camera),
@@ -439,7 +444,7 @@ const BUTTON_HELP: u32 = 0x7F00_0202;
 /// Misc's help, and the same without the debug menu (its row isn't there without the debug tools).
 const MISC_HELP: u32 = 0x7F00_020C;
 const MISC_HELP_NO_DEBUG: &str = "Battle quotes.";
-const STRINGS: [(u32, &str); 116] = [
+const STRINGS: [(u32, &str); 118] = [
     (0x7F00_0201, "KH1 in KH2"),
     (0x7F00_0202, "Choose KH1's or KH2's camera, combat, movement and more."),
     (0x7F00_0203, "Camera"),
@@ -499,6 +504,8 @@ const STRINGS: [(u32, &str); 116] = [
     (0x7F00_0194, "On: KH2's knock-back on enemies times KH1's weight for each\nenemy. Off: KH2's own numbers for every enemy."),
     (0x7F00_0223, "Small Blows"),
     (0x7F00_0224, "On: a KH2 blow with a small arc, like Fire's, plays KH1's\nknock-back with KH2's numbers. Off: every blow is KH1's launch."),
+    (0x7F00_0225, "Chest Opening"),
+    (0x7F00_0226, "KH1: Sora waits for the item window. KH2: Sora can move at once;\nwhat the chest held shows in a notice box."),
     (0x7F00_0197, "Cast from Glide"),
     (0x7F00_0198, "On: a KH2 spell ends the glide and is cast in the air, as in\nKH2. Off: no spell while gliding."),
     (0x7F00_0199, "Clash Combo"),
@@ -581,6 +588,7 @@ fn value(what: Row) -> bool {
         Row::TrailAlways => super::cosmetics::always(),
         Row::SoftReset => super::softreset::enabled(),
         Row::IngameSkip => super::ingameskip::enabled(),
+        Row::Chest => super::chest::kh2(),
     }
 }
 
@@ -617,6 +625,7 @@ fn set(what: Row, v: bool) {
         Row::TrailAlways => super::cosmetics::set_always(v),
         Row::SoftReset => super::softreset::set(v),
         Row::IngameSkip => super::ingameskip::set(v),
+        Row::Chest => super::chest::set(v),
     }
 }
 
