@@ -44,6 +44,8 @@ reflect is playing the base animation
 air fires physics are wrong
 all the air magics movement and physics aren't proper
 air reflect is base soras reflect 
+air attacks movements seem off
+you can't move and attack on the ground
 
 look into the steam c decomp to confirm what I'm saying and apply all fixes, I've traced everything for you to get a head start
 
