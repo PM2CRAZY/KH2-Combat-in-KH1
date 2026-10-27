@@ -287,7 +287,7 @@ The tester: the glide can't come out of the dodge as fast as in KH2. What KH2 ne
 - `combomods::dodge_clock` (from `dodge_apex`, each physics frame): on the first physics frame after
   KH1 applied our dodge request (time 0, no blend, a 60 Hz step), the slot's time `+0x16C` is put at
   1, so KH1's update makes it KH2's 2 (KH2's skip of frame 1, as `glide::kh2_clock` does for the
-  glide). The sound at frame 1 still plays (our slot's events fire between 0 and 2, as KH2's).
+  glide). The sound at frame 1 plays because 202's frame 0 and 1 triggers are keyed at 1.0, not 1 - 1/64 (t726: since t677 KH1's motion pass fires them, and its update from 1 to 2 reads keys with `from <= t < to`; at 0.984 they were never in range and the dodge was silent). **Checked (decomp)**: KH1 `0x14029F0A0` passes the time at `+0x16C` before the step as `from` to `0x14029FB30`.
 - `kh2slots` (`INPUT_LEAD`): the dodge slot's KH1 "may be left" starts one frame before KH2's free
   frame (3, not 4), since KH1's control step sees it one frame after the animation fires it while
   KH2's input step sees its free bit on the same frame.

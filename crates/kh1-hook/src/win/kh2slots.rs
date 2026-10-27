@@ -1485,6 +1485,9 @@ fn bake_one(b: &pose::Baker, src: &pose::Src, template: &[u8], (motion, field): 
 /// (`ks::KH2_RUMBLE`, the pattern's id), every baked slot that carries one: KH1's own vibration
 /// player plays KH2's pattern (`rumble`).
 fn kh2_trigger_keys(motion: u16, clip: &character_core::Clip, reaction: bool, form: bool) -> Vec<ks::EventKey> {
+    // (The Aerial Dodge's KH2 start skips frame 1, `combomods::dodge_clock`: its frame 0 and 1
+    // triggers are keyed for the update from 1, `ks::kh2_trigger_time_skipped`.)
+    let at = |frame: u32| if motion == character_core::motion::AERIAL_DODGE { ks::kh2_trigger_time_skipped(frame) } else { ks::kh2_trigger_time(frame) };
     let mut keys: Vec<ks::EventKey> = clip
         .events
         .iter()
@@ -1496,13 +1499,13 @@ fn kh2_trigger_keys(motion: u16, clip: &character_core::Clip, reaction: bool, fo
                 EventKind::Rumble(n) => (ks::KH2_RUMBLE, n as u16 as u32),
                 _ => return None,
             };
-            Some(ks::EventKey { time: ks::kh2_trigger_time(e.frame), a, b: motion, c, d: 0 })
+            Some(ks::EventKey { time: at(e.frame), a, b: motion, c, d: 0 })
         })
         .collect();
     let mut frames: Vec<u32> = clip.events.iter().filter(|e| matches!(e.kind, EventKind::Effect(_))).map(|e| e.frame).collect();
     frames.sort_unstable();
     frames.dedup();
-    keys.extend(frames.into_iter().map(|f| ks::EventKey { time: ks::kh2_trigger_time(f), a: ks::KH2_EFFECTS, b: motion, c: ks::kh2_effects_value(f, form), d: 0 }));
+    keys.extend(frames.into_iter().map(|f| ks::EventKey { time: at(f), a: ks::KH2_EFFECTS, b: motion, c: ks::kh2_effects_value(f, form), d: 0 }));
     keys.sort_by(|x, y| x.time.total_cmp(&y.time));
     keys
 }

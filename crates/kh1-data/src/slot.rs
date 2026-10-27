@@ -286,6 +286,21 @@ pub fn kh2_trigger_time(frame: u32) -> f32 {
     }
 }
 
+/// The time a KH2 frame trigger at `frame` gets on a motion KH2 starts with its skip of frame 1
+/// (the Aerial Dodge's 202: asked at time 0, its next update turns 0 -> 1 into 0 -> 2, Steam KH2
+/// `0x1403C6740`, Checked (decomp)). KH2 fires triggers with `from < F <= to` (and the start's),
+/// so its one 0 -> 2 update fires frames 0 and 1. Ours puts the slot's time at 1 before KH1's
+/// update (`combomods::dodge_clock`), which then steps 1 -> 2 and reads keys with `from <= t < to`:
+/// a key at 1 - 1/64 is behind it. Frames 0 and 1 are keyed at exactly 1.0, so that update fires
+/// them, on the update KH2 fires them. Later frames are [`kh2_trigger_time`]'s.
+pub fn kh2_trigger_time_skipped(frame: u32) -> f32 {
+    if frame <= 1 {
+        1.0
+    } else {
+        kh2_trigger_time(frame)
+    }
+}
+
 /// `keys` (sound events, type 6) added to `tracks`. KH1 reads only the first group of a type and
 /// id (`0x140394900` looks each id 0..3 up from the list's start, Checked (decomp)), so they go into
 /// the first sound group there is (else a new 6.0), sorted by time. Keys that would put more than
@@ -394,6 +409,15 @@ mod tests {
         let times: Vec<(f32, u16)> = t.keys.iter().map(|k| (k.time, k.a)).collect();
         assert_eq!(times, vec![(10.0, 1), (25.0, 0), (30.0, 1), (40.0, 0)]);
     }
+    #[test]
+    fn skipped_start_fires_frames_0_and_1_on_the_update_from_1() {
+        // (KH1 fires a key when from <= t < to; the dodge's first update steps 1 -> 2.)
+        let fires = |t: f32| 1.0 <= t && t < 2.0;
+        assert!(fires(kh2_trigger_time_skipped(0)) && fires(kh2_trigger_time_skipped(1)));
+        assert!(!fires(kh2_trigger_time(1)));
+        assert_eq!(kh2_trigger_time_skipped(2), kh2_trigger_time(2));
+    }
+
     #[test]
     fn kh2_triggers_join_the_first_sound_group() {
         let mut tracks = vec![EventTrack::level(HIT, 0, &[(1.0, 5.0)]), EventTrack { id: 1, kind: SOUND, keys: vec![EventKey { time: 10.0, a: 0, b: 7, c: 0, d: 0 }] }, EventTrack { id: 2, kind: SOUND, keys: vec![] }];
