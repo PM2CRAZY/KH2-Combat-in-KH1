@@ -1089,3 +1089,59 @@ The tester: "build form levels into KH1" (KH2 uses the form's own level for its 
   ledge, KH1's ground checks still run, so a ladder or ledge grab can take him mid-carry. Left as is (b).
   Later: decide whether the carry should block KH1's grab checks until the move's hold ends, as KH2 has no
   grab during these moves (Assumption: not traced in KH2).
+
+## 11. The drive-forms thread's list (Valor and Wisdom on KH1's states)
+
+The tester's traces (`testers/drive-forms/`, Select+Triangle) and the t725 log of the same session
+(`testers/kh2-chest/kh1-kh2.log`, Valor from f8258, Wisdom from f17245) against KH2's files
+(`P_EX100_BTLF.mset`, `P_EX100_MAGF.mset`, `W_EX010_MAGF.mset`, `W_EX010_BTLF_R.mset`, `00battle.bin`;
+Checked (files) with `kh2-data`'s readers) and the Steam decomps.
+
+- **Wisdom's Square (Quick Run).** Trace f17582: Square gave KH1's own roll (motion 0xDC, slot 117).
+  `quickrun::built()` refused every Drive Form (a t501 rule from when the forms ran on KH2's
+  controller), so `shared::control`'s Wisdom branch couldn't start KH1's Quick Run state and KH1's menu
+  step (Steam `0x1402937F0`: Square's pressed bit `0x10` sets the command record's `0x4000000`) led
+  to KH1's roll in its control step (`0x1402A7B30`, ability bit `0x20` of `0x142D5EC10`, set from the
+  equipped Dodge Roll by `0x1402A6380`). Checked (decomp). Now native Wisdom takes the Quick Run state.
+- **Gravity's finisher.** Trace f23582 / log: Gravity in Wisdom played 62 every time. t719's block in
+  `combat::command` (Gravity / Stop / Aero's combo step at Magic Combo KH2, Thunder's finisher cast 63
+  at the length) was dropped by t721's commit, made from an older `combat.rs`. Restored.
+- **Wisdom's Keyblade twirl.** `W_EX010_MAGF` motion 0 turns the Keyblade root 75..246 degrees from base
+  Sora's hold over the idle's 142 frames; base Sora's own stays within 8 degrees in his idle and swings;
+  Valor's `W_EX010_BTLF_R` 181 holds it ~95 degrees round (Checked (files)). The bake kept KH1's rest
+  grip for every motion. `pose::form_grip`: a form's bake turns KH1's grip bone (280) and what hangs
+  from it by the form's root turn from base Sora's hold (motion 0, frame 0), in model axes through
+  KH2's hand. Assumption: KH1's rest grip stands for base Sora's KH2 hold.
+- **Wisdom's Reflect.** Log f26207: "command 0x2 (02000702) is KH2's: KH2 borrows him for it" (the
+  deprecated controller, which drew base Sora's 71). `reflect::native_path`: Reflect on KH1's own cast
+  state in native Wisdom too, Wisdom's own 71 / 72 / 73 on our Reflect rows, sub +10, KH2's cost.
+- **Moving while attacking (Wisdom).** Trace f45615: no move at all through 151 with the stick held. Our
+  combo rows stand for KH1's swing slots 98..101, so KH1's ground step took the swing branch and never
+  ran the form's ground inertia. It does now (151's range 41 is 0..46, 154's 10..80).
+- **Fire's dash.** Wisdom's 56 travels 384 forward, 57 836, 58 383 (base Sora's casts: none), Checked
+  (files). The ground casts are baked with their travel and their request gets KH1's travel flag
+  (bit 15) while Wisdom's slot is on it. In the air: the root's travel on every frame of a form's air
+  move (`kh2slots::air_root_form`; 219 of 58's 383 come before its no-gravity range 16..36), as the OG
+  rewrite's action step adds the root on every action frame.
+- **Air attacks and casts steer.** Trace f46520: 181 dragged with the stick held. KH1's air step treats
+  every action with no steering; a form's action in its range 41 (181 all through, the casts from 24,
+  73 at 0..10 and from 50) now steers as in a jump (the OG rewrite's `air_control`).
+- **Valor's air finisher drop.** Trace f14640: 184 (Finishing Plus after 183) started with no rise and
+  fell ~50 before its no-gravity range at 16. 183 is held to its end; the hold-end fall restart
+  (`kh2_fall_at`, KH2's `0x1403B4780`) on the next air step measured the held frame and replaced 184's
+  row hop of 14. A fresh hop now isn't restarted. Assumption: KH2's vertical speed at that think is
+  the hop's start speed.
+- **Valor's ground finisher in the air.** 154: no gravity from 63, root rising 0 → 125 between 64 and
+  116 (Checked (files)). `shared::physics::lift_off`: KH1's air state from the frame its root rises in
+  the range, the motion kept, then KH1's fall. Assumption: KH1's state 2 runs the swing to its end.
+
+Not done this round:
+- **Valor's Square finisher effect** (155: elements 13 / 14 at frame 0, 15 at 42): the log has no
+  Effects lines (the category was off), so whether KH1 refused them (a program not in KH1 yet, a layer
+  left out) or never got them isn't known. Needs a log with the Effects category on.
+- **The left Keyblade moving between animations**: no data in the traces for the left blade; needs a
+  video or the left Keyblade log lines around a change.
+- **Wisdom's Fire "physics"** on the ground beyond the dash: KH2's range 42 (`KeepMomentum`, the motion
+  state's `+0x38` bit 0, read as `+0x190` bit 0 by the free-state move `0x140422350` to pick the inertia
+  path, Checked (decomp)) is on every Wisdom move; ours runs the inertia for all of Wisdom's actions,
+  which matches.
