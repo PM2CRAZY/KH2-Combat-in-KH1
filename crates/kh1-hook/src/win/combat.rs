@@ -692,28 +692,10 @@ unsafe fn command_step(actor: usize, dir: usize) {
             let step = super::formmagic::note_step(actor, false);
             cmd_log(|| format!("command {kind:#x} ({full:08x}): KH1's spell {arg}, Magic Combo KH2: step {:?} of the combo", step.map(|s| s.0)));
         }
-        // Gravity, Stop and Aero on the ground. At Magic Combo KH2 the combo roles of KH2's
-        // Thunder, Magnet and Cure (`formmagic::ground_role`): a step of the combo as KH2's magic
-        // command counts one (`note_step`), and the cast KH2 plays for it: Thunder's finisher cast
-        // 63 when Gravity's step reaches the length, else the spell's own (62, 68, 65). At Magic
-        // Combo KH1 the combo's finisher (`formmagic::finisher_spell`) on KH2's Thunder finisher
-        // cast 63, as before.
-        if !drive && !kh1_air && matches!(state, 0 | 6 | 0x18) && (4..=6).contains(&arg) {
-            let request = 0x36 + arg as u32;
-            if let Some(role) = super::formmagic::ground_role(request) {
-                let step = super::formmagic::note_step(actor, false);
-                let finisher = role == super::formmagic::Role::Thunder && step.is_some_and(|s| s.1) && super::formmagic::anim_kh2(arg);
-                let m = super::kh2slots::pick_cast(request as usize, finisher);
-                cmd_log(|| format!("command {kind:#x} ({full:08x}): KH1's spell {arg} on the ground, Magic Combo KH2 as KH2's {role:?}: step {step:?}, KH2 cast {m:?}"));
-            } else if super::formmagic::finisher_spell(request) {
-                let step = super::formmagic::note_finisher_step(actor);
-                let m = super::kh2slots::pick_cast(request as usize, true);
-                cmd_log(|| format!("command {kind:#x} ({full:08x}): KH1's spell {arg} on the ground, the combo's finisher: step {step:?}, KH2 cast {m:?}"));
-            } else if (4..=6).contains(&arg) {
-                // (Neither: Wisdom at Magic Combo KH1, as before t716, on KH2's Thunder finisher
-                // cast it played then.)
-                super::kh2slots::pick_cast(request as usize, true);
-            }
+        // Gravity, Stop and Aero on the ground: the combo's finisher (`formmagic::finisher_spell`).
+        if !drive && !kh1_air && matches!(state, 0 | 6 | 0x18) && (4..=6).contains(&arg) && super::formmagic::finisher_spell(0x36 + arg as u32) {
+            let step = super::formmagic::note_finisher_step(actor);
+            cmd_log(|| format!("command {kind:#x} ({full:08x}): KH1's spell {arg} on the ground, the combo's finisher: step {step:?}"));
         }
         // KH1's own air cast at the Magic Combo row KH2 (base Sora; Wisdom's Gravity, Stop and
         // Aero): its step of the air combo, as KH2's air casts take one (`formmagic::
@@ -2912,17 +2894,32 @@ pub unsafe fn scale_record(rec: usize, attack: usize, target: usize) {
             log!(Combat, "KH1's row of ours hit: KH2's ATKP {} (power {}, reaction {}, {}) on record {rec:#x}", a.id, a.power, a.enemy_reaction, if own_launch.is_some() { "KH2's launch" } else { "no launch" });
         }
     }
-    // A KH2 launch: KH1's launch reaction (kind 5) with KH2's numbers once it runs.
+    // A KH2 launch: KH1's launch reaction (kind 5) with KH2's numbers once it runs. A blow with a
+    // small arc (Small Blows on) is KH1's knock-back (kind 4) instead, with KH2's numbers once it runs.
     if let Some(l) = own_launch.or_else(|| if own.is_some() { None } else { PENDING.lock().ok().and_then(|g| *g) }) {
-        wr(rec + 0xC, (rd::<u32>(rec + 0xC) & !0x1F) | 5);
-        if let Ok(mut v) = LAUNCHES.lock() {
-            let now = takeover_ms();
-            v.retain(|(r, _, t)| *r != rec && now.saturating_sub(*t) < LAUNCH_FRESH_MS);
-            v.push((rec, l, now));
-        }
-        static N: AtomicU32 = AtomicU32::new(0);
-        if super::log_on(super::LogCat::Combat) && N.fetch_add(1, Ordering::Relaxed) < 40 {
-            log!(Combat, "KH2 launch asked: record {rec:#x} made a launch (KH2's start: up {:.0}, sideways {:.0} a frame)", l.up, l.speed);
+        let small = super::knockback::small_blows() && pose::kh2().is_some_and(|k| l.apex(&k.character.reaction).0 <= SMALL_BLOW_MAX);
+        if small {
+            wr(rec + 0xC, (rd::<u32>(rec + 0xC) & !0x1F) | 4);
+            if let Ok(mut v) = SMALLS.lock() {
+                let now = takeover_ms();
+                v.retain(|(r, _, t)| *r != rec && now.saturating_sub(*t) < LAUNCH_FRESH_MS);
+                v.push((rec, l, now));
+            }
+            static S: AtomicU32 = AtomicU32::new(0);
+            if super::log_on(super::LogCat::Combat) && S.fetch_add(1, Ordering::Relaxed) < 40 {
+                log!(Combat, "KH2 small blow asked: record {rec:#x} made a knock-back, KH1's kind 4 (KH2's start: up {:.0}, sideways {:.0} a frame)", l.up, l.speed);
+            }
+        } else {
+            wr(rec + 0xC, (rd::<u32>(rec + 0xC) & !0x1F) | 5);
+            if let Ok(mut v) = LAUNCHES.lock() {
+                let now = takeover_ms();
+                v.retain(|(r, _, t)| *r != rec && now.saturating_sub(*t) < LAUNCH_FRESH_MS);
+                v.push((rec, l, now));
+            }
+            static N: AtomicU32 = AtomicU32::new(0);
+            if super::log_on(super::LogCat::Combat) && N.fetch_add(1, Ordering::Relaxed) < 40 {
+                log!(Combat, "KH2 launch asked: record {rec:#x} made a launch (KH2's start: up {:.0}, sideways {:.0} a frame)", l.up, l.speed);
+            }
         }
     } else if let Some(a) = own.as_ref().filter(|a| character_core::reaction::category(a.enemy_reaction) == 3) {
         // A KH2 flinch on one of our rows whose data is a launch (the move's first hit window
@@ -3126,6 +3123,79 @@ unsafe fn kh2_launch(actor: usize, l: Launch, bases: &[u16], via: &str) {
     }
 }
 
+/// The highest apex (units above the start, the blow flown as `Launch::apex` does) a KH2 blow can have
+/// and still be a "small blow" (Small Blows on): Fire's hits are up 1 to 6 a frame, 1 to 23 high;
+/// Guard Break (20 up) is 117 and Thunder's burst (30 and more) 190 and up. **Assumption:** 25 is
+/// where a lift stops being a stagger; it is picked to put every Fire hit under it, not read from
+/// KH2 (KH2 plays its blow motion for any arc).
+const SMALL_BLOW_MAX: f32 = 25.0;
+/// Records made with a small blow: (record, launch, when). Taken by the knock-back hook.
+static SMALLS: std::sync::Mutex<Vec<(usize, Launch, u64)>> = std::sync::Mutex::new(Vec::new());
+
+/// A fresh small blow for `rec` (`scale_record`), taken off the list.
+fn take_small(rec: usize) -> Option<Launch> {
+    let now = takeover_ms();
+    SMALLS.lock().ok().and_then(|mut v| {
+        v.retain(|(_, _, t)| now.saturating_sub(*t) < LAUNCH_FRESH_MS);
+        v.iter().position(|(r, _, _)| *r == rec).map(|i| v.remove(i).1)
+    })
+}
+
+/// KH1's enemy knock-back reaction (Steam `0x1402B77D0 (actor, record)`, kind 4 of the hit pass; also
+/// where KH1's launch falls back when the enemy has no launch motion; Checked (decomp)):
+/// - on the ground and not in a class-2 movement state: motion 0x4C / 0x4D, staying put (no arc, no
+///   velocity); an enemy with no 0x4C plays its launch (0x52) instead, else a flinch;
+/// - in the air: motion 0x50 / 0x51, a hop of 20 (`0x1402AF960`) and `+0x3C0` = the record's direction
+///   times btltbl's `+0x3C`.
+/// `push rbx; push rsi; sub rsp, 0x68` (Checked (exe), the bytes at this address in the user's Steam exe).
+const KNOCK_BACK_STEAM: usize = 0x2B77D0;
+const KNOCK_BACK_PROLOGUE: [u8; 7] = [0x40, 0x53, 0x56, 0x48, 0x83, 0xEC, 0x68];
+static ORIG_KNOCK_BACK: AtomicUsize = AtomicUsize::new(0);
+/// The hop KH1's airborne knock-back sets (`0x41A00000` = 20.0 into `0x1402AF960`).
+const KNOCK_BACK_HOP: f32 = 20.0;
+
+/// KH1's knock-back (Steam): KH1's, then KH2's arc and sideways speed for a small blow's record, when
+/// KH1 hopped the enemy (the airborne branch).
+unsafe extern "system" fn knocked_back(actor: usize, rec: usize) {
+    let f: unsafe extern "system" fn(usize, usize) = std::mem::transmute(ORIG_KNOCK_BACK.load(Ordering::Acquire));
+    f(actor, rec);
+    let Some(l) = take_small(rec) else { return };
+    let state = rd::<i32>(actor + 0x70);
+    let motion = rd::<u16>(actor + 0x3EA);
+    static N: AtomicU32 = AtomicU32::new(0);
+    let log_on = super::log_on(super::LogCat::Combat) && N.fetch_add(1, Ordering::Relaxed) < 40;
+    // The airborne branch's mark: air state 2 with a fresh arc of exactly its hop.
+    let hopped = state == 2 && rd::<f32>(actor + 0x3B0) == 0.0 && rd::<f32>(actor + 0x3BC) == -KNOCK_BACK_HOP;
+    if !hopped {
+        if state == 2 && (motion == 0x52 || motion == 0x5C) {
+            // (No 0x4C motion: KH1 fell back to its launch; KH2's numbers go in it as for any launch.)
+            if log_on {
+                log!(Combat, "KH1's knock-back on {actor:#x} fell back to its launch (no 0x4C motion): KH2's numbers in it");
+            }
+            kh2_launch(actor, l, &[0x52, 0x5C], "KH1's knock-back");
+        } else if log_on {
+            log!(Combat, "KH1's knock-back on {actor:#x} for a small blow (up {:.0}, sideways {:.0}): KH1's own ground stagger, nothing of KH2's to put in it (motion {motion:#x}, state {state})", l.up, l.speed);
+        }
+        return;
+    }
+    let Some(p) = pose::kh2().map(|k| k.character.reaction.clone()) else { return };
+    let k = super::knockback::launch_factor(actor);
+    let l = Launch { up: l.up * k, speed: l.speed * k };
+    let (h, t) = l.apex(&p);
+    // The record's direction, flattened (KH2's sideways speed keeps its sign).
+    let r: [f32; 4] = rd(rec + 0x10);
+    let n = r[0].hypot(r[2]);
+    let (dx, dz) = if n > 1e-4 { (r[0] / n, r[2] / n) } else { (0.0, 0.0) };
+    wr(actor + 0x3B0, 0.0f32);
+    wr(actor + 0x3B8, t);
+    wr(actor + 0x3BC, -h);
+    wr(actor + 0x3C0, [dx * l.speed, 0.0, dz * l.speed, l.speed.abs()]);
+    super::knockback::fly_blow(actor, [dx * l.speed, dz * l.speed], l.up, t, h);
+    if log_on {
+        log!(Combat, "KH2 small blow on {actor:#x} (KH1's airborne knock-back): up {:.0} / sideways {:.1} a frame (weight x{k:.2}): up {h:.0} in {t:.0} frames", l.up, l.speed);
+    }
+}
+
 /// KH1's scripted launch (Steam only): `mov [rsp+0x10], rbx; mov [rsp+0x18], rsi; push rdi;
 /// sub rsp, 0x40` (Checked (exe)).
 const SCRIPT_LAUNCH_STEAM: usize = 0x2B79F0;
@@ -3138,6 +3208,7 @@ pub unsafe fn install() {
     hook::install(base + LAUNCH_RVA, &LAUNCH_PROLOGUE, launched as *const () as usize, &ORIG_LAUNCH, "enemy launch reaction");
     if super::addr::Build::current() == super::addr::Build::Steam {
         hook::install(base + SCRIPT_LAUNCH_STEAM, &SCRIPT_LAUNCH_PROLOGUE, script_launched as *const () as usize, &ORIG_SCRIPT_LAUNCH, "enemy scripted launch (KH2's blows)");
+        hook::install(base + KNOCK_BACK_STEAM, &KNOCK_BACK_PROLOGUE, knocked_back as *const () as usize, &ORIG_KNOCK_BACK, "enemy knock-back (KH2's small blows)");
     }
     if hook::install(base + EXEC_RVA, &EXEC_PROLOGUE, exec as *const () as usize, &ORIG_EXEC, "execute attack row").is_some() {
         EXEC_IN.store(true, Ordering::Release);

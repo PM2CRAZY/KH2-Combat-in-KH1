@@ -332,3 +332,38 @@ Enemy Weight on) along the record's direction (Steam KH2 `0x1403D4800`: 50.0 and
 Checked (decomp); the constant drift is `character_core::npc`'s reading of KH2's air flinch,
 `docs/combat-model.md`). Not done: KH2's turn of the flinched body (`0x1403D3840` faces it along
 the push, negated from the front); KH1's air flinch keeps its facing.
+
+## 5. Small blows (t721, the user after the Fire log)
+
+**Why.** KH2's Fire is a chain of blows (reaction group 4) with tiny numbers: up 1 to 6 a frame, 0
+sideways, so a lift of 1 to 23 units (**Checked (files)**, `00battle.bin` ATKP 502; its last hit of a
+sequence is a flinch with a big push). The user's log showed hits 1 and 2 as "KH2's launch, up 6" and
+asked why Fire staggers like a finisher. Since t602 every KH2 blow was KH1's launch, so that lift
+played KH1's launch motion (0x52 / 0x53) and its lying-down time. **Checked (trace)** for the log;
+**Checked (decomp)** for KH2 playing its blow motion (16 front / 18 behind) for any group-4 hit.
+
+**KH1's lighter reaction (Steam `0x1402B77D0`, kind 4 of the enemy hit pass; Checked (decomp)).**
+- On the ground (and not in a class-2 movement state): motion 0x4C / 0x4D, staying where it is, no arc
+  and no velocity. An enemy with no 0x4C motion plays its launch (0x52) instead, else a flinch.
+- In the air: motion 0x50 / 0x51, a hop of 20 and a horizontal velocity of the record's direction
+  times btltbl's `+0x3C`; no lying-down time.
+- It is also where KH1's launch falls back, and where KH1's scripted launch falls back.
+
+**What changed.** With Small Blows on (Config > Combat > Tweaks, ini `small_blows`, on by default), a
+KH2 blow whose arc is at most `combat::SMALL_BLOW_MAX` (25 units, KH2's blow flown as `Launch::apex`
+does) is written into the hit record as kind 4, not 5 (`combat::scale_record`). KH1's knock-back runs;
+for such a record its airborne branch (told by air state 2 and a fresh arc of exactly its hop of 20)
+is then given KH2's arc and sideways speed (times the enemy's weight with Enemy Weight on) and the
+flight is KH2's blow (`knockback::fly_blow`), as for a launch. On the ground KH1's own stagger plays
+and there is nothing of KH2's to put in it (KH2's sideways speed for Fire is 0). An enemy that fell
+back to its launch gets KH2's numbers in the launch as before. The hook (`combat::knocked_back`, Steam
+only, prologue `40 53 56 48 83 EC 68`, Checked (exe)) does nothing for a record that isn't a small
+blow's. Blows over 25 (Guard Break 117, Thunder's burst 190 and up, Aerial Finish's last hit) stay
+KH1's launch. Off: every KH2 blow is KH1's launch, as t602.
+
+**Assumptions / not checked.**
+- 25 is picked so every Fire hit is under it, it is not KH2's: KH2 plays its blow motion for any arc.
+- What motion 0x4C / 0x4D looks like on each enemy, and that the common enemies have it.
+- That a scripted enemy (actor kinds 4 / 5 / 9 / 10, its script gets the record) answers a kind-4
+  record with KH1's knock-back; the user's log did not say.
+- Aerial Finish's spins (up 5, sideways -1) and Explosion's ticks are small blows too, now.

@@ -47,6 +47,30 @@ pub fn weight() -> bool {
     }
 }
 
+/// The Small Blows setting: 0 not read yet, 1 off, 2 on.
+static SMALL_ON: AtomicU8 = AtomicU8::new(0);
+
+/// Small Blows (Config > Combat > Tweaks, ini `small_blows`, on by default): a KH2 blow with a small
+/// arc (`combat::SMALL_BLOW_MAX`) plays KH1's knock-back reaction with KH2's numbers; off, every KH2
+/// blow is KH1's launch (t602).
+pub fn small_blows() -> bool {
+    match SMALL_ON.load(Ordering::Relaxed) {
+        0 => {
+            let w = super::settings::get().small_blows;
+            SMALL_ON.store(1 + w as u8, Ordering::Relaxed);
+            w
+        }
+        v => v == 2,
+    }
+}
+
+/// The Config row (Combat > Tweaks > Small Blows): live, kept in the ini.
+pub fn set_small_blows(on: bool) {
+    SMALL_ON.store(1 + on as u8, Ordering::Relaxed);
+    super::settings::save("small_blows", if on { "on" } else { "off" });
+    log!(Combat, "Config menu: Small Blows {}", if on { "On" } else { "Off" });
+}
+
 /// The Config row (Combat > Tweaks > Enemy Weight): live, kept in the ini.
 pub fn set_weight(on: bool) {
     WEIGHT_ON.store(1 + on as u8, Ordering::Relaxed);

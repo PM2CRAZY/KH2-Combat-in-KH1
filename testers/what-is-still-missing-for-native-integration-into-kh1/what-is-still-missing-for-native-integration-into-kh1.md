@@ -871,3 +871,12 @@ make soras base and any form that can do drive form magic this: aero is the same
 
 ^m18
 
+1. give kh2's its own ability list right next to sora, should be titled "KH2"
+2. (a)
+3. (b)
+4. (a)
+5. it plays on base animations properly so I don't know what you mean
+   
+make a separate thread each for abilities and drive forms so we aren't getting clogged here.
+
+go ahead

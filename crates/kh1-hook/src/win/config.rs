@@ -215,6 +215,8 @@ enum Row {
     AbilityChance,
     /// Tweaks > Enemy Weight (Off | On, `knockback::weight`).
     EnemyWeight,
+    /// Tweaks > Small Blows (Off | On, `knockback::small_blows`).
+    SmallBlows,
     /// Tweaks > Cast from Glide (Off | On, `glide::cast_out`).
     GlideCast,
     /// Tweaks > Clash Combo (KH1 | KH2, `recoil::clash_count`).
@@ -365,9 +367,10 @@ const COSMETICS: [Item; 1] = [Item::Set([0x7F00_0215, 0x7F00_0217, 0x7F00_0218, 
 // (Hit Reactions, Knock-back Numbers, Medium Hits, KH2 Damage, Criticals, Party Criticals and Recoil
 // moved here from Combat: the user, t704: "put recoil, critical, party critical, kh2 damage, medium
 // hits, knock back numbers, and hit reactions into the tweaks section".)
-const TWEAKS: [Item; 11] = [
+const TWEAKS: [Item; 12] = [
     Item::Set([0x7F00_0191, 0x7F00_011D, 0x7F00_011E, 0x7F00_0192], Row::AbilityChance),
     Item::Set([0x7F00_0193, 0x7F00_011D, 0x7F00_011E, 0x7F00_0194], Row::EnemyWeight),
+    Item::Set([0x7F00_0223, 0x7F00_011D, 0x7F00_011E, 0x7F00_0224], Row::SmallBlows),
     Item::Set([0x7F00_0197, 0x7F00_011D, 0x7F00_011E, 0x7F00_0198], Row::GlideCast),
     Item::Set(kh(0x7F00_0199, 0x7F00_019A), Row::ClashCount),
     Item::Set(kh(0x7F00_0140, 0x7F00_0141), Row::Style(Kind::HitReactions)),
@@ -436,7 +439,7 @@ const BUTTON_HELP: u32 = 0x7F00_0202;
 /// Misc's help, and the same without the debug menu (its row isn't there without the debug tools).
 const MISC_HELP: u32 = 0x7F00_020C;
 const MISC_HELP_NO_DEBUG: &str = "Battle quotes.";
-const STRINGS: [(u32, &str); 114] = [
+const STRINGS: [(u32, &str); 116] = [
     (0x7F00_0201, "KH1 in KH2"),
     (0x7F00_0202, "Choose KH1's or KH2's camera, combat, movement and more."),
     (0x7F00_0203, "Camera"),
@@ -494,6 +497,8 @@ const STRINGS: [(u32, &str); 114] = [
     (0x7F00_0192, "On: KH1's 30 percent chance on Stun Impact, Gravity Break\nand Zantetsuken; when it fails, the next move that fits comes."),
     (0x7F00_0193, "Enemy Weight"),
     (0x7F00_0194, "On: KH2's knock-back on enemies times KH1's weight for each\nenemy. Off: KH2's own numbers for every enemy."),
+    (0x7F00_0223, "Small Blows"),
+    (0x7F00_0224, "On: a KH2 blow with a small arc, like Fire's, plays KH1's\nknock-back with KH2's numbers. Off: every blow is KH1's launch."),
     (0x7F00_0197, "Cast from Glide"),
     (0x7F00_0198, "On: a KH2 spell ends the glide and is cast in the air, as in\nKH2. Off: no spell while gliding."),
     (0x7F00_0199, "Clash Combo"),
@@ -570,6 +575,7 @@ fn value(what: Row) -> bool {
         Row::PartyCriticals => super::kh2damage::party_criticals(),
         Row::AbilityChance => super::kh1picker::chance(),
         Row::EnemyWeight => super::knockback::weight(),
+        Row::SmallBlows => super::knockback::small_blows(),
         Row::GlideCast => super::glide::cast_out(),
         Row::ClashCount => super::recoil::clash_count(),
         Row::TrailAlways => super::cosmetics::always(),
@@ -605,6 +611,7 @@ fn set(what: Row, v: bool) {
         Row::PartyCriticals => super::kh2damage::set_party_criticals(v),
         Row::AbilityChance => super::kh1picker::set_chance(v),
         Row::EnemyWeight => super::knockback::set_weight(v),
+        Row::SmallBlows => super::knockback::set_small_blows(v),
         Row::GlideCast => super::glide::set_cast_out(v),
         Row::ClashCount => super::recoil::set_clash_count(v),
         Row::TrailAlways => super::cosmetics::set_always(v),
