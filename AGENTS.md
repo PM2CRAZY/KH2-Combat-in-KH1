@@ -1,3 +1,6 @@
+### 2026-10-27: Stage 739 (testing branch: Valor's air finisher keeps its hop)
+- **Valor's air finisher keeps its hop.** The tester (drive-forms): "you drop a little bit before the hitboxes come out on final air finisher". Trace f14640: 184 started with no rise and fell ~50 before its hitboxes. 183's hold-end fall restart (KH2 `0x1403B4780`) measured the held frame and replaced 184's row hop of 14; a fresh hop is no longer restarted (`kh2_hop_as` clears the hold-last flag). Assumption: KH2's speed there is the hop's start speed (`+0xA3C` not traced). Not checked in game.
+
 ### 2026-10-27: Stage 738 (testing branch: Form air moves steer and take their root)
 - **Form air attacks and casts steer and take their root.** The tester (drive-forms): "air fires physics are wrong", "all the air magics movement and physics aren't proper", "air attacks movements seem off". Trace f46520: 181 dragged with the stick held. In a form action's allow-movement range (id 41) KH1's air step steers as in a jump, and the clip's root is added on every air frame (`air_root_form`; 219 of air Fire 58's 383 come before its no-gravity range 16..36). Source: the OG rewrite's action step (Assumption: not re-traced in the Steam KH2 decomp). Base Sora unchanged. Not checked in game.
 

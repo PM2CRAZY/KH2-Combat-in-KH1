@@ -948,6 +948,16 @@ pub mod physics {
                 if let Ok(mut a) = AIR.lock() {
                     *a = Some(Air { arc, last_y: y, asked_up: 0.0, written: Some((y, kh1)) });
                 }
+                // (A hop out of a move held by its no-gravity range (Valor's air finisher 183, held
+                // 16..its end, then Finishing Plus's 184): the hold's end isn't the fall's restart
+                // here. KH2's restart (`0x1403B4780`) takes his actual vertical speed, which the
+                // new row's hop has just set (`0x1403D78D0` -> `0x1403CBB00`), so the hop goes on;
+                // ours measured the frame before it (0, held) and dropped him from rest, 16 frames
+                // of fall before 184's own range (the tester, drive-forms: "you drop a little bit
+                // before the hitboxes come out on final air finisher"; trace f14640: 184 started
+                // with no rise, about 50 down by frame 16). **Assumption**: KH2's speed at that
+                // think is the hop's start speed (`+0xA3C` not traced there).)
+                HELD_LAST.store(false, Ordering::Relaxed);
                 format!("KH2's arc, {:.1} frames up", arc.uptime)
             }
             None => {
