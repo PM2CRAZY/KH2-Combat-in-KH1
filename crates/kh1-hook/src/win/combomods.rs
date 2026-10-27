@@ -90,6 +90,30 @@ static BLOWN_AT: AtomicU64 = AtomicU64::new(0);
 /// `finisher_base` + Finishing Plus): 1 after a finisher, one more for each next finisher, 0 after
 /// a swing.
 static FINISHERS: AtomicU8 = AtomicU8::new(0);
+/// Finishing Plus windows taken out of a cast that was no finisher (Stop as KH2's Magnet mid-combo,
+/// `formmagic::Role::Magnet`) in this combo: KH2's `+0xD75` went one more for each (Steam KH2
+/// `0x1403D6CA0`'s finisher window branch, Checked (decomp)), and only a new combo sets it back
+/// (`0x101`), so they count on top of `FINISHERS` (which the swings after it set back to 0) until
+/// the combo ends (`new_combo`).
+static SPENT: AtomicU8 = AtomicU8::new(0);
+
+/// KH2's finisher count `+0xD75` as ours: the finishers in a row (at least 1, as a new combo's
+/// `0x101`) and the Finishing Plus windows spent out of a mid-combo Magnet (`SPENT`).
+fn finishers_now() -> u8 {
+    FINISHERS.load(Ordering::Relaxed).max(1).saturating_add(SPENT.load(Ordering::Relaxed))
+}
+
+/// An Attack or a spell was taken in the Finishing Plus window of a cast that was no finisher
+/// (Stop as Magnet mid-combo, `formmagic::magnet_window`): one Finishing Plus spent (`SPENT`).
+pub fn spend_finisher_window() {
+    let n = SPENT.fetch_add(1, Ordering::Relaxed).saturating_add(1);
+    note(|| format!("Magnet's Finishing Plus window taken mid-combo: {n} Finishing Plus spent"));
+}
+
+/// A new combo starts (KH1's count back to 1): nothing spent (`SPENT`).
+pub fn new_combo() {
+    SPENT.store(0, Ordering::Relaxed);
+}
 /// A KH2 move on a KH1 row of its own (`kh1rows`) for KH1's Attack step this frame (`control`:
 /// a Square move in KH1's combo window): ours, KH2's hop for it, the game frame.
 static OURS: Mutex<Option<(usize, Option<character_core::Launch>, u64)>> = Mutex::new(None);
@@ -150,6 +174,7 @@ unsafe fn ours_combo_run(actor: usize, n: usize, launch: Option<character_core::
             *g = request_of(r).map(|m| (1, m, false, true));
         }
         FINISHERS.store(0, Ordering::Relaxed);
+        new_combo();
         note(|| format!("KH2's hop {} (motion {}) on KH1's air row {r} of its own (request {:#x}) out of KH1's air state, {:.0} high, {:.1}/frame sideways", o.name, o.motion, k::request(n), l.height, l.velocity[0].hypot(l.velocity[1])));
         return Run::Hop(r, l);
     }
@@ -272,7 +297,7 @@ pub fn kh1_length(len: u8) -> u8 {
 /// finisher indefinitely, it needs to behave exact like kh1").
 pub fn finisher_chain_open() -> bool {
     let plus = takeover::with_abilities(|a| a.finishing_plus).unwrap_or(0);
-    FINISHERS.load(Ordering::Relaxed).max(1) < 1 + plus
+    finishers_now() < 1 + plus
 }
 
 /// Finishing Plus's next finisher is left (KH2's own test in its Attack and command check, Steam
@@ -282,7 +307,7 @@ pub fn finisher_chain_open() -> bool {
 /// (the maximum's reading as `finisher_chain_open` takes it), Finishing Plus equipped.
 pub fn finisher_left() -> bool {
     let plus = takeover::with_abilities(|a| a.finishing_plus).unwrap_or(0);
-    plus > 0 && FINISHERS.load(Ordering::Relaxed).max(1) < 1 + plus
+    plus > 0 && finishers_now() < 1 + plus
 }
 
 /// A KH2 cast on KH1's cast state took its step of KH1's combo (`formmagic::take_step`): noted as
@@ -322,6 +347,11 @@ pub unsafe fn kh1_finisher_window(actor: usize) {
         return;
     }
     let Some((_, request, true, air)) = LAST.try_lock().ok().and_then(|l| *l) else { return };
+    // (Not a cast noted as the combo's finisher, `cast_step`: a cast's Finishing Plus window is its
+    // own clip's (`kh2slots::finisher_window`) or `formmagic`'s, never 155's / 183's.)
+    if matches!(request & 0xFFFF, 0x36..=0x3D | 0x83..=0x8A) {
+        return;
+    }
     let kind = if air { super::styles::Kind::AirCombo } else { super::styles::Kind::GroundCombo };
     if request & 0xFFFF != rd::<u32>(actor + 0x164) & 0xFFFF || super::kh2slots::playing_motion(actor).is_some() {
         return;
@@ -330,7 +360,7 @@ pub unsafe fn kh1_finisher_window(actor: usize) {
     // KH1's own, `kh2_finisher_walk`; another finisher is left by KH2's count, `+0xD75` against
     // one plus Finishing Plus's copies.)
     let plus = takeover::with_abilities(|a| a.finishing_plus).unwrap_or(0);
-    let left = if super::styles::kh2(kind) { FINISHERS.load(Ordering::Relaxed).max(1) < 1 + plus } else { finisher_chain_open() };
+    let left = if super::styles::kh2(kind) { finishers_now() < 1 + plus } else { finisher_chain_open() };
     if plus == 0 || !left {
         return;
     }
@@ -431,6 +461,13 @@ unsafe fn attack_row(actor: usize, row: i32, request_of: &dyn Fn(i32) -> Option<
     // (KH2's pick KH1's picker made for this row, taken here so none is left for a later press.)
     let made = take_kh2_pick(row, air);
     let Some((count, kh1_len, _)) = kh1_combo(actor, air) else { return Run::Row(row) };
+    // (KH2's finisher count: a new combo sets it back; an Attack in a mid-combo Magnet's Finishing
+    // Plus window spends one Finishing Plus, `spend_finisher_window`.)
+    if count <= 1 {
+        new_combo();
+    } else if super::formmagic::magnet_window(actor) == Some(true) && !LAST.try_lock().ok().and_then(|l| *l).is_some_and(|l| l.2) {
+        spend_finisher_window();
+    }
     // A Square move of KH2's on its own KH1 row (`control` / `valor_square` gave KH1 this Attack
     // for it). An air row's hop from the ground (Valor's row 11, motion 181 with its hop of 90:
     // `valor_square`) is entered as KH2's plain hops are (`ours_combo_run`); every other row as
@@ -2202,6 +2239,7 @@ unsafe fn start_own(actor: usize, motion: u16, face: Option<f32>) -> bool {
         *l = None;
     }
     FINISHERS.store(0, Ordering::Relaxed);
+    new_combo();
     true
 }
 

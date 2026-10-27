@@ -93,20 +93,22 @@ pub const CASTS: [(u16, usize, usize, bool); 16] = [
     (64, 81, 0x85, true),
     (67, 81, 0x86, true),
     (58, 82, 0x8A, true),
-    // (Gravity, Stop and Aero on the ground: KH2's Thunder finisher cast, 63, as the combo's
-    // finisher they are, `formmagic::finisher_spell`; the tester, combo row selection m30: "make
-    // them play the thunder finisher animation, also ... aero ... the same as gravity and stop".)
-    (63, 55, 0x3A, false),
-    (63, 56, 0x3B, false),
-    (63, 56, 0x3C, false),
+    // (Gravity, Stop and Aero on the ground: the casts of the KH2 spells whose combo roles they
+    // take at Magic Combo KH2 (`formmagic::Role`; the tester, what-is-still-missing after m17:
+    // "aero is the same as kh2 cure, gravity is the same as thunder, stop is a finisher like
+    // magnet"): Thunder's 62 (its finisher cast 63 picked at the length), Magnet's 68, Cure's 65
+    // (MAGC, Checked (files)). At Magic Combo KH1 each plays KH2's Thunder finisher cast 63, as the
+    // combo's finisher they are there (`formmagic::finisher_spell`; the tester, combo row selection
+    // m30: "make them play the thunder finisher animation"): `CAST_FINISHERS`, picked at the
+    // command, `combat::command`.)
+    (62, 55, 0x3A, false),
+    (68, 56, 0x3B, false),
+    (65, 56, 0x3C, false),
     (64, 80, 0x87, true),
     (67, 81, 0x88, true),
     (67, 81, 0x89, true),
 ];
 
-/// KH2's finisher casts (MAGC's finisher motions, Checked (files): Fire 57, Blizzard 60, Thunder 63;
-/// Cure has none, and none in the air), each on KH1's ground request of its spell (and Fire's
-/// second part, 0x3D, which KH1 plays for a Fire out of a swing): (motion, KH1's slot, request).
 /// The spell of one of KH1's cast requests (`CASTS`: ground `0x36 + spell`, air `0x83 + spell`,
 /// Fire's second parts 0x3D / 0x8A; Fire 0 .. Aero 6), for its rows (`redirect`).
 fn cast_spell(request: usize) -> Option<u8> {
@@ -118,7 +120,14 @@ fn cast_spell(request: usize) -> Option<u8> {
     }
 }
 
-const CAST_FINISHERS: [(u16, usize, usize); 4] = [(57, 54, 0x36), (60, 55, 0x37), (63, 56, 0x38), (57, 57, 0x3D)];
+/// KH2's finisher casts (MAGC's finisher motions, Checked (files): Fire 57, Blizzard 60, Thunder 63;
+/// Cure has none, and none in the air), each on KH1's ground request of its spell (and Fire's
+/// second part, 0x3D, which KH1 plays for a Fire out of a swing): (motion, KH1's slot, request).
+///
+/// Also KH2's Thunder finisher cast 63 on Gravity's, Stop's and Aero's ground requests: Gravity's
+/// at the combo's length at Magic Combo KH2 (Thunder's role), all three at Magic Combo KH1 (their
+/// finisher rule, t644 / t651).
+const CAST_FINISHERS: [(u16, usize, usize); 7] = [(57, 54, 0x36), (60, 55, 0x37), (63, 56, 0x38), (57, 57, 0x3D), (63, 55, 0x3A), (63, 56, 0x3B), (63, 56, 0x3C)];
 
 const fn cast_spec(i: usize) -> Spec {
     let (motion, stands_for, request, air) = CASTS[i];
@@ -784,9 +793,9 @@ fn make(mset: &[u8], src: &pose::Src, bake: Option<&pose::Baker>, cache: Option<
     let cast = matches!(kind, Kind::Magic | Kind::AirMagic);
     // (KH2's finisher casts end the combo: `cast_follow`.)
     // (Ours too: Reflect's finisher cast, `kh1rows::Kind::CastFinisher`.)
-    // (KH1's Gravity and Stop on the ground count as the combo's finisher, t644: no combo window,
-    // `formmagic::finisher_spell`.)
-    let finisher_cast = cast && ((!default && CAST_FINISHERS.iter().any(|f| f.0 == motion && f.2 == request)) || ours.is_some_and(|o| o.kind.finisher()) || super::formmagic::FINISHER_SPELL_REQUESTS.contains(&(request as u32)));
+    // (KH1's Gravity, Stop and Aero: their own cast's windows from its clip (Thunder's 62, Magnet's
+    // 68, Cure's 65), their Thunder finisher cast 63 as a finisher cast, `CAST_FINISHERS`.)
+    let finisher_cast = cast && ((!default && CAST_FINISHERS.iter().any(|f| f.0 == motion && f.2 == request)) || ours.is_some_and(|o| o.kind.finisher()));
     // (A hit reaction, `REACTIONS`: KH2's free state as KH1's "may be left", as on our own requests.)
     // (A recoil, `RECOILS`, the same: KH1's reaction function asked for it.)
     let reaction = matches!(kind, Kind::HitReactions | Kind::Recoil);
@@ -1768,7 +1777,7 @@ fn combo_kind(clip: &character_core::Clip, k: &WindowKind) -> bool {
 }
 
 /// KH2's finisher window (range id 50) on its motion `motion`, as shares of the motion's length
-/// (Thunder's finisher cast 63 and Cure's 68: 42..78, Checked (files)), for Gravity and Stop as
+/// (Thunder's finisher cast 63 and Magnet's 68: 42..78, Checked (files)), for Gravity and Stop as
 /// the combo's finisher (`formmagic::finisher_spell_window`).
 pub fn finisher_share(motion: u16) -> Option<(f32, f32)> {
     let clip = pose::kh2_moves()?.moveset.clips.get(&motion)?;
@@ -1803,7 +1812,7 @@ pub unsafe fn cast_attack_window(actor: usize) -> Option<bool> {
 /// Our finisher cast playing on `actor` is in its Finishing Plus window now (the tester,
 /// kh2-magic-and-reflect-native after m10, question 2 (a)): KH2's finisher window (range id 50,
 /// `WindowKind::Finisher`; the ground finisher casts Fire 57 54..84, Blizzard 60 46..76, Thunder
-/// 63 / Cure's 68 42..78, Reflect 72 54..84, Checked (files) `P_EX100.mset`) with Finishing Plus's
+/// 63 / Magnet's 68 42..78, Reflect 72 54..84, Checked (files) `P_EX100.mset`) with Finishing Plus's
 /// next finisher left (`combomods::finisher_left`), base Sora on KH1's states. Steam KH2's Attack
 /// and command check `0x1403D6CA0` takes an Attack, and a spell (command kind 2, the same check
 /// from the input step `0x1403D6FC0`), there: the count and the finisher count one more

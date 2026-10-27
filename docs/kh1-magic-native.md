@@ -432,7 +432,66 @@ exe's bytes, **Checked (files)** read from the staged game files, **Assumption**
   since t486. KH2 has no air finisher cast motion, so only Finishing Plus's count differs.
 - Not checked in game.
 
+#### 4c.3.3 Gravity, Stop and Aero take KH2 Thunder's, Magnet's and Cure's roles (what-is-still-missing after m17)
+
+- The tester: "make soras base and any form that can do drive form magic this: aero is the same as
+  kh2 cure, gravity is the same as thunder, stop is a finisher like magnet (not in the game yet)".
+  At Magic Combo KH2 only; at KH1 §4c.4 / §4c.1e stand.
+- **KH2 has no per-spell combo rule, Checked (decomp)**, Steam KH2: the magic command
+  (`0x1403D6FC0` → `0x1403D6CA0 (p, 1)`) counts every spell alike (§4c.3.2). The cast start
+  `0x1403A9DD0` asks `0x1403D7780 (p, 0)` whether the count has reached the length and passes it to
+  `0x1403C5170 (p, spell, at_length)`: on the ground the MAGC row's finisher motion (`+0x2C`) when at
+  the length and the row has one (`>= 0`), else the ground motion (`+0x28`); in the air always the
+  air motion (`+0x30`). So a spell's part in the combo is its MAGC motions and their windows.
+- **The three spells, Checked (files)** (`00battle.bin` MAGC, every level; `P_EX100.mset`; Wisdom's
+  `P_EX100_MAGF.mset` has the same layout):
+
+  | KH2 spell | ground | finisher | air | its windows |
+  |---|---|---|---|---|
+  | Thunder | 62 (A364) | 63 (A365) | 64 (A372) | 62: combo window (range 35 naming 62) from 42; 63: Finishing Plus window (range 50) 42..78 |
+  | Cure | 65 (A364) | none | 67 (A372) | 65 carries 62's ranges, range 35 names 62: no window at all |
+  | Magnet | 68 (A365) | none | 70 (A372) | 68 carries 63's ranges: Finishing Plus window 42..78 only |
+
+  The air motions are one clip with no combo or finisher window (range 14 only).
+- So in KH2: Thunder is a plain step whose cast can be combo'd out of, and the finisher cast at the
+  length; Cure is a plain step nothing follows (the last one at the length: the combo ends);
+  Magnet is a plain step (its count one more, `+0xD75` untouched) whose cast only Finishing Plus
+  may be followed out of: mid-combo that spends one Finishing Plus (`+0xD75` one more, the count
+  one more, the selector's next row by the count), at the length it is followed as a finisher is.
+  In the air all three are a plain air step (§4c.3.2).
+- Ours (base Sora on KH1's states, and Wisdom on them; `formmagic::Role`, `ground_role`,
+  `roles_on`):
+  - At the command (`combat::command`) the cast takes its step (`note_step`), and the cast our slot
+    plays is picked (`kh2slots::pick_cast`): Gravity Thunder's 62, its finisher cast 63 when its
+    step reaches the length (KH2's animation only); Stop Magnet's 68; Aero Cure's 65
+    (`kh2slots::CASTS`; 63 is now in `CAST_FINISHERS` for all three).
+  - At KH1's spell start (`spell_start`) `take_step`: Gravity a finisher only on 63, Stop a
+    finisher at the length (its count kept in Finishing Plus's window, `LAST` a finisher's), Aero
+    never.
+  - The windows come from the clip on our slot (`kh2slots::cast_follow`, `finisher_window`,
+    `cast_finisher_open`). On KH1's own animation (base Sora, the animation row at KH1): Gravity and
+    Aero get KH2 Fire's window by share as KH1's own Thunder and Cure do (§4c.3, the tester's rule);
+    Stop Magnet's Finishing Plus window by share of 68 (`magnet_window`, **Assumption**: KH1's
+    casts have no windows of their own).
+  - Magnet's window taken mid-combo spends a Finishing Plus (`combomods::spend_finisher_window`,
+    `SPENT`, set back by a new combo, `new_combo`), counted on top of `FINISHERS`
+    (`finishers_now`), so a later finisher has one Finishing Plus fewer, as KH2's `+0xD75`.
+  - `combomods::kh1_finisher_window` no longer opens 155's / 183's window over a cast noted as a
+    finisher (KH1's cast requests 0x36..0x3D, 0x83..0x8A).
+  - `time_kh1_spell` times KH1's script to the cast picked (`cast_now`), so Gravity's 63 at the
+    length releases at 63's cast frame.
+- At Magic Combo KH1 nothing changes: all three are the combo's finisher on KH2's Thunder finisher
+  cast 63 (picked at the command), Wisdom's three on 63 with no step.
+- Not changed: KH1's own Thunder on KH2's animation never picks the finisher cast (only Gravity as
+  Thunder, and KH2's Thunder, do); Valor (no magic); Master / Final / Limit / Anti (deprecated
+  controller). The air requests keep their motions (Stop's 0x88 on Cure's 67, the same clip as
+  Magnet's 70).
+- Not checked in game.
+
 ### 4c.4 Gravity and Stop as the combo's finisher (t644)
+
+- **Since after m17: at Magic Combo KH1 only** (on KH2's animation); at KH2 they take KH2 Thunder's,
+  Magnet's and Cure's roles (§4c.3.3).
 
 - The tester (same message): "for gravity and stop, there's a phenomenon in kh2 where those
   magics count as a finisher so the combo row skips straight to the finisher, if you have a
