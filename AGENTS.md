@@ -1,3 +1,6 @@
+### 2026-10-27: Stage 731 (testing branch: Chest Opening: the notice at the top left)
+- **The notice sits at the top left.** Mr Bugs: "1. (b)" (the notice at the top like KH2's info bar). KH1's box updater `0x140272F10` (boxes `0x14283B390`) stacks columns from 0x10 below the top, from the left (Checked (exe)), where KH2's info bar sits; the row's help text says so. Not built: KH2's own info-bar art and timing (needs a KH2 2D layout reader on testing; the give path `trap_treasure_get` `0x1404317F0` -> `0x1401595B0` not traced).
+
 ### 2026-10-27: Stage 730 (testing branch: Chest Opening KH2: gummi and Dalmatian chests)
 - **Gummi and Dalmatian chests take the KH2 path.** Mr Bugs: "the other parts of the code played except for chests that have gummi's in it and Dalmatians". Chest table `0x140528D60` (Checked (exe)): kind 1 gummi blocks (given by the Open handler through `0x14020D3F0`; full stays KH1's), kind 2 the Dalmatians (33 entries; the chest script gives them, message function 605 only builds the window line, Checked (decomp)). Both now take the KH2 path; notice "Gummi Block" / "Dalmatians NN, NN, NN". Assumptions: kind 2 = Dalmatians from the count; set n = puppies 3n-2..3n; the gummi's own name isn't read. Not checked in game.
 

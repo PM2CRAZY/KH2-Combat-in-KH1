@@ -505,7 +505,7 @@ const STRINGS: [(u32, &str); 118] = [
     (0x7F00_0223, "Small Blows"),
     (0x7F00_0224, "On: a KH2 blow with a small arc, like Fire's, plays KH1's\nknock-back with KH2's numbers. Off: every blow is KH1's launch."),
     (0x7F00_0225, "Chest Opening"),
-    (0x7F00_0226, "KH1: Sora waits for the item window. KH2: Sora can move at once;\nwhat the chest held shows in a notice box."),
+    (0x7F00_0226, "KH1: Sora waits for the item window. KH2: Sora can move at once;\nwhat the chest held shows in the box at the top left."),
     (0x7F00_0197, "Cast from Glide"),
     (0x7F00_0198, "On: a KH2 spell ends the glide and is cast in the air, as in\nKH2. Off: no spell while gliding."),
     (0x7F00_0199, "Clash Combo"),

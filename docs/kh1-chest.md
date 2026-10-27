@@ -134,15 +134,26 @@ contexts.
   set n is puppies 3n-2 .. 3n). A full gummi hangar stays KH1's, as a full item stock does. Kinds 4,
   5, 6 and non-item reward records stay KH1's.
 
+## The notice (round 2, question 1: "(b) the top of the screen like KH2's info bar")
+
+- KH1's level-up boxes, which the notice uses, are updated by `0x140272F10` (Steam; boxes at
+  `0x14283B390`, `0xBA0` each, 5 per member, members `0x3A20` apart, counts at `0x14283B380`): each
+  column starts at `+0x10` from the top and the boxes stack downward (`+0x16` a line), one column per
+  party member from the left. Checked (exe). So the notice already sits in the top-left corner, where
+  KH2's information bar is.
+- Not done: KH2's own bar (its art and its slide / fade timing). That is a new HUD element drawn with
+  KH1's sprite calls from KH2's field 2D layout, and it needs a reader of KH2's 2D layout files and
+  their images on this branch (main's Drive gauge has one; this branch may not take main's code). Its
+  timing in KH2's exe isn't traced yet (the chest's give is `trap_treasure_get` -> `0x1401595B0`).
+
 ## Not checked (Assumption)
 
-- KH2's own timings: KH2's treasure-box code (its BDX trap `trap_treasure_get`) wasn't in the
-  KH2 decomp chunks at hand. From memory of KH2: no lock on the player, the item in the top-left
-  information bar. Not checked against the KH2 exe.
-- That the treasure script's only blocking step is its message window, and that it queues nothing
-  on Sora that pulls him back (a motion, a turn) once he has walked off. The log lines say what was
-  skipped.
-- Where KH1's level-up box shows on screen (it is KH1's own; the tester asked for the top).
+- (t724, now answered) KH2's own chest: see "KH2's own chest opening" above (checked in files and
+  exe for the command and the box; the player side from the absence of a chest action).
+- (t724, replaced) "the treasure script's only blocking step is its window": wrong, it also held Sora
+  through actions on him (round 2's trace); those take KH1's no-actor path now. Still not read: the
+  script file itself (which actions, in which order).
+- Where KH1's level-up box shows: top left (round 2, Checked (exe)).
 - Whether KH1's "obtained" jingle belongs to the window (then it is gone) or to the script (kept).
 - Archipelago's patched `treasure.ev`: its windows are skipped the same way; the notice names what
   KH1's chest table gave.

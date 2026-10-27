@@ -1,4 +1,4 @@
-//! Chest Opening (KH1 | KH2), the Config menu's Combat > Tweaks row (the tester Mr Bugs, thread
+//! Chest Opening (KH1 | KH2), the Config menu's QoL row (KH2 by default; it was Combat > Tweaks in t724) (the tester Mr Bugs, thread
 //! kh2-chest: "quickly open and move from the chest opening animation like in kh2 ... open the chest,
 //! move then the pop up for the item plays at the top of the game letting you know what you got").
 //! `docs/kh1-chest.md`.
