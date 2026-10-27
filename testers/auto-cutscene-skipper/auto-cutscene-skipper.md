@@ -600,3 +600,12 @@ go ahead
 
 ^m34
 
+(b) we're going to merge this with the work done on quick chests once its finished so it notifies you after the cutscene ends.
+
+also, updated the log and a trace, you get stuck to a black screen during Olympus coliseums tournament 
+
+
+make any changes you need and don't come back until you think its finished
+
+
+go ahead
