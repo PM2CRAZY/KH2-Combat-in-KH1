@@ -856,7 +856,12 @@ fn make(mset: &[u8], src: &pose::Src, bake: Option<&pose::Baker>, cache: Option<
     }
     // (KH1 moves the actor by the motion's H10 when the request has bit 15, `travels`.)
     // (KH1's roll request has it too: KH2's roll moves him by its root, `ROLL`.)
-    let travel = matches!(kind, Kind::GroundCombo | Kind::DodgeRoll) && travels(requests[request]);
+    // (A Drive Form's ground cast with root travel of its own: KH1 moves him by it too, the request
+    // given KH1's travel flag while the form's slot is on it, `redirect`. Wisdom's Fire 56 goes 384
+    // forward, its finisher cast 57 836 (Checked (files) `P_EX100_MAGF.mset`; base Sora's casts have
+    // none). The tester (drive-forms): "fires physics are missing".)
+    let form_cast_travel = kind == Kind::Magic && src.form.is_some() && clip.root.iter().any(|r| r[0].hypot(r[2]) > 1.0);
+    let travel = (matches!(kind, Kind::GroundCombo | Kind::DodgeRoll) && travels(requests[request])) || form_cast_travel;
     // (From the motion slot cache when it has this exact bake, `slot_key`; baked and kept there
     // otherwise.)
     let mut cache = cache;
@@ -1993,8 +1998,11 @@ pub fn is_baked(slot: usize) -> bool {
 /// moves the actor by the motion's H10 (`0x14029A3C0`, `+0x200`) and pulls the model back by it
 /// (`0x14029F0A0`, `+0x210`). Sora's ground combo (0xC8..0xCB) has it; his air combo doesn't.
 pub fn travels(entry: u32) -> bool {
-    entry & 0x8000 != 0
+    entry & TRAVEL_FLAG != 0
 }
+
+/// KH1's travel flag on a request table entry (bit 15: KH1 moves the actor by the motion's H10).
+const TRAVEL_FLAG: u32 = 0x8000;
 
 /// Sora (`actor`) plays one of ours baked with KH2's travel: KH1 moves him by it (`shared`'s
 /// swing travel stays out).
@@ -2696,6 +2704,11 @@ unsafe fn redirect(p: &mut Placed) {
                     _ => super::styles::kh2(kind),
                 };
                 *e = if own || form.is_some() || on && (style || (forced(req) && want == Some(id))) { (kh1 & !0xFFF) | ours } else { kh1 };
+                // (A form's cast baked with its root travel (`make`'s `form_cast_travel`): KH1's
+                // travel flag on the request while that slot is on it, so KH1 moves him by its H10.)
+                if form.is_some() && *e & 0xFFF == ours && moved(id).is_some_and(|m| m.travel) {
+                    *e |= TRAVEL_FLAG;
+                }
             }
         }
     }

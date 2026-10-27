@@ -1,3 +1,6 @@
+### 2026-10-27: Stage 737 (testing branch: Wisdom's Fire dashes)
+- **Wisdom's Fire carries him.** The tester (drive-forms): "fires physics are missing". Checked (files): Wisdom's 56 / 57 / 58 travel 384 / 836 / 383 (base Sora's casts none). A form's ground cast with root travel is baked with it and its request gets KH1's travel bit 15 in `redirect`. Not checked in game.
+
 ### 2026-10-27: Stage 736 (testing branch: Wisdom moves while attacking)
 - **Wisdom moves while attacking on the ground.** The tester (drive-forms): "you can't move and attack on the ground". Trace f45615: no movement through 151 with the stick held. Our combo rows stand for KH1's swing slots 98..101, and that branch of `ground_step` skipped `ground_inertia`; it now runs it, in each swing's allow-movement range (151: 0..46, 154: 10..80; Checked (files)). Not checked in game.
 
