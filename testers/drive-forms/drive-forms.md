@@ -25,3 +25,26 @@
 
 ^m1
 
+valor and wisdom are missing a lot of functionality
+
+valor:
+
+missing square ground finisher effect
+2nd keyblade moves around when changing animations then goes back to soras hand
+final finisher on ground doesn't put you in the air
+you drop a little bit before the hitboxes come out on final air finisher
+
+wisdom:
+
+you dodge roll instead of quick run
+sora doesn't spin his keyblade on the idle animation
+fires physics are missing
+gravity doesn't have a finisher
+reflect is playing the base animation
+air fires physics are wrong
+all the air magics movement and physics aren't proper
+air reflect is base soras reflect 
+
+look into the steam c decomp to confirm what I'm saying and apply all fixes, I've traced everything for you to get a head start
+
+go ahead
