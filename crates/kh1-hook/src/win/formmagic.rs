@@ -636,7 +636,14 @@ pub(super) unsafe fn take_step(actor: usize, request: u32, finisher: bool, air: 
     }
     let (step, last) = ((v & 0xFF) as u8, v >> 8 & 1 != 0);
     let finisher = finisher && last && !air;
-    super::combomods::cast_step(step, request & 0xFFFF, finisher, chained, air);
+    // (An air cast taken in an air finisher's Finishing Plus window (the count already at the air
+    // length, `CHAINED`): KH2's `0x1403D6CA0` adds one to the finisher count `+0xD75` there for the
+    // magic command as for the Attack, whatever the cast plays (Checked (decomp)); noted as the next
+    // finisher of the combo (`combomods::cast_step` chained), though KH2 has no air finisher cast
+    // and so nothing follows it (its air cast has no window). The tester, what-is-still-missing
+    // m17 question 7: "add it".)
+    let air_chained = air && chained && last;
+    super::combomods::cast_step(step, request & 0xFFFF, finisher || air_chained, chained, air);
     let plus = finisher && super::combomods::finisher_left();
     wr(info + 0x41, if last && !plus { 0u8 } else { step });
     // (KH2 clears its "connected" flag, `+0x120` bit 0x2000000, as the cast is taken
@@ -651,6 +658,8 @@ pub(super) unsafe fn take_step(actor: usize, request: u32, finisher: bool, air: 
         "KH2 magic: the cast takes step {step} of KH1's combo{}",
         if plus {
             if chained { " (Finishing Plus's next finisher; another left)" } else { " (its finisher; Finishing Plus leaves another)" }
+        } else if air_chained {
+            " (in the air finisher's Finishing Plus window: counted as the next finisher; the air combo ends)"
         } else if last {
             " (its last: the combo ends)"
         } else {

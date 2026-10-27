@@ -426,10 +426,16 @@ exe's bytes, **Checked (files)** read from the staged game files, **Assumption**
     combo window.
   - **Not changed:** Valor (no magic); Master, Final, Limit, Anti (KH2's controller, deprecated:
     the tester's m15 answer 4).
-- **Kept as before (ours, to check):** a cast taken in an air finisher's Finishing Plus window
-  counts on past the length but is noted as no finisher (`take_step` with `air`), where KH2's
-  `0x1403D6CA0` also adds one to the finisher count `+0xD75`; the same as the native air casts
-  since t486. KH2 has no air finisher cast motion, so only Finishing Plus's count differs.
+- **Done since (the tester, m17 question 7: "add it"):** a cast taken in an air finisher's
+  Finishing Plus window (KH1's count already at the air length, `note_step`'s `CHAINED`) is noted
+  as the combo's next finisher (`take_step`: `combomods::cast_step` with `finisher` and `chained`,
+  `FINISHERS` one more), as KH2's `0x1403D6CA0` adds one to `+0xD75` for the magic command there
+  (**Checked (decomp)**). It plays its plain air cast (KH2 has no air finisher cast, MAGC `+0x30`
+  in the air, `0x1403C5170`) and its count goes to 0 as every last air step (unchanged). Every
+  magic path that takes an air step goes through `take_step`: KH2's spells on KH1's cast state
+  (`kh1_spell_start`), Reflect (`reflect::cast_native`), KH1's own air casts and Wisdom's
+  (`spell_start`). `combomods::kh1_finisher_window` skips casts noted as finishers (§4c.3.3), so
+  no window is opened over the air cast. Before (since t486) such a cast was noted as no finisher.
 - Not checked in game.
 
 #### 4c.3.3 Gravity, Stop and Aero take KH2 Thunder's, Magnet's and Cure's roles (what-is-still-missing after m17)
