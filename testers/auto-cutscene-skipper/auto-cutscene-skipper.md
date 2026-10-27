@@ -37,6 +37,7 @@
 - [31. Assistant: t712 adds a new QoL row, In-game Scene Skip (Off  On, off by](#^m31)
 - [32. Assistant: t717: Trinities now skip under the same row, In-game Scene S](#^m32)
 - [33. Assistant: Thanks for the correction on the reload. No version this rou](#^m33)
+- [34. Assistant: Thanks, this log has the exact spot. No version this round; ](#^m34)
 
 ---
 
@@ -577,9 +578,25 @@ update: I was actually wrong and loaded the wrong save file, ignore my message "
 
 ^m33
 
+
 (a)
 
 sent a log showing the exact moment, its when you get thunder. if you do talk to phil again then he has a question for you but not during this part.
 
 go ahead
+
+
+> [!tip] Assistant
+> Thanks, this log has the exact spot. No version this round; here's why.
+>
+> The Thunder part isn't started by your talk, so (a) doesn't hold it back. After the barrel game the gates reload and the room's own script runs by itself. First it plays Phil's high-poly scene, and Cutscene Skip already skipped that in your log. Then, still in "scene mode", the same room script gives Thunder and shows the "learned Thunder" lines plus two more. That's the part you pressed through. There's no question in it; the question you get from talking to Phil again is a separate talk, as you said.
+>
+> The catch: this part isn't a separate scene like the others. It's the room's own background script carrying on after the cutscene. KH1's own skip only ends when a scene finishes and the game goes back to the room's script, and here it's already in the room's script, so KH1's skip would never end. Skipping it means using KH1's skip mode (it gives the spell, shows no messages, runs it all at once) and ending it myself when the room script turns scene mode off. KH1 has no such ending, so it's your call:
+> - (a) Leave it: these room-script follow-ups always play (it's a few lines).
+> - (b) Skip them under In-game Scene Skip: when a scene ends and the room's script carries on in scene mode, skip that part too, unless it has a question, shop or menu.
+> - (c) Like (b), but only for follow-ups that give something (a spell, an item or an ability); plain dialogue follow-ups still play.
+>
+> How I checked: the Coliseum gates' room script in your game files (read locally, nothing copied into the repo) matched against your log frame by frame, and KH1's skip code in the Steam decomp; notes in docs/kh1-ingame-skip.md. I only read this one room. If you pick (b) or (c), a Cutscenes log from one more room where a scene leads straight into more dialogue would show whether other rooms work the same way. Trinities (t717) are still waiting for a test.
+
+^m34
 

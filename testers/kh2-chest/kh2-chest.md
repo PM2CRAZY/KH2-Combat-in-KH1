@@ -6,6 +6,7 @@
 
 - [1. Mr Bugs: I want to add a config in the tweaks menu that lets use quic](#^m1)
 - [2. Assistant: t724 adds a new row in Combat > Tweaks: Chest Opening (KH1  ](#^m2)
+- [3. Assistant: Five versions this round. Your first trace showed why you co](#^m3)
 
 ---
 
@@ -47,6 +48,7 @@
 
 ^m2
 
+
 wasn't able to move when opening a chest, I stayed in idle for a bit. the other parts of the code played except for chests that have gummi's in it and Dalmatians 
 
 1. (b)
@@ -58,4 +60,22 @@ wasn't able to move when opening a chest, I stayed in idle for a bit. the other 
    go ahead
    
    
+
+
+> [!tip] Assistant
+> Five versions this round. Your first trace showed why you couldn't walk off: KH1's chest script was still holding Sora. His "held by a script" flags came on the frame after you opened the chest and stayed on for about 2.2 seconds, even though t724 had let him go. (Your log had no chest lines: the Menus log was off, and the newest log in this folder looks like your Drive Forms session. Chest lines now go to the Cutscenes & Events log.)
+>
+> - **t727:** Chest Opening is in QoL now, KH2 by default. If your ini already says `chest_style = kh1`, flip the row once.
+> - **t728:** the chest script still runs in full (lid, sound, the item, the opened flag), but everything it asks Sora to do is marked done at once, through KH1's own route for "that actor isn't here". Its wait on Sora's motion passes at once too. So nothing holds, locks, turns or animates him.
+> - **t729:** no open motion. I checked KH2's files and exe: KH2's Open command is a message to the chest, the chest plays its own lid animation, and KH2 has no chest action for Sora. So there's no KH2 chest-opening animation for Sora to port. Your answer 3 (b) is exactly what KH2 does: he just keeps moving.
+> - **t730:** gummi and Dalmatian chests go the KH2 way too. The notice reads "Gummi Block" or "Dalmatians 01, 02, 03".
+> - **t731:** KH1's notice box already sits in the top-left corner, where KH2's info bar goes; the row's help text now says so. KH2's own bar art isn't built yet (see the question).
+>
+> **What I checked:** KH1's script, action and chest code in the Steam decomp and exe; KH2's Open command in 03system; KH2's chest code in the Steam KH2 decomp; your trace for the cause. **Not checked:** KH1's chest script file itself (which actions it queues, in what order), the Dalmatian numbering, the gummi names, KH2's info-bar timing, and anything in game.
+>
+> **Please test:** a plain chest, a munny chest, a gummi chest and a Dalmatian chest. Do you walk off right away? Does the lid open with its sound? Do you really get the item (check the gummi hangar and the Dalmatian count)? Open one standing still: Sora shouldn't play KH1's open motion. Try one with a full stack (it should stay KH1's). Please send a trace and the log with Cutscenes & Events on. Lines to look for: "Chest Opening: KH2 open (kind ...)", "treasure script: action 0x.. on Sora ... done at once", "its wait on Sora's motion ... goes on", "open motion request replaced".
+>
+> **Question:** for the notice, should I (a) keep KH1's top-left box as it is now, or (b) build KH2's own info bar (its art and timing) as its own version? (b) means adding a reader for KH2's 2D HUD files on testing first.
+
+^m3
 
