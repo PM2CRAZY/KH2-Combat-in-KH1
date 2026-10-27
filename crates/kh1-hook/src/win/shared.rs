@@ -1331,6 +1331,13 @@ pub mod physics {
             .filter(|s| (98..=101).contains(s));
         if let Some(slot) = swing {
             let r = swing_step(actor, slot, disp, f);
+            // A Drive Form with ground inertia (Wisdom): its swings steer by KH2's ground velocity
+            // in their allow-movement range (151: 0..46, 154: 10..80, Checked (files)) and brake
+            // outside it, as KH1's other actions on our slots do (`ground_inertia`). The tester
+            // (drive-forms): "you can't move and attack on the ground"; their trace f45615: no move
+            // at all through 151 with the stick held (our combo rows stand for KH1's swing slots
+            // 98..101, so this branch skipped the inertia).
+            ground_inertia(actor, disp);
             // KH2's edge stop in our slot's motion (either physics: it is the motion's own).
             edge_stop(actor, disp);
             return r;

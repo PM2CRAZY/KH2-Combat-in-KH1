@@ -1,3 +1,6 @@
+### 2026-10-27: Stage 736 (testing branch: Wisdom moves while attacking)
+- **Wisdom moves while attacking on the ground.** The tester (drive-forms): "you can't move and attack on the ground". Trace f45615: no movement through 151 with the stick held. Our combo rows stand for KH1's swing slots 98..101, and that branch of `ground_step` skipped `ground_inertia`; it now runs it, in each swing's allow-movement range (151: 0..46, 154: 10..80; Checked (files)). Not checked in game.
+
 ### 2026-10-27: Stage 735 (testing branch: Wisdom's Reflect on KH1's cast state)
 - **Wisdom's Reflect on KH1's cast state.** The tester (drive-forms): "reflect is playing the base animation", "air reflect is base soras reflect". Log f26207: KH2's deprecated controller borrowed him and drew base 71. `reflect::native_path` now covers native Wisdom: its own 71 / 72 / 73 (Checked (files), MAGF) on our Reflect rows, sub +10, KH2's cost through mpcost. Not checked in game.
 
