@@ -461,3 +461,7 @@ in game yet).
 ### 6.z3 Soft Reset in QoL (t707)
 
 The QoL list has a second row, Soft Reset (Off | On, ini `soft_reset`, off by default): the PS2's six-button reset (L1 + L2 + R1 + R2 + Start + Select) held for a second returns to the title screen. How it works and what is checked: `docs/kh1-softreset.md`.
+
+### 6.z4 Cutscene Skip in QoL (t710)
+
+The QoL list has a third row, Cutscene Skip (Off | Seen | All, ini `cutscene_skip`, off by default): skips the story cutscenes the pause menu's Skip Cutscene can skip, a second after they start. Never talks, shops or the dialog scenes confirmed line by line. How it works and what is checked: `docs/kh1-cutscene-skip.md`.

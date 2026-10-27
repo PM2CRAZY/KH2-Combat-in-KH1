@@ -231,6 +231,12 @@ trail_always = off\r\n\
 ; soft_reset: off = nothing; on = L1 + L2 + R1 + R2 + Start + Select held for a second returns to the\r\n\
 ; title screen, as the PS2's reset did (the Config menu's QoL > Soft Reset row switches it in game too)\r\n\
 soft_reset = off\r\n\
+; cutscene_skip: off = nothing; seen = skip a story cutscene (the ones the pause menu lets you skip) only when you have\r\n\
+; watched it before; all = skip every one of them, a second after it starts. Talks, shops and the dialog scenes\r\n\
+; you confirm line by line are never skipped (the Config menu's QoL > Cutscene Skip row switches it in game too)\r\n\
+cutscene_skip = off\r\n\
+; cutscene_seen: the scenes already watched, kept by the mod for the seen setting (delete the line to forget them)\r\n\
+cutscene_seen =\r\n\
 ; trace: (debug tools: only with debug_menu = on) on = the last trace_seconds of Sora's frames (position, KH1's and KH2's states, the pad)\r\n\
 ; are kept and written to the kh1-kh2-traces folder on Select + Triangle, or on their own when\r\n\
 ; something looks wrong; always = every frame is also written to kh1-kh2.trace.csv; off = none\r\n\
@@ -396,6 +402,10 @@ pub struct Settings {
     pub trail_always: bool,
     /// L1 + L2 + R1 + R2 + Start + Select held a second returns to the title screen (`soft_reset = on`, `softreset.rs`).
     pub soft_reset: bool,
+    /// Skips the pause menu's skippable cutscenes (`cutscene_skip = off | seen | all`: 0, 1, 2; `cutsceneskip.rs`).
+    pub cutscene_skip: u8,
+    /// The scenes already watched, as the mod keeps them (`cutscene_seen`).
+    pub cutscene_seen: String,
     /// KH1's own states own base Sora (`shared = on`, `shared.rs`): KH2's animations on KH1's
     /// states per move style (its physics by `physics_rule`), KH2's controller only for KH2's own
     /// moves. Off: the old
@@ -642,6 +652,12 @@ fn load(first: bool) -> Option<Settings> {
         gummi_skip: on(&text, "gummi", "skip", false),
         trail_always: on(&text, "trail_always", "on", false),
         soft_reset: on(&text, "soft_reset", "on", false),
+        cutscene_skip: match setting(&text, "cutscene_skip").as_deref() {
+            Some("seen") => 1,
+            Some("all") | Some("on") => 2,
+            _ => 0,
+        },
+        cutscene_seen: setting(&text, "cutscene_seen").unwrap_or_default(),
         shared: on(&text, "shared", "on", true),
         kh1_slots: match setting(&text, "kh1_slots").as_deref() {
             Some("off") | Some("0") | Some("no") => None,

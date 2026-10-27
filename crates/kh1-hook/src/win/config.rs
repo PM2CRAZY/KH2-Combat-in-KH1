@@ -240,17 +240,21 @@ enum Item {
 enum Pick {
     /// Knock-back Numbers (KH1 | Scaled | KH2, `hitreact::Numbers`).
     KnockNumbers,
+    /// QoL > Cutscene Skip (Off | Seen | All, `cutsceneskip`).
+    CutsceneSkip,
 }
 
 fn pick_value(what: Pick) -> usize {
     match what {
         Pick::KnockNumbers => super::hitreact::numbers() as usize,
+        Pick::CutsceneSkip => super::cutsceneskip::mode() as usize,
     }
 }
 
 fn pick_set(what: Pick, v: usize) {
     match what {
         Pick::KnockNumbers => super::hitreact::set_numbers(super::hitreact::Numbers::ALL[v.min(2)]),
+        Pick::CutsceneSkip => super::cutsceneskip::set(v.min(2) as u8),
     }
 }
 
@@ -337,9 +341,12 @@ const COMMAND_MENU: [Item; 1] = [Item::Set([0x7F00_0123, 0x7F00_011D, 0x7F00_011
 // there".)
 // (Soft Reset: the user, t707: "in qol you can quick reset the game", then "the combo does not work in the pc
 // version so restore it".)
-const QOL: [Item; 2] = [
+// (Cutscene Skip: the user, t710: "an auto cutscene skipper in qol", then the rules: never talks, shops or the
+// dialog scenes you confirm line by line; skip the pause menu's skippable ones with the game's own function.)
+const QOL: [Item; 3] = [
     Item::Set([0x7F00_0111, 0x7F00_0113, 0x7F00_0114, 0x7F00_0112], Row::Gummi),
     Item::Set([0x7F00_021B, 0x7F00_011D, 0x7F00_011E, 0x7F00_021C], Row::SoftReset),
+    Item::Pick([0x7F00_021D, 0x7F00_011D, 0x7F00_021E, 0x7F00_021F, 0x7F00_0220], Pick::CutsceneSkip),
 ];
 // (Cosmetics: the user, t704: "a new menu called cosmetics and put a setting in there for keyblades to
 // always have their trail on".)
@@ -424,7 +431,7 @@ const BUTTON_HELP: u32 = 0x7F00_0202;
 /// Misc's help, and the same without the debug menu (its row isn't there without the debug tools).
 const MISC_HELP: u32 = 0x7F00_020C;
 const MISC_HELP_NO_DEBUG: &str = "Battle quotes.";
-const STRINGS: [(u32, &str); 108] = [
+const STRINGS: [(u32, &str); 112] = [
     (0x7F00_0201, "KH1 in KH2"),
     (0x7F00_0202, "Choose KH1's or KH2's camera, combat, movement and more."),
     (0x7F00_0203, "Camera"),
@@ -461,9 +468,13 @@ const STRINGS: [(u32, &str); 108] = [
     (0x7F00_0219, "Command Menu"),
     (0x7F00_021A, "Options for the command menu."),
     (0x7F00_0211, "QoL"),
-    (0x7F00_0212, "Quality of life: Gummi routes, Soft Reset."),
+    (0x7F00_0212, "Quality of life: Gummi routes, Soft Reset, Cutscene Skip."),
     (0x7F00_021B, "Soft Reset"),
     (0x7F00_021C, "On: L1 + L2 + R1 + R2 + Start + Select held for a second return to the title screen."),
+    (0x7F00_021D, "Cutscene Skip"),
+    (0x7F00_021E, "Seen"),
+    (0x7F00_021F, "All"),
+    (0x7F00_0220, "Skips the story cutscenes the pause menu can skip, a second after they\nstart. Seen: only ones you watched before. Talks, shops and dialog you\nconfirm line by line are never skipped."),
     (0x7F00_0213, "Cosmetics"),
     (0x7F00_0214, "How things look, not how they play: Keyblade trails."),
     (0x7F00_0215, "Keyblade Trail"),

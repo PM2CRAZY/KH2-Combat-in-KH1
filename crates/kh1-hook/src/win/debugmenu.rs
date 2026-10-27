@@ -539,6 +539,8 @@ unsafe extern "system" fn frame_end(renderer: usize) {
     if base != 0 {
         if super::debug_on() {
             apply_locks(base);
+            // (t709) The cutscene log's flag and button changes, only with that log on.
+            super::cutscenelog::frame(base);
             if OPEN.load(Ordering::Relaxed) {
                 step(base);
             }

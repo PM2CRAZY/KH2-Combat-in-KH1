@@ -281,6 +281,8 @@ unsafe extern "system" fn pad(src: usize, out: usize, cfg: usize) {
     super::takeover::RAW_STICKS.store(u32::from_le_bytes(st_all), Ordering::Relaxed);
     // Soft Reset (`softreset`): the six-button combo held a second.
     super::softreset::pad(b_all);
+    // Cutscene Skip (`cutsceneskip`): follows the cutscene bit, one flag word read when on.
+    super::cutsceneskip::pad();
     // Final Form's secret code (`form::pad`).
     super::form::pad(b_all);
     // L1 held: KH1's shortcuts (L1 + a face button cast the spells set there), so KH1 keeps
