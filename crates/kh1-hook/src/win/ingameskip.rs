@@ -107,7 +107,12 @@ static REARMED: AtomicU32 = AtomicU32::new(0);
 /// KH1's give functions (event functions 583, 458, 444, 570) as the table held them (t785).
 static ORIG_GIVE: [AtomicUsize; 4] = [const { AtomicUsize::new(0) }; 4];
 /// What KH1 gave during the mod's skip, shown in the notice box when the skip ends (t785).
-static GIVEN: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+static GIVEN: std::sync::Mutex<Vec<(String, Option<u8>)>> = std::sync::Mutex::new(Vec::new());
+/// t786: the gives are ready to show (the skip has ended); the script file KH1's treasure machine is
+/// showing them from (kept until the machine is free again), and whether KH1's script start checked out.
+static SHOW: AtomicBool = AtomicBool::new(false);
+static SCRIPT: std::sync::Mutex<Vec<u8>> = std::sync::Mutex::new(Vec::new());
+static START_OK: AtomicBool = AtomicBool::new(false);
 /// KH1's event functions 512 and 514 as the table held them (t764: the mod's skip ends there).
 static ORIG_RELEASE: AtomicUsize = AtomicUsize::new(0);
 static ORIG_EVENT_OFF: AtomicUsize = AtomicUsize::new(0);
@@ -176,6 +181,20 @@ const SPELL_SAVE_PTR_STEAM: usize = 0x2868BA0;
 const SPELL_LEVELS: usize = 0x492;
 const MUNNY_PTR_STEAM: usize = 0x2E1F4D8;
 const MUNNY: usize = 0x1C;
+/// t786: KH1's start of a script in its treasure machine (`0x1401A43A0 (file, entry)`, the one event 5 uses
+/// for chests; `mov [rsp+8], rbx; mov [rsp+0x10], rbp; mov [rsp+0x18], rsi; push rdi`), the script in use
+/// and the machine's file. The icons the treasure texts put before an item and before Sora's ability.
+/// Checked (decomp + exe + files).
+const MACHINE_START_STEAM: usize = 0x1A43A0;
+const MACHINE_START_BYTES: [u8; 16] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x6C, 0x24, 0x10, 0x48, 0x89, 0x74, 0x24, 0x18, 0x57];
+/// The treasure machine's contexts and their count (as the start fills them), a context's flags and its
+/// "ended" bit (Checked (decomp)).
+const MACHINE_CONTEXTS_STEAM: usize = 0x23BF0B0;
+const MACHINE_COUNT_STEAM: usize = 0x23AB2DC;
+const CTX_FLAGS: usize = 0x33C;
+const CTX_ENDED: u32 = 8;
+const ICON_ITEM: u8 = 0x82;
+const ICON_ABILITY: u8 = 0x86;
 /// A context's stack: its top index (`+0x194`) and the values (`+0x198`, i32 each).
 const CTX_SP: usize = 0x194;
 const CTX_STACK: usize = 0x198;
@@ -298,6 +317,8 @@ unsafe fn verify() {
             return;
         }
     }
+    // t786: KH1's treasure-machine start, for the "Obtained" window (without it the level-up box is used).
+    START_OK.store(at(MACHINE_START_STEAM, MACHINE_START_BYTES.len()) == MACHINE_START_BYTES, Ordering::Relaxed);
     // KH1's give functions (t785): what a skipped scene gives is noted for the notice box. A mismatch
     // only leaves that kind of give without a box.
     let ours = [give_583 as *const () as usize, give_458 as *const () as usize, give_444 as *const () as usize, give_570 as *const () as usize];
@@ -305,7 +326,7 @@ unsafe fn verify() {
         let at = base + TABLE_STEAM + n as usize * 8;
         ORIG_GIVE[i].store(base + rva, Ordering::Release);
         if !super::hook::patch(at, &((base + rva) as u64).to_le_bytes(), &(ours[i] as u64).to_le_bytes(), "event function (in-game skip notice)") {
-            log!(Menus, "In-game Scene Skip: event function {n} not wrapped: no notice for it");
+            log!(Cutscenes, "In-game Scene Skip: event function {n} not wrapped: no notice for it");
         }
     }
     // The section ends (t765): the part of a scene after its skippable section. Not needed for the rest,
@@ -333,6 +354,7 @@ pub fn pad() {
 
 unsafe fn step() {
     let base = BASE.load(Ordering::Relaxed);
+    show_now(base);
     let entry = rd::<i32>(base + ENTRY_STEAM);
     let last = LAST_ENTRY.swap(entry, Ordering::Relaxed);
     if FORCED.load(Ordering::Relaxed) {
@@ -510,22 +532,71 @@ unsafe fn noting() -> bool {
     ON.load(Ordering::Relaxed) && FORCED.load(Ordering::Relaxed) && base != 0 && rd::<u32>(base + RUNNER_STEAM) & 1 != 0
 }
 
-fn note(line: String) {
+fn note(line: String, icon: Option<u8>) {
     log!(Cutscenes, "in-game skip: KH1 gave \"{line}\" during the skip (shown when it ends)");
     if let Ok(mut g) = GIVEN.lock() {
         if g.len() < 8 {
-            g.push(line);
+            g.push((line, icon));
         }
     }
 }
 
-/// The notes, into the mod's notice box (KH1's level-up prompt box, `menu::queue_prompt`, the one `queue_notice` became), in the order
-/// KH1 gave them (the owner: "1 and 2 with (a)": "Obtained" for everything, every kind of give).
+/// The skip has ended: the notes are shown at the next pad read with the machine free (`show_now`), in
+/// the order KH1 gave them (the owner: "1 and 2 with (a)": "Obtained" for everything, every kind of give).
 fn show_given() {
-    let lines = GIVEN.lock().map(|mut g| std::mem::take(&mut *g)).unwrap_or_default();
-    for line in lines {
-        super::menu::queue_prompt("Obtained", &line);
+    if GIVEN.lock().map(|g| !g.is_empty()).unwrap_or(false) {
+        SHOW.store(true, Ordering::Relaxed);
     }
+}
+
+/// t786 (the owner, (a): the chests' window for a skipped scene's gives): KH1's treasure-script machine
+/// shows them in window 7, as a chest's "Obtained" (`docs/kh1-chest.md` round 9). A script file of the
+/// treasure script's own window calls (`crate::kh1script::obtained_script`) is started the way KH1's event 5
+/// starts the treasure script, `0x1401A43A0 (file, 0)`: it swaps in the file's texts, runs sub-script 0 of
+/// each context at once, and adds the machine's task (`0x1401A2CF0`), which steps it and, when its context
+/// has ended, puts the room script's file and texts back. Checked (decomp). Only from the pad read (outside
+/// KH1's script step), with the mod's skip over, the runner word's low bits clear (no skip mode, no hold on the player) and the machine free (no context of
+/// its, a chest's treasure script's included, still running).
+unsafe fn show_now(base: usize) {
+    // (The start clears the runner word's low four bits, `0x1401A43A0`: so it waits until none is set, no
+    // skip and no script holding the player, bit 1, as when a chest is opened in play.)
+    if !SHOW.load(Ordering::Relaxed) || FORCED.load(Ordering::Relaxed) || rd::<u32>(base + RUNNER_STEAM) & 0xF != 0 {
+        return;
+    }
+    // The machine is free when its context 0 has ended (bit 3 of `+0x33C`, set by the class 5 handler
+    // `0x14019FAB0` when a context's last sub-script ends): its task (`0x1401A2CF0`) ends the whole script
+    // then, whatever the other contexts do (the treasure script's contexts 1..3 idle in a loop and never
+    // end). Checked (decomp). t791: t789 waited for every context, so after any chest's treasure script the
+    // window never came again (the owner's t790 log: Thunder noted at f11709, the Dalmatians' chests at
+    // f3400 / f4299 before it, no window).
+    let count = rd::<i32>(base + MACHINE_COUNT_STEAM);
+    if (1..=CTX_MAX).contains(&count) && rd::<u32>(base + MACHINE_CONTEXTS_STEAM + CTX_FLAGS) & CTX_ENDED == 0 {
+        return;
+    }
+    SHOW.store(false, Ordering::Relaxed);
+    let lines = GIVEN.lock().map(|mut g| std::mem::take(&mut *g)).unwrap_or_default();
+    if lines.is_empty() {
+        return;
+    }
+    if !START_OK.load(Ordering::Relaxed) {
+        for (line, _) in lines {
+            super::menu::queue_prompt("Obtained", &line);
+        }
+        return;
+    }
+    let texts: Vec<Vec<u8>> = lines
+        .iter()
+        .map(|(line, icon)| {
+            let mut name = super::menu::encode(line);
+            name.pop();
+            crate::kh1script::obtained_text(&name, *icon)
+        })
+        .collect();
+    let Ok(mut file) = SCRIPT.lock() else { return };
+    *file = crate::kh1script::obtained_script(&texts);
+    let start: unsafe extern "system" fn(usize, i32) = std::mem::transmute(base + MACHINE_START_STEAM);
+    start(file.as_ptr() as usize, 0);
+    log!(Cutscenes, "in-game skip: {} \"Obtained\" window(s) started in KH1's treasure machine ({})", lines.len(), lines.iter().map(|(l, _)| l.as_str()).collect::<Vec<_>>().join(", "));
 }
 
 /// The value `k` below the top of a context's stack.
@@ -558,11 +629,11 @@ unsafe extern "system" fn give_583(ctx: usize) -> u64 {
             let item = (rec >> 8) as u8;
             let count = (rec >> 4) & 0xF;
             let name = super::equip::item_name(base, item).map(|n| super::chest::strip_codes(&n)).unwrap_or_else(|| format!("Item {item:#x}"));
-            note(if count > 1 { format!("{name} x{count}") } else { name });
+            note(if count > 1 { format!("{name} x{count}") } else { name }, Some(ICON_ITEM));
         }
         Some(rec) if rec & 0xF == 1 => {
             let ab = (rec >> 8) as u8;
-            note(super::menu::ability_name(base, ab).unwrap_or_else(|| format!("Ability {ab:#x}")));
+            note(super::menu::ability_name(base, ab).unwrap_or_else(|| format!("Ability {ab:#x}")), Some(ICON_ABILITY));
         }
         _ => {}
     }
@@ -572,6 +643,9 @@ unsafe extern "system" fn give_583(ctx: usize) -> u64 {
 /// 458, a spell's level (a new spell at level 1).
 unsafe extern "system" fn give_458(ctx: usize) -> u64 {
     if !noting() {
+        if ON.load(Ordering::Relaxed) {
+            log!(Cutscenes, "in-game skip: event function 458 outside the mod's skip (forced {}): spell {}, level {}", FORCED.load(Ordering::Relaxed), arg(ctx, 1), arg(ctx, 0));
+        }
         return orig_give(1, ctx);
     }
     let base = BASE.load(Ordering::Relaxed);
@@ -580,8 +654,11 @@ unsafe extern "system" fn give_458(ctx: usize) -> u64 {
     let at = save + SPELL_LEVELS + spell.clamp(0, 6) as usize;
     let before = (save >= 0x10000 && super::crash::readable(at)).then(|| rd::<u8>(at));
     let r = orig_give(1, ctx);
-    if (0..7).contains(&spell) && (1..=3).contains(&level) && before.is_some_and(|b| b as i32 != level) {
-        note(SPELLS[spell as usize][level as usize - 1].to_string());
+    log!(Cutscenes, "in-game skip: event function 458 during the skip: spell {spell}, level {level} (was {before:?})");
+    // t788: noted whether or not the level changes (the owner's t787 log: a replayed save already had
+    // Blizzard at 1, "was Some(1)", and t785..t787 noted only a change; the scene shows its lines anyway).
+    if (0..7).contains(&spell) && (1..=3).contains(&level) {
+        note(SPELLS[spell as usize][level as usize - 1].to_string(), None);
     }
     r
 }
@@ -599,7 +676,7 @@ unsafe extern "system" fn give_444(ctx: usize) -> u64 {
     if ok {
         let after = rd::<u32>(block + MUNNY);
         if after > before {
-            note(format!("{} Munny", after - before));
+            note(format!("{} Munny", after - before), None);
         }
     }
     r
@@ -611,7 +688,7 @@ unsafe extern "system" fn give_570(ctx: usize) -> u64 {
         return orig_give(3, ctx);
     }
     let r = orig_give(3, ctx);
-    note("Gummi Block".to_string());
+    note("Gummi Block".to_string(), None);
     r
 }
 

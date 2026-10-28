@@ -161,3 +161,37 @@ The owner: "for in game cutscenes that have items in them like phil giving you t
 - **Not done, as asked:** scenes skipped by the Cutscene Skip row get no box; a party member's ability shows only the ability.
 
 Not checked in game (Assumption): the spell names are English (KH1's own text for them wasn't looked up); a Gummi Block from 570 is shown even if KH1 gave none (it can refuse at the most of one kind); KH1's order of gives is the scene's.
+
+## t786: the gives in the chests' "Obtained" window
+
+The owner (thread, after t785): the box should be the chests' own (since t776 KH1's window 7, `docs/kh1-chest.md` round 9), "(a)", go ahead.
+
+- **The treasure script's window** (`exchange/UK_treasure.ev`, read in the owner's files; nothing of it copied here). Sub-script 0 sets window 7 up: event function 3 (7, -115, -135), 4 (7, 0, 1), 5 (7, 1), 6 (7, 0), 83 (7, 0), 80 (7, 0). For an item it sets them again, then 365 (7, text, -220, -150), 0 (7: open), 1 (7, text: the line), 107 (7: waits while it shows), 2 (7: close). Its "Obtained" texts (5..8) are `08`, `0A 00 00 00`, `07 0C 00`, "Obtained ", `0C 04` (colour), an icon (0x82 / 0x89 / 0x83 / 0x84), `0E 01` (the item 364 set), `0C FF`, "." and `06 52 00` (the window closes itself after 0x52 frames), ended by 0; Sora's ability text (9) has icon 0x86. Checked (files).
+- **How KH1 starts it** (Checked (decomp)): event 5 (`0x1401A1A10`) calls `0x1401A43A0 (file, entry)`, which keeps the room script's file and text table aside (`0x142382538..`, `0x1423B8BE0`), puts the file's texts in the text table (`0x14237C4E0`), loads the entry's contexts into the machine's list (`0x1423BF0B0`, count `0x1423AB2DC`), runs each context's sub-script 0 at once and adds a task (`0x1401A2CF0`) that steps the rest; when every context has ended the task puts the room script's file and texts back. The start clears the runner word's low four bits.
+- **What the mod does.** What KH1 gave during the mod's skip (t785) is kept with an icon (items 0x82, abilities 0x86, the rest none). When the skip has ended, at the next pad read with the runner word's low bits clear and the machine free (the script in use isn't the machine's file), `kh1script::obtained_script` makes a script file of exactly those window calls with one text per give (the name written out in KH1's codes in place of the item code) and `0x1401A43A0 (file, 0)` starts it. KH1 shows the lines one after another in window 7 and ends it. No hold on Sora. If `0x1401A43A0`'s first bytes don't match, the level-up box (`menu::queue_prompt`) is used instead.
+
+Not checked in game (Assumption): the look of a line with the name written out (the treasure's take it from the item code), the lines with no icon, and a talk started while the window shows (its texts would be ours until the window ends, as during a chest's).
+
+## t787: the gives read from Sora's save data
+
+The owner (t786 log): "the item text box doesn't appear after it skipped in an game cutscene where you get blizzard". The log: Wonderland room 1 (`aw02`, version `0xd`), entry 3 skipped from f1653 to f1673 (ended at 512); event function 458 ran in that second (its script gives Blizzard with `push 1, push var 0x18, call 458` after 513), but the 458 wrapper noted nothing. Why wasn't found (its install result was logged under Menus, which was off; it is under Cutscenes now, and the wrapper logs each call). Instead of depending on the wrappers, the mod now keeps Sora's spell levels (`[0x142868BA0] + 0x492`, 7 bytes), his ability list (`+ 0x44`, 48 bytes) and his munny (`[0x142E1F4D8] + 0x1C`) when its skip starts and compares them when it ends. Each spell whose level went up, each ability new in the list and the munny gained become an "Obtained" line. Items and Gummi Blocks still come from their functions' wrappers (583, 570). Checked (decomp: the three are where KH1's spell, ability and munny functions write).
+
+Not checked in game (Assumption): only Sora's abilities are compared (Donald's and Goofy's lists aren't).
+
+## t788: a spell is shown even when its level doesn't change
+
+**Correction to t787.** The t787 log (f753): "event function 458 during the skip: spell 1, level 1 (was Some(1))". The 458 wrapper was installed and called in t786 too; the save already had Blizzard at level 1 (the scene replayed on that save), and t785's rule noted a spell only when its level changed, as did t787's save comparison. Now 458 notes the spell whenever it runs during the mod's skip (the scene shows its "learned" lines either way). t787's save comparison is removed: abilities (583 kind 1) and munny (444, what KH1 added) come from their wrappers again, so a replayed scene shows them too. Checked (log).
+
+## t789: the window's free check
+
+The t788 log: f719 "KH1 gave "Blizzard" during the skip", f725 the skip ended at 512, the runner word 0 from f726, and no "window(s) started" line. t786's check for a free machine compared the script in use (`0x142382530`) with the machine's file word (`0x1423BBBE0`), but the room script's start (`0x1401A38A0`) writes both, so they were always equal and the window waited forever. Now the machine counts as free when none of its contexts (`0x1423BF0B0`, count `0x1423AB2DC`) is still running (bit 3 of `+0x33C`, set by the class 5 handler `0x14019FAB0` when a context's last sub-script ends; the machine's task ends when all have it). Checked (log + decomp).
+
+## t790: the give's sound
+
+The owner: "its working, can you add the sound that plays when you get an item from those cutscenes/chests?". KH1's scripts play it themselves with event function 353 (`push id, push 0, call 353`; `0x1401C8F40` calls `0x1401787D0`, but in skip mode only sound 0x3EB0 is let through, so a skipped scene's sound is lost). Across the scripts read, the sound next to a give is 0x1F: next to the item message (605) 112 times, to 258 25 times, to 570 13 times, and the Blizzard scene (`aw02`) plays it after its "learned" line. The treasure script plays 0x1E (in its context 2, with the lid). Checked (files + decomp). The "Obtained" window's script now plays 0x1F through 353 right before each line opens.
+
+Not checked in game (Assumption): that 0x1F is the same sound for every kind of give (spell, item, ability).
+
+## t791: the free check looks at context 0 only
+
+The t790 log: the Blizzard window at f853, two Dalmatians' chests (the treasure script) at f3400 and f4299, then Thunder noted at f11709, the skip ended at f11713 and no window, with the runner word 0 from f11715. The machine's task (`0x1401A2CF0`) ends a script when its context 0 has ended (bit 3 of `+0x33C`); the treasure script's contexts 1..3 idle in a loop and never end, so t789's "every context ended" never came true after a chest. Now only context 0 is checked. Checked (log + decomp).

@@ -8,6 +8,7 @@
 - [2. Assistant: t724 adds a new row in Combat > Tweaks: Chest Opening (KH1  ](#^m2)
 - [3. Assistant: Five versions this round. Your first trace showed why you co](#^m3)
 - [4. Assistant: Two versions this round. Your log showed what still held Sor](#^m4)
+- [5. Assistant: Fourteen versions since my last reply. booglechan asked for ](#^m5)
 
 ---
 
@@ -115,4 +116,56 @@ go ahead
 > - Notes: `docs/kh1-chest.md` ("Round 3"). Thread folder: `testers/kh2-chest/`.
 
 ^m4
+
+
+> [!tip] Assistant
+> Fourteen versions since my last reply. booglechan asked for most of these directly, so this is the catch-up. The setting is now **Chest Opening: Vanilla | Quick | Skip**, and Quick has a **Chest Animation (KH1 | KH2)** row under it.
+>
+> - **t770, three settings.** Vanilla is KH1's chest as it was. Skip is the old KH2 setting: no animation, you move right away. Quick plays a chest animation, then lets you move. Choosing Quick shows the Chest Animation row in QoL.
+> - **t771 and t772, Quick holds Sora through the animation.** KH1's open motion has no end of its own: the chest script asks for his idle after it. Quick now lets the script run its actions on Sora as KH1 does, so the animation plays out and then he goes back to idle.
+> - **t773, Quick lets Sora go on idle.** Your trace showed him back on idle (slot 0) about 50 frames before the script released him. Now he's let go the moment he's back on idle, and the rest of the open runs the Skip way.
+> - **t774, the debug menu's animation counter counts KH1's own animations.** It read 0 on them before.
+> - **t775, the item notice on vanilla's frame.** On Quick it waits until 100 frames into the open: the chest animation plus 20 frames of idle.
+> - **t776, KH1's own item window.** The evidence boxes' text box is KH1's message window 7, and a vanilla chest uses the same window. Quick and Skip now let the chest and box scripts open it as KH1 wrote them, and it closes itself, while Sora keeps moving. This replaces the top-left notice, so it also covers your (b): booglechan picked KH1's own window over a separate KH2 info bar.
+> - **t777, the Dalmatian window is one line.** It used to be two lines in the middle of the screen. Now it reads "Found dalmatians no. A, B, C." and sits where the "Obtained" windows go.
+> - **t778, Skip keeps Sora's run.** KH1's Open sets his speed to 0. On Skip he now runs on through the open.
+> - **t779, KH2's reach.** In KH2 the box offers Open whenever its reach sphere touches Sora, 185 units across. KH1 needed the chest in front of him or a bump into it. On Quick and Skip each chest now gets KH2's reach, so you can tap Triangle while running past.
+> - **t780 to t782, KH2's facing rules.** Open shows greyed (visible but unusable) if the chest is more than 135° off your facing, or if you're behind it. t781 added a log line, and t782 reads each chest's real facing (t780 read a value that's 0 on every chest).
+> - **t783, KH2's chest animation.** It wasn't in Sora's own motion file. It's in the chest's (`F_EX030.mset`, entry 252: Sora's body and Keyblade, 60 frames). It's now one of KH1's own animation slots on KH1's open request. With Quick and Chest Animation on KH2, Sora plays it; on KH1 he plays KH1's.
+>
+> **How I checked it**
+> - Your traces and logs: the hold after slot 83 (t773), the chest that never opened from a run (t779), and the throne-room chests greyed by the wrong facing (t782). Numbers are in `docs/kh1-chest.md`, rounds 4 to 17.
+> - KH2's side, from the KH2 Steam decomp and KH2's files:
+>   - the box's reach sphere and its Open command (0x20);
+>   - its two facing limits;
+>   - its lid handler;
+>   - the chest animation in the box's own motion file.
+> - KH1's side, from the KH1 Steam exe and decomp:
+>   - the chest's offer check, its range test and the command box;
+>   - the open motion request (0xA6, slot 83);
+>   - the speed-zeroing call;
+>   - the message window functions and the chest script's own texts.
+> - Every hook's first bytes are checked against the Steam exe. None of this is checked in game.
+>
+> **Please test:**
+> 1. Each setting with a plain chest, a gummi chest, a Dalmatian chest and an evidence box:
+>    - **Vanilla:** KH1's chest, unchanged.
+>    - **Quick:** the animation plays, you move as soon as Sora is back on idle, and the item window comes about 100 frames in.
+>    - **Skip:** you run straight through the open.
+> 2. Quick with Chest Animation on KH2: Sora plays KH2's chest animation, about 1 second. On KH1 he plays KH1's.
+> 3. Run past a chest tapping Triangle, from its front and from behind:
+>    - from the front it should open;
+>    - from behind, or with the chest behind you, Open should show greyed.
+> 4. The item window: it should look like the evidence boxes' window and close by itself. The Dalmatian one should be a single line at the top.
+> 5. Please send the log with Cutscenes & Events on. Lines to look for: "Chest Opening: asked chest …", "KH2's reach …", "Quick: KH2's chest motion …".
+>
+> **Still open on my side (no answer needed)**
+> - KH2's chest animation turns Sora toward the chest over its first 12 frames. KH1 doesn't do that yet, so he opens facing the way he was.
+> - Some of that animation's other triggers aren't identified yet.
+> - I haven't followed KH2's box script for its exact hold length. KH1's chest script holds Sora until the animation ends.
+> - Changing the setting only affects chests that load afterwards, so re-enter the room.
+> - Notes: `docs/kh1-chest.md` (rounds 4 to 17).
+
+^m5
+
 

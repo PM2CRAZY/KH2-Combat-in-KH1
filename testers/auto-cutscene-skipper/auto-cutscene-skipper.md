@@ -44,6 +44,13 @@
 - [38. Assistant: t767 should make that Wonderland scene skip. In t766 the mod](#^m38)
 - [39. Assistant: No code yet. Here's the plan for the "Obtained" box after a ](#^m39)
 - [40. Assistant: t785: when In-game Scene Skip skips a scene that gives you s](#^m40)
+- [41. Assistant: No code this round. A correction and one question about the ](#^m41)
+- [42. Assistant: t786: a skipped scene's gives now show in the same "Obtained](#^m42)
+- [43. Assistant: t787: the Blizzard scene (and any skipped scene that gives a](#^m43)
+- [44. Assistant: t788: the Blizzard window should now show. I was wrong about](#^m44)
+- [45. Assistant: t789: the "Obtained Blizzard." window should now open after ](#^m45)
+- [46. Assistant: t790: each "Obtained" line after a skipped scene now plays t](#^m46)
+- [47. Assistant: t791: the "Obtained" window should now come every time, also](#^m47)
 
 ---
 
@@ -759,4 +766,118 @@ go ahead
 
 ^m40
 
+
+> [!tip] Assistant
+> No code this round. A correction and one question about the "Obtained" box.
+>
+> **Correction.** t785 shows its box in KH1's level-up box. That's what the chests used when you first asked, but since t776 (kh2-chest thread, `docs/kh1-chest.md` round 9) chests show KH1's own message window 7: the same small "Obtained" window the Wonderland evidence boxes use, opened and closed by the script itself while Sora stays free. I hadn't read that thread's later rounds before building t785, so the skipped scenes don't match the chests yet. t785 also wouldn't build after your chest work removed the old box; I pointed it at the renamed one so it builds.
+>
+> **Why it can't be copied one to one.** Chests get window 7 because the treasure script itself opens it, and t776 just lets its window calls run. A skipped scene usually has no window 7 of its own to let through. Phil's "learned Thunder" is ordinary dialog lines, and only some scenes, like the Dodge Roll one, have an item window. So for every skipped give to show the chest's window, something has to open window 7 after the skip.
+>
+> **How it could be done (Checked, files + decomp).** The treasure script sets up window 7 with the same calls every time: 364 (the item), 4 / 5 / 6 / 83 / 80 (window 7's settings), 365 (text and place, at (-220, -150)), 0 (open), 1 (line), 107 (wait while it shows), 2 (close).
+>
+> **Question: how should the window open after a skip?**
+> - (a) KH1 runs those same window calls for us. After the skip, a short script made of exactly that sequence, with our "Obtained X" line, goes through KH1's own script machine in the treasure script's free slots, and KH1 opens, shows and closes window 7 itself. It looks identical to the chest box for every give. Nothing is given twice, because only the window part runs.
+> - (b) Only let a scene's own item window through during the skip, the way t776 does for chests. This is the most native, but Thunder and most scenes would show nothing.
+> - (c) Keep t785's level-up box.
+>
+> I recommend (a). It's the only one that matches the chest box for everything a scene gives. Before building, I'd check that the treasure slots are free at that moment and how KH1 starts a script there.
+>
+> Write "go ahead" with your answer.
+
+^m41
+
+
+> [!tip] Assistant
+> **t786**: a skipped scene's gives now show in the same "Obtained" window chests use. KH1 opens it and closes it itself.
+>
+> **How it works.** The chest window comes from KH1's treasure script, which sets up window 7, places it and shows one line. The mod now builds a tiny script out of exactly those window steps, one line per thing the scene gave. Once the skip is over and Sora is free, it hands that script to KH1 the same way KH1 starts the treasure script when you open a chest. KH1 then shows each line in turn, closes the window on its own timer and goes back to the room's script. Nothing is given again, and Sora isn't held.
+>
+> **How I checked it.**
+> - The window steps and the "Obtained" text format come from the treasure script in your game files.
+> - How KH1 starts and ends that script comes from the Steam decomp, and the start function's bytes are checked at start. If they don't match, it falls back to t785's box.
+> - The script builder has a unit test.
+> - This also fixes the build error from t785 (the old box function was gone).
+> - Not run in game; `cargo test` couldn't run here.
+>
+> **Assumptions:** the item name is written into the line rather than filled in by the game, as the chest's is, so check it looks the same. Spells, munny and Gummi Blocks have no icon. The window waits until the scene has fully let go of Sora, so it may come a moment after the fade in.
+>
+> **Please test:**
+> 1. Phil's Thunder: after the skip, the chest-style window says "Obtained Thunder." and closes by itself.
+> 2. The Dodge Roll scene: "Obtained Dodge Roll." with the ability icon.
+> 3. Open a chest right after a skipped scene: both windows should still show.
+>
+> Notes are in `docs/kh1-ingame-skip.md` (t786 section) and AGENTS.md Stage 786.
+
+^m42
+
+
+> [!tip] Assistant
+> **t787**: the Blizzard scene (and any skipped scene that gives a spell, an ability or munny) should now show the "Obtained" window (your report in chat: "the item text box doesn't appear after it skipped in an game cutscene where you get blizzard").
+>
+> **What your log showed.** The skip itself worked: Wonderland's room 1, the scene ran skipped for 20 frames and ended when Sora was given back. KH1 gave Blizzard inside it; your log counts the spell function in that second, and the scene's script calls it after the scene starts. But the mod's watcher on that function never wrote down a give, so no window. I couldn't tell why from the log: its setup line goes to the Menus log category, which was off.
+>
+> **The fix.** The mod no longer depends on catching the moment KH1 gives a spell, ability or munny. When its skip starts it remembers Sora's spell levels, his ability list and his munny, and when the skip ends it compares them. Whatever went up becomes an "Obtained" line in the chest window. Items and Gummi Blocks still come from their functions, as in t786. The spell function's calls are now logged under Cutscenes too, so if anything is still off I can see it.
+>
+> **How I checked it:** where KH1 writes spell levels, abilities and munny comes from the Steam decomp; the Blizzard call in the scene's script comes from your game files. Not run in game; `cargo test` couldn't run here. Assumption: only Sora's abilities are compared, not Donald's or Goofy's.
+>
+> **Please test:** the same Blizzard scene with the Cutscenes log on. You should get "Obtained Blizzard." in the chest window after the skip. If not, send the log: the "event function 458" line will say what happened.
+>
+> Notes are in `docs/kh1-ingame-skip.md` (t787 section) and AGENTS.md Stage 787.
+
+^m43
+
+
+> [!tip] Assistant
+> **t788**: the Blizzard window should now show. I was wrong about the cause in t787.
+>
+> **What your log showed.** The mod did see KH1 give Blizzard during the skip (frame 753), both this time and last time. But your save already had Blizzard: the log says the level was 1 before and 1 after. I had written it to show a spell only when its level went up, so on a save that already has the spell nothing showed. t787's compare-the-save approach had the same blind spot.
+>
+> **The fix.** A spell given during the skip now always gets its "Obtained" line, whether or not you already had it, the same way the scene would show its lines anyway. I took t787's save comparison back out: abilities and munny come from KH1's own give functions again, so a replayed scene shows those too.
+>
+> **Please test:** the same Blizzard scene. After the skip, the chest window should say "Obtained Blizzard." If it still doesn't, send the log. Look for an "Obtained window(s) started" line after the skip; if that line is there, the window was started and the problem is in the window itself.
+>
+> Not run in game; `cargo test` couldn't run here. Notes are in `docs/kh1-ingame-skip.md` (t788 section) and AGENTS.md Stage 788.
+
+^m44
+
+
+> [!tip] Assistant
+> **t789**: the "Obtained Blizzard." window should now open after the skip.
+>
+> **What your log showed.** The mod now catches the Blizzard give (frame 719) and the skip ends normally (frame 725), but the window never started. That was my bug in the check for "is KH1's treasure script free?". I compared two addresses that I thought only a running chest script sets, but the room's own script sets them too, so the check always said "busy" and the window waited forever.
+>
+> **The fix.** The mod now checks whether any of the treasure script's threads is still running. Each one has an "ended" flag that KH1 sets when it finishes. If none is running, the window starts. Checked (your log + the decomp). Not run in game; `cargo test` couldn't run here.
+>
+> **Please test:** the Blizzard scene again. After the skip you should see the chest-style "Obtained Blizzard." window. If not, the log will either have an "Obtained window(s) started" line (then the window itself is the problem) or not (then it's still waiting).
+>
+> Notes are in `docs/kh1-ingame-skip.md` (t789 section) and AGENTS.md Stage 789.
+
+^m45
+
+
+> [!tip] Assistant
+> **t790**: each "Obtained" line after a skipped scene now plays the "you got something" sound (your request in chat: "can you add the sound that plays when you get an item from those cutscenes/chests?").
+>
+> **How.** Scenes play that sound themselves with one of KH1's script functions. During a skip KH1 mutes it, which is why it was missing. The scripts in your game files use sound 0x1F for it almost every time something is given (next to 150 item messages and gives, and right after the "learned Blizzard" line). The mod's window script now asks KH1 to play 0x1F just before each line opens, through the same function. Checked (game files + decomp). Not run in game; `cargo test` couldn't run here.
+>
+> **About chests.** The treasure script I read plays a different sound, 0x1E, with the lid. I didn't change chests. If you want 0x1F on chest windows too, say so here.
+>
+> **Please test:** the Blizzard scene and a scene that gives an item. You should hear the get sound as each window opens. Tell me if it's the wrong sound.
+>
+> Notes are in `docs/kh1-ingame-skip.md` (t790 section) and AGENTS.md Stage 790.
+
+^m46
+
+
+> [!tip] Assistant
+> **t791**: the "Obtained" window should now come every time, also after you've opened chests (your report in chat: "the pop up didn't happen in my last cutscene but happened earlier").
+>
+> **What your log showed.** The Blizzard window came (frame 853). Then you opened two Dalmatian chests, and after that the Thunder scene was skipped and Thunder noted (frame 11709), but no window. My check for "is the treasure script free?" waited for all of its threads to finish. The chest's treasure script has three helper threads that just idle and never finish; KH1 ends the script when its main thread ends. So after the first chest, my check said "busy" forever. Now it only looks at the main thread, the same way KH1 decides the script is over. Checked (your log + the decomp). Not run in game; `cargo test` couldn't run here.
+>
+> **Please test:** open a chest, then skip a scene that gives something (Thunder or Blizzard). The window and sound should still come.
+>
+> Notes are in `docs/kh1-ingame-skip.md` (t791 section) and AGENTS.md Stage 791.
+
+^m47
 

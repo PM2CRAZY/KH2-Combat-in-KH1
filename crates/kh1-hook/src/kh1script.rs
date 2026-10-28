@@ -218,6 +218,90 @@ pub fn started_entry(pc: usize, entry: u32, word: impl Fn(usize) -> Option<u32>)
     }
 }
 
+/// t786: the "Obtained" window after a skipped scene, as KH1's treasure script shows it (`exchange/
+/// <lang>_treasure.ev`, read in the owner's files, nothing of it copied here): window 7 set up with event
+/// functions 3 / 4 / 5 / 6 / 83 / 80, then per line 365 (window, text, x, y: placed at (-220, -150)), 0
+/// (open), 1 (the line), 107 (wait while it shows) and 2 (close). Its "Obtained" texts are: `08`, `0A 00 00
+/// 00`, `07 0C 00`, the words, a colour `0C 04`, an icon, the item, `0C FF`, a full stop (0x68) and `06 52 00`
+/// (the window closes itself after 0x52 frames), ended by 0. Checked (files).
+pub const CLASS_OP: u8 = 1;
+pub const OP_NEGATE: u32 = 5;
+const WINDOW: u32 = 7;
+/// t790: event function 353 plays a sound (`push id, push 0, call 353`; `0x1401C8F40` -> `0x1401787D0`, not
+/// in skip mode). Sound 0x1F is the one the room scripts play with a give: next to the item message (605)
+/// 112 times, next to 258 25 times and to 570 13 times across the scripts read, and in the Blizzard scene
+/// after its "learned" line (`aw02`). Checked (files + decomp).
+pub const FN_SOUND: u32 = 353;
+pub const SOUND_GET: u32 = 0x1F;
+
+/// One "Obtained" line in the treasure script's form: `name` in KH1's text codes (no end byte), `icon`
+/// the glyph before it (the treasure texts use 0x82 / 0x83 / 0x84 / 0x89 for items, 0x86 for Sora's
+/// abilities), if any.
+pub fn obtained_text(name: &[u8], icon: Option<u8>) -> Vec<u8> {
+    let mut t = vec![0x08, 0x0A, 0x00, 0x00, 0x00, 0x07, 0x0C, 0x00];
+    // "Obtained " in KH1's codes (0x2B.. A-Z, 0x45.. a-z, 1 a space).
+    t.extend("Obtained ".bytes().map(|c| match c {
+        b'A'..=b'Z' => 0x2B + (c - b'A'),
+        b'a'..=b'z' => 0x45 + (c - b'a'),
+        _ => 0x01,
+    }));
+    t.extend_from_slice(&[0x0C, 0x04]);
+    if let Some(i) = icon {
+        t.push(i);
+    }
+    t.extend(name.iter().copied().filter(|&b| b != 0 && b != 0x04));
+    t.extend_from_slice(&[0x0C, 0xFF, 0x68, 0x06, 0x52, 0x00, 0x00]);
+    t
+}
+
+/// A script file in KH1's form (the layout `0x1401A43A0` reads: no variables, one entry, the texts at the
+/// offset in word 3) that shows `texts` one after another in window 7, as the treasure script does, and
+/// ends: entry 0, one context, sub-script 0 sets the window up (run at once by the start), sub-script 1
+/// shows the lines. No hold on the player (no 511 / 512, 113..115).
+pub fn obtained_script(texts: &[Vec<u8>]) -> Vec<u8> {
+    let push = |a: u32| (CLASS_PUSH as u32) << 24 | (a & 0xFF_FFFF);
+    let call = |f: u32| (CLASS_CALL as u32) << 24 | f;
+    let neg = (CLASS_OP as u32) << 24 | OP_NEGATE;
+    let end = (CLASS_END as u32) << 24 | 0x10;
+    let settings = |c: &mut Vec<u32>| {
+        c.extend([push(WINDOW), push(0), push(1), call(4), push(WINDOW), push(1), call(5), push(WINDOW), push(0), call(6)]);
+        c.extend([push(WINDOW), push(0), call(83), push(WINDOW), push(0), call(80)]);
+    };
+    let mut s0 = vec![push(WINDOW), push(0x73), neg, push(0x87), neg, call(3)];
+    settings(&mut s0);
+    s0.push(end);
+    let mut s1 = Vec::new();
+    for k in 0..texts.len() as u32 {
+        settings(&mut s1);
+        s1.extend([push(WINDOW), push(k), push(0xDC), neg, push(0x96), neg, call(365)]);
+        s1.extend([push(SOUND_GET), push(0), call(FN_SOUND)]);
+        s1.extend([push(WINDOW), call(0), push(WINDOW), push(k), call(1), push(WINDOW), call(107), push(WINDOW), call(2)]);
+    }
+    s1.push(end);
+    // Header: 0 variables, 0, 1 entry, the texts' offset, entry 0's offset.
+    let mut f: Vec<u8> = Vec::new();
+    let word = |f: &mut Vec<u8>, w: u32| f.extend_from_slice(&w.to_le_bytes());
+    for _ in 0..5 {
+        word(&mut f, 0);
+    }
+    let entry = f.len() as u32;
+    f.extend_from_slice(b"OBT\0");
+    word(&mut f, 1);
+    word(&mut f, 1);
+    f.extend_from_slice(&[1, 2, 0, 0, 0]);
+    for w in s0.iter().chain(s1.iter()) {
+        word(&mut f, *w);
+    }
+    let text_at = f.len() as u32;
+    word(&mut f, texts.len() as u32);
+    for t in texts {
+        f.extend_from_slice(t);
+    }
+    f[12..16].copy_from_slice(&text_at.to_le_bytes());
+    f[16..20].copy_from_slice(&entry.to_le_bytes());
+    f
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -307,5 +391,45 @@ mod tests {
         assert_eq!(read_follow_up(0, 0, word, sub, &plays), Follow::NoEnd);
         // Unreadable code.
         assert_eq!(read_follow_up(0, 0, |_, _| None, sub, &plays), Follow::Unread);
+    }
+
+    #[test]
+    fn builds_an_obtained_script() {
+        let texts = vec![obtained_text(&[0x3B, 0x52, 0x57], Some(0x82)), obtained_text(&[0x3F], None)];
+        let f = obtained_script(&texts);
+        let w = |o: usize| u32::from_le_bytes(f[o..o + 4].try_into().unwrap());
+        // As `0x1401A43A0` reads it: entry 0's record at word (n1 + n0 + 1 + 0) + 3, its context count at
+        // +0xC, the context's sub-script count at +0xD and its code at +0x11.
+        let (n0, n1) = (w(0) as usize, w(4) as usize);
+        let e = w((n1 + n0 + 1 + 3) * 4) as usize;
+        assert_eq!(f[e + 0xC], 1);
+        assert_eq!(f[e + 0xD], 2);
+        let code = e + 0x11;
+        let mut i = code;
+        let mut subs = 0;
+        let mut calls = Vec::new();
+        while subs < 2 {
+            let ins = w(i);
+            if (ins >> 24) as u8 == CLASS_END {
+                subs += 1;
+            } else if (ins >> 24) as u8 == CLASS_CALL {
+                calls.push(ins & 0xFF_FFFF);
+            }
+            i += 4;
+        }
+        // The texts follow the code: their count, then each one.
+        let t = w(12) as usize;
+        assert_eq!(t, i);
+        assert_eq!(w(t), 2);
+        assert_eq!(&f[t + 4..t + 4 + texts[0].len()], &texts[0][..]);
+        // Each line: 365, open, line, wait, close.
+        assert_eq!(calls.iter().filter(|&&c| c == 365).count(), 2);
+        assert_eq!(calls.iter().filter(|&&c| c == 107).count(), 2);
+        assert!(!calls.contains(&511) && !calls.contains(&512) && !calls.contains(&113));
+        // The give's sound with each line.
+        assert_eq!(calls.iter().filter(|&&c| c == FN_SOUND).count(), 2);
+        // "Obtained" as the treasure texts spell it; a text ends at its 0 after `06 52 00`.
+        assert_eq!(&texts[0][8..17], &[0x39, 0x46, 0x58, 0x45, 0x4D, 0x52, 0x49, 0x48, 0x01]);
+        assert_eq!(&texts[0][texts[0].len() - 4..], &[0x06, 0x52, 0x00, 0x00]);
     }
 }
