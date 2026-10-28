@@ -95,6 +95,26 @@ fn decode(p: usize) -> String {
     s
 }
 
+/// An ability's name in plain text, from the ability table KH1 reads (`0x142D37748`, entry
+/// `(id & 0x7F) - 1`, its name handle at `+4`), for the In-game Scene Skip's notice (t785).
+pub unsafe fn ability_name(base: usize, id: u8) -> Option<String> {
+    let n = (id & 0x7F) as usize;
+    if n == 0 || n > ENTRIES {
+        return None;
+    }
+    let table = rd::<u64>(base + TABLE_PTR_RVA) as usize;
+    let e = table.checked_add((n - 1) * 12)?;
+    if table < 0x10000 || !super::crash::readable(e) || !super::crash::readable(e + 11) {
+        return None;
+    }
+    let p = super::pose::ptr(rd::<u32>(e + 4));
+    if p < 0x10000 || !super::crash::readable(p) {
+        return None;
+    }
+    let s = decode(p);
+    (!s.is_empty()).then_some(s)
+}
+
 /// Quick Run's menu name buffer (KH1 text codes) and its size.
 static QR_NAME: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 const QR_NAME_LEN: usize = 32;

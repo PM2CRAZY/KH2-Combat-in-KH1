@@ -775,7 +775,7 @@ unsafe fn box_notice(base: usize, ctx: usize, n: u32) {
 }
 
 /// The item name without the codes `item_name` writes as `{xx}`.
-fn strip_codes(s: &str) -> String {
+pub(super) fn strip_codes(s: &str) -> String {
     let mut out = String::new();
     let mut skip = false;
     for c in s.chars() {

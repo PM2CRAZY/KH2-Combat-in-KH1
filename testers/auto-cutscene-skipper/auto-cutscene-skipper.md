@@ -42,6 +42,8 @@
 - [36. Assistant: t765 skips the low-poly lines that come after a high-poly sc](#^m36)
 - [37. Assistant: t766 fixes the Wonderland scene: the text-bubble part after ](#^m37)
 - [38. Assistant: t767 should make that Wonderland scene skip. In t766 the mod](#^m38)
+- [39. Assistant: No code yet. Here's the plan for the "Obtained" box after a ](#^m39)
+- [40. Assistant: t785: when In-game Scene Skip skips a scene that gives you s](#^m40)
 
 ---
 
@@ -701,4 +703,60 @@ go ahead
 > Not run in game; `cargo test` couldn't run here. Notes are in `docs/kh1-ingame-skip.md` (t767 section) and AGENTS.md Stage 767.
 
 ^m38
+
+
+> [!tip] Assistant
+> No code yet. Here's the plan for the "Obtained" box after a skipped in-game cutscene (your message in chat: "for in game cutscenes that have items in them like phil giving you thunder I want it to play a text box like our custom chest text box"). I need a few answers before I build it.
+>
+> **What we have now.** The chest box is KH1's own small notice box, the one level-ups use. Quick chest opening fills it with "Obtained" and the item's name, and it doesn't stop the game. In-game Scene Skip already lets KH1 give everything during the skip. KH1 just shows nothing, because its message windows are off in skip mode.
+>
+> **What KH1 gives in a scene (Checked, decomp + exe).** Four of KH1's script functions hand things out:
+> - **Reward:** an item (into the stock), or an ability for Sora or a party member. This is how the Dodge Roll scene gives Dodge Roll.
+> - **Spell:** a new spell or a spell level-up. This is Phil's Thunder.
+> - **Munny.**
+> - **Gummi:** the same call chests use for Gummi Blocks. Assumption: in a scene it gives a Gummi Block too.
+>
+> **The plan, one version.** While In-game Scene Skip's skip is running, the mod notes each of these as KH1 gives it, through KH1's own function table, the same way the skip already watches its end. When the skip ends, it puts one box per thing into that same notice box, in the order KH1 gave them. Cutscenes that play normally are left alone, since they show their own message.
+>
+> **What I haven't found yet.** Item names come from KH1's item table, as for chests. I haven't found where KH1 keeps ability names, so I'd look that up before building. Spell names I'd write in English (Fire, Fira, Firaga ...), unless I find KH1's own text for them. That part is an Assumption.
+>
+> **Questions**
+> 1. **What should the box say?**
+>    - (a) "Obtained" for everything, like chests.
+>    - (b) "Obtained" for items, munny and Gummi, "Learned" for spells and abilities. That matches what KH1's own scene lines say.
+>    - I recommend (b).
+> 2. **Which gives get a box?**
+>    - (a) All four.
+>    - (b) Only items, spells and abilities.
+>    - I recommend (a).
+> 3. **Pause-skippable cutscenes that give something** (some high-poly scenes give items or abilities too). Should Cutscene Skip also show the box when it skips one?
+>    - (a) Yes, same box.
+>    - (b) No, only In-game Scene Skip.
+>    - I recommend (a), so a skipped scene never gives something silently.
+> 4. **An ability for Donald or Goofy:** show whose it is, e.g. "Learned / Donald: Cheer"?
+>    - (a) Yes.
+>    - (b) Just the ability.
+>    - I recommend (a).
+>
+> Write "go ahead" with your answers.
+
+^m39
+
+
+> [!tip] Assistant
+> **t785**: when In-game Scene Skip skips a scene that gives you something, the chest box now shows it once the skip ends: "Obtained" and the name. This follows your answers in chat: "do 1 and 2 with (a) 3 and 4 I'm unsure so leave it".
+>
+> **What it covers:** items (with "x2" and so on when there's more than one), abilities, spells (the new level's name, e.g. Thunder, Thundara), munny ("150 Munny") and Gummi Blocks. If a scene gives several things, you get one box per thing, in the order the game gave them. Scenes the Cutscene Skip row skips get no box, and a Donald or Goofy ability shows just the ability's name, since you left 3 and 4 as they are.
+>
+> **How I checked it:** the four functions KH1 gives things with, what they take and where the item, spell and munny values live, all from the Steam decomp and the exe. KH1 still does every give itself. The mod only reads what was given, and the box comes from the same code the chests use. Assumptions: the spell names are written in English (I didn't look up KH1's own text for them), and a Gummi Block box shows even in the rare case KH1 is already at the most it holds. Not run in game; `cargo test` couldn't run here.
+>
+> **Please test:**
+> 1. Phil's Thunder after the barrel game: the scene skips, then a box says "Obtained / Thunder".
+> 2. The Traverse Town scene that gives Dodge Roll: "Obtained / Dodge Roll".
+> 3. A scene that plays normally, or one Cutscene Skip skips: no extra box.
+>
+> Notes are in `docs/kh1-ingame-skip.md` (t785 section) and AGENTS.md Stage 785.
+
+^m40
+
 

@@ -64,6 +64,8 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [36. Assistant: t765 skips the low-poly lines that come after a high-poly sc](../testers/auto-cutscene-skipper/auto-cutscene-skipper.md#^m36)
   - [37. Assistant: t766 fixes the Wonderland scene: the text-bubble part after ](../testers/auto-cutscene-skipper/auto-cutscene-skipper.md#^m37)
   - [38. Assistant: t767 should make that Wonderland scene skip. In t766 the mod](../testers/auto-cutscene-skipper/auto-cutscene-skipper.md#^m38)
+  - [39. Assistant: No code yet. Here's the plan for the "Obtained" box after a ](../testers/auto-cutscene-skipper/auto-cutscene-skipper.md#^m39)
+  - [40. Assistant: t785: when In-game Scene Skip skips a scene that gives you s](../testers/auto-cutscene-skipper/auto-cutscene-skipper.md#^m40)
 - [Baking the rest of the base animations](../testers/baking-the-rest-of-the-base-animations/baking-the-rest-of-the-base-animations.md)
   - [1. Assistant: I started this thread from What is still missing(../what-is-](../testers/baking-the-rest-of-the-base-animations/baking-the-rest-of-the-base-animations.md#^m1)
   - [2. Assistant: Thanks! Three versions, one step of the plan each:](../testers/baking-the-rest-of-the-base-animations/baking-the-rest-of-the-base-animations.md#^m2)

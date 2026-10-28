@@ -104,6 +104,10 @@ static FIRST_ENTRY: AtomicI32 = AtomicI32::new(0);
 static STARTER: AtomicU64 = AtomicU64::new(0);
 /// Times the flag byte was set again (for the log).
 static REARMED: AtomicU32 = AtomicU32::new(0);
+/// KH1's give functions (event functions 583, 458, 444, 570) as the table held them (t785).
+static ORIG_GIVE: [AtomicUsize; 4] = [const { AtomicUsize::new(0) }; 4];
+/// What KH1 gave during the mod's skip, shown in the notice box when the skip ends (t785).
+static GIVEN: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
 /// KH1's event functions 512 and 514 as the table held them (t764: the mod's skip ends there).
 static ORIG_RELEASE: AtomicUsize = AtomicUsize::new(0);
 static ORIG_EVENT_OFF: AtomicUsize = AtomicUsize::new(0);
@@ -160,6 +164,32 @@ const END_FNS: [(u32, usize); 2] = [(FN_RELEASE, 0x1A7660), (FN_EVENT_OFF, 0x1A7
 /// KH1's skippable sections' ends (the pairs of 84, 139, 489 and 623), where this exe has them (wrapped
 /// in the table, t765: a scene that goes on in event mode after its section is the row's).
 const SECTION_ENDS: [(u32, usize); 4] = [(85, 0x1A8BD0), (140, 0x1AA120), (490, 0x1B05F0), (624, 0x1A8C00)];
+/// KH1's give functions (t785, Checked (decomp + exe)): 583 a reward record (`0x1401B13E0`: the record
+/// is the u16 at `[0x142D36D58] + id * 2`; kind `& 0xF` 0 an item `>> 8` (count `>> 4 & 0xF`) into the
+/// stock, 1 an ability `>> 8` for party member `>> 4 & 0xF`), 458 a spell's level (`0x1401AF730`: the
+/// spell under the level on the stack; `0x14028F560` writes it to save `[0x142868BA0] + 0x492 + spell`
+/// unless it is already that), 444 munny (`0x1401AF190`, added to `[0x142E1F4D8] + 0x1C`), 570 a Gummi
+/// Block (`0x1401B12A0` -> `0x14020D3F0`, the call chests' Gummi Blocks use).
+const GIVE_FNS: [(u32, usize); 4] = [(583, 0x1B13E0), (458, 0x1AF730), (444, 0x1AF190), (570, 0x1B12A0)];
+const REWARDS_PTR_STEAM: usize = 0x2D36D58;
+const SPELL_SAVE_PTR_STEAM: usize = 0x2868BA0;
+const SPELL_LEVELS: usize = 0x492;
+const MUNNY_PTR_STEAM: usize = 0x2E1F4D8;
+const MUNNY: usize = 0x1C;
+/// A context's stack: its top index (`+0x194`) and the values (`+0x198`, i32 each).
+const CTX_SP: usize = 0x194;
+const CTX_STACK: usize = 0x198;
+/// KH1's spells by save index, with their three level names (Assumption: the English names; KH1's own
+/// text for them wasn't looked up).
+const SPELLS: [[&str; 3]; 7] = [
+    ["Fire", "Fira", "Firaga"],
+    ["Blizzard", "Blizzara", "Blizzaga"],
+    ["Thunder", "Thundara", "Thundaga"],
+    ["Cure", "Cura", "Curaga"],
+    ["Gravity", "Gravira", "Graviga"],
+    ["Stop", "Stopra", "Stopga"],
+    ["Aero", "Aerora", "Aeroga"],
+];
 /// The script step's test of bit 0 (`test byte [rip+x], 1`), its read and clear of the flag byte
 /// (`cmp [rip+x], r12b` / `mov [rip+x], r12b`), and where each must point.
 const STEP_BIT_STEAM: usize = 0x1A2835;
@@ -266,6 +296,16 @@ unsafe fn verify() {
         if !super::hook::patch(at, &((base + rva) as u64).to_le_bytes(), &(ours[i] as u64).to_le_bytes(), "event function (in-game skip)") {
             log!(Menus, "In-game Scene Skip: event function {n} not wrapped, not used");
             return;
+        }
+    }
+    // KH1's give functions (t785): what a skipped scene gives is noted for the notice box. A mismatch
+    // only leaves that kind of give without a box.
+    let ours = [give_583 as *const () as usize, give_458 as *const () as usize, give_444 as *const () as usize, give_570 as *const () as usize];
+    for (i, &(n, rva)) in GIVE_FNS.iter().enumerate() {
+        let at = base + TABLE_STEAM + n as usize * 8;
+        ORIG_GIVE[i].store(base + rva, Ordering::Release);
+        if !super::hook::patch(at, &((base + rva) as u64).to_le_bytes(), &(ours[i] as u64).to_le_bytes(), "event function (in-game skip notice)") {
+            log!(Menus, "In-game Scene Skip: event function {n} not wrapped: no notice for it");
         }
     }
     // The section ends (t765): the part of a scene after its skippable section. Not needed for the rest,
@@ -375,6 +415,7 @@ unsafe fn release(why: &str) {
         return;
     }
     KIND.store(0, Ordering::Relaxed);
+    show_given();
     let base = BASE.load(Ordering::Relaxed);
     if base == 0 {
         return;
@@ -460,6 +501,117 @@ unsafe fn section_end(i: usize, ctx: usize) -> u64 {
     // one after the call, `+0x190` + 1.)
     let Ok(pc) = usize::try_from(rd::<i32>(ctx + CTX_PC)) else { return r };
     skip_follow_up(base, &ctxs, c, pc + 1, &format!("entry {entry} goes on in event mode after its skippable section (event function {})", SECTION_ENDS[i].0));
+    r
+}
+
+/// t785: whether the mod's skip is running now (what KH1 gives then is noted for the box).
+unsafe fn noting() -> bool {
+    let base = BASE.load(Ordering::Relaxed);
+    ON.load(Ordering::Relaxed) && FORCED.load(Ordering::Relaxed) && base != 0 && rd::<u32>(base + RUNNER_STEAM) & 1 != 0
+}
+
+fn note(line: String) {
+    log!(Cutscenes, "in-game skip: KH1 gave \"{line}\" during the skip (shown when it ends)");
+    if let Ok(mut g) = GIVEN.lock() {
+        if g.len() < 8 {
+            g.push(line);
+        }
+    }
+}
+
+/// The notes, into the mod's notice box (KH1's level-up prompt box, `menu::queue_prompt`, the one `queue_notice` became), in the order
+/// KH1 gave them (the owner: "1 and 2 with (a)": "Obtained" for everything, every kind of give).
+fn show_given() {
+    let lines = GIVEN.lock().map(|mut g| std::mem::take(&mut *g)).unwrap_or_default();
+    for line in lines {
+        super::menu::queue_prompt("Obtained", &line);
+    }
+}
+
+/// The value `k` below the top of a context's stack.
+unsafe fn arg(ctx: usize, k: i32) -> i32 {
+    let sp = rd::<i32>(ctx + CTX_SP);
+    rd::<i32>(ctx + CTX_STACK + ((sp - k).max(0) as usize) * 4)
+}
+
+unsafe fn orig_give(i: usize, ctx: usize) -> u64 {
+    let f: unsafe extern "system" fn(usize) -> u64 = std::mem::transmute(ORIG_GIVE[i].load(Ordering::Acquire));
+    f(ctx)
+}
+
+/// 583, a reward record: an item or an ability.
+unsafe extern "system" fn give_583(ctx: usize) -> u64 {
+    if !noting() {
+        return orig_give(0, ctx);
+    }
+    let base = BASE.load(Ordering::Relaxed);
+    let id = arg(ctx, 0);
+    let table = rd::<u64>(base + REWARDS_PTR_STEAM) as usize;
+    let rec = if table >= 0x10000 && (0..0x10000).contains(&id) && super::crash::readable(table + id as usize * 2 + 1) {
+        Some(rd::<u16>(table + id as usize * 2))
+    } else {
+        None
+    };
+    let r = orig_give(0, ctx);
+    match rec {
+        Some(rec) if rec & 0xF == 0 => {
+            let item = (rec >> 8) as u8;
+            let count = (rec >> 4) & 0xF;
+            let name = super::equip::item_name(base, item).map(|n| super::chest::strip_codes(&n)).unwrap_or_else(|| format!("Item {item:#x}"));
+            note(if count > 1 { format!("{name} x{count}") } else { name });
+        }
+        Some(rec) if rec & 0xF == 1 => {
+            let ab = (rec >> 8) as u8;
+            note(super::menu::ability_name(base, ab).unwrap_or_else(|| format!("Ability {ab:#x}")));
+        }
+        _ => {}
+    }
+    r
+}
+
+/// 458, a spell's level (a new spell at level 1).
+unsafe extern "system" fn give_458(ctx: usize) -> u64 {
+    if !noting() {
+        return orig_give(1, ctx);
+    }
+    let base = BASE.load(Ordering::Relaxed);
+    let (spell, level) = (arg(ctx, 1), arg(ctx, 0));
+    let save = rd::<u64>(base + SPELL_SAVE_PTR_STEAM) as usize;
+    let at = save + SPELL_LEVELS + spell.clamp(0, 6) as usize;
+    let before = (save >= 0x10000 && super::crash::readable(at)).then(|| rd::<u8>(at));
+    let r = orig_give(1, ctx);
+    if (0..7).contains(&spell) && (1..=3).contains(&level) && before.is_some_and(|b| b as i32 != level) {
+        note(SPELLS[spell as usize][level as usize - 1].to_string());
+    }
+    r
+}
+
+/// 444, munny (the difference KH1 made).
+unsafe extern "system" fn give_444(ctx: usize) -> u64 {
+    if !noting() {
+        return orig_give(2, ctx);
+    }
+    let base = BASE.load(Ordering::Relaxed);
+    let block = rd::<u64>(base + MUNNY_PTR_STEAM) as usize;
+    let ok = block >= 0x10000 && super::crash::readable(block + MUNNY + 3);
+    let before = if ok { rd::<u32>(block + MUNNY) } else { 0 };
+    let r = orig_give(2, ctx);
+    if ok {
+        let after = rd::<u32>(block + MUNNY);
+        if after > before {
+            note(format!("{} Munny", after - before));
+        }
+    }
+    r
+}
+
+/// 570, a Gummi Block.
+unsafe extern "system" fn give_570(ctx: usize) -> u64 {
+    if !noting() {
+        return orig_give(3, ctx);
+    }
+    let r = orig_give(3, ctx);
+    note("Gummi Block".to_string());
     r
 }
 
@@ -610,6 +762,7 @@ unsafe fn end_skip(r: u64, n: u32) -> u64 {
     }
     let end: unsafe extern "system" fn() -> u64 = std::mem::transmute(base + SKIP_END_STEAM);
     let ended = end() as u32 != 0;
+    show_given();
     log!(Cutscenes, "in-game skip: event function {n} reached ({}), KH1's end of a skip run (fade in)", if kind == KIND_FOLLOW { "the follow-up's end" } else { "Sora given back" });
     if ended { r | 4 } else { r }
 }

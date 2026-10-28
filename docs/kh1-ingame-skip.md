@@ -151,3 +151,13 @@ The owner: loading a save froze the game for a moment, only with the mod on. The
 - What is read, and what is skipped or played, is unchanged.
 
 Not checked in game (Assumption): that the freeze is gone; the next load profiler log says.
+
+## t785: an "Obtained" box for what a skipped scene gave
+
+The owner: "for in game cutscenes that have items in them like phil giving you thunder I want it to play a text box like our custom chest text box", then (thread m39) "1 and 2 with (a)": "Obtained" for everything, every kind of give; 3 and 4 left as they are.
+
+- **KH1's gives in a scene** (Checked (decomp + exe)): event function 583 hands out a reward record (the u16 at `[0x142D36D58] + id * 2`: kind `& 0xF` 0 an item `>> 8`, count `>> 4 & 0xF`, through KH1's stock add; 1 an ability `>> 8` for party member `>> 4 & 0xF`); 458 sets a spell's level (`0x14028F560`: save `[0x142868BA0] + 0x492 + spell`, nothing if already that level); 444 adds munny (`[0x142E1F4D8] + 0x1C`); 570 a Gummi Block (`0x14020D3F0`, as chests). None of them shows anything itself; the scene's own message lines do, and those open nothing in skip mode.
+- **What the mod does.** The four go through the event table to wrappers that always run KH1's own. While In-game Scene Skip's skip is running, each give is noted: the item's name (and "xN" if more than one), the ability's name (KH1's ability table), the spell's name at its new level, "N Munny" (what KH1 actually added), "Gummi Block". When the skip ends they go into the mod's notice box (the chests' box) as "Obtained" / the name, one after another.
+- **Not done, as asked:** scenes skipped by the Cutscene Skip row get no box; a party member's ability shows only the ability.
+
+Not checked in game (Assumption): the spell names are English (KH1's own text for them wasn't looked up); a Gummi Block from 570 is shown even if KH1 gave none (it can refuse at the most of one kind); KH1's order of gives is the scene's.
