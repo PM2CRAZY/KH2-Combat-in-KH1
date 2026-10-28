@@ -189,7 +189,9 @@ unsafe fn step(mode: u8) {
     if !on {
         if ACTIVE.swap(false, Ordering::Relaxed) {
             // The scene is over: a flag byte that was written and not used is dropped, so it can't skip the next one.
-            if FIRED.swap(false, Ordering::Relaxed) && rd::<u8>(base + SKIP_FLAG_STEAM) != 0 {
+            // (t767: not when In-game Scene Skip has just set bit 0 and the byte itself for the scene's
+            // line-by-line part after this section: that byte is its, `ingameskip.rs`.)
+            if FIRED.swap(false, Ordering::Relaxed) && !super::ingameskip::forced() && rd::<u8>(base + SKIP_FLAG_STEAM) != 0 {
                 wr(base + SKIP_FLAG_STEAM, 0u8);
             }
             PENDING.store(false, Ordering::Relaxed);

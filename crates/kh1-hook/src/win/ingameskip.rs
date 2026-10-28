@@ -45,15 +45,33 @@
 //! the ladder, the charged wall, the pushed object, the detected chest, the journal's count) is set by
 //! the entry's own script steps, which skip mode runs.
 //!
+//! t764, where the mod's skip ends (the tester: "you get stuck to a black screen during Olympus
+//! coliseums tournament"; "(b)", the room script's follow-ups). KH1 ends its own skip in two ways
+//! (Checked (decomp + exe)): when every thread of the entry has ended and it goes back to entry 0
+//! (`0x1401A2130` from the script step), and at the end of a skippable section (event functions 85,
+//! 140, 490 and 624, the pairs of 84, 139, 489 and 623: bit 0 off, then `0x1401A2130`). The Coliseum's
+//! tournament rounds are event entries with play in them (a short lead-in, event function 512 giving
+//! Sora back, the fight, then the next entry through 126 from the entry), so a skip the mod started
+//! never reached either end: the fights ran in skip mode, faded out at KH1's frame step (the log's frame
+//! scale 4 from f64556 on). Now event function 512 (`0x1401A7660`, through the event table) ends the mod's
+//! skip the way 140 does. In every room script read (110 script files in 38 rooms of nine worlds) 512 is an in-game
+//! scene's last step but for the tournament and the Coliseum's other fight entries, where play follows (and the Trinity mark's thread inside Phil's entry in the Coliseum gates, after its Trinity).
+//! The room script's follow-up (it carries on in event mode after an entry it started, the Thunder lines
+//! after Phil's scene) is read from the context that started that entry (`push n, call 126` just before
+//! its next instruction `+0x190`) to its first 514 or 512, with every sub-script it wakes (`21/c 22/s`):
+//! no choice, shop or menu on the way and an end found, it gets KH1's skip too (bit 0 and the flag byte;
+//! the script step's skip start works with entry 0), and 514 or 512 (event function 514, `0x1401A7750`,
+//! through the table) ends it. `crate::kh1script::read_follow_up`, unit-tested.
+//!
 //! Assumption (not run in game): the code read finds the pause-skip functions in every high-poly
 //! scene (the t709 / t710 logs only listed each entry's first thread); a scene chained from a skipped
 //! one is skipped too, as after the pause menu's skip; the item popup is not shown (KH1 doesn't in
 //! skip mode), the item is given.
 
 use super::addr::Build;
-use crate::kh1script::{trinity_call, Call, CMD_TRINITY, FN_OFFER, FN_START_ENTRY};
+use crate::kh1script::{read_follow_up, started_entry, trinity_call, Call, Follow, CMD_TRINITY, FN_EVENT_OFF, FN_OFFER, FN_RELEASE, FN_START_ENTRY, FOLLOW_SUBS};
 use super::log;
-use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU32, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU32, AtomicU64, AtomicU8, AtomicUsize, Ordering};
 
 static ON: AtomicBool = AtomicBool::new(false);
 static VERIFIED: AtomicBool = AtomicBool::new(false);
@@ -71,6 +89,26 @@ static TRIN_YES: AtomicBool = AtomicBool::new(false);
 /// can be a context of an event entry too (Olympus's Coliseum after the barrel game: Phil's entry 1 has
 /// one), and its Trinity entry replaces that entry's contexts, so they are read beforehand.
 static NEXT_TRIN: AtomicU32 = AtomicU32::new(0);
+/// What the mod's bit 0 is for: an event entry (KIND_ENTRY) or the room script's follow-up after one
+/// (KIND_FOLLOW, t764).
+static KIND: AtomicU8 = AtomicU8::new(0);
+const KIND_ENTRY: u8 = 1;
+const KIND_FOLLOW: u8 = 2;
+/// The entry in use at the last pad read, and the first entry started from the room script (the one
+/// its context waits on: a chained entry replaces it, `0x1401A38A0`).
+static LAST_ENTRY: AtomicI32 = AtomicI32::new(0);
+static FIRST_ENTRY: AtomicI32 = AtomicI32::new(0);
+/// The room-script context that started it and the instruction it carries on at (context << 32 |
+/// instruction, + 1; 0: none), noted when the entry starts (the room script doesn't step while an
+/// entry runs, so that is where its follow-up begins).
+static STARTER: AtomicU64 = AtomicU64::new(0);
+/// Times the flag byte was set again (for the log).
+static REARMED: AtomicU32 = AtomicU32::new(0);
+/// KH1's event functions 512 and 514 as the table held them (t764: the mod's skip ends there).
+static ORIG_RELEASE: AtomicUsize = AtomicUsize::new(0);
+static ORIG_EVENT_OFF: AtomicUsize = AtomicUsize::new(0);
+/// KH1's section ends (event functions 85, 140, 490, 624) as the table held them (t765).
+static ORIG_SECTION_END: [AtomicUsize; 4] = [const { AtomicUsize::new(0) }; 4];
 
 /// Steam: the entry in use, the second scene flag word, the pause menu's flag byte, the runner word
 /// (bit 0 skip mode), the event contexts and their count (Checked (decomp)).
@@ -87,6 +125,10 @@ const COUNT0_STEAM: usize = 0x237F4E4;
 const CTX_SIZE: usize = 0x360;
 const CTX_CODE: usize = 0x80;
 const CTX_SUBS: usize = 0x88;
+/// A context's sub-script starts (`+0x90`, an i32 each) and its next instruction (`+0x190`) (Checked
+/// (decomp): the loader `0x1401A38A0` fills them, the script step `0x1401A2320` reads `+0x190`).
+const CTX_SUB_STARTS: usize = 0x90;
+const CTX_PC: usize = 0x190;
 const CLASS_END: u8 = 5;
 const CLASS_CALL: u8 = 0x18;
 /// Event functions 454 (offer a Triangle command) and 126 (start an event entry), where this exe has
@@ -103,6 +145,21 @@ const SCAN_MAX: usize = 8192;
 /// KH1's skip (`sub rsp, 0x28; cmp dword [..], 0; je +5; call ..`), as in `cutsceneskip.rs`.
 const SKIP_FN_STEAM: usize = 0x1A22B0;
 const SKIP_FN_BYTES: [u8; 18] = [0x48, 0x83, 0xEC, 0x28, 0x83, 0x3D, 0x15, 0xE6, 0x19, 0x02, 0x00, 0x74, 0x05, 0xE8, 0xFE, 0x9F, 0xFE, 0xFF];
+/// KH1's end of a skip (`0x1401A2130`: skip mode off, the message windows closed, a fade in over a
+/// second; returns 1 if skip mode was on), what KH1's own section ends call after bit 0 is off (event
+/// functions 85, 140, 490 and 624: `0x1401A8BD0`, `0x1401AA120`, `0x1401B05F0`, `0x1401A8C00`). Its first
+/// bytes (`push rbx; sub rsp, 0x40; mov rax, [rip+x]`) and event function 140's call of it (`+0x15`).
+/// Checked (decomp + exe).
+const SKIP_END_STEAM: usize = 0x1A2130;
+const SKIP_END_BYTES: [u8; 9] = [0x40, 0x53, 0x48, 0x83, 0xEC, 0x40, 0x48, 0x8B, 0x05];
+const FN140_STEAM: usize = 0x1AA120;
+const FN140_CALL: usize = 0x15;
+/// Event functions 512 (Sora given back) and 514 (event mode off), where this exe has them (wrapped
+/// in the table, t764).
+const END_FNS: [(u32, usize); 2] = [(FN_RELEASE, 0x1A7660), (FN_EVENT_OFF, 0x1A7750)];
+/// KH1's skippable sections' ends (the pairs of 84, 139, 489 and 623), where this exe has them (wrapped
+/// in the table, t765: a scene that goes on in event mode after its section is the row's).
+const SECTION_ENDS: [(u32, usize); 4] = [(85, 0x1A8BD0), (140, 0x1AA120), (490, 0x1B05F0), (624, 0x1A8C00)];
 /// The script step's test of bit 0 (`test byte [rip+x], 1`), its read and clear of the flag byte
 /// (`cmp [rip+x], r12b` / `mov [rip+x], r12b`), and where each must point.
 const STEP_BIT_STEAM: usize = 0x1A2835;
@@ -195,6 +252,33 @@ unsafe fn verify() {
             return;
         }
     }
+    // KH1's end of a skip, the way its own section end (event function 140) calls it.
+    if at(SKIP_END_STEAM, SKIP_END_BYTES.len()) != SKIP_END_BYTES || at(FN140_STEAM + FN140_CALL, 1) != [0xE8] || target(FN140_STEAM + FN140_CALL, 1, 5) != SKIP_END_STEAM {
+        log!(Menus, "In-game Scene Skip: KH1's end of a skip isn't as expected, not used");
+        return;
+    }
+    // Event functions 512 and 514 point at ours (they call KH1's first, then end the mod's skip).
+    let ours = [release_fn as *const () as usize, event_off_fn as *const () as usize];
+    let origs = [&ORIG_RELEASE, &ORIG_EVENT_OFF];
+    for (i, &(n, rva)) in END_FNS.iter().enumerate() {
+        let at = base + TABLE_STEAM + n as usize * 8;
+        origs[i].store(base + rva, Ordering::Release);
+        if !super::hook::patch(at, &((base + rva) as u64).to_le_bytes(), &(ours[i] as u64).to_le_bytes(), "event function (in-game skip)") {
+            log!(Menus, "In-game Scene Skip: event function {n} not wrapped, not used");
+            return;
+        }
+    }
+    // The section ends (t765): the part of a scene after its skippable section. Not needed for the rest,
+    // so a mismatch here only leaves that part playing.
+    let ours = [section_end_85 as *const () as usize, section_end_140 as *const () as usize, section_end_490 as *const () as usize, section_end_624 as *const () as usize];
+    for (i, &(n, rva)) in SECTION_ENDS.iter().enumerate() {
+        let at = base + TABLE_STEAM + n as usize * 8;
+        ORIG_SECTION_END[i].store(base + rva, Ordering::Release);
+        if !super::hook::patch(at, &((base + rva) as u64).to_le_bytes(), &(ours[i] as u64).to_le_bytes(), "event function (in-game skip)") {
+            log!(Menus, "In-game Scene Skip: event function {n} not wrapped: the part after a section plays");
+            ORIG_SECTION_END[i].store(0, Ordering::Release);
+        }
+    }
     BASE.store(base, Ordering::Relaxed);
     VERIFIED.store(true, Ordering::Relaxed);
 }
@@ -210,22 +294,39 @@ pub fn pad() {
 unsafe fn step() {
     let base = BASE.load(Ordering::Relaxed);
     let entry = rd::<i32>(base + ENTRY_STEAM);
+    let last = LAST_ENTRY.swap(entry, Ordering::Relaxed);
     if FORCED.load(Ordering::Relaxed) {
         let skipping = rd::<u32>(base + RUNNER_STEAM) & 1 != 0;
         if skipping {
             SAW_SKIP.store(true, Ordering::Relaxed);
         }
-        if entry == 0 {
+        if entry == 0 && KIND.load(Ordering::Relaxed) == KIND_ENTRY {
             release("the scene is over");
         } else if SAW_SKIP.load(Ordering::Relaxed) && !skipping {
             release("KH1's skip mode has ended");
+        } else if !SAW_SKIP.load(Ordering::Relaxed) && !skipping && rd::<u8>(base + SKIP_FLAG_STEAM) == 0 {
+            // t767: the skip hasn't started and the flag byte is gone (cleared by something else before
+            // KH1's script step read it): bit 0 and the byte are put back, so the step starts it.
+            wr(base + FLAGS2_STEAM, rd::<u32>(base + FLAGS2_STEAM) | BIT_SKIPPABLE);
+            wr(base + SKIP_FLAG_STEAM, 1u8);
+            if REARMED.fetch_add(1, Ordering::Relaxed) < 4 {
+                log!(Cutscenes, "in-game skip: the flag byte was cleared before KH1's skip started, set again");
+            }
         }
     }
     if entry == 0 {
         JUDGED.store(0, Ordering::Relaxed);
         TRIN_ENTRY.store(0, Ordering::Relaxed);
         NEXT_TRIN.store(0, Ordering::Relaxed);
+        if last != 0 {
+            follow_up(base, FIRST_ENTRY.load(Ordering::Relaxed));
+        }
         return;
+    }
+    if last == 0 {
+        FIRST_ENTRY.store(entry, Ordering::Relaxed);
+        let starter = Ctxs::room(base).and_then(|room| room.starter(entry));
+        STARTER.store(starter.map_or(0, |(c, pc)| ((c as u64) << 32 | pc as u64) + 1), Ordering::Relaxed);
     }
     if JUDGED.load(Ordering::Relaxed) == entry {
         return;
@@ -252,6 +353,7 @@ unsafe fn step() {
             wr(base + FLAGS2_STEAM, rd::<u32>(base + FLAGS2_STEAM) | BIT_SKIPPABLE);
             wr(base + SKIP_FLAG_STEAM, 1u8);
             SAW_SKIP.store(false, Ordering::Relaxed);
+            KIND.store(KIND_ENTRY, Ordering::Relaxed);
             FORCED.store(true, Ordering::Relaxed);
             log!(Cutscenes, "in-game skip: entry {entry} ({what}, {n} instructions read, flags {flags:#x}) skipped: bit 0 and the flag byte set, KH1's script step runs its own skip");
         }
@@ -272,6 +374,7 @@ unsafe fn release(why: &str) {
     if !FORCED.swap(false, Ordering::Relaxed) {
         return;
     }
+    KIND.store(0, Ordering::Relaxed);
     let base = BASE.load(Ordering::Relaxed);
     if base == 0 {
         return;
@@ -284,6 +387,204 @@ unsafe fn release(why: &str) {
         wr(base + SKIP_FLAG_STEAM, 0u8);
     }
     log!(Cutscenes, "in-game skip: bit 0 taken back ({why})");
+}
+
+/// t764: the room script carrying on after an event entry it started (`first`), still in event mode
+/// (the Thunder lines after Phil's scene in the Coliseum gates). KH1's skip runs on it too (bit 0 and
+/// the flag byte, the script step's `0x1401A22B0` works with any entry), unless the follow-up, or a
+/// sub-script it wakes, has a choice, shop or menu, or no 514 / 512 on its way to end the skip at.
+unsafe fn follow_up(base: usize, first: i32) {
+    let flags = rd::<u32>(base + FLAGS2_STEAM);
+    if flags & BIT_EVENT == 0 || flags & BIT_SKIPPABLE != 0 || FORCED.load(Ordering::Relaxed) || rd::<u32>(base + RUNNER_STEAM) & 1 != 0 || first <= 0 {
+        return;
+    }
+    if flags & BIT_TALK != 0 {
+        log!(Cutscenes, "in-game skip: the room script goes on in event mode after entry {first}, plays (a talk's bit is set)");
+        return;
+    }
+    let Some(room) = Ctxs::room(base) else { return };
+    let noted = STARTER.swap(0, Ordering::Relaxed);
+    let Some((ctx, pc)) = (if noted != 0 { Some((((noted - 1) >> 32) as usize, ((noted - 1) & 0xFFFF_FFFF) as usize)) } else { room.starter(first) }) else {
+        log!(Cutscenes, "in-game skip: the room script goes on in event mode after entry {first}, plays (no context of it started that entry)");
+        return;
+    };
+    skip_follow_up(base, &room, ctx, pc, &format!("the room script goes on in event mode after entry {first}"));
+}
+
+/// Reads a follow-up from context `ctx`'s instruction `pc` and, with no choice, shop or menu on the way
+/// and a 514 / 512 to end at, gives it KH1's skip (bit 0 and the flag byte; ended by `end_skip`).
+unsafe fn skip_follow_up(base: usize, ctxs: &Ctxs, ctx: usize, pc: usize, what: &str) {
+    // A choice, shop or menu makes it play; so does a pause-skippable section ahead (t766: the high-poly
+    // scenes are the Cutscene Skip row's alone, the owner: "the goal is to not skip high poly scenes").
+    let plays: Vec<u32> = PLAYS.iter().chain(PAUSE_SKIP.iter()).map(|(n, _)| *n).collect();
+    match read_follow_up(ctx, pc, |c, i| ctxs.word(c, i), |c, s| ctxs.sub(c, s), &plays) {
+        Follow::Skip(n) => {
+            wr(base + FLAGS2_STEAM, rd::<u32>(base + FLAGS2_STEAM) | BIT_SKIPPABLE);
+            wr(base + SKIP_FLAG_STEAM, 1u8);
+            SAW_SKIP.store(false, Ordering::Relaxed);
+            KIND.store(KIND_FOLLOW, Ordering::Relaxed);
+            FORCED.store(true, Ordering::Relaxed);
+            log!(Cutscenes, "in-game skip: {what} (context {ctx}, instruction {pc}, {n} instructions read) skipped: bit 0 and the flag byte set, ends at event function 514 or 512");
+        }
+        Follow::Plays(f) if PAUSE_SKIP.iter().any(|(n, _)| *n == f) => log!(Cutscenes, "in-game skip: {what} (context {ctx}), plays (event function {f}: a pause-skippable section ahead, the Cutscene Skip row's)"),
+        Follow::Plays(f) => log!(Cutscenes, "in-game skip: {what} (context {ctx}), plays (event function {f}: a choice, shop or menu)"),
+        Follow::NoEnd => log!(Cutscenes, "in-game skip: {what} (context {ctx}), plays (no 514 or 512 to end a skip at)"),
+        Follow::Unread => log!(Cutscenes, "in-game skip: {what} (context {ctx}), plays (its code couldn't be read, or it wakes more than {FOLLOW_SUBS} sub-scripts)"),
+    }
+}
+
+/// t765: a skippable section's end (event functions 85, 140, 490, 624) through the table: KH1's own,
+/// then, if the scene goes on in event mode (Wonderland's Queen's castle: the high-poly part, 140, then
+/// lines confirmed one by one up to 512 / 514), that part is read from the next instruction like the
+/// room script's follow-up and skipped the same way. Whether KH1's skip ran on the section (the
+/// Cutscene Skip row) or it played doesn't matter.
+unsafe fn section_end(i: usize, ctx: usize) -> u64 {
+    let f: unsafe extern "system" fn(usize) -> u64 = std::mem::transmute(ORIG_SECTION_END[i].load(Ordering::Acquire));
+    let r = f(ctx);
+    if r & 2 == 0 || !ON.load(Ordering::Relaxed) || FORCED.load(Ordering::Relaxed) {
+        return r;
+    }
+    let base = BASE.load(Ordering::Relaxed);
+    if base == 0 {
+        return r;
+    }
+    let flags = rd::<u32>(base + FLAGS2_STEAM);
+    if flags & BIT_EVENT == 0 || flags & BIT_SKIPPABLE != 0 || flags & BIT_TALK != 0 {
+        return r;
+    }
+    let entry = rd::<i32>(base + ENTRY_STEAM);
+    let ctxs = if entry == 0 { Ctxs::room(base) } else { Ctxs::entry(base) };
+    let Some(ctxs) = ctxs else { return r };
+    let Some(c) = ctxs.index(ctx) else { return r };
+    // (The script step moves the context past the call when this returns: the next instruction is the
+    // one after the call, `+0x190` + 1.)
+    let Ok(pc) = usize::try_from(rd::<i32>(ctx + CTX_PC)) else { return r };
+    skip_follow_up(base, &ctxs, c, pc + 1, &format!("entry {entry} goes on in event mode after its skippable section (event function {})", SECTION_ENDS[i].0));
+    r
+}
+
+unsafe extern "system" fn section_end_85(ctx: usize) -> u64 {
+    section_end(0, ctx)
+}
+unsafe extern "system" fn section_end_140(ctx: usize) -> u64 {
+    section_end(1, ctx)
+}
+unsafe extern "system" fn section_end_490(ctx: usize) -> u64 {
+    section_end(2, ctx)
+}
+unsafe extern "system" fn section_end_624(ctx: usize) -> u64 {
+    section_end(3, ctx)
+}
+
+/// A script's contexts read in place: the room script's (entry 0) or the event entry's.
+struct Ctxs {
+    at: usize,
+    count: usize,
+}
+
+impl Ctxs {
+    unsafe fn room(base: usize) -> Option<Ctxs> {
+        Ctxs::read(base + CONTEXTS0_STEAM, base + COUNT0_STEAM)
+    }
+    unsafe fn entry(base: usize) -> Option<Ctxs> {
+        Ctxs::read(base + CONTEXTS_STEAM, base + COUNT_STEAM)
+    }
+    unsafe fn read(at: usize, count: usize) -> Option<Ctxs> {
+        let count = rd::<i32>(count);
+        (1..=CTX_MAX).contains(&count).then_some(Ctxs { at, count: count as usize })
+    }
+    /// The index of the context at `ctx`, if it is one of these.
+    fn index(&self, ctx: usize) -> Option<usize> {
+        let off = ctx.checked_sub(self.at)?;
+        (off % CTX_SIZE == 0 && off / CTX_SIZE < self.count).then_some(off / CTX_SIZE)
+    }
+    fn ctx(&self, c: usize) -> usize {
+        self.at + c * CTX_SIZE
+    }
+    /// Context `c`'s instruction `i`.
+    fn word(&self, c: usize, i: usize) -> Option<u32> {
+        use super::crash::readable;
+        if c >= self.count {
+            return None;
+        }
+        unsafe {
+            let code = rd::<u64>(self.ctx(c) + CTX_CODE) as usize;
+            let at = code.checked_add(i.checked_mul(4)?)?;
+            if code < 0x10000 || !readable(at) || !readable(at + 3) {
+                return None;
+            }
+            Some(rd::<u32>(at))
+        }
+    }
+    /// The first instruction of context `c`'s sub-script `s`.
+    fn sub(&self, c: usize, s: usize) -> Option<usize> {
+        if c >= self.count {
+            return None;
+        }
+        unsafe {
+            if s >= rd::<i32>(self.ctx(c) + CTX_SUBS).clamp(0, 64) as usize {
+                return None;
+            }
+            usize::try_from(rd::<i32>(self.ctx(c) + CTX_SUB_STARTS + s * 4)).ok()
+        }
+    }
+    /// The context whose next instruction follows `push entry, call 126`, and that instruction.
+    fn starter(&self, entry: i32) -> Option<(usize, usize)> {
+        let entry = u32::try_from(entry).ok()?;
+        (0..self.count).find_map(|c| {
+            let pc = usize::try_from(unsafe { rd::<i32>(self.ctx(c) + CTX_PC) }).ok()?;
+            started_entry(pc, entry, |i| self.word(c, i)).then_some((c, pc))
+        })
+    }
+}
+
+/// Event function 512 (Sora given back to the player) through the table: KH1's own, then the mod's skip
+/// (either kind) ends there. An event entry with play in it (the Coliseum's tournament rounds: a short
+/// lead-in, 512, the fight, then the next entry) would otherwise run its fight in skip mode, faded out.
+unsafe extern "system" fn release_fn(ctx: usize) -> u64 {
+    let f: unsafe extern "system" fn(usize) -> u64 = std::mem::transmute(ORIG_RELEASE.load(Ordering::Acquire));
+    let r = f(ctx);
+    end_skip(r, FN_RELEASE)
+}
+
+/// Event function 514 (event mode off) through the table: KH1's own, then a follow-up's skip ends there.
+unsafe extern "system" fn event_off_fn(ctx: usize) -> u64 {
+    let f: unsafe extern "system" fn(usize) -> u64 = std::mem::transmute(ORIG_EVENT_OFF.load(Ordering::Acquire));
+    let r = f(ctx);
+    end_skip(r, FN_EVENT_OFF)
+}
+
+/// Ends the mod's skip the way KH1's own section ends do (event function 140: bit 0 off, then
+/// `0x1401A2130`, and 6 instead of 2 when that ended a skip, so the thread waits a frame for the fade).
+unsafe fn end_skip(r: u64, n: u32) -> u64 {
+    if r & 2 == 0 || !ON.load(Ordering::Relaxed) || !FORCED.load(Ordering::Relaxed) {
+        return r;
+    }
+    let kind = KIND.load(Ordering::Relaxed);
+    if n == FN_EVENT_OFF && kind != KIND_FOLLOW {
+        return r;
+    }
+    let base = BASE.load(Ordering::Relaxed);
+    if base == 0 {
+        return r;
+    }
+    if rd::<u32>(base + RUNNER_STEAM) & 1 == 0 {
+        // Reached before KH1's script step started the skip (a short tail run in the same step as the
+        // section end): nothing to skip any more, so the bit and the flag byte are taken back before the
+        // next step could start a skip in play.
+        release(&format!("event function {n} reached before KH1's skip started"));
+        return r;
+    }
+    FORCED.store(false, Ordering::Relaxed);
+    KIND.store(0, Ordering::Relaxed);
+    wr(base + FLAGS2_STEAM, rd::<u32>(base + FLAGS2_STEAM) & !BIT_SKIPPABLE);
+    if rd::<u8>(base + SKIP_FLAG_STEAM) != 0 {
+        wr(base + SKIP_FLAG_STEAM, 0u8);
+    }
+    let end: unsafe extern "system" fn() -> u64 = std::mem::transmute(base + SKIP_END_STEAM);
+    let ended = end() as u32 != 0;
+    log!(Cutscenes, "in-game skip: event function {n} reached ({}), KH1's end of a skip run (fade in)", if kind == KIND_FOLLOW { "the follow-up's end" } else { "Sora given back" });
+    if ended { r | 4 } else { r }
 }
 
 enum Scene {

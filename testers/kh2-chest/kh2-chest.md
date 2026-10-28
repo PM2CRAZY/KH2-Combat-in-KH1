@@ -7,6 +7,7 @@
 - [1. Mr Bugs: I want to add a config in the tweaks menu that lets use quic](#^m1)
 - [2. Assistant: t724 adds a new row in Combat > Tweaks: Chest Opening (KH1  ](#^m2)
 - [3. Assistant: Five versions this round. Your first trace showed why you co](#^m3)
+- [4. Assistant: Two versions this round. Your log showed what still held Sor](#^m4)
 
 ---
 
@@ -79,6 +80,7 @@ wasn't able to move when opening a chest, I stayed in idle for a bit. the other 
 
 ^m3
 
+
 (b)
 
 I sent a log and traces, still unable to move on the chests we've modified,  I also found another chest type which is the evidence boxes you find in alice's world
@@ -86,3 +88,31 @@ I sent a log and traces, still unable to move on the chests we've modified,  I a
 do these changes without checking in, once you think you have a completed version upload it to github 
 
 go ahead
+
+
+> [!tip] Assistant
+> Two versions this round. Your log showed what still held Sora: the chest script never let go of him through the parts t728 didn't catch.
+>
+> - **t768, chests let go of Sora.** The chest script names Sora as "the party's first actor", not by his own number, so t728 never matched any of its actions on him (your log has no "done at once" line at any open). It also takes the player into KH1's event mode and turns off Sora's command input (the "runner 0x2, engine 0xc" in your log, right after each Open). Now its actions on Sora are found the way KH1 finds them, those holds are skipped for chests opened the KH2 way, and KH1's open motion is never asked for. The lid, the sound, the item and the opened flag are still KH1's own.
+> - **t769, the evidence boxes.** They aren't chests to KH1: no chest code runs for them. They're part of each room's own script, which you start with the Triangle command. When you pick it, I read that part of the room script in place. If it's a box (it takes the player, gives something and gives him back, with no scene, choice, shop or menu), it opens the KH2 way like a chest, with the "Obtained" notice. Across all 236 room files that is Wonderland's evidence (two command types in two rooms) and some boxes in End of the World. Everything else stays KH1's.
+>
+> **How I checked it**
+> - Your t743 log and trace `trace_1793085402_f43568` showed the cause. From the frame after the Open, Sora's flags sit at `0x0130c0c3` and KH1's open motion plays for three frames. Then he idles with the stick held and doesn't move. The log never has "done at once", has no motion-swap line, and shows "runner 0x2, engine 0xc" while the script runs.
+> - The chest script itself (`UK_treasure.ev`, read from your extracted files): it takes the player at its start, holds him with actions that name "actor 0", and gives him back at the end. What those steps do, and how KH1 finds an action's actor, I checked in the KH1 Steam decomp and exe. The new hook points' first bytes are checked against the Steam exe.
+> - The evidence boxes: your log at the Alice box (Triangle, then held about 2 seconds with no chest code). I also read every room file's script for which commands open a box. The part-reader has unit tests.
+> - I couldn't check either version in game.
+>
+> **Please test:**
+> 1. A plain chest, a munny chest, a gummi chest and a Dalmatian chest with Chest Opening on KH2. Can you walk off the same frame you open it? Does the lid still open with its sound? Is the item really added?
+> 2. Open a chest standing still. Sora shouldn't play KH1's open motion.
+> 3. The evidence boxes in Wonderland (Lotus Forest and the Bizarre Room ones). Can you move at once? Does the notice show the evidence's name? Does the evidence count for the story (the Queen's trial)?
+> 4. An event chest, a chest with an item you already have the most of, and the Trinity marks. All should be unchanged (KH1's).
+> 5. Please send the log with Cutscenes & Events on and a trace of a chest and an evidence box. Lines to look for: "Chest Opening: KH1's open motion not asked for", "treasure script's player hold (event function 511) skipped", "action 0x.. ... done at once", "KH2 open of a room script's box (command 0x55 ...)", "the box gives ... Obtained / ...".
+>
+> **Still open on my side (no answer needed)**
+> - **KH2's own info bar (your (b)) isn't in yet.** That needs a reader for KH2's 2D HUD files, finding KH2's info-bar art and timing in its exe, and drawing it through KH1's own 2D path. The art isn't in the field HUD sheet I checked (`zz0field.2dd`). The item icons it uses look like the ones in `zz0command.2dd`, but I haven't confirmed that in KH2's code. It comes as its own versions next. Until then the notice is KH1's top-left box.
+> - Traverse Town's command 0x72 reads like a box but I left it KH1's (I think it's the mailbox). If you know of other boxes that still hold you, tell me where.
+> - Notes: `docs/kh1-chest.md` ("Round 3"). Thread folder: `testers/kh2-chest/`.
+
+^m4
+

@@ -146,6 +146,67 @@ contexts.
   their images on this branch (main's Drive gauge has one; this branch may not take main's code). Its
   timing in KH2's exe isn't traced yet (the chest's give is `trap_treasure_get` -> `0x1401595B0`).
 
+## Round 3 (t768): what still held Sora
+
+- **The log and traces (t743).** At every KH2 open the log had "its wait on Sora's motion ... goes on"
+  but never an action "done at once", and no "open motion request replaced" line; the watch line showed
+  "runner 0x2, engine 0xc" from the frame after the Open until the script ended (about 55 frames);
+  the trace (`trace_1793085402_f43568`) has Sora's flags at `0x0130c0c3` from f43411, motion `0xA6`
+  (KH1's open motion) on f43411..43413, then idle with the stick held and no movement. Checked (log +
+  trace).
+- **The treasure script itself** (`exchange/UK_treasure.ev`, the same as `US_treasure.ev`; read in place
+  from the user's extracted files, nothing copied here): entry 0 has four contexts. Context 0's first
+  sub-script (run at once by the script start, `0x1401A43A0`) opens the windows' layout and ends with
+  event functions 113 and 115; its main part starts with 511, then pushes the open's arguments (341..345),
+  marks the chest (339), opens the lid, gives, shows the window and ends with 112, 114 and 512. Its
+  actions on the player (55, 336, 338, 57, 108, 21/22/26, ...) name the context's actor, which starts at
+  0. Checked (files).
+- **What those do** (Checked (exe + decomp)): 511 (`0x1401A7540`) sets the runner word's bit 1
+  (`0x1423AB2D0`), which makes KH1's game mode "event" (`0x14017EFC0` returns 1); 512 clears it. 113 and
+  115 (`0x1401A9A80`, `0x1401A9AA0`) set bits 8 and 4 of the engine word `0x142867364`; bit 4 stops KH1's
+  command and pad input for Sora (`0x1402937F0`); 112 and 114 clear them. An action's actor id 0 is the
+  party's first actor (`0x140291D30`: ids 0, 1, 2 are the party, `0x1xxxx` an object by its entry, any
+  other an actor's own `+4`). t728 matched the records on Sora's `+4`, so none was caught.
+- **The fix.** Actions are matched through KH1's own lookup, so the script's actions on Sora go to KH1's
+  done queue as before; from a treasure context during a fast open, event functions 511, 512, 112..115 are
+  skipped (they take no arguments). The handler's call of the motion request for `0x900A6`
+  (`0x1402B59CC`, Checked (exe)) goes to `open_request`: on a fast open (its arguments are already
+  written then) nothing is asked, so Sora keeps his run or idle. Assumption: nothing else in the script
+  holds him (the trace will say: his flags should stay `0x0000c003`, the watch line should show no
+  runner 0x2 / engine 0xc at a KH2 open).
+
+## Round 3 (t769): the room scripts' boxes (Wonderland's evidence)
+
+- **What they are.** The tester's "evidence boxes you find in alice's world" are not chests of KH1's chest
+  table: the Open handler never runs for them. They are parts of the room's own script. A context offers a
+  Triangle command with event function 454 (`push 0x55, push 1, call 454`); when it is picked, KH1's pick
+  (`0x1401A4D00`, from `0x140297CA0`) finds the object's context (the room list `0x142382AD0` / count
+  `0x14237F4E4` with entry 0 in use, else the event list `0x1423902D0` / `0x14237F4E8`; the context whose
+  `+0` is the object's `+4`), wakes its sub-script 9 (`0x1401A0AF0`: next instruction `+0x190` = the start
+  at `+0x90 + 9 * 4`) and keeps the command at `0x142382A38`. Checked (decomp + exe). The sub-script
+  checks the command (`push 0x55, 1/6, 3/<skip>`) and runs that command's part. Checked (files).
+- **The box's part** (Wonderland `aw05`, the tester's log at f45532: Triangle, then "runner 0x2, engine
+  0xc" and "Sora can act: false" until f45665): 424, 113, 115, 321, 378, 593, 511, 113, 115, a wait,
+  625, wakes of another context's sub-scripts (Sora's open motion, `push 0xA6, call 108`, and its wait,
+  103; the actions 55, 336, 338, 57 on him), 353, 163 / 167, 644 / 258 (`push 0xDF, push 1`: the item,
+  added to the stock by 258, `0x1401AC700`), 364, the message (4, 5, 6, 83, 80, 365, 0, 1 with lines
+  picked by a variable), 107, 2, then 112, 114, 512. Checked (files + log).
+- **Which commands are boxes.** Read across the 236 room files (every script version): the parts that
+  take the player (511), give (258, or 583 a reward record) and give him back (512) with no scene,
+  choice, shop or menu (88, 126, 222, 268, 278, 392, 628, 629, 673, or a pause-skippable section) are
+  command 0x55's in `aw02` and `aw05` (items 0xDF..0xE2, the evidence) and `ew02` (reward records), and
+  0x49's in `aw02` (evidence). Traverse Town's 0x72 (`tw01`, four reward records) reads the same way but
+  is left KH1's (Assumption: the mailbox, not a box). 0x55 elsewhere (`aw04`: a choice; `pp03`, `lm08`: no
+  give; 106 parts the reader can't follow) stays KH1's. Checked (files).
+- **KH2 setting (t769).** KH1's pick is hooked: for 0x55 or 0x49, after KH1's own pick, the part KH1 woke
+  is read in place (`crate::kh1script::read_box`, unit-tested). A box gets the chest's treatment for the
+  contexts of that list until its 512: holds (511 / 512, 112..115) skipped, actions on Sora to KH1's done
+  queue (so no open motion), his motion waits passed, message functions in their skip-mode branch; its
+  give (258 / 583) shows the notice ("Obtained / Footprints"). The box's own lid and sounds run as KH1
+  wrote them. Anything else is KH1's. KH1 setting: nothing installed.
+- **Not checked:** in game; the evidence's names come from KH1's item names (`equip::item_name`), and a
+  583 record that isn't an item reads "Reward".
+
 ## Not checked (Assumption)
 
 - (t724, now answered) KH2's own chest: see "KH2's own chest opening" above (checked in files and

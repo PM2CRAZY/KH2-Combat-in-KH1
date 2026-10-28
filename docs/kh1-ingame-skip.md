@@ -89,3 +89,56 @@ The tester: "sent a log showing the exact moment, its when you get thunder. if y
 - **In the log.** f22228 entry 1 starts (no talk bit); f22239 the Cutscene Skip row skips it; f22266 KH1's skip ends (entry back to 0, `0x401` → `0x400`) and event mode stays on with entry 0: the Thunder lines, confirmed with Circle until f22551 (event mode off). The second run (f29264..f29594) is the same and the log ends there. f22591 the Triangle on Phil (talk bit `0x800`, no entry started) is the talk with his question (context 7 of entry 0 holds event function 88). Checked (trace).
 - **So** the Thunder scene isn't talk-started: (a) doesn't keep it. But it isn't an event entry either. It runs in entry 0, which In-game Scene Skip never judges, and KH1's own skip can't run there: KH1 ends its skip mode only when every thread of the entry has ended and it goes back to entry 0 (`0x1401A2130`), which never happens for the room's own script. Checked (decomp, see "The end" above). Nothing is built.
 - **What a skip would take (not built, asked).** KH1's skip mode (bit 0 of `0x1423AB2D0`, the message functions opening nothing, the 128 frame step) started when an entry ends with event mode still on and the script back at entry 0, and ended by the mod when event mode goes off (event function 514), with KH1's own end steps (skip mode off, the fade in). That gives KH1's skip a second way to end that KH1 itself doesn't have. Assumption: other rooms continue the same way after a scene (only this room read).
+
+## t764: where the mod's skip ends (the tournament black screen, and the room script's follow-ups)
+
+The tester, choosing (b) for the follow-ups: "(b) we're going to merge this with the work done on quick chests once its finished so it notifies you after the cutscene ends. also, updated the log and a trace, you get stuck to a black screen during Olympus coliseums tournament".
+
+### Correction
+
+Earlier notes here said KH1 has no way to leave skip mode in the middle of a scene. That was wrong. Besides the end at entry 0 (`0x1401A2130` from the script step), KH1's skippable sections have their own end: event functions 85, 140, 490 and 624 (`0x1401A8BD0`, `0x1401AA120`, `0x1401B05F0`, `0x1401A8C00`), the pairs of the skip-on functions 84, 139, 489 and 623, turn bit 0 off and call `0x1401A2130` (skip mode off, the message windows closed, a fade in over a second), returning 6 when that ended a skip. Checked (decomp + exe: the event table at `0x1404FA870`).
+
+### The black screen (Checked (log + trace + files))
+
+- The tournament is world `0xb` room 5 (`he06`, the script version whose entry 0 has 470 instructions in its first thread; read in place from the tester's install, nothing copied here). Each round is an event entry (1, 2, 3, ...): a short lead-in in event mode (no messages), event function 514 (event mode off), 512 (Sora given back), the fight (enemy spawns 601, waits 457), then `push 20, call 126` from the entry itself: entry 20, the between-round scene (pause skip 139), which starts the next round the same way.
+- The log: f64554 entry 1 starts, f64555 In-game Scene Skip skips it (no pause skip, no choice). f64556 KH1's skip mode is on (runner `0x3`) and the frame scale goes to 4. From f64563 the fight runs (event mode off, "Sora can act: true", hits) with skip mode still on: the runner stays odd (`0x19`, `0x3`) to the end of the log, the frame scale is never 1 again, and the trace (f64603..f64663) has 4 steps every frame. Entries 20, 2, 20, 3 follow without the script ever returning to entry 0, so neither of KH1's ends ran: no fade in (black), the fight fast-forwarded.
+- The Cutscene Skip row didn't act on entry 20 either: the mod's own bit 0 was still set, which that row leaves alone (`ingameskip::forced`).
+
+### What changed
+
+- **The mod's skip of an event entry ends at event function 512** (Sora given back, `0x1401A7660`). Its table entry points at a wrapper that runs KH1's 512 and then, if the mod's skip is running, does what 140 does: bit 0 off, the pause flag byte cleared, `0x1401A2130`, 6 instead of 2. Read across 110 script files in 38 rooms of nine worlds (Traverse Town, Olympus Coliseum, Wonderland, Agrabah, Deep Jungle, Halloween Town, Monstro, Atlantica and Destiny Islands; all of Traverse Town and Olympus, a few rooms of the others): in the entries the row skips, 512 is a scene's last step (followed by at most 514, 101, 27 or 150) except the Coliseum's fight entries (`he03`, `he06`, `he07`: the barrel game, the tournaments) and a Trinity mark's thread in Phil's entry, where play follows it. Checked (files).
+- **The room script's follow-up** (the tester's (b)). When an event entry has ended and the script is back at entry 0 with event mode still on and no talk bit, the mod takes the room-script context that started that entry (noted when the entry started: its next instruction `+0x190` right after `push n, call 126`; the room script doesn't step while an entry runs) and reads on from there to its first 514 or 512, with every sub-script it wakes on the way (`21/c 22/s`, read whole). No choice (88), shop or menu on the way and an end found: bit 0 and the flag byte, so KH1's script step starts its own skip there too (`0x1401A22B0` doesn't care which entry is in use), and the wrapper on event function 514 (`0x1401A7750`) or 512 ends it the same way. Otherwise it plays, with a log line saying why. `crate::kh1script::read_follow_up` (unit-tested).
+- **The Thunder scene**: in the Coliseum gates (`he02`, the version with Phil's high-poly entry 1), context 0 goes on after `push 1, call 126`: the spell (458 with spell 2, 459), the "learned" lines, a wake of context 7's sub-script 13 (two more lines, no question) and 514. No choice, an end found: it is skipped. Phil's question (context 7's sub-script 12) isn't woken from there. Checked (files).
+- Across the rooms read, 34 room-script places start an entry and then show messages; 7 of them have a choice on the way (two in Traverse Town, three of Phil's talks, two more in Traverse Town's `tw20`) and play; the rest either reach 514 / 512 (skipped) or not (they play: "no 514 or 512 to end a skip at"). Checked (files); which of them actually run in event mode is only known at run time.
+
+Not native in one way, said plainly: KH1 ends a skip only at its section ends and at entry 0; the mod adds that end at 512 / 514 for the scenes it skips (through KH1's event table, with KH1's own end routine). Everything the skip does is KH1's.
+
+### Not checked in game (Assumption)
+
+- The tournament: that ending the skip at 512 gives a normal fight (fade in, normal speed) and that each round's lead-in skip looks right. The between-round scenes are the Cutscene Skip row's.
+- A follow-up starts one frame after KH1's fade in at the end of the entry, so a short flash may show between the two skips.
+- Messages a follow-up skips show no "Obtained" box (KH1 shows nothing in skip mode); the tester's plan is to merge the Quick Chests notice later.
+- Rooms not read (the rest of Wonderland, Agrabah, Deep Jungle, Monstro, Halloween Town and Atlantica, and all of Hollow Bastion, Neverland, End of the World and the 100 Acre Wood): assumed the same.
+
+## t765: the part of a scene after its skippable section
+
+The owner, in chat with the t764 log: "there's also in game cutscenes in alice's world that aren't skipping".
+
+- **What played.** Wonderland room 4 (`aw05`, version `0xd`), entry 1. Context 0 turns the pause skip on (event function 139), runs the high-poly part, ends the section (140), and then wakes 18 sub-scripts in other contexts with lines confirmed one by one (message functions 0 / 1 / 177, waits 33 / 107), no choice, then 512 and 514. In the log the Cutscene Skip row skipped the section (f30680) and the lines played from f30723 ("Sora can act: false", waits 107 and 33 to past f31086). In-game Scene Skip had judged the entry the Cutscene Skip row's (it has 139) and didn't look at it again. Checked (log + files, read in place from the owner's install).
+- **What changed.** The four section ends (event functions 85, 140, 490, 624) go through the event table to `ingameskip::section_end`: KH1's own runs first; then, with event mode still on, no talk bit and the mod not already skipping, the rest of the scene is read from the instruction after the call, the same way as t764's room-script follow-up (to the first 514 / 512, every woken sub-script whole). No choice, shop or menu and an end found: bit 0 and the flag byte, KH1's skip, ended at 514 / 512. This doesn't depend on whether the section itself was skipped.
+- **Across the scripts read** (110 files): 112 section ends; after 84 of them the scene reaches 514 / 512 with no choice (skipped), after 28 it doesn't (they play, logged "no 514 or 512 to end a skip at"); none has a choice. Checked (files).
+- **A tail run in the same step.** When the scene ends right after the section (514 / 512 a few instructions later, run in the same script step), the skip hasn't started yet: `end_skip` then takes the bit and the flag byte back so no skip starts in play.
+- **Room 3's "plays (event function 88)" lines** (`aw04`): that room keeps entry 1 running the whole time (its talk handlers have a choice); event mode comes on there when Sora goes through to room 4. Not a scene: nothing was missed. Checked (log + files).
+
+Not checked in game (Assumption): the look (KH1's fade in at the section end, then the fade out of the new skip a frame later).
+
+## t766: longer follow-ups, and never into a pause-skippable section
+
+The owner (chat, t765 log): "same issue on the same scene", and what the two rows are for: the Cutscene Skip row owns the scenes KH1's pause menu can skip (high-poly or not); In-game Scene Skip is for the scenes read line by line with the confirm button (like Phil's Thunder), whatever models they use.
+
+- **Why t765 didn't skip it.** The log (f412): "entry 1 goes on in event mode after its skippable section (event function 140) (context 0), plays (its code couldn't be read)". The follow-up reader gave up after 16 woken sub-scripts; this scene (`aw05` version `0xd`, entry 1) wakes 18. The limit is now 128 (the most in the scripts read is 40). Checked (log + files).
+- **Never into the Cutscene Skip row's part.** A pause-skip function (84, 139, 476, 489, 623) ahead in a follow-up now makes it play, like a choice. None of the 112 section ends read has one. So with the Cutscene Skip row off, a pause-skippable section always plays, and only the line-by-line part after it is skipped. Checked (files).
+
+## t767: the Cutscene Skip row was dropping the flag byte
+
+The owner (chat, t766 log): "the cutscene still did not skip". The log (f423): the part after the section was read (514 instructions, no choice) and bit 0 and the flag byte were set, but KH1's skip never started: the second flag word stayed `0x401` and the runner `0x2` until 512 at f1563. Cause: the Cutscene Skip row had fired on the section just before (f397); at its next pad read bit 0 was In-game Scene Skip's, which it takes as its scene being over, and it dropped what it took for its own unused flag byte. Fix: it leaves the byte alone while In-game Scene Skip has set bit 0; and In-game Scene Skip puts bit 0 and the byte back if its skip hasn't started and the byte is gone. Checked (log + code).

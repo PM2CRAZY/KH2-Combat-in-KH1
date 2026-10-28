@@ -40,6 +40,19 @@
 //!   from a treasure context the actions queued on Sora go into KH1's done queue (`0x1401A4F20`), as KH1's
 //!   own action step does for an action whose actor isn't there, and its wait on Sora's motion (event
 //!   function 103) goes on at once. Logged in Cutscenes & Events.
+//! - t768 (the tester's t743 log and traces: still held, flags `0x0130c0c3`, "runner 0x2, engine 0xc"):
+//!   the script names Sora as actor 0 (the party's first), so its actions are matched through KH1's own
+//!   lookup (`0x140291D30`) now, not his `+4`; its player holds (event functions 511 / 512, 113 / 115,
+//!   112 / 114: the event game mode and the engine's command lock) are skipped from a treasure context;
+//!   and the handler's call for the open motion goes to `open_request`, which asks for nothing on a fast
+//!   open (t729's swap of the pending request never matched: no log line in that log).
+//! - t769, the room scripts' boxes (the tester: "another chest type which is the evidence boxes you find
+//!   in alice's world"): those are no chest of KH1's chest table but parts of the room's own script, run
+//!   when a command it offered (event function 454) is picked. KH1's pick (`0x1401A4D00`) is hooked: for
+//!   command 0x55 or 0x49 on KH2, the part KH1 just woke is read (`crate::kh1script::read_box`); a box
+//!   (it takes the player with 511, gives with 258 or 583, gives him back with 512, and has no scene,
+//!   choice, shop or menu) gets the same treatment as a chest for its script's contexts until its 512,
+//!   and its give shows the notice. Anything else stays KH1's.
 //! - What was found is shown in KH1's own non-blocking notice box (the level-up box, `menu::queue_notice`,
 //!   as the mod's "New Ability" boxes): "Obtained" and the item's name or the munny.
 //!
@@ -49,7 +62,8 @@
 
 use super::addr::Build;
 use super::{hook, log};
-use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicU8, AtomicUsize, Ordering};
+use crate::kh1script::{read_box, BoxOpen, FN_ADD_ITEM, FN_GIVE_REWARD, FN_RELEASE};
 use std::sync::OnceLock;
 use std::time::Instant;
 
@@ -69,6 +83,19 @@ static SORA: AtomicUsize = AtomicUsize::new(0);
 static ORIG_CALL: AtomicUsize = AtomicUsize::new(0);
 /// Actions on Sora completed at once / motion waits passed for the current open (for the log).
 static RELEASED: AtomicU32 = AtomicU32::new(0);
+/// The Open handler's motion request call goes to `open_request` (t768).
+static REQUEST_REDIRECTED: AtomicBool = AtomicBool::new(false);
+/// The player-hold calls skipped for the current open (for the log, t768).
+static HOLDS: AtomicU32 = AtomicU32::new(0);
+/// What the open in progress is (t769): the treasure script's (an Open on a chest) or a box of a room's
+/// script (a picked command whose part reads as a box), and for a box its context list and count.
+static MODE: AtomicU8 = AtomicU8::new(0);
+const MODE_NONE: u8 = 0;
+const MODE_TREASURE: u8 = 1;
+const MODE_BOX: u8 = 2;
+static BOX_CTXS: AtomicUsize = AtomicUsize::new(0);
+static BOX_COUNT: AtomicUsize = AtomicUsize::new(0);
+static ORIG_PICK: AtomicUsize = AtomicUsize::new(0);
 
 /// KH1's Open command handler `(sora, chest)` (Steam; `mov [rsp+8], rbx; mov [rsp+0x10], rbp`,
 /// Checked (exe)).
@@ -79,16 +106,14 @@ const OPEN_PROLOGUE: [u8; 10] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x6C,
 const ARG_KIND_STEAM: usize = 0x2DB7B30;
 const ARG_ITEM_STEAM: usize = 0x2DB7B34;
 const ARG_FULL_STEAM: usize = 0x2DB7B38;
-/// KH1's motion request `0x14029F980 (actor, request, f32 in XMM2)` (Steam, its first 10 bytes checked;
-/// Checked (decomp + exe): it replaces the one pending request, `+0x178` count 1, `+0x17C` the request) and the
-/// request the handler makes, the open motion (`0x900A6`, motion `0xA6`). The motion applied last is
-/// `+0x164` (low 16 bits).
+/// KH1's motion request `0x14029F980 (actor, request, f32 in XMM2)` (Steam; Checked (decomp + exe): it
+/// sets the one pending request, `+0x178` count 1, `+0x17C` the request) and the call of it in the Open
+/// handler that asks for Sora's open motion (`0x1402B59CC`: `mov edx, 0x900A6; mov rcx, rdi; call`,
+/// Checked (exe)). t768: that call goes to `open_request`, which on a fast open asks for nothing.
 const REQUEST_STEAM: usize = 0x29F980;
-const REQUEST_PROLOGUE: [u8; 10] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x57, 0x48, 0x83, 0xEC, 0x20];
+const OPEN_REQUEST_CALL_STEAM: usize = 0x2B59CC;
 const OPEN_REQUEST: u32 = 0x900A6;
-const ACTOR_PENDING: usize = 0x178;
 const ACTOR_REQUEST: usize = 0x17C;
-const ACTOR_APPLIED: usize = 0x164;
 /// Sora's lock: actor `+0x444` bit 1 (the handler sets it; KH1's control step is skipped while it is).
 const ACTOR_LOCK: usize = 0x444;
 const LOCK_BIT: u32 = 2;
@@ -130,9 +155,59 @@ const ACTIONS_READ_STEAM: usize = 0x23CFDFC;
 const DONE_PUSH_STEAM: usize = 0x1A4F20;
 const DONE_PUSH_PROLOGUE: [u8; 7] = [0x48, 0x63, 0x05, 0xE9, 0xEE, 0x22, 0x02];
 const ACTION_SIZE: usize = 0x20;
+/// KH1's actor lookup `0x140291D30 (id)` (Steam; Checked (decomp + exe)): the actor an action names
+/// (0, 1, 2: the party's three; `0x1xxxx`: an object by its entry; else an actor's own `+4`), as KH1's
+/// action step finds it. The treasure script's context names Sora as 0 (its actor id `+0` starts at 0,
+/// `0x1401A43A0`), not by his own id, so t728's match on his `+4` never caught its actions (the tester's
+/// log: no "done at once" line at any open). `mov [rsp+8], rbx; mov [rsp+0x10], rbp`.
+const FIND_ACTOR_STEAM: usize = 0x291D30;
+const FIND_ACTOR_PROLOGUE: [u8; 10] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x6C, 0x24, 0x10];
+/// The event functions that hold the player for a script, none with arguments (Checked (exe)): 511
+/// (`0x1401A7540`, the runner's bit 1: KH1's game mode becomes "event", `0x14017EFC0`), 512 (its
+/// release, `0x1401A7660`), 113 / 115 (`0x1401A9A80` / `0x1401A9AA0`: the engine word `0x142867364` bits
+/// 8 and 4; bit 4 stops KH1's command input, `0x1402937F0`) and 112 / 114 (their clears). The treasure
+/// script calls 113 and 115 at its start and 511 first in its main part (Checked (files):
+/// `UK_treasure.ev` entry 0), which is the "runner 0x2, engine 0xc" in the tester's log at every open.
+const HOLD_FNS: [i32; 6] = [511, 512, 112, 113, 114, 115];
 /// Event function 103 (`0x1401A96F0`): waits (returns 4) until the context's actor's motion is over,
 /// then goes on (2) (Checked (decomp)).
 const FN_WAIT_MOTION: usize = 103;
+
+/// KH1's Triangle-box command pick `0x1401A4D00 (object, _, command)` (Steam; Checked (decomp)): for a
+/// command a room script offered (event function 454), it finds the object's context (the room
+/// script's list `0x142382AD0` / count `0x14237F4E4` with entry 0 in use `0x142382524`, else the event
+/// list `0x1423902D0` / `0x14237F4E8`; the context whose `+0` is the object's `+4`), wakes its
+/// sub-script 9 (`0x1401A0AF0`, its start at `+0x90 + 9 * 4`, the next instruction `+0x190`) and keeps
+/// the command at `0x142382A38`. First bytes `mov [rsp+8], rbx; mov [rsp+0x10], rbp; mov [rsp+0x18],
+/// rsi` (Checked (exe)).
+const PICK_STEAM: usize = 0x1A4D00;
+const PICK_PROLOGUE: [u8; 15] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x6C, 0x24, 0x10, 0x48, 0x89, 0x74, 0x24, 0x18];
+const ENTRY_STEAM: usize = 0x2382524;
+const ROOM_CTXS_STEAM: usize = 0x2382AD0;
+const ROOM_COUNT_STEAM: usize = 0x237F4E4;
+const EVENT_CTXS_STEAM: usize = 0x23902D0;
+const EVENT_COUNT_STEAM: usize = 0x237F4E8;
+const CTX_CODE: usize = 0x80;
+const CTX_SUBS: usize = 0x88;
+const CTX_SUB_STARTS: usize = 0x90;
+const CTX_PC: usize = 0x190;
+const HANDLER_SUB: usize = 9;
+/// The commands the room scripts' boxes are opened with (Checked (files): across the 236 room files,
+/// the parts that take the player, give an item or a reward and give him back with no scene, choice,
+/// shop or menu are 0x55's in Wonderland (`aw02`, `aw05`: the evidence, items 0xDF..0xE2) and End of
+/// the World (`ew02`, reward records), and 0x49's in `aw02` (evidence)). Traverse Town's 0x72 reads the
+/// same way but is left KH1's (not a box the tester asked for; Assumption: the mailbox).
+const BOX_COMMANDS: [i32; 2] = [0x55, 0x49];
+/// What makes a part a scene, not a box: a choice (88), a shop or menu (222, 268, 278, 392, 628, 629,
+/// 673), an event entry (126), a pause-skippable section (84, 139, 476, 489, 623) (as
+/// `ingameskip::PLAYS`).
+const BOX_PLAYS: [u32; 14] = [88, 222, 268, 278, 392, 628, 629, 673, 126, 84, 139, 476, 489, 623];
+/// KH1's reward records (`0x14028F9A0 (n)`: a u16 each from the pointer at `0x142D36D58`; low four bits
+/// the kind, 0 an item whose id is the high byte; Checked (exe)), for the notice of a box's 583.
+const REWARDS_PTR_STEAM: usize = 0x2D36D58;
+/// The party's first actor (Sora), the pointer KH1's actor lookup returns for id 0 (`0x142D37280`,
+/// Checked (decomp)).
+const SORA_PTR_STEAM: usize = 0x2D37280;
 
 /// How long after an open its message windows are still skipped. Assumption: the treasure script
 /// reaches its window well within this (KH1's own open motion and lid take about a second).
@@ -190,7 +265,8 @@ unsafe fn hook_in() {
     // anything is patched: without them the open stays KH1's).
     let entry = rd::<u64>(base + CALL_ENTRY_STEAM) as usize;
     let done = std::slice::from_raw_parts((base + DONE_PUSH_STEAM) as *const u8, DONE_PUSH_PROLOGUE.len());
-    if entry != base + CALL_STEAM || done != DONE_PUSH_PROLOGUE {
+    let find = std::slice::from_raw_parts((base + FIND_ACTOR_STEAM) as *const u8, FIND_ACTOR_PROLOGUE.len());
+    if entry != base + CALL_STEAM || done != DONE_PUSH_PROLOGUE || find != FIND_ACTOR_PROLOGUE {
         log!(Cutscenes, "Chest Opening: KH1's script call handler ({entry:#x}) or done queue isn't as expected: the Open stays KH1's");
         return;
     }
@@ -209,15 +285,24 @@ unsafe fn hook_in() {
         log!(Menus, "Chest Opening: only {wrapped} of KH1's message functions wrapped: the Open stays KH1's");
         return;
     }
+    // The open motion's request (t768): its call in the handler goes to `open_request`.
+    if hook::redirect_call(base + OPEN_REQUEST_CALL_STEAM, base + REQUEST_STEAM, open_request as *const () as usize, "Open's motion request (chest)") {
+        REQUEST_REDIRECTED.store(true, Ordering::Relaxed);
+    } else {
+        log!(Cutscenes, "Chest Opening: the Open handler's motion request call isn't as expected: Sora plays KH1's open motion");
+    }
     if hook::install(base + OPEN_STEAM, &OPEN_PROLOGUE, open as *const () as usize, &ORIG_OPEN, "KH1's Open command (chest)").is_none() {
         log!(Menus, "Chest Opening: KH1's Open handler not hooked: chests stay KH1's");
+    }
+    // The room scripts' boxes (t769): KH1's command pick.
+    if hook::install(base + PICK_STEAM, &PICK_PROLOGUE, pick as *const () as usize, &ORIG_PICK, "KH1's script command pick (chest)").is_none() {
+        log!(Menus, "Chest Opening: KH1's script command pick not hooked: the room scripts' boxes stay KH1's");
     }
 }
 
 /// KH1's Open handler, then KH2's fast open for a plain chest.
 unsafe extern "system" fn open(sora: usize, chest: usize) {
     let orig: unsafe extern "system" fn(usize, usize) = std::mem::transmute(ORIG_OPEN.load(Ordering::Acquire));
-    let before = if sora != 0 { rd::<u32>(sora + ACTOR_APPLIED) & 0xFFFF } else { 0 };
     orig(sora, chest);
     if !kh2() || sora == 0 {
         FAST_AT.store(0, Ordering::Relaxed);
@@ -240,9 +325,11 @@ unsafe extern "system" fn open(sora: usize, chest: usize) {
     let lock = sora + ACTOR_LOCK;
     std::ptr::write_unaligned(lock as *mut u32, rd::<u32>(lock) & !LOCK_BIT);
     SORA.store(sora, Ordering::Relaxed);
+    MODE.store(MODE_TREASURE, Ordering::Relaxed);
     FAST_AT.store(ms() + 1, Ordering::Relaxed);
     SKIPPED.store(0, Ordering::Relaxed);
     RELEASED.store(0, Ordering::Relaxed);
+    HOLDS.store(0, Ordering::Relaxed);
     // KH1's treasure script holds Sora through actions on him (the tester's t725 trace: his actor
     // flags gain 0x1000000 (action 0x24), 0x200000 (0x26) and 0x40 (0x2B) on the frame after the Open,
     // and lose them 132 frames later; he couldn't walk meanwhile): our call handler goes into KH1's
@@ -250,14 +337,7 @@ unsafe extern "system" fn open(sora: usize, chest: usize) {
     call_handler_in(base);
     // No open motion (the tester, answer 3 (b), as KH2: KH2's Open, command 0x1A5, is a message to the
     // box, execute 421 / action 0 in 03system's cmd table, and the box plays its own lid motion 0x98;
-    // KH2's player has no open action): the handler's request for KH1's open motion is replaced by the
-    // motion Sora had, through KH1's own request.
-    let req = std::slice::from_raw_parts((base + REQUEST_STEAM) as *const u8, REQUEST_PROLOGUE.len());
-    if req == REQUEST_PROLOGUE && rd::<i32>(sora + ACTOR_PENDING) == 1 && rd::<u32>(sora + ACTOR_REQUEST) == OPEN_REQUEST {
-        let f: unsafe extern "system" fn(usize, u32, f32) -> usize = std::mem::transmute(base + REQUEST_STEAM);
-        f(sora, before, 0.0);
-        log!(Cutscenes, "Chest Opening: KH1's open motion request replaced by Sora's own motion {before:#x}");
-    }
+    // KH2's player has no open action): the handler's own call for it went to `open_request` (t768).
     let line = if kind == 3 {
         format!("{what} Munny")
     } else if kind == 1 {
@@ -275,6 +355,123 @@ unsafe extern "system" fn open(sora: usize, chest: usize) {
     };
     super::menu::queue_notice("Obtained", &line);
     log!(Cutscenes, "Chest Opening: KH2 open (kind {kind}, contents {what:#x}): Sora free at once, notice \"Obtained / {line}\", the treasure script's windows skipped");
+}
+
+/// The Open handler's request for Sora's open motion (`0x1402B59CC`'s call of `0x14029F980`, t768). On a
+/// fast open (KH2, a kind the KH2 way, the stock not full: the handler has already written the open's
+/// arguments by then, Checked (decomp)) nothing is asked, so he goes on with the motion he has; else
+/// KH1's own request. The handler doesn't use what the request returns (Checked (exe): the next
+/// instruction loads `rcx` again).
+unsafe extern "system" fn open_request(actor: usize, request: u32, blend: f32) -> usize {
+    let base = base();
+    if kh2() && request == OPEN_REQUEST && fast_kind(base) {
+        log!(Cutscenes, "Chest Opening: KH1's open motion not asked for (KH2: Sora keeps his motion)");
+        return actor + ACTOR_REQUEST;
+    }
+    let f: unsafe extern "system" fn(usize, u32, f32) -> usize = std::mem::transmute(base + REQUEST_STEAM);
+    f(actor, request, blend)
+}
+
+/// The open in progress goes the KH2 way: kinds 0..3 (an item, a gummi block, Dalmatians, munny) with
+/// the stock not full (the handler's arguments, `0x142DB7B30` / `0x142DB7B38`).
+unsafe fn fast_kind(base: usize) -> bool {
+    let kind = rd::<u32>(base + ARG_KIND_STEAM);
+    let full = rd::<u32>(base + ARG_FULL_STEAM);
+    full == 0 && matches!(kind, 0..=3)
+}
+
+/// KH1's command pick, then, for a box command on KH2, KH2's quick open of the room script's box: its
+/// part is read from the context KH1 just woke; a box (it takes the player, gives, gives him back, with
+/// no scene, choice, shop or menu) runs whole as KH1 wrote it, with its holds, actions on Sora and
+/// windows taken as a chest's are (t769).
+unsafe extern "system" fn pick(object: usize, b: usize, command: i32) -> u32 {
+    let orig: unsafe extern "system" fn(usize, usize, i32) -> u32 = std::mem::transmute(ORIG_PICK.load(Ordering::Acquire));
+    if !kh2() || !BOX_COMMANDS.contains(&command) || object < 0x10000 {
+        return orig(object, b, command);
+    }
+    let base = base();
+    let (list, count_at) = if rd::<i32>(base + ENTRY_STEAM) == 0 { (base + ROOM_CTXS_STEAM, base + ROOM_COUNT_STEAM) } else { (base + EVENT_CTXS_STEAM, base + EVENT_COUNT_STEAM) };
+    let r = orig(object, b, command);
+    let count = rd::<i32>(count_at).clamp(0, CTX_MAX as i32) as usize;
+    let id = rd::<i32>(object + 4);
+    let Some(c) = (0..count).find(|&c| rd::<i32>(list + c * CTX_SIZE) == id) else { return r };
+    let ctx = list + c * CTX_SIZE;
+    let subs = rd::<i32>(ctx + CTX_SUBS).clamp(0, 64) as usize;
+    if subs <= HANDLER_SUB {
+        return r;
+    }
+    let start = rd::<i32>(ctx + CTX_SUB_STARTS + HANDLER_SUB * 4);
+    // KH1 woke the handler (its next instruction is the sub-script's start).
+    if start < 0 || rd::<i32>(ctx + CTX_PC) != start {
+        return r;
+    }
+    let word = |c: usize, i: usize| -> Option<u32> {
+        if c >= count {
+            return None;
+        }
+        let code = rd::<u64>(list + c * CTX_SIZE + CTX_CODE) as usize;
+        let at = code.checked_add(i.checked_mul(4)?)?;
+        (code >= 0x10000 && super::crash::readable(at) && super::crash::readable(at + 3)).then(|| rd::<u32>(at))
+    };
+    let sub = |c: usize, s: usize| -> Option<usize> {
+        if c >= count || s >= rd::<i32>(list + c * CTX_SIZE + CTX_SUBS).clamp(0, 64) as usize {
+            return None;
+        }
+        usize::try_from(rd::<i32>(list + c * CTX_SIZE + CTX_SUB_STARTS + s * 4)).ok()
+    };
+    match read_box(c, start as usize, command as u32, word, sub, &BOX_PLAYS) {
+        BoxOpen::Give(n) => {
+            let sora = rd::<u64>(base + SORA_PTR_STEAM) as usize;
+            if sora < 0x10000 {
+                return r;
+            }
+            SORA.store(sora, Ordering::Relaxed);
+            BOX_CTXS.store(list, Ordering::Relaxed);
+            BOX_COUNT.store(count_at, Ordering::Relaxed);
+            MODE.store(MODE_BOX, Ordering::Relaxed);
+            FAST_AT.store(ms() + 1, Ordering::Relaxed);
+            SKIPPED.store(0, Ordering::Relaxed);
+            RELEASED.store(0, Ordering::Relaxed);
+            HOLDS.store(0, Ordering::Relaxed);
+            call_handler_in(base);
+            log!(Cutscenes, "Chest Opening: KH2 open of a room script's box (command {command:#x}, context {c}, {n} instructions read): its holds and windows skipped, Sora free");
+        }
+        BoxOpen::Not(f) => log!(Cutscenes, "Chest Opening: command {command:#x}'s part (context {c}) isn't a box (event function {f}): KH1's"),
+        BoxOpen::Unread => log!(Cutscenes, "Chest Opening: command {command:#x}'s part (context {c}) couldn't be read: KH1's"),
+    }
+    r
+}
+
+/// The notice for a box's give (event function 258 `push item, push count`, or 583 `push record`),
+/// read from the context's stack before KH1's function runs (Checked (exe): 258 takes the item one below
+/// the top, the count on top; 583 the record on top).
+unsafe fn box_notice(base: usize, ctx: usize, n: u32) {
+    let sp = rd::<i32>(ctx + CTX_SP);
+    if !(1..64).contains(&sp) {
+        return;
+    }
+    let top = rd::<u32>(ctx + CTX_SP + 4 + sp as usize * 4);
+    let below = rd::<u32>(ctx + CTX_SP + sp as usize * 4);
+    let (item, count) = if n == FN_ADD_ITEM {
+        (Some(below), top)
+    } else {
+        let table = rd::<u64>(base + REWARDS_PTR_STEAM) as usize;
+        let rec = if table >= 0x10000 && top < 0x1000 { rd::<u16>(table + top as usize * 2) } else { 0xFFFF };
+        ((rec & 0xF == 0).then_some((rec >> 8) as u32), 1)
+    };
+    let line = match item {
+        Some(i) if i < 0x100 => {
+            let name = super::equip::item_name(base, i as u8).map(|n| strip_codes(&n)).unwrap_or_else(|| format!("Item {i:#x}"));
+            if count > 1 {
+                format!("{name} x{count}")
+            } else {
+                name
+            }
+        }
+        _ => "Reward".to_string(),
+    };
+    super::menu::queue_notice("Obtained", &line);
+    log!(Cutscenes, "Chest Opening: the box gives (event function {n}): notice \"Obtained / {line}\"");
 }
 
 /// The item name without the codes `item_name` writes as `{xx}`.
@@ -300,6 +497,7 @@ unsafe fn ours_to_skip(ctx: usize) -> bool {
     }
     if ms() + 1 - at > FAST_MS {
         FAST_AT.store(0, Ordering::Relaxed);
+        MODE.store(MODE_NONE, Ordering::Relaxed);
         log!(
             Cutscenes,
             "Chest Opening: the open's time is over ({} message call(s) skipped, {} action(s) on Sora done at once / motion waits passed)",
@@ -309,13 +507,18 @@ unsafe fn ours_to_skip(ctx: usize) -> bool {
         call_handler_out(base());
         return false;
     }
-    let base = base();
-    if rd::<u64>(base + SCRIPT_IN_USE_STEAM) as usize != base + TREASURE_STEAM {
-        return false;
+    open_ctx(base(), ctx)
+}
+
+/// A context of the script the open runs in: the treasure script's, or (a box of a room's script, t769)
+/// one of the context list the box's handler is in.
+unsafe fn open_ctx(base: usize, ctx: usize) -> bool {
+    if MODE.load(Ordering::Relaxed) == MODE_BOX {
+        let first = BOX_CTXS.load(Ordering::Relaxed);
+        let count = (rd::<i32>(BOX_COUNT.load(Ordering::Relaxed)).clamp(0, CTX_MAX as i32)) as usize;
+        return first != 0 && ctx >= first && ctx < first + count * CTX_SIZE && (ctx - first) % CTX_SIZE == 0;
     }
-    let first = base + CONTEXTS_STEAM;
-    let count = rd::<u32>(base + COUNT_STEAM).min(CTX_MAX) as usize;
-    ctx >= first && ctx < first + count * CTX_SIZE && (ctx - first) % CTX_SIZE == 0
+    treasure_ctx(base, ctx)
 }
 
 /// A context of the treasure script (whatever the open's time).
@@ -360,6 +563,7 @@ unsafe extern "system" fn script_call(ctx: usize, n: i32) -> u64 {
     if at == 0 || ms() + 1 - at > FAST_MS {
         if at != 0 {
             FAST_AT.store(0, Ordering::Relaxed);
+            MODE.store(MODE_NONE, Ordering::Relaxed);
             log!(
                 Cutscenes,
                 "Chest Opening: the open's time is over ({} message call(s) skipped, {} action(s) on Sora done at once / motion waits passed)",
@@ -371,11 +575,32 @@ unsafe extern "system" fn script_call(ctx: usize, n: i32) -> u64 {
         return orig(ctx, n);
     }
     let sora = SORA.load(Ordering::Relaxed);
-    if sora == 0 || !treasure_ctx(base, ctx) {
+    if sora == 0 || !open_ctx(base, ctx) {
         return orig(ctx, n);
+    }
+    let boxed = MODE.load(Ordering::Relaxed) == MODE_BOX;
+    if boxed && (n as u32 == FN_ADD_ITEM || n as u32 == FN_GIVE_REWARD) {
+        box_notice(base, ctx, n as u32);
     }
     if n as usize == FN_WAIT_MOTION && rd::<u64>(ctx + CTX_ACTOR) as usize == sora {
         note_release(&format!("its wait on Sora's motion (function 103, context {ctx:#x}) goes on"));
+        return 2;
+    }
+    if HOLD_FNS.contains(&n) {
+        if HOLDS.fetch_add(1, Ordering::Relaxed) < 8 {
+            log!(Cutscenes, "Chest Opening: {}'s player hold (event function {n}) skipped", if boxed { "the box's script" } else { "treasure script" });
+        }
+        // A box's part ends at its 512 (the player given back): the open is over (t769).
+        if boxed && n as u32 == FN_RELEASE {
+            FAST_AT.store(0, Ordering::Relaxed);
+            MODE.store(MODE_NONE, Ordering::Relaxed);
+            log!(
+                Cutscenes,
+                "Chest Opening: the box's part has ended ({} message call(s) skipped, {} action(s) on Sora done at once / motion waits passed)",
+                SKIPPED.load(Ordering::Relaxed),
+                RELEASED.load(Ordering::Relaxed)
+            );
+        }
         return 2;
     }
     let write = base + ACTIONS_WRITE_STEAM;
@@ -383,14 +608,15 @@ unsafe extern "system" fn script_call(ctx: usize, n: i32) -> u64 {
     let r = orig(ctx, n);
     let after = rd::<i32>(write);
     if after != before {
-        to_done(base, before, after, rd::<u32>(sora + 4), n);
+        to_done(base, before, after, sora, n);
     }
     r
 }
 
-/// The actions queued from `from` to `to` (ring indices): those on Sora (`id`) go to KH1's done queue,
-/// the others are kept in order.
-unsafe fn to_done(base: usize, from: i32, to: i32, id: u32, n: i32) {
+/// The actions queued from `from` to `to` (ring indices): those on Sora (the actor KH1's own lookup finds
+/// for the record's id) go to KH1's done queue, the others are kept in order.
+unsafe fn to_done(base: usize, from: i32, to: i32, sora: usize, n: i32) {
+    let find: unsafe extern "system" fn(u32) -> usize = std::mem::transmute(base + FIND_ACTOR_STEAM);
     let ring = base + ACTIONS_STEAM;
     let slot = |i: i32| ring + (i as usize & 0xFF) * ACTION_SIZE;
     let mut kept: Vec<Action> = Vec::new();
@@ -399,7 +625,7 @@ unsafe fn to_done(base: usize, from: i32, to: i32, id: u32, n: i32) {
     let mut guard = 0;
     while i != to && guard < 256 {
         let a = std::ptr::read_unaligned(slot(i) as *const Action);
-        if u32::from_le_bytes([a.0[4], a.0[5], a.0[6], a.0[7]]) == id {
+        if find(u32::from_le_bytes([a.0[4], a.0[5], a.0[6], a.0[7]])) == sora {
             moved.push(a);
         } else {
             kept.push(a);

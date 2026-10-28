@@ -38,6 +38,10 @@
 - [32. Assistant: t717: Trinities now skip under the same row, In-game Scene S](#^m32)
 - [33. Assistant: Thanks for the correction on the reload. No version this rou](#^m33)
 - [34. Assistant: Thanks, this log has the exact spot. No version this round; ](#^m34)
+- [35. Assistant: t764, In-game Scene Skip now ends its skip where Sora gets c](#^m35)
+- [36. Assistant: t765 skips the low-poly lines that come after a high-poly sc](#^m36)
+- [37. Assistant: t766 fixes the Wonderland scene: the text-bubble part after ](#^m37)
+- [38. Assistant: t767 should make that Wonderland scene skip. In t766 the mod](#^m38)
 
 ---
 
@@ -600,6 +604,7 @@ go ahead
 
 ^m34
 
+
 (b) we're going to merge this with the work done on quick chests once its finished so it notifies you after the cutscene ends.
 
 also, updated the log and a trace, you get stuck to a black screen during Olympus coliseums tournament 
@@ -609,3 +614,91 @@ make any changes you need and don't come back until you think its finished
 
 
 go ahead
+
+> [!tip] Assistant
+> **t764**, In-game Scene Skip now ends its skip where Sora gets control back. This fixes the tournament black screen, and the lines the room plays after a scene (like Thunder from Phil) are skipped too.
+>
+> **A correction first.** Last round I said KH1 can't leave skip mode partway through a scene. That was wrong. KH1's high-poly scenes mark a skippable section with a start function and an end function, and the end function stops the skip right there. Checked (decomp + exe). The mod now ends its own skips the same way, using KH1's own end routine.
+>
+> **Black screen in the tournament.** Cause: each round is one event scene. It has a short lead-in, then KH1 hands Sora back, then the fight, and then it jumps straight to the next scene without returning to the room. The row skipped the lead-in, and KH1 only ends a skip at a section end or back in the room, so neither happened. The whole tournament ran in skip mode: faded out and fast-forwarded. Your log shows the game speed stuck at 4x from the first round on, and your trace has the fight running 4 steps a frame. Checked (log + trace + your game's tournament script). Fix: the moment KH1 hands Sora back, the mod ends the skip the way KH1's own section end does (the fade comes back, normal speed). In every scene the row skips, that hand-back is the scene's last step, except in the Coliseum's fights (the tournaments and the barrel game), where the fight follows it.
+>
+> **(b), the room's follow-up lines.** When a scene ends and the room's own script carries on in scene mode, the mod reads ahead from where it carries on, including any lines it calls on other characters, up to where scene mode ends. With no question, shop or menu on the way, it gets KH1's skip too, ended at that point. Phil's Thunder part qualifies: the spell, the "learned Thunder" lines and his two lines, no question. Thunder is still given, since the skip runs every step and only cuts the windows. Scenes started by talking still play, as you chose before. I left the notification for when the quick chests work is ready, as you said.
+>
+> **How I checked it**
+> - KH1's skip start, its two ends and the hand-back / scene-mode-off functions come from the Steam decomp. The table entries and first bytes the mod relies on are checked against the exe at start, and the row does nothing on a mismatch.
+> - I read the scripts of 110 room versions in 38 rooms from your install (all of Traverse Town and Olympus, some rooms in seven other worlds). Nothing was copied into the repo.
+> - The follow-up reader has a unit test. I couldn't run `cargo test` or a build in this session (the crate registry is blocked here), so please run `cargo test` before you push. I type-checked the changed file on its own.
+> - Not run in game. Assumption: a follow-up starts its skip one frame after KH1's fade in from the scene, so you may see a short flash between the two.
+>
+> **Please test:** (QoL > In-game Scene Skip on, Cutscenes log on)
+> 1. Enter a Coliseum tournament. Each round's lead-in should skip, and the fight should then show normally at normal speed. Play two or three rounds, and check the scenes between rounds still skip with Cutscene Skip on.
+> 2. Win the barrel game and talk to Phil after it. His scene and the Thunder lines should both skip, and Thunder should be in your magic. The log should say "the room script goes on in event mode after entry 1 ... skipped".
+> 3. Talk to Phil again afterwards. His question should still come up.
+> 4. Re-check one Traverse Town scene that already worked (the Dodge Roll one) and one Trinity, to make sure nothing changed there.
+> 5. If a skip leaves you on a black screen or fast-forwarded anywhere, send the log. The "event function 512 / 514 reached" lines show where each skip ended.
+>
+> **Still open on my side (no answer needed)**
+> - The "Obtained" notice after a skipped scene waits for the quick chests work.
+> - Rooms I didn't read are assumed to work the same way (most of Wonderland, Agrabah, Deep Jungle, Monstro, Halloween Town and Atlantica, and all of Hollow Bastion, Neverland, End of the World and the 100 Acre Wood).
+> - Trinities (t717) are still waiting for a test.
+>
+> Notes are in `docs/kh1-ingame-skip.md` (t764 section) and AGENTS.md Stage 764.
+
+^m35
+
+
+> [!tip] Assistant
+> **t765** skips the low-poly lines that come after a high-poly scene in the same cutscene (your report in chat: "there's also in game cutscenes in alice's world that aren't skipping").
+>
+> **What your log showed.** In Wonderland's room 4 (the cutscene when you went through from room 3, about 11 minutes into your session), the cutscene has a high-poly part and then a run of lines you confirm one by one. KH1 lets the pause menu skip only the high-poly part. Cutscene Skip did skip that part, but the lines after it played, because In-game Scene Skip had already handed the whole cutscene to the Cutscene Skip row. Checked (your log + the room's script in your game files).
+>
+> **The fix.** When KH1 ends a skippable part and the cutscene carries on in scene mode, the mod now reads the rest the same way it reads Phil's Thunder lines. With no question, shop or menu, it skips the rest with KH1's own skip. This works whether or not the high-poly part was skipped. Across the scripts I read there are 112 of these section ends: after 84 the rest will now skip, after 28 there's no clear end so it still plays, and none leads into a question.
+>
+> **Also in the log:** the "plays" lines in the room before it are just the door into the next room, not a scene, so nothing was missed there. The tournament rounds and the Thunder lines skipped as intended in your t764 log.
+>
+> **How I checked it:** the four section-end functions come from the Steam decomp and are checked in the exe at start. The new reading uses the same unit-tested reader as t764. I type-checked the file; `cargo test` couldn't run here. Not run in game. Assumption: you may see a short flash between the two skips.
+>
+> **Please test:**
+> 1. Replay that Wonderland cutscene with both skip rows on. The whole cutscene should skip, lines included.
+> 2. With Cutscene Skip off and In-game Scene Skip on, the high-poly part should play and the lines after it should skip.
+> 3. If any cutscene now ends on a black screen or fast-forwards into gameplay, send the log ("event function ... reached" lines).
+>
+> **Still open on my side (no answer needed):** the "Obtained" notice after a skip waits for the quick chests work.
+>
+> Notes are in `docs/kh1-ingame-skip.md` (t765 section) and AGENTS.md Stage 765.
+
+^m36
+
+
+> [!tip] Assistant
+> **t766** fixes the Wonderland scene: the text-bubble part after the skippable part should now skip.
+>
+> **Why t765 didn't do it.** Your log has the mod reaching that exact point, then giving up with "its code couldn't be read". My reader stopped after following 16 of the scene's lines-and-actions blocks, and this scene has 18. That was my limit, not the game. It's now 128; the biggest I found in your game's scripts is 40.
+>
+> **Your clarification, as I now build it.** Cutscene Skip owns every cutscene the pause menu can skip, whatever models it uses. In-game Scene Skip is only for the text-bubble scenes you confirm through, like Phil's Thunder, also whatever models they use. So with Cutscene Skip off, the pause-skippable part of that Wonderland scene plays, and only the text-bubble part after it is skipped. I also made sure the mod can never skip forward into a pause-skippable part. If one comes up ahead, that stretch plays. None of the scripts I read has that, but now it can't happen.
+>
+> **How I checked it:** your t765 log (frame 412) and the scene's script in your game files. I type-checked the changed file and ran the reader's unit test; `cargo test` on the whole crate couldn't run here. Not run in game.
+>
+> **Please test:**
+> 1. That Wonderland scene with both rows on: everything skips.
+> 2. With Cutscene Skip off: the pause-skippable part plays, then the text bubbles skip.
+> 3. If anything doesn't skip, the log line under "in-game skip" says why.
+>
+> Notes are in `docs/kh1-ingame-skip.md` (t766 section) and AGENTS.md Stage 766.
+
+^m37
+
+
+> [!tip] Assistant
+> **t767** should make that Wonderland scene skip. In t766 the mod made the right call but the skip never got going.
+>
+> **What your log showed.** The mod read the text-bubble part, found no question and asked KH1 to skip it. KH1 never started the skip. The two skip rows were stepping on each other: Cutscene Skip had just skipped the pause-skippable part. On its next check it saw the flag In-game Scene Skip had set and took it as its own leftover from the scene that just ended. So it cleared it, before KH1 could read it. Checked (your log + the code).
+>
+> **The fix.** Cutscene Skip now leaves that flag alone when In-game Scene Skip has set it. In-game Scene Skip also sets the flag again if it disappears before the skip starts, and logs it if that ever happens.
+>
+> **Please test:** the same Wonderland scene with both rows on, then with Cutscene Skip off. If it still plays, the log lines starting with "in-game skip" and "cutscene skip" show where it stopped.
+>
+> Not run in game; `cargo test` couldn't run here. Notes are in `docs/kh1-ingame-skip.md` (t767 section) and AGENTS.md Stage 767.
+
+^m38
+
