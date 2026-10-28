@@ -1569,6 +1569,8 @@ unsafe fn room_watch(actor: usize, kh2: bool) {
             pose::ptr(rd::<u32>(actor + 0x440)) != 0,
         );
         *seen = Some(RoomSeen { world, room, at_ms: now, frames: 0, kh2_frames: 0, reported: false });
+        // (t783) The load profiler's window opens for this room's first 10 s.
+        super::loadprof::room_entered();
     }
     let Some(s) = seen.as_mut() else { return };
     s.frames += 1;

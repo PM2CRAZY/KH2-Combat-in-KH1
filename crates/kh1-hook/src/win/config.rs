@@ -225,7 +225,8 @@ enum Row {
     SoftReset,
     /// QoL > In-game Scene Skip (Off | On, `ingameskip`).
     IngameSkip,
-    /// QoL > Chest Animation (KH1 | KH2, `chest::anim_kh2`), shown only with Chest Opening on Quick.
+    /// QoL > Chest Animation (KH1 | KH2, `chest::anim_kh2`), shown only with Chest Opening on Quick (back
+    /// since t783: KH2's chest motion found, the box's capture set, `pose::CHEST_MOTION`).
     ChestAnim,
     /// Command Menu > Drive Page (Page 1 | Page 2, `cmdmenu::drive_page2`).
     DrivePage,
@@ -330,7 +331,8 @@ impl List {
             }
             List::MagicAnim => &MAGIC_ANIM,
             List::Tweaks => &TWEAKS,
-            // (Chest Animation only with Chest Opening on Quick: the user, t770; it is the list's last row.)
+            // (Chest Animation only with Chest Opening on Quick: the user, t770; it is the list's last row.
+            // Commented out t771..t782 until KH2's chest motion was found, t783.)
             List::QoL => {
                 if super::chest::style() == super::chest::QUICK {
                     &QOL
@@ -389,6 +391,7 @@ const QOL: [Item; 6] = [
     Item::Pick([0x7F00_021D, 0x7F00_011D, 0x7F00_021E, 0x7F00_021F, 0x7F00_0220], Pick::CutsceneSkip),
     Item::Set([0x7F00_0221, 0x7F00_011D, 0x7F00_011E, 0x7F00_0222], Row::IngameSkip),
     Item::Pick([0x7F00_0225, 0x7F00_0231, 0x7F00_0232, 0x7F00_0233, 0x7F00_0226], Pick::Chest),
+    // (t783: the Chest Animation row, back: KH2's chest motion found.)
     Item::Set(kh(0x7F00_0234, 0x7F00_0235), Row::ChestAnim),
 ];
 // (Cosmetics: the user, t704: "a new menu called cosmetics and put a setting in there for keyblades to
@@ -543,7 +546,7 @@ const STRINGS: [(u32, &str); 131] = [
     (0x7F00_0193, "Enemy Weight"),
     (0x7F00_0194, "On: KH2's knock-back on enemies times KH1's weight for each\nenemy. Off: KH2's own numbers for every enemy."),
     (0x7F00_0225, "Chest Opening"),
-    (0x7F00_0226, "Vanilla: KH1's chest opening. Quick: Sora plays a chest animation,\nthen moves on. Skip: no animation, Sora moves at once. Quick and\nSkip: no item window, the item shows in the box at the top left."),
+    (0x7F00_0226, "Vanilla: KH1's chest opening. Quick: Sora plays the chest animation,\nthen moves on from idle. Skip: no animation, Sora moves at once. Quick and\nSkip: KH1's item window shows while Sora keeps moving."),
     (0x7F00_0231, "Vanilla"),
     (0x7F00_0232, "Quick"),
     (0x7F00_0233, "Skip"),

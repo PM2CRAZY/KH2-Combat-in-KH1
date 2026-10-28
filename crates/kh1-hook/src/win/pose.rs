@@ -231,6 +231,50 @@ pub const PORTED_TO_VALOR: [u8; 1] = [37];
 /// Copies Sora's combo rows `rows` (and their motions: the clip, the body's and the first
 /// Keyblade's animation) into a form's data, where the form has no row of that id (the same
 /// skeleton, `load_form` checks it).
+/// KH2 Sora's chest-opening motion as one of his motions (t783, the owner: Quick's Chest Animation row
+/// at KH2). It is in the treasure box's own motion set, not his: `obj/F_EX030.mset` entry 252, a capture
+/// set (BAR type 20) whose `0010` is his body and `0011` / `0012` his Keyblade, as KH2's reaction commands
+/// keep the motion an object puts the player in (Checked (files); `docs/kh1-chest.md` round 16). Added
+/// under `CHEST_MOTION` (1000 + the box's slot, the capture numbering `kh2-bevy`'s `rc` uses), so
+/// `kh2slots` makes it a KH1 slot like his own motions. Its files are noted for the slot cache.
+pub const CHEST_MOTION: u16 = 1000 + CHEST_BOX_SLOT as u16;
+const CHEST_BOX: &str = "F_EX030";
+const CHEST_BOX_SLOT: usize = 252;
+
+fn add_chest_motion(install: &kh2_data::Install, source: kh2_data::Source, sora: &mut kh2_data::sora::SoraData) {
+    let box_data = match install.load_enemy(source, CHEST_BOX, &sora.combat) {
+        Ok(b) => b,
+        Err(e) => {
+            log!(Animation, "KH2's chest motion: {CHEST_BOX} did not load ({e}); the Chest Animation row stays KH1's");
+            return;
+        }
+    };
+    let Some(c) = box_data.capture(CHEST_BOX_SLOT, "001", CHEST_MOTION, &sora.combat) else {
+        log!(Animation, "KH2's chest motion: {CHEST_BOX}'s slot {CHEST_BOX_SLOT} has no motion for Sora");
+        return;
+    };
+    for name in [format!("obj/{CHEST_BOX}.mset"), format!("obj/{CHEST_BOX}.mdlx")] {
+        if let (Ok(bytes), Ok(mut v)) = (install.read_any(source, &name), KH2_INPUTS.lock()) {
+            v.retain(|(n, _, _)| *n != name);
+            v.push((name.clone(), crate::slotcache::hash(&bytes), bytes.len()));
+        }
+    }
+    let length = c.clip.length;
+    sora.character.moveset.clips.insert(CHEST_MOTION, c.clip);
+    if let Some(rig) = sora.rig.as_mut() {
+        let rig = Arc::make_mut(rig);
+        if let Some(b) = c.body {
+            rig.motions.insert(CHEST_MOTION, b);
+        }
+        for (w, m) in rig.weapons.iter_mut().zip(c.weapons) {
+            if let Some(m) = m {
+                w.motions.insert(CHEST_MOTION, m);
+            }
+        }
+    }
+    log!(Animation, "KH2's chest motion: {CHEST_BOX} slot {CHEST_BOX_SLOT} (Sora's body and Keyblade) added as motion {CHEST_MOTION}, {length} frames");
+}
+
 fn port_moves(f: &mut Form, sora: &character_core::Character, sora_rig: &Rig, rows: &[u8]) {
     let mut rig = (*f.rig).clone();
     for &id in rows {
@@ -628,7 +672,7 @@ pub fn load_kh2() {
             let source = if install.has_backup() { kh2_data::Source::Backup } else { kh2_data::Source::Live };
             // (Every file read for him noted with its hash: the motion slot cache's manifest,
             // `slot_cache_manifest`.)
-            let sora = install
+            let mut sora = install
                 .load_sora_noting(source, &|name, bytes| {
                     if let Ok(mut v) = KH2_INPUTS.lock() {
                         v.retain(|(n, _, _)| n != name);
@@ -639,6 +683,7 @@ pub fn load_kh2() {
             if let Ok(mut v) = KH2_INPUTS.lock() {
                 v.push((format!("(KH2 files: {source:?})"), 0, 0));
             }
+            add_chest_motion(&install, source, &mut sora);
             let rig = sora.rig.clone().ok_or_else(|| sora.rig_error.clone().unwrap_or_else(|| "no rig".into()))?;
             let roots = sora.character.moveset.clips.iter().map(|(m, c)| (*m, c.root.clone())).collect();
             let mut ground = HashMap::new();
@@ -1112,7 +1157,9 @@ fn wanted(s: &mut Sora, slot: Option<usize>, to_world: &Mat4) -> Option<Vec<Mat4
         (true, 1) => Drawn { route: "kh2_controller", ..Default::default() },
         (true, 2) => DRAW_DETAIL.try_lock().ok().and_then(|d| d.clone()).map(|d| Drawn { route: "follow", ..d }).unwrap_or(Drawn { route: "follow", ..Default::default() }),
         (false, 3) => DRAW_DETAIL.try_lock().ok().and_then(|d| d.clone()).map(|d| Drawn { route: "baked", ..d }).unwrap_or(Drawn { route: "baked", ..Default::default() }),
-        _ => Drawn { route: "kh1_own", ..Default::default() },
+        // (t774: KH1's own animation counts KH1's motion time; before, nothing filled it and the
+        // panel's frame stayed 0.)
+        _ => Drawn { route: "kh1_own", frames: unsafe { super::kh2slots::kh1_time_now(super::takeover::sora_actor()) }.unwrap_or(0.0), ..Default::default() },
     };
     d.slot = slot;
     d.at = Some(Instant::now());

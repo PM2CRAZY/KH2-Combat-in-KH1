@@ -53,8 +53,10 @@
 //!   (it takes the player with 511, gives with 258 or 583, gives him back with 512, and has no scene,
 //!   choice, shop or menu) gets the same treatment as a chest for its script's contexts until its 512,
 //!   and its give shows the notice. Anything else stays KH1's.
-//! - What was found is shown in KH1's own non-blocking notice box (the level-up box, `menu::queue_notice`,
-//!   as the mod's "New Ability" boxes): "Obtained" and the item's name or the munny.
+//! - (t724..t775) What was found was shown in KH1's level-up notice box (`menu::queue_notice`) with the
+//!   script's windows skipped. (t776, the owner: "exactly like" the evidence boxes' box) The script's own
+//!   message windows run as KH1 wrote them (window 7, its lines, its own close), with Sora free; on Quick
+//!   a window's open waits until 100 frames into the open (vanilla's frame, t775).
 //!
 //! Anything else (an event chest, a full stock, a reward record that is not an item, kind 1, any other
 //! script using those contexts) is KH1's as before. KH1: nothing of this is installed until the row is
@@ -77,6 +79,27 @@ pub const SKIP: u8 = 2;
 static ANIM_KH2: AtomicBool = AtomicBool::new(false);
 /// Quick: Sora's lock is the mod's until his open motion is over (the actor it was set on, 0: none).
 static QUICK_LOCK: AtomicUsize = AtomicUsize::new(0);
+/// Sora's "can't act" bit (`+0x444` bit 0: KH1's action 0xE sets it, 0xD clears it; event functions 55 / 54).
+const CANT_ACT_BIT: u32 = 1;
+/// Quick (t773): Sora's actor flags (`+0`) just before the open, and his applied motion request then
+/// (`+0x164`, low 16 bits).
+static QUICK_FLAGS: AtomicU32 = AtomicU32::new(0);
+static QUICK_FROM: AtomicU32 = AtomicU32::new(0);
+/// Quick: his open motion has started (the applied request left the one he had at the open).
+static QUICK_PLAYED: AtomicBool = AtomicBool::new(false);
+/// Quick: he is back on idle after it and has been let go; from then on the open goes the Skip way.
+static QUICK_FREE: AtomicBool = AtomicBool::new(false);
+/// The applied motion request (`+0x164`; the trace's kh1_motion: 0xA6 the open, 0 idle, slot 0).
+const ACTOR_APPLIED: usize = 0x164;
+/// Quick: the "Obtained" notice shows this many 60 Hz frames after the Open (the owner: vanilla's window
+/// comes 100 frames in, the open motion and 20 frames of idle).
+const QUICK_NOTICE_FRAMES: u64 = 100;
+/// Quick: the 60 Hz frame (`takeover::TICKS`) the open's window may open from (0: no wait).
+static WINDOW_DUE: AtomicU64 = AtomicU64::new(0);
+/// The actor-flag bits the open and the treasure script hold him with (the tester's t772 trace: 0x80 and
+/// 0x100000 on the open's frame, 0x1000000 / 0x200000 / 0x40 the frame after; all gone together when the
+/// script lets him go, flags back to what they were before the open).
+const HOLD_FLAGS: u32 = 0x0100_0000 | 0x0020_0000 | 0x0010_0000 | 0x80 | 0x40;
 static INSTALLED: AtomicBool = AtomicBool::new(false);
 static ORIG_OPEN: AtomicUsize = AtomicUsize::new(0);
 /// KH1's message functions as the table held them (called for anything not ours).
@@ -120,6 +143,43 @@ const ARG_FULL_STEAM: usize = 0x2DB7B38;
 /// Checked (exe)). t768: that call goes to `open_request`, which on a fast open asks for nothing.
 const REQUEST_STEAM: usize = 0x29F980;
 const OPEN_REQUEST_CALL_STEAM: usize = 0x2B59CC;
+/// The Open handler's stop (`0x1402B59D7`: `0x140297F30 (sora, 0.0)` clears flag 0x100000, sets 0x80 and
+/// zeroes his speed `+0xC`), Checked (exe).
+const OPEN_STOP_CALL_STEAM: usize = 0x2B59D7;
+const STOP_STEAM: usize = 0x297F30;
+/// The chest's tick's first-frame call (`0x1402B5879`: `0x1402AE160 (chest, 0)`, run once, when its touch
+/// callback is registered), Checked (exe).
+const CHEST_FIRST_CALL_STEAM: usize = 0x2B5879;
+const CHEST_FIRST_STEAM: usize = 0x2AE160;
+/// The chest's object record (handle at actor `+0x130`): `+0x44` its offer radius, `+0x5E` the shape of
+/// the range test `0x140293FC0` (0 cylinder, 1 flat + height with no facing, 2 point, 3 flat; 0, 2 and 3
+/// also need Sora to face it: cos > 0), `+0x5F` its kind (3: its own handler decides, the chest's touch
+/// callback). Checked (exe).
+const REC_RADIUS: usize = 0x44;
+const REC_SHAPE: usize = 0x5E;
+const REC_KIND: usize = 0x5F;
+/// KH2's reach for the box's Open (t779): the box's reaction area (`F_EX030.mdlx`, its type-5 shape: a
+/// sphere of radius 150, 150 above its base) touching Sora's body (radius 35): 185 across; its facing rules
+/// are applied by `chest_touch` (t780). Checked (files + decomp: `0x140407DE0` walks the box's type-5 shapes).
+const KH2_REACH: f32 = 185.0;
+const SHAPE_FLAT_HEIGHT: u8 = 1;
+/// The chest's touch callback (`0x1402B5A30 (chest, sora, code)`: code -1 = "offer?", it offers Open 0x37
+/// in state 0 with the height difference in (-50, 20)), `mov [rsp+8], rbx; push rdi; sub rsp, 0x20`.
+const TOUCH_STEAM: usize = 0x2B5A30;
+const TOUCH_PROLOGUE: [u8; 10] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x57, 0x48, 0x83, 0xEC, 0x20];
+static ORIG_TOUCH: AtomicUsize = AtomicUsize::new(0);
+/// KH2's box Open (03system `cmd` 0x20, the box's reaction shape's argument; Checked (files)) is usable only
+/// when (`0x1404088F0`, Checked (decomp)) Sora's facing · (box - Sora) >= its `+0x10` (-0.7071: the box at
+/// most 135 degrees off his facing) and (box - Sora) · (the box's facing turned by `+0x14` + pi) >= its
+/// `+0x18` (6.1e-17, i.e. 0: Sora on the box's front side); otherwise it is greyed.
+/// KH1's command box: the command per slot (`0x140528914`, slot 3 the Triangle box), greyed and blocked bits
+/// (`0x140528904`, `0x140528908`); the chest's Open is command 0x37. Checked (exe).
+const MENU_SLOTS_STEAM: usize = 0x528914;
+const GREYED_STEAM: usize = 0x528904;
+const BLOCKED_STEAM: usize = 0x528908;
+const OPEN_COMMAND: u8 = 0x37;
+const KH2_OPEN_FACING: f32 = -0.707_106_77;
+const KH2_OPEN_FRONT: f32 = 6.123_031_8e-17;
 const OPEN_REQUEST: u32 = 0x900A6;
 const ACTOR_REQUEST: usize = 0x17C;
 /// Sora's lock: actor `+0x444` bit 1 (the handler sets it; KH1's control step is skipped while it is).
@@ -249,6 +309,12 @@ pub fn anim_kh2() -> bool {
     ANIM_KH2.load(Ordering::Relaxed)
 }
 
+/// Sora opens a chest on KH2's chest motion (t783): Chest Opening on Quick and its Chest Animation row at
+/// KH2. `kh2slots` points KH1's open request (0xA6) at its slot then (`kh2slots::CHEST_REQUEST`).
+pub fn kh2_animation() -> bool {
+    style() == QUICK && anim_kh2()
+}
+
 fn style_name(v: u8) -> &'static str {
     match v {
         VANILLA => "Vanilla",
@@ -274,6 +340,8 @@ pub fn set_style(v: u8) {
     if v != VANILLA {
         unsafe { hook_in() };
     }
+    // (KH1's open request onto KH2's chest motion or back, at once: `kh2_animation`.)
+    unsafe { super::kh2slots::refresh() };
     FAST_AT.store(0, Ordering::Relaxed);
     super::settings::save("chest_style", match v {
         VANILLA => "vanilla",
@@ -286,19 +354,76 @@ pub fn set_style(v: u8) {
 /// The Config menu's Chest Animation row (shown on Quick), kept in the ini.
 pub fn set_anim_kh2(v: bool) {
     ANIM_KH2.store(v, Ordering::Relaxed);
+    unsafe { super::kh2slots::refresh() };
     super::settings::save("chest_anim", if v { "kh2" } else { "kh1" });
     log!(Menus, "Config menu: Chest Animation {}", if v { "KH2" } else { "KH1" });
 }
 
-/// Quick: KH1's lock on Sora (`+0x444` bit 1) is let go once his open motion is over (t770).
+/// Quick: the open starts on `sora` (his flags and applied request read before KH1's open changed them).
+fn quick_start(sora: usize, flags: u32, from: u32) {
+    QUICK_LOCK.store(sora, Ordering::Relaxed);
+    QUICK_FLAGS.store(flags, Ordering::Relaxed);
+    QUICK_FROM.store(from & 0xFFFF, Ordering::Relaxed);
+    QUICK_PLAYED.store(false, Ordering::Relaxed);
+    QUICK_FREE.store(false, Ordering::Relaxed);
+}
+
+/// Quick, still holding: the open's actions on Sora and the waits on his motion are KH1's.
+fn quick_holding() -> bool {
+    style() == QUICK && !QUICK_FREE.load(Ordering::Relaxed)
+}
+
+/// Quick (t773): KH1's open motion plays, then the treasure script asks for his idle (slot 0) but keeps him
+/// held for about 50 frames more (the tester's t772 trace: idle from f2108, flags back only at f2159). As
+/// soon as the applied request is idle after the open motion, he is let go: `+0x444` bits 0 / 1 off and
+/// the hold flags back to what they were before the open; the rest of the open goes the Skip way.
+unsafe fn quick_check() {
+    let sora = QUICK_LOCK.load(Ordering::Relaxed);
+    if sora < 0x10000 || style() != QUICK || QUICK_FREE.load(Ordering::Relaxed) {
+        return;
+    }
+    let now = rd::<u32>(sora + ACTOR_APPLIED) & 0xFFFF;
+    if !QUICK_PLAYED.load(Ordering::Relaxed) {
+        if now != 0 && now != QUICK_FROM.load(Ordering::Relaxed) {
+            QUICK_PLAYED.store(true, Ordering::Relaxed);
+        }
+        return;
+    }
+    if now == 0 {
+        QUICK_FREE.store(true, Ordering::Relaxed);
+        let lock = rd::<u32>(sora + ACTOR_LOCK);
+        let flags = rd::<u32>(sora);
+        let free = (flags & !HOLD_FLAGS) | (QUICK_FLAGS.load(Ordering::Relaxed) & HOLD_FLAGS);
+        std::ptr::write_unaligned((sora + ACTOR_LOCK) as *mut u32, lock & !(LOCK_BIT | CANT_ACT_BIT));
+        std::ptr::write_unaligned(sora as *mut u32, free);
+        log!(
+            Cutscenes,
+            "Chest Opening: Quick: Sora is back on idle: let go (+0x444 {lock:#x} -> {:#x}, flags {flags:#010x} -> {free:#010x}, +0x88 {:#x}); the rest of the open goes the Skip way",
+            lock & !(LOCK_BIT | CANT_ACT_BIT),
+            rd::<u32>(sora + 0x88)
+        );
+    }
+}
+
+/// Quick: the backstop at the open's end: a lock (`+0x444` bits 0 / 1) or hold flags still on then are
+/// cleared, so he is never left stuck.
 unsafe fn quick_release(why: &str) {
     let sora = QUICK_LOCK.swap(0, Ordering::Relaxed);
-    if sora < 0x10000 {
+    if sora < 0x10000 || QUICK_FREE.swap(true, Ordering::Relaxed) {
         return;
     }
     let lock = sora + ACTOR_LOCK;
-    std::ptr::write_unaligned(lock as *mut u32, rd::<u32>(lock) & !LOCK_BIT);
-    log!(Cutscenes, "Chest Opening: Quick: Sora free ({why})");
+    let was = rd::<u32>(lock);
+    if was & (LOCK_BIT | CANT_ACT_BIT) != 0 {
+        std::ptr::write_unaligned(lock as *mut u32, was & !(LOCK_BIT | CANT_ACT_BIT));
+        log!(Cutscenes, "Chest Opening: Quick: Sora's lock was still on at {why} (+0x444 {was:#x}): cleared");
+    }
+    let flags = rd::<u32>(sora);
+    let free = (flags & !HOLD_FLAGS) | (QUICK_FLAGS.load(Ordering::Relaxed) & HOLD_FLAGS);
+    if free != flags {
+        std::ptr::write_unaligned(sora as *mut u32, free);
+        log!(Cutscenes, "Chest Opening: Quick: Sora's hold flags were still on at {why} ({flags:#010x}): put back ({free:#010x})");
+    }
 }
 
 /// The Open handler hook and the four table entries (Steam only, once).
@@ -341,6 +466,15 @@ unsafe fn hook_in() {
     } else {
         log!(Cutscenes, "Chest Opening: the Open handler's motion request call isn't as expected: Sora plays KH1's open motion");
     }
+    if hook::install(base + TOUCH_STEAM, &TOUCH_PROLOGUE, chest_touch as *const () as usize, &ORIG_TOUCH, "chest's touch callback (chest)").is_none() {
+        log!(Cutscenes, "Chest Opening: the chest's touch callback isn't as expected: no KH2 facing rule");
+    }
+    if !hook::redirect_call(base + CHEST_FIRST_CALL_STEAM, base + CHEST_FIRST_STEAM, chest_first as *const () as usize, "chest's first frame (chest)") {
+        log!(Cutscenes, "Chest Opening: the chest's first-frame call isn't as expected: chests keep KH1's reach");
+    }
+    if !hook::redirect_call(base + OPEN_STOP_CALL_STEAM, base + STOP_STEAM, open_stop as *const () as usize, "Open's stop (chest)") {
+        log!(Cutscenes, "Chest Opening: the Open handler's stop call isn't as expected: Skip stops Sora for the open");
+    }
     if hook::install(base + OPEN_STEAM, &OPEN_PROLOGUE, open as *const () as usize, &ORIG_OPEN, "KH1's Open command (chest)").is_none() {
         log!(Menus, "Chest Opening: KH1's Open handler not hooked: chests stay KH1's");
     }
@@ -353,6 +487,7 @@ unsafe fn hook_in() {
 /// KH1's Open handler, then KH2's fast open for a plain chest.
 unsafe extern "system" fn open(sora: usize, chest: usize) {
     let orig: unsafe extern "system" fn(usize, usize) = std::mem::transmute(ORIG_OPEN.load(Ordering::Acquire));
+    let (flags_before, applied_before) = if sora >= 0x10000 { (rd::<u32>(sora), rd::<u32>(sora + ACTOR_APPLIED)) } else { (0, 0) };
     orig(sora, chest);
     if !kh2() || sora == 0 {
         FAST_AT.store(0, Ordering::Relaxed);
@@ -374,9 +509,9 @@ unsafe extern "system" fn open(sora: usize, chest: usize) {
     }
     let lock = sora + ACTOR_LOCK;
     if style() == QUICK {
-        // Quick (t770): KH1's lock stays on while the open motion `open_request` asked for plays; it is
-        // let go when the treasure script's wait on Sora's motion (event function 103) sees it end.
-        QUICK_LOCK.store(sora, Ordering::Relaxed);
+        // Quick: KH1's lock stays on through the open motion; the script asks for his idle, and he is let
+        // go there (`quick_check`, t773), not when the script lets him go.
+        quick_start(sora, flags_before, applied_before);
     } else {
         std::ptr::write_unaligned(lock as *mut u32, rd::<u32>(lock) & !LOCK_BIT);
     }
@@ -409,8 +544,12 @@ unsafe extern "system" fn open(sora: usize, chest: usize) {
             None => format!("Item {what:#x}"),
         }
     };
-    super::menu::queue_notice("Obtained", &line);
-    log!(Cutscenes, "Chest Opening: {} open (kind {kind}, contents {what:#x}): notice \"Obtained / {line}\", the treasure script's windows skipped", style_name(style()));
+    // (t776, the owner: the box KH1 itself shows, as the evidence boxes' (KH1's message window 7, opened by
+    // the treasure script with its own lines); not the mod's notice. Quick: not before vanilla's frame, 100
+    // frames into the open (t775, the owner), counted in 60 Hz frames from the Open.)
+    let due = if style() == QUICK { super::takeover::TICKS.load(Ordering::Relaxed) + QUICK_NOTICE_FRAMES } else { 0 };
+    WINDOW_DUE.store(due, Ordering::Relaxed);
+    log!(Cutscenes, "Chest Opening: {} open (kind {kind}, contents {what:#x}, \"{line}\"): KH1's own window from the treasure script{}", style_name(style()), if due != 0 { ", not before 100 frames in" } else { "" });
 }
 
 /// The Open handler's request for Sora's open motion (`0x1402B59CC`'s call of `0x14029F980`, t768). On a
@@ -425,12 +564,107 @@ unsafe extern "system" fn open_request(actor: usize, request: u32, blend: f32) -
         return actor + ACTOR_REQUEST;
     }
     if style() == QUICK && request == OPEN_REQUEST && fast_kind(base) {
-        // (KH2's animation isn't chosen yet: KH2's Sora has no chest motion of his own, `docs/kh1-chest.md`;
-        // until it is, Quick plays KH1's.)
-        log!(Cutscenes, "Chest Opening: Quick: KH1's open motion{}", if anim_kh2() { " (KH2's animation not chosen yet: KH1's plays)" } else { "" });
+        // (t783: on the Chest Animation row at KH2, KH1's open request plays KH2's chest motion, its slot of
+        // ours (`kh2slots::CHEST_REQUEST`); else KH1's own.)
+        let ours = super::kh2slots::has(super::kh2slots::CHEST_REQUEST, super::pose::CHEST_MOTION);
+        log!(
+            Cutscenes,
+            "Chest Opening: Quick: {}",
+            match (anim_kh2(), ours) {
+                (true, true) => "KH2's chest motion (on KH1's open request)",
+                (true, false) => "KH1's open motion (KH2's chest motion isn't built: KH1 motion slots off, or the box's files missing)",
+                _ => "KH1's open motion",
+            }
+        );
     }
     let f: unsafe extern "system" fn(usize, u32, f32) -> usize = std::mem::transmute(base + REQUEST_STEAM);
     f(actor, request, blend)
+}
+
+/// The Open handler's stop (t778, the owner: open a chest from the run on Quick and Skip, like KH2). KH1
+/// already takes the Open while Sora runs (the command runs in his states 0, 6 and 0x18, his run being state 0,
+/// `0x1402A3768`, and the chest offers it in state 0, `0x1402B5A30`, Checked (exe + traces: running is state 0,
+/// motion 2, slot 6)); what ends the run is this stop, his speed set to 0. On Skip, a fast open keeps his
+/// speed and flags: he runs on. Quick plays the open motion, so it stops him as KH1 does.
+unsafe extern "system" fn open_stop(actor: usize, speed: f32) {
+    if style() == SKIP && fast_kind(base()) {
+        log!(Cutscenes, "Chest Opening: Skip: Sora keeps his speed through the open");
+        return;
+    }
+    let f: unsafe extern "system" fn(usize, f32) = std::mem::transmute(base() + STOP_STEAM);
+    f(actor, speed)
+}
+
+/// A chest's first frame (t779, the owner: "in kh2 you can run by the chest and spam triangle and it'll
+/// open"). KH1 offers Open from its per-frame scan (`0x1402948F0`) only when the chest is in range by its
+/// record and in front of Sora (cos > 0), or when he walks into it (his touched actor `+0x98`); a chest he
+/// runs past is beside or behind him. KH2 offers its Open whenever the box's reaction area touches him,
+/// with no facing check. On Quick / Skip the chest's record is given KH2's reach: the flat-and-height shape
+/// (no facing) and radius 185. Read by KH1's own scan; nothing of ours runs per frame. (A chest set up
+/// while Vanilla keeps KH1's record; one set up on Quick / Skip keeps KH2's until the room reloads.)
+unsafe extern "system" fn chest_first(actor: usize, b: u32) -> usize {
+    if kh2() && actor >= 0x10000 {
+        let rec = super::pose::ptr(rd::<u32>(actor + 0x130));
+        if rec >= 0x10000 && rd::<u8>(rec + REC_KIND) == 3 {
+            let (r, sh) = (rd::<f32>(rec + REC_RADIUS), rd::<u8>(rec + REC_SHAPE));
+            std::ptr::write_unaligned((rec + REC_RADIUS) as *mut f32, r.max(KH2_REACH));
+            std::ptr::write_unaligned((rec + REC_SHAPE) as *mut u8, SHAPE_FLAT_HEIGHT);
+            log!(Cutscenes, "Chest Opening: chest {actor:#x}: KH2's reach (offer radius {r:.0} -> {:.0}, shape {sh} -> 1: no facing)", r.max(KH2_REACH));
+        } else if rec >= 0x10000 {
+            log!(Cutscenes, "Chest Opening: chest {actor:#x}: its record's kind is {} (not 3): KH1's reach kept", rd::<u8>(rec + REC_KIND));
+        }
+    }
+    let f: unsafe extern "system" fn(usize, u32) -> usize = std::mem::transmute(base() + CHEST_FIRST_STEAM);
+    f(actor, b)
+}
+
+/// The chest's touch callback (t780): on Quick / Skip, KH2's two facing rules for the box's Open before
+/// KH1's own offer (its state and height checks stay): the chest no more than 135 degrees off Sora's facing,
+/// and Sora on the chest's front side. Facings are the actors' direction vectors (`+0x30`, t782); Assumption:
+/// a chest's front is that direction. Called by KH1 only when its scan asks this chest.
+unsafe extern "system" fn chest_touch(chest: usize, sora: usize, code: i32) -> u64 {
+    let orig: unsafe extern "system" fn(usize, usize, i32) -> u64 = std::mem::transmute(ORIG_TOUCH.load(Ordering::Acquire));
+    if code != -1 || !kh2() || chest < 0x10000 || sora < 0x10000 {
+        return orig(chest, sora, code);
+    }
+    let base = base();
+    let (c, p) = (rd::<[f32; 3]>(chest + 0x10), rd::<[f32; 3]>(sora + 0x10));
+    let (dx, dz) = (c[0] - p[0], c[2] - p[2]);
+    let len = (dx * dx + dz * dz).sqrt().max(1e-3);
+    let (dx, dz) = (dx / len, dz / len);
+    // (t782: an actor's facing as KH1's own range test reads it, the direction at `+0x30` (`0x140293FC0`
+    // dots Sora's with the way to the actor, Checked (exe)); t780 read the yaw `+0x3C`, which is 0 for every
+    // chest (the owner's t781 log), so the front rule was the same for all three throne room chests.)
+    let flat = |v: [f32; 3]| {
+        let l = (v[0] * v[0] + v[2] * v[2]).sqrt();
+        (l > 0.1).then(|| (v[0] / l, v[2] / l))
+    };
+    let (sf, cf) = (flat(rd::<[f32; 3]>(sora + 0x30)), flat(rd::<[f32; 3]>(chest + 0x30)));
+    let facing = sf.map_or(1.0, |(x, z)| dx * x + dz * z);
+    let front = cf.map_or(1.0, |(x, z)| -(dx * x + dz * z));
+    let (sy, cy) = (rd::<f32>(sora + 0x3C), rd::<f32>(chest + 0x3C));
+    let grey = len > 1.0 && (facing < KH2_OPEN_FACING || front < KH2_OPEN_FRONT);
+    let r = orig(chest, sora, code);
+    let offered = rd::<u8>(base + MENU_SLOTS_STEAM + 3) == OPEN_COMMAND;
+    if grey && offered {
+        // Greyed, as KH2's (shown, not usable): KH1's own offer, then its slot 3 greyed and blocked
+        // (bit 3 of `0x140528904` / `0x140528908`, as KH1's scan greys a Talk, Checked (exe)).
+        for at in [GREYED_STEAM, BLOCKED_STEAM] {
+            std::ptr::write_unaligned((base + at) as *mut u32, rd::<u32>(base + at) | 8);
+        }
+    }
+    // (t781, diagnosis: the owner saw no prompt at all; at most one line a second.)
+    static LAST: AtomicU64 = AtomicU64::new(0);
+    let now = ms();
+    if now.saturating_sub(LAST.load(Ordering::Relaxed)) >= 1000 {
+        LAST.store(now, Ordering::Relaxed);
+        log!(
+            Cutscenes,
+            "Chest Opening: asked chest {chest:#x} at ({:.0},{:.0},{:.0}) yaw {cy:.2} facing dir {:?}: Sora at ({:.0},{:.0},{:.0}) yaw {sy:.2} facing dir {:?}, {len:.0} away, facing {facing:.2}, front {front:.2}, state {}; KH1 offered Open: {offered}{}",
+            c[0], c[1], c[2], cf, p[0], p[1], p[2], sf, rd::<i32>(sora + 0x70), if grey && offered { " (greyed: KH2's facing rule)" } else { "" }
+        );
+    }
+    r
 }
 
 /// The open in progress goes the KH2 way: kinds 0..3 (an item, a gummi block, Dalmatians, munny) with
@@ -488,18 +722,14 @@ unsafe extern "system" fn pick(object: usize, b: usize, command: i32) -> u32 {
             }
             SORA.store(sora, Ordering::Relaxed);
             if style() == QUICK {
-                // Quick (t770): KH1's open motion and KH1's lock, as KH1's Open handler does for a chest
-                // (`0x14029F980 (sora, 0x900A6, 0)`, `+0x444` bit 1); let go when the box's wait on his
-                // motion sees it end, or at its 512.
-                let req: unsafe extern "system" fn(usize, u32, f32) -> usize = std::mem::transmute(base + REQUEST_STEAM);
-                req(sora, OPEN_REQUEST, 0.0);
-                let lock = sora + ACTOR_LOCK;
-                std::ptr::write_unaligned(lock as *mut u32, rd::<u32>(lock) | LOCK_BIT);
-                QUICK_LOCK.store(sora, Ordering::Relaxed);
+                // Quick: the box's own part holds him and plays his motion (its actions on him are KH1's);
+                // he is let go on idle after it (t773), the backstop at its 512.
+                quick_start(sora, rd::<u32>(sora), rd::<u32>(sora + ACTOR_APPLIED));
             }
             BOX_CTXS.store(list, Ordering::Relaxed);
             BOX_COUNT.store(count_at, Ordering::Relaxed);
             MODE.store(MODE_BOX, Ordering::Relaxed);
+            WINDOW_DUE.store(0, Ordering::Relaxed);
             FAST_AT.store(ms() + 1, Ordering::Relaxed);
             SKIPPED.store(0, Ordering::Relaxed);
             RELEASED.store(0, Ordering::Relaxed);
@@ -541,8 +771,7 @@ unsafe fn box_notice(base: usize, ctx: usize, n: u32) {
         }
         _ => "Reward".to_string(),
     };
-    super::menu::queue_notice("Obtained", &line);
-    log!(Cutscenes, "Chest Opening: the box gives (event function {n}): notice \"Obtained / {line}\"");
+    log!(Cutscenes, "Chest Opening: the box gives (event function {n}): \"{line}\" (KH1's own window from the box's script)");
 }
 
 /// The item name without the codes `item_name` writes as `{xx}`.
@@ -644,25 +873,31 @@ unsafe extern "system" fn script_call(ctx: usize, n: i32) -> u64 {
                 RELEASED.load(Ordering::Relaxed)
             );
         }
+        puppy_restore(base);
         call_handler_out(base);
         return orig(ctx, n);
     }
+    quick_check();
     let sora = SORA.load(Ordering::Relaxed);
     if sora == 0 || !open_ctx(base, ctx) {
         return orig(ctx, n);
     }
     let boxed = MODE.load(Ordering::Relaxed) == MODE_BOX;
+    if !boxed && n == FN_PLACE_TEXT {
+        puppy_text(base, ctx);
+    }
+    if !boxed && n == FN_CLOSE_WINDOW {
+        let r = orig(ctx, n);
+        puppy_restore(base);
+        return r;
+    }
     if boxed && (n as u32 == FN_ADD_ITEM || n as u32 == FN_GIVE_REWARD) {
         box_notice(base, ctx, n as u32);
     }
     if n as usize == FN_WAIT_MOTION && rd::<u64>(ctx + CTX_ACTOR) as usize == sora {
-        // Quick: KH1's own wait, so the script goes on with the motion's end, and Sora with it (t770).
-        if QUICK_LOCK.load(Ordering::Relaxed) == sora {
-            let r = orig(ctx, n);
-            if r & 2 != 0 {
-                quick_release("his open motion is over");
-            }
-            return r;
+        // Quick, until he is let go: KH1's own wait, so the script goes on with the motion's end (t770).
+        if quick_holding() {
+            return orig(ctx, n);
         }
         note_release(&format!("its wait on Sora's motion (function 103, context {ctx:#x}) goes on"));
         return 2;
@@ -689,7 +924,10 @@ unsafe extern "system" fn script_call(ctx: usize, n: i32) -> u64 {
     let before = rd::<i32>(write);
     let r = orig(ctx, n);
     let after = rd::<i32>(write);
-    if after != before {
+    // (Quick, until he is let go on idle (t773): the script's actions on Sora are KH1's: its lock, his open
+    // motion, its idle request after the motion (event function 58: action 0x11, request 0). After that its
+    // late unlocks (56, 54, 335, 337) and anything else on him are done at once, as on Skip.)
+    if after != before && !quick_holding() {
         to_done(base, before, after, sora, n);
     }
     r
@@ -747,19 +985,20 @@ fn note_release(what: &str) {
     }
 }
 
-/// KH1's skip-mode branch of a message function: its arguments popped, nothing opened.
-unsafe fn skip(ctx: usize, which: usize) -> u64 {
-    let sp = ctx + CTX_SP;
-    std::ptr::write_unaligned(sp as *mut i32, rd::<i32>(sp) - MESSAGE_FNS[which].2);
-    if SKIPPED.fetch_add(1, Ordering::Relaxed) < 8 {
-        log!(Cutscenes, "Chest Opening: treasure script's message function {} skipped", MESSAGE_FNS[which].0);
-    }
-    2
-}
-
+/// (t776) The open's message windows are KH1's own (window 7, as the evidence boxes show it); on Quick a
+/// window's open (functions 0 / 177) waits, with KH1's own "wait" return (4: the instruction runs again
+/// next frame, as 107 does, Checked (exe)), until vanilla's frame (`WINDOW_DUE`).
 unsafe fn call(ctx: usize, which: usize) -> u64 {
-    if ours_to_skip(ctx) {
-        return skip(ctx, which);
+    if matches!(which, 0 | 2) && ours_to_skip(ctx) {
+        let due = WINDOW_DUE.load(Ordering::Relaxed);
+        if due != 0 {
+            if super::takeover::TICKS.load(Ordering::Relaxed) < due {
+                return 4;
+            }
+            WINDOW_DUE.store(0, Ordering::Relaxed);
+            SKIPPED.fetch_add(1, Ordering::Relaxed);
+            log!(Cutscenes, "Chest Opening: Quick: KH1's window (message function {}) opens 100 frames into the open", MESSAGE_FNS[which].0);
+        }
     }
     let f: unsafe extern "system" fn(usize) -> u64 = std::mem::transmute(ORIG_FN[which].load(Ordering::Acquire));
     f(ctx)
@@ -776,6 +1015,89 @@ unsafe extern "system" fn msg177(ctx: usize) -> u64 {
 }
 unsafe extern "system" fn msg605(ctx: usize) -> u64 {
     call(ctx, 3)
+}
+
+// ---- The Dalmatians' window (t777) ----
+
+/// KH1's message pointers by text id for the script in use (`0x14237C4E0`, 8 bytes each: KH1's script
+/// loader fills it from the file's text list, `0x1401A3DA6`, Checked (exe)).
+const TEXTS_STEAM: usize = 0x237C4E0;
+/// The treasure script's Dalmatians text (`UK_treasure.ev` text 4: "Found dalmatians." and "Puppy no. A,
+/// no. B, and no. C returned home!", two lines, centred: 365 places it at (-230, 0)), Checked (files).
+const PUPPY_TEXT: i32 = 4;
+/// Event function 365 (`0x1401B7C80`): window, text, x, y (it measures the text and places the window),
+/// and 2 (`0x1401B8100`): closes a window. Checked (exe).
+const FN_PLACE_TEXT: i32 = 365;
+const FN_CLOSE_WINDOW: i32 = 2;
+/// Where the treasure script places its one-line "Obtained" windows (365's x and y), Checked (files).
+const OBTAINED_AT: (i32, i32) = (-220, -150);
+/// The text pointer KH1 had for text 4 while ours stands in (0: none).
+static PUPPY_WAS: AtomicUsize = AtomicUsize::new(0);
+static PUPPY_LINE: OnceLock<usize> = OnceLock::new();
+
+/// Our one line for the Dalmatians, in the "Obtained" texts' own form (the same codes before the words,
+/// the same 60-frame close, `{06} 0x3C`): "Found dalmatians no. A, B, C." with KH1's own number codes
+/// (`{0E} 0x10..0x12`, the values the script sets with event function 475). Never freed.
+fn puppy_line() -> usize {
+    *PUPPY_LINE.get_or_init(|| {
+        let mut b: Vec<u8> = vec![0x08, 0x0A, 0x00, 0x00, 0x00, 0x07, 0x0C, 0x00];
+        let text = |b: &mut Vec<u8>, s: &str| {
+            for c in s.chars() {
+                b.push(match c {
+                    'A'..='Z' => 0x2B + (c as u8 - b'A'),
+                    'a'..='z' => 0x45 + (c as u8 - b'a'),
+                    '.' => 0x68,
+                    ',' => 0x69,
+                    _ => 0x01,
+                });
+            }
+        };
+        text(&mut b, "Found dalmatians no. ");
+        b.extend_from_slice(&[0x0E, 0x10]);
+        text(&mut b, ", ");
+        b.extend_from_slice(&[0x0E, 0x11]);
+        text(&mut b, ", ");
+        b.extend_from_slice(&[0x0E, 0x12]);
+        text(&mut b, ".");
+        b.extend_from_slice(&[0x06, 0x3C, 0x00, 0x00]);
+        Box::leak(b.into_boxed_slice()).as_ptr() as usize
+    })
+}
+
+/// Quick / Skip (the owner: the puppy window "the same size as our new text box so its not obstructing
+/// gameplay"): when the treasure script places text 4, our one line stands in for it and the window goes
+/// where its "Obtained" windows go; KH1 measures, opens, numbers and closes it as its own.
+unsafe fn puppy_text(base: usize, ctx: usize) {
+    let sp = rd::<i32>(ctx + CTX_SP);
+    if !(3..0x40).contains(&sp) {
+        return;
+    }
+    let at = |k: usize| ctx + 0x18C + sp as usize * 4 + k * 4;
+    if rd::<i32>(at(1)) != PUPPY_TEXT {
+        return;
+    }
+    let slot = base + TEXTS_STEAM + PUPPY_TEXT as usize * 8;
+    let was = rd::<u64>(slot) as usize;
+    let ours = puppy_line();
+    if was != ours {
+        PUPPY_WAS.store(was, Ordering::Relaxed);
+        std::ptr::write_unaligned(slot as *mut u64, ours as u64);
+    }
+    std::ptr::write_unaligned(at(2) as *mut i32, OBTAINED_AT.0);
+    std::ptr::write_unaligned(at(3) as *mut i32, OBTAINED_AT.1);
+    log!(Cutscenes, "Chest Opening: the Dalmatians' window: one line, placed as the \"Obtained\" windows");
+}
+
+/// KH1's own text 4 back (the window closed, or the open is over).
+unsafe fn puppy_restore(base: usize) {
+    let was = PUPPY_WAS.swap(0, Ordering::Relaxed);
+    if was == 0 {
+        return;
+    }
+    let slot = base + TEXTS_STEAM + PUPPY_TEXT as usize * 8;
+    if rd::<u64>(slot) as usize == puppy_line() {
+        std::ptr::write_unaligned(slot as *mut u64, was as u64);
+    }
 }
 
 #[cfg(test)]

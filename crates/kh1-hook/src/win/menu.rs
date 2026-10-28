@@ -369,19 +369,6 @@ pub fn queue_prompt(title: &str, line: &str) {
     }
 }
 
-/// Notices shown as soon as a box is free (alone, or beside KH1's own box when one is up), not held
-/// for a level-up's box as `queue_prompt`'s are (`chest`'s "Obtained" notice).
-static NOTICES: std::sync::Mutex<Vec<(String, String)>> = std::sync::Mutex::new(Vec::new());
-
-/// Shows a box in KH1's prompt style (title, one line) at the first frame a box is free.
-pub fn queue_notice(title: &str, line: &str) {
-    if let Ok(mut q) = NOTICES.lock() {
-        if q.len() < 8 {
-            q.push((title.to_string(), line.to_string()));
-        }
-    }
-}
-
 /// Sora's save block, if it is there.
 pub unsafe fn save_block(base: usize) -> Option<usize> {
     let mut save = rd::<u64>(base + SAVE_PTR_RVA) as usize;
@@ -592,13 +579,6 @@ impl Growth {
         }
         if let Ok(mut q) = QUEUED.try_lock() {
             self.prompts.extend(q.drain(..));
-        }
-        if let Ok(mut q) = NOTICES.try_lock() {
-            if let Some((t, l)) = q.first().cloned() {
-                if prompt(base, &t, &l, "", false) || prompt(base, &t, &l, "", true) {
-                    q.remove(0);
-                }
-            }
         }
         // Beside the level-up's own box when it comes (the user: KH1 shows several at once): for
         // up to 3 s after learning, added to KH1's when it is up; then alone if the box is free.

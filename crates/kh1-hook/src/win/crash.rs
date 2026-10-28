@@ -35,6 +35,51 @@ pub unsafe fn readable(addr: usize) -> bool {
     state == 0x1000 && protect & 0x101 == 0 && protect != 0
 }
 
+/// The readable memory holding `addr` (as `readable`): its start and end, so a caller reading many
+/// words checks once per region, not once per word (t784: the in-game skip's scene reads asked
+/// Windows twice per script word, a third of a second to most of a second on loading a save).
+pub unsafe fn readable_span(addr: usize) -> Option<(usize, usize)> {
+    let mut info = [0u8; 48];
+    if VirtualQuery(addr as *const c_void, info.as_mut_ptr() as *mut c_void, 48) == 0 {
+        return None;
+    }
+    let state = rd::<u32>(info.as_ptr() as usize + 32);
+    let protect = rd::<u32>(info.as_ptr() as usize + 36);
+    if state != 0x1000 || protect & 0x101 != 0 || protect == 0 {
+        return None;
+    }
+    let start = rd::<u64>(info.as_ptr() as usize) as usize;
+    let size = rd::<u64>(info.as_ptr() as usize + 24) as usize;
+    Some((start, start.saturating_add(size)))
+}
+
+/// Readable memory remembered for one pass (t785): the region last found readable
+/// (`readable_span`), so a caller checking many addresses asks Windows only for one outside it.
+/// Made fresh for each pass (memory can be freed between frames).
+#[derive(Default)]
+pub struct Reach(std::cell::Cell<(usize, usize)>);
+
+impl Reach {
+    /// `n` bytes at `at` can be read (as `readable` on its first and last byte).
+    pub unsafe fn ok(&self, at: usize, n: usize) -> bool {
+        n == 0 || (self.byte(at) && self.byte(at.saturating_add(n - 1)))
+    }
+
+    pub unsafe fn byte(&self, a: usize) -> bool {
+        let (s, e) = self.0.get();
+        if a >= s && a < e {
+            return true;
+        }
+        match readable_span(a) {
+            Some(span) => {
+                self.0.set(span);
+                true
+            }
+            None => false,
+        }
+    }
+}
+
 fn name(a: usize) -> String {
     let (exe, ours) = (EXE.load(Ordering::Relaxed), OURS.load(Ordering::Relaxed));
     if a >= exe && a < exe + 0x400_0000 {

@@ -42,4 +42,6 @@ thiserror = "1"
 lewton = "0.10"
 
 [profile.release]
-debug = false
+# Line tables only (t786): the PDB names every function and source line for the load profiler
+# (`docs/kh1-load-profiler.md`); the code built is the same.
+debug = "line-tables-only"

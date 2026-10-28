@@ -142,3 +142,12 @@ The owner (chat, t765 log): "same issue on the same scene", and what the two row
 ## t767: the Cutscene Skip row was dropping the flag byte
 
 The owner (chat, t766 log): "the cutscene still did not skip". The log (f423): the part after the section was read (514 instructions, no choice) and bit 0 and the flag byte were set, but KH1's skip never started: the second flag word stayed `0x401` and the runner `0x2` until 512 at f1563. Cause: the Cutscene Skip row had fired on the section just before (f397); at its next pad read bit 0 was In-game Scene Skip's, which it takes as its scene being over, and it dropped what it took for its own unused flag byte. Fix: it leaves the byte alone while In-game Scene Skip has set bit 0; and In-game Scene Skip puts bit 0 and the byte back if its skip hasn't started and the byte is gone. Checked (log + code).
+
+## t784: the scene reads no longer freeze the game
+
+The owner: loading a save froze the game for a moment, only with the mod on. The t783 load profiler showed it: on the first frame after KH1's opening script hands Sora over, 97 to 99% of a 337 ms / 829 ms frame was this file's scene reading, inside Windows. Each 4-byte script word was checked readable twice (`crash::readable`, one `VirtualQuery` each), and the first scene has every thread of the room script and the entry scanned for Trinity marks and the scene's own calls (up to 64 threads of up to 8192 words). Checked (log, PDB).
+
+- `Reach` keeps the readable region last asked about (`crash::readable_span`) and asks again only outside it: one query per region instead of two per word. `marks`, `read_scene` and `Ctxs::word` use it.
+- What is read, and what is skipped or played, is unchanged.
+
+Not checked in game (Assumption): that the freeze is gone; the next load profiler log says.

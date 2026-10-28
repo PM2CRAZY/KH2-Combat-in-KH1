@@ -23,6 +23,8 @@ its off in the ini then its gone from that menu."
   - The trace recorder: no row is built, nothing is kept, no dumps, no `kh1-kh2.trace.csv`
     (`trace::refresh` keeps its mode Off; `trace::on` / `wants` are false).
   - The sound log's hooks: KH1's menu sound, voice clip, voice call, sound effect create / play.
+  - The load profiler (t783, `loadprof`, `kh1-load-profiler.md`): also only with the Loading & Cache log on;
+    it samples the game thread around loads and names our functions in slow frames.
   - The heartbeat thread (`monitor`: the "alive" line every 2 minutes, the Insert test key that
     cycled what Sora is drawn with, the event-opcode trace once a second).
   - The probes' debug-only work inside hooks that stay for gameplay (`probe.rs`): the event
@@ -139,6 +141,10 @@ is on.
 - Not kept in the ini (starts off each launch, like Frame Advance); turned off with the Config
   menu's Debug Menu row. The panel reads what the pose code already records for the trace
   (`pose::drawn`), so it adds no hook; it is drawn only while on.
+- (t774) The frame count on KH1's own animations: the panel counted nothing there (the frame stayed 0,
+  e.g. the chest open, slot 83), since only KH2's clips recorded a time. KH1's own now reads Sora's motion
+  time (`+0x16C`, the time KH1's actor motion code steps each frame, Checked (exe)), so it shows the
+  frame within the slot of its length and counts loops. KH2's controller pose still shows no frame.
 
 ## Ledge Carry row (the what-is-still-missing thread, m14 answer 4)
 

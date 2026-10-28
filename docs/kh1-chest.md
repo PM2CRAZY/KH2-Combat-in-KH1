@@ -225,6 +225,229 @@ contexts.
   at `0x97` / `0x98` (`A300`, `A301`), but nothing ties them to chests. Checked (files). Until a KH2 motion
   is chosen, KH2 on this row plays KH1's (logged).
 
+## Round 5 (t771): Quick holds Sora until idle; Chest Animation row off
+
+- The owner: "(c) uncomment the code for the animation switch, we'll find it later. For now make you unable to
+  move during the chest animation until you return to the idle animation for the quick setting".
+- **KH2 has no chest animation for field Sora** (Checked (files + decomp)): every non-empty motion in
+  `P_EX100.mset` is accounted for (movement 0..8, 40, 201..209; item use 9; hit reactions 10..19; guard / recoil
+  41..43; the Drive Form change 52, `0x14040CE60`; summon / party calls 137 / 138, `0x140405440`; the summon
+  entrance 130, `0x1403DE610`; casts 56..73; attacks 151..197). Field Sora's command handler (vtable entry 39 of
+  `PLAYER::VTABLE<SORA>`, `0x140404FD0` -> `0x140405440` -> `0x1403A8B10`) has no case for Open (`0x1A5`) and
+  passes it to the chest. Only Atlantica's mermaid Sora (`PLAYER::VTABLE<LMPLAYER>`, entry 39 `0x140405ED0`)
+  plays a motion of his own (`0x98`) on Open. The Chest Animation row and the `List::QoL` switch are commented
+  out in `config.rs` until one is chosen; `chest_anim` and `chest::anim_kh2` stay.
+- **Quick:** the open motion's end (the treasure script's or box's wait on Sora's motion, event function 103,
+  going on) no longer lets him go by itself: the next script step that finds his applied request (`+0x164`) on
+  KH1's idle (request 0) clears the lock (`quick_release`); a second after the motion's end without idle, or the
+  open's 8 s, lets him go anyway (logged). Not checked in game.
+
+## Round 6 (t772): Quick is the treasure script's own hold
+
+- The owner (two traces, t771): "I'm still able to move during the chest animation and when I return to idle I'm
+  stuck in the idle state". Checked (trace `trace_1793161449_f2743`): the open motion `0xA6` is applied from
+  f2567 to f2707 (140 frames, held on its last pose); Sora moves from f2600 with the stick while `0xA6` is still
+  applied (the mod's lock let go early, at its one-second fallback, with KH1 never leaving `0xA6`), and only at
+  f2708 does KH1 switch to his run.
+- **Why** (Checked (files): `UK_treasure.ev` entry 0): the open motion has no end of its own; the script ends it.
+  Context 1 (its actor 0, Sora) holds him (55 at its start; 336 / 338, 57 in sub-script 11 with the wait on his
+  motion, 103), then sub-script 12 asks for his idle (`push 0, push 4, call 58`: action 0x11, request 0 with a
+  blend of 4, `0x1401A7F80`, Checked (exe)) and unlocks him (56), and sub-script 13 clears the rest (56, 54, 335,
+  337). Context 0 waits on sub-script 11 before going on (the `c0x17` wait). t768..t771 sent all of those actions
+  to KH1's done queue, so on Quick nothing ever asked for his idle.
+- **Quick now** runs the script's actions on Sora as KH1 does (`to_done` only on Skip): KH1's lock from the Open
+  handler, the open motion, the wait on it, the idle request and the unlocks, so he is held through the
+  animation and freed by KH1 on his idle. Only the window functions (skip mode) and the holds 511 / 512 and 112..115
+  are still skipped. A room script's box on Quick: the same (its part plays the motion and frees him); the mod no
+  longer asks for the motion itself. The backstop: at the open's end (8 s, or the box's 512) a lock still on
+  (`+0x444` bits 0 / 1) is cleared and logged. Not checked in game.
+
+### Round 7 (t773): Quick lets Sora go on idle
+
+- The owner (trace `trace_1793161906_f2177`, log): after the open (slot 83) Sora goes back to idle (slot 0) but
+  can't move until the script lets him go. Checked (trace): flags `0x0000c003` before the open; `0x0010c083` on
+  the open's frame (f2026); `0x0130c0c3` from f2027 with the open motion `0xA6` applied; idle (request 0) from
+  f2108, still `0x0130c0c3`; back to `0x0000c003` only at f2159, with the script's 112 / 114 / 512 (and its
+  unlocks 54 / 56 / 335 / 337 in the same second). So about 51 frames on idle, held.
+- Checked (exe): KH1's "can act" test (`0x140297870`) is: flags bit 0x4 clear, `+0x88` bit 0x20 clear and
+  `+0x444` bit 0 clear. The Open handler sets `+0x444` bit 1 and calls `0x140297F30` (clears flag 0x100000, sets
+  0x80, zeroes `+0xC`).
+- **Quick now**: at the open the mod keeps Sora's flags and applied request. Once his applied request has left
+  that one (the open motion) and comes back to 0 (idle), checked on each of KH1's script calls while the open
+  runs, he is let go: `+0x444` bits 0 / 1 off and the hold flags (0x1000000, 0x200000, 0x100000, 0x80, 0x40) put
+  back to what they were before the open. From then on the open goes the Skip way (the script's later actions on
+  him done at once, its waits on his motion pass), so its late unlocks can't hold him again. The backstop at the
+  open's end does the same if he never got there. A room script's box on Quick: the same rule.
+- Assumption: those five bits are all that holds him (the log line "Sora is back on idle: let go" prints
+  `+0x444`, the flags before / after and `+0x88` to confirm). Not checked in game.
+
+### Round 8 (t775): Quick's notice on vanilla's frame
+
+- The owner: on Quick the "Obtained" notice should come on the frame vanilla's window does, 100 frames into
+  the open (the open motion and 20 frames of idle). It showed at the Open itself.
+- **Quick now** queues the notice with a due frame: the Open's 60 Hz frame (`takeover::TICKS`) + 100; KH1's
+  notice box (`menu`'s drain, which already runs each frame) shows it from then. Skip still shows it at once;
+  a room script's box on Quick still at its give.
+- Checked (trace `trace_1793161906_f2177`, t772, script timing as vanilla's): the Open at f2025, the open motion
+  f2027..f2107, the script's window calls (message functions 0 and 1) at f2129. The 100 is the owner's count.
+
+### Round 9 (t776): KH1's own window, as the evidence boxes'
+
+- The owner: the notice should be exactly the text box the evidence boxes in Wonderland show (their trace
+  `trace_1793165977_f7980` and log, a Vanilla box open: slot 83 from f7733, idle from f7814, the window's
+  calls 0 / 1 in the second from f7809, its wait 107 until about f7958, no confirm pressed: only L1 / R1 at
+  f7886..f7888, so the window closes itself). Checked (trace + log).
+- That box is KH1's message window 7. Checked (files): the evidence box's part (`aw05`) sets it up with
+  364 (the item), 4 / 5 / 6 / 83 / 80 (window 7's settings), 365 (its text and place), then 0 (open) and 1
+  (the line), 107 (waits while it shows), 2 (close). `UK_treasure.ev` sets up the same window 7 with the same
+  calls and arguments, only the text ids differ (the chest's 5 / 6 / 13 / 14 .. by kind). So the chest's own
+  vanilla window and the evidence box's are the same box.
+- **Quick and Skip now** let the treasure script's (and a box's) message functions run as KH1 wrote them,
+  instead of their skip-mode branch: KH1 opens window 7 with its own lines and closes it itself, while Sora
+  is free (his holds are still skipped / let go as before). The mod's notice in the level-up box is gone
+  (`menu`'s notice queue removed). On Quick a chest's window open (function 0 / 177) waits with KH1's own
+  "run again next frame" return (4, as function 107 does, Checked (exe)) until 100 frames into the open
+  (t775's frame). Skip: the window comes when the script reaches it. Boxes: at their script's own time.
+- Assumption: an open message window doesn't stop Sora's own control (in the evidence log he was held by
+  the script's holds, which stay skipped). Not checked in game.
+
+### Round 10 (t777): the Dalmatians' window, one line at the top
+
+- The owner: a chest with puppies plays the vanilla puppy text (since t776 the script's own windows show);
+  shrink it to the size of the other window so it doesn't block play.
+- Checked (files, `UK_treasure.ev`, its text list read as KH1's loader `0x1401A3DA6` reads it): text 4 is the
+  Dalmatians' message, two lines ("Found dalmatians." / "Puppy no. A, no. B, and no. C returned home!", the
+  numbers KH1's own codes `{0E} 0x10..0x12`, set by event function 475) closing after 90 frames; the
+  "Obtained" texts are one line (`{08} {0A}.. {07} {0C} 00` before the words, `{06} 0x3C`: 60 frames). The
+  script places text 4 with 365 at (-230, 0), the screen's middle, and its "Obtained" windows at (-220, -150).
+  Checked (exe): 365 (`0x1401B7C80`) reads window, text, x, y from the context's stack, measures the text and
+  places the window; the script machine's operator 5 negates (`0x1401BA5A0`); the text pointers by id are at
+  `0x14237C4E0`, read when a window starts its line.
+- **Quick and Skip now**: when the treasure script places text 4, text 4's pointer is our one line in the
+  "Obtained" texts' form ("Found dalmatians no. A, B, C.", KH1's number codes, the 60-frame close) and the
+  window goes to (-220, -150); KH1 measures, opens, fills in the numbers and closes it as its own. KH1's
+  pointer is put back when the script closes that window (function 2) or the open ends. Vanilla: unchanged.
+- Not checked in game: the wording fits on one line at the size of an "Obtained" window (Assumption).
+
+### Round 11 (t778): opening from the run
+
+- The owner: on Quick and Skip, open a chest from the run like KH2 (Assumption on their side: only idle works now).
+- Checked (exe + traces): KH1 already takes the Open while Sora runs. The chest offers the command while he is in
+  state 0 (`0x1402B5A30`), and the Triangle command runs in his states 0, 6 and 0x18 (`0x1402A3768` -> the
+  command step `0x1402A3DB0` -> the Open handler); his run is state 0 (every trace: state 0, motion 2, slot 6
+  while the stick is held). What ends the run is the Open handler itself: `0x1402B59D7` calls `0x140297F30
+  (sora, 0.0)`, which zeroes his speed (`+0xC`), clears flag 0x100000 and sets 0x80.
+- **Skip now** keeps his speed: for a fast open that call is skipped (`open_stop`), so he runs on through the
+  open as in KH2. **Quick** plays the open motion, so it still stops him as KH1 does. Vanilla unchanged.
+- Not checked in game. If Triangle still does nothing while running, a trace of it is needed (it would mean
+  another gate than the two above).
+
+### Round 12 (t779): KH2's reach for the Open
+
+- The owner (five traces, Quick): spamming Triangle while running past a chest doesn't open it; it opens only
+  when Sora is slow or still against it. Checked (traces `..._f4215`, `_f4631`, `_f4931`): every press at full
+  run speed (7..8 a frame) failed, even 7..23 units from where it later opened; the three opens came at speeds
+  under ~4 (turning, or stopped against the chest).
+- **KH1** (Checked (exe)): the Triangle box is filled each frame by `0x1402948F0`. Sora's touched actor (`+0x98`,
+  set by collision, `0x140297C60`) is always asked; then every actor whose record kind (`+0x5F`) is non-zero and
+  that `0x140293FC0` finds in range. That range test reads the record's shape `+0x5E` and radius `+0x44`; shapes
+  0, 2 and 3 also need the actor in front of Sora (cos > 0; score d + d(1 - cos)/2), shape 1 (flat distance and
+  height under the radius) has no facing and scores 0. A chest is kind 3: its touch callback (`0x1402B5A30`)
+  offers Open (0x37) when Sora is in state 0 (run included) and the height difference is in (-50, 20). So a
+  chest he runs past (beside or behind him) is never offered unless he bumps into it.
+- **KH2** (Checked (files)): the box `F_EX030.mdlx` has a type-5 (reaction) shape: a sphere of radius 150, 150
+  above its base. Its Open (03system `cmd` 0x1A5) has no distance or facing check (range -1, direction range
+  -1), so it is offered whenever that sphere touches Sora's body (radius 35): 185 across, any facing
+  (`reaction-commands.md`).
+- **Quick and Skip now**: on a chest's first frame (its tick's one-time call `0x1402B5879`, redirected) its
+  record gets shape 1 and radius max(its own, 185). KH1's own scan then offers Open from 185 away, any facing,
+  running or not. Nothing of ours runs per frame. The log line "chest ...: KH2's reach (offer radius X -> 185,
+  shape S -> 1)" shows KH1's own values.
+- Not checked: in game; that the record isn't read for anything else (Assumption); a chest set up while
+  Vanilla keeps KH1's reach and one set up on Quick / Skip keeps KH2's until the room reloads. Shape 1 scores
+  0, so a chest in reach is picked before a Talk in reach (KH2 picks by priority then distance).
+
+### Round 13 (t780): KH2's facing rules, from the KH2 Steam decomp
+
+- **Correction to round 12**: the box's Open in KH2 is not 0x1A5 with no checks. Checked (decomp + files): KH2's
+  reaction pass (`0x140407DE0`) walks the box's collision shapes with mask 0x4020; the box (`F_EX030.mdlx`) has
+  one type-5 shape, a sphere of radius 150, 150 above its base, whose argument is the command: 0x20 (03system
+  `cmd`: execute 32, flags 0x8013, priority 100, `+0x10` -0.7071, `+0x14` 0, `+0x18` 6.1e-17). It is offered
+  while that sphere overlaps Sora's body shape (`0x1403C9C00` / `0x1403C94C0`). The score function
+  (`0x1404088F0`) greys it (bit 0x40000000, shown, not usable) when Sora's facing · (box - Sora) < -0.7071 (the
+  box more than 135 degrees off his facing), when (box - Sora) · (the box's facing turned by 0 + pi) < 6.1e-17
+  (Sora behind the box's front half), or when the Land flag (flags bit 1, set) is on and he is in the air.
+  (0x1A5, from round 2, is what the box's handlers take; which command the player's press sends to the box
+  was not followed.)
+- **Quick and Skip now** (t780): the chest's touch callback (`0x1402B5A30`, hooked; KH1 calls it only when its
+  scan or a bump asks this chest) checks KH2's two facing rules first; when one fails, KH1's own offer runs and
+  slot 3 is then greyed and blocked (bits 3 of `0x140528904` / `0x140528908`, as KH1's scan greys a Talk). KH1's
+  own state-0 test stands in for the Land flag. The reach stays round 12's (185, from the box's sphere and
+  Sora's body radius 35).
+- Assumption: a KH1 chest's front is its yaw's direction ((sin, cos) of `+0x3C`, as Sora's). If chests open
+  only from behind in game, the front is the other way.
+
+### Round 14 (t781): no prompt at all (diagnosis)
+
+- The owner (trace `trace_1793170133_f8615`, log): running around the chest at (1190, -1708) while tapping
+  Triangle, no prompt appeared. Checked (log): t779 gave all three of the room's chests KH2's reach (KH1's own
+  record: radius 150, shape 0; now 185, shape 1), and the chest at (1075, -1228) opened from the run at f7640.
+  The traced chest is the Dalmatians one opened at f4147 in the session before (kind 2, contents 5); if that
+  open was saved, KH1 offers nothing for it (its touch callback checks the chest is still closed first).
+- t781 logs each time KH1 asks a chest (at most one line a second): the chest's place and yaw, Sora's place,
+  yaw and state, the distance, KH2's two facing values, whether KH1 offered Open and whether it was greyed.
+  No line at all means KH1's scan never asked the chest.
+
+### Round 15 (t782): the chests' facing
+
+- The owner (throne room, three chests: one opened from the run, two never did). Checked (t781 log): KH1 asked all
+  three and offered Open each time; KH2's front rule greyed the two at (1190, -1708) and (-225, -1076) every
+  time (front -0.45 .. -1.00, Sora south of them), and passed the one at (1075, -1228) (Sora east and north of
+  it, front 0.08 .. 0.61). Every chest's yaw `+0x3C` read 0.00, so t780 treated all three as facing +z.
+- Checked (exe): KH1's own range test (`0x140293FC0`) takes an actor's facing from its direction vector at
+  `+0x30` (dotted with the way to the target), not from `+0x3C`. t782 reads both facings from `+0x30` (flat,
+  normalised); a chest with no direction there gets no front rule. The log line now prints both vectors.
+- Assumption: a chest's front is its `+0x30` direction. Not checked in game.
+
+### Round 16: KH2's chest animation for Sora (found)
+
+- **Correction to round 2 / t729** ("KH2 has no chest motion for Sora"): it isn't in Sora's own motion set; it is in
+  the box's. Checked (files): `obj/F_EX030.mset` (the treasure box, objentry 323 `F_EX030_TR`) has, at entry 252, a
+  nested reaction set `AZ10` (BAR type 20) holding motions tagged by character, as KH2's reaction commands do
+  (`reaction-commands.md`: the object's script captures Sora into a motion from the object's own set): `0010`
+  Sora's body (its 4th slot, 25 088 bytes), `0011` and `0012` his Keyblade's. Each is 30 frames at 30 fps, 60
+  frames at 60 Hz (1 s), return frame 30 (no loop).
+- Its triggers (Checked (files), not yet named): body: ranges 0..12 id 22 [15], 0..60 id 26 [32], 0..end id 43
+  [32], 0..50 id 23 [5], and a frame trigger at 53, id 19 [1]; Keyblade `0011`: ranges 10..23 id 12 [28], and
+  frame triggers 34 and 47 (id 8, [4, 500]).
+- Checked (decomp): the box's handler (`0x140405ED0` / `0x140406020`) takes message 0x1A5, copies its prize and
+  plays the box's own lid motion 0x98 with an 8-frame blend; the Open offered to the player is command 0x20, the
+  argument of the box's type-5 shape. Not followed yet: the box's script (BDX) that captures Sora into `AZ10`,
+  and whether Sora is held for all 60 frames.
+- Open questions for the owner: Skip was built on "KH2 plays no animation"; KH2 does play this 1 s motion. And
+  the Chest Animation row (KH1 | KH2, commented out since t771) can now be built from this motion.
+
+### Round 17 (t783): Quick's Chest Animation row, KH2's motion
+
+- The owner's answers: Skip stays a no-animation setting ((a)); build the Chest Animation row from KH2's motion.
+- **Loading** (`pose::add_chest_motion`): with KH2 Sora's files, the box `F_EX030` is read as an object
+  (`kh2_data` `load_enemy`), its capture slot 252's `0010` / `0011` / `0012` (`EnemyData::capture`, the same
+  path `kh2-bevy`'s reaction commands use) added to his moveset and rig as motion 1252 (`pose::CHEST_MOTION`:
+  1000 + the box's slot). Its two files go into the slot cache's manifest.
+- **As a KH1 slot** (`kh2slots::CHEST`): KH1's open request 0xA6 (slot 83, KH1's open motion, its template)
+  gets a slot of ours, KH2's 60-frame motion (KH1's own is 81), baked into a KH1 motion with `kh1_bake`
+  (else KH1's retimed and KH2's pose drawn over it), KH1's sounds kept with KH2's frame triggers added.
+  `redirect` points 0xA6 at it only while `chest::kh2_animation()` (Chest Opening Quick and the row at
+  KH2); both setters refresh the requests at once.
+- **Config**: QoL > Chest Animation (KH1 | KH2) is back, shown only with Chest Opening on Quick.
+- **What still runs as before**: the Open handler asks for 0xA6; KH1 plays our slot; the treasure script's
+  wait on his motion ends at its end and asks for his idle; Sora is let go on idle (t773) and the item window
+  comes 100 frames into the open (t775).
+- **Not done, open**: the motion's turn-to-target range (id 22, frames 0..12, 15 a frame: KH2 turns Sora to the
+  box) has no KH1 counterpart here, so he opens facing the way he was. Range ids 26, 43, 23 and frame id 19 are
+  unnamed. KH2's own hold length (the box's script) not followed; Sora is held by KH1's script until the
+  motion ends. Not checked in game.
+
 ## Not checked (Assumption)
 
 - (t724, now answered) KH2's own chest: see "KH2's own chest opening" above (checked in files and

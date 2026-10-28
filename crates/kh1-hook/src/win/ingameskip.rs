@@ -476,10 +476,38 @@ unsafe extern "system" fn section_end_624(ctx: usize) -> u64 {
     section_end(3, ctx)
 }
 
+/// Script words known readable (t784): the readable region last asked about (`crash::readable_span`),
+/// so a scan asks Windows once per region instead of twice per 4-byte word. The owner's t783 log: the
+/// scans on the save's first scene (up to 64 threads of up to 8192 words, room and entry) held the
+/// game 337 ms and 829 ms in two runs, almost all of it in those queries (`docs/kh1-load-profiler.md`).
+#[derive(Default)]
+struct Reach(std::cell::Cell<(usize, usize)>);
+
+impl Reach {
+    /// `n` bytes at `at` can be read.
+    unsafe fn ok(&self, at: usize, n: usize) -> bool {
+        self.byte(at) && self.byte(at.saturating_add(n - 1))
+    }
+    unsafe fn byte(&self, a: usize) -> bool {
+        let (s, e) = self.0.get();
+        if a >= s && a < e {
+            return true;
+        }
+        match super::crash::readable_span(a) {
+            Some(span) => {
+                self.0.set(span);
+                true
+            }
+            None => false,
+        }
+    }
+}
+
 /// A script's contexts read in place: the room script's (entry 0) or the event entry's.
 struct Ctxs {
     at: usize,
     count: usize,
+    reach: Reach,
 }
 
 impl Ctxs {
@@ -491,7 +519,7 @@ impl Ctxs {
     }
     unsafe fn read(at: usize, count: usize) -> Option<Ctxs> {
         let count = rd::<i32>(count);
-        (1..=CTX_MAX).contains(&count).then_some(Ctxs { at, count: count as usize })
+        (1..=CTX_MAX).contains(&count).then_some(Ctxs { at, count: count as usize, reach: Reach::default() })
     }
     /// The index of the context at `ctx`, if it is one of these.
     fn index(&self, ctx: usize) -> Option<usize> {
@@ -503,14 +531,13 @@ impl Ctxs {
     }
     /// Context `c`'s instruction `i`.
     fn word(&self, c: usize, i: usize) -> Option<u32> {
-        use super::crash::readable;
         if c >= self.count {
             return None;
         }
         unsafe {
             let code = rd::<u64>(self.ctx(c) + CTX_CODE) as usize;
             let at = code.checked_add(i.checked_mul(4)?)?;
-            if code < 0x10000 || !readable(at) || !readable(at + 3) {
+            if code < 0x10000 || !self.reach.ok(at, 4) {
                 return None;
             }
             Some(rd::<u32>(at))
@@ -624,7 +651,7 @@ unsafe fn trinity_entry(base: usize, entry: i32) -> bool {
 /// In a context array (the room's script or the event entry's), each context that offers the Trinity
 /// command, with every entry it starts: (context, entry).
 unsafe fn marks(base: usize, contexts: usize, count: usize) -> Vec<(usize, u32)> {
-    use super::crash::readable;
+    let reach = Reach::default();
     let mut out = Vec::new();
     let count = rd::<i32>(base + count);
     if !(1..=CTX_MAX).contains(&count) {
@@ -644,7 +671,7 @@ unsafe fn marks(base: usize, contexts: usize, count: usize) -> Vec<(usize, u32)>
         let mut starts = Vec::new();
         while ends < subs && n < SCAN_MAX {
             let at = code + n * 4;
-            if !readable(at) || !readable(at + 3) {
+            if !reach.ok(at, 4) {
                 break;
             }
             let w = rd::<u32>(at);
@@ -668,7 +695,7 @@ unsafe fn marks(base: usize, contexts: usize, count: usize) -> Vec<(usize, u32)>
 
 /// The event functions the scene's threads call, read once from their code.
 unsafe fn read_scene(base: usize) -> Scene {
-    use super::crash::readable;
+    let reach = Reach::default();
     let count = rd::<i32>(base + COUNT_STEAM);
     if !(1..=CTX_MAX).contains(&count) {
         return Scene::Unread;
@@ -685,7 +712,7 @@ unsafe fn read_scene(base: usize) -> Scene {
         let (mut ends, mut n) = (0, 0usize);
         while ends < subs && n < SCAN_MAX {
             let at = code + n * 4;
-            if !readable(at) || !readable(at + 3) {
+            if !reach.ok(at, 4) {
                 return Scene::Unread;
             }
             let w = rd::<u32>(at);

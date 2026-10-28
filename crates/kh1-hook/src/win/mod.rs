@@ -44,6 +44,7 @@ mod knockback;
 mod kh2sound;
 mod leftblade;
 mod lefthits;
+mod loadprof;
 mod loadscreen;
 mod menu;
 mod kh2list;
@@ -418,6 +419,8 @@ pub unsafe extern "system" fn DllMain(_inst: *mut c_void, reason: u32, _reserved
         if debug_on() || CRASH_NOTES_ALWAYS {
             crash::install();
         }
+        // (t783) The load profiler: with the debug tools and the Loading & Cache log on.
+        loadprof::start();
         pose::install();
         kh2slots::install();
         probe::install();

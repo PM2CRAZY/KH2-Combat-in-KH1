@@ -286,7 +286,14 @@ const fn jump_spec(i: usize) -> Spec {
 /// landing 0x7 (both slot 11).
 const ALIASES: [(usize, usize); 2] = [(0xB, 0x6), (0xC, 0x7)];
 
-const SPECS: [Spec; 42] = [
+/// KH2's chest-opening motion (t783, `pose::CHEST_MOTION`: the treasure box's capture motion for Sora) on
+/// KH1's open request: the Open handler asks for `0x900A6` (request 0xA6, KH1's slot 83, Checked (exe +
+/// trace: applied request 0xA6, slot 83)). Pointed at our slot only with Chest Opening on Quick and its
+/// Chest Animation row at KH2 (`redirect`, `chest::kh2_animation`), not by a style row.
+pub const CHEST_REQUEST: usize = 0xA6;
+const CHEST: Spec = Spec { motion: pose::CHEST_MOTION, stands_for: 83, request: CHEST_REQUEST, kind: Kind::MiscAnims };
+
+const SPECS: [Spec; 43] = [
     Spec { motion: 152, stands_for: 99, request: 0xC9, kind: Kind::GroundCombo },
     Spec { motion: 151, stands_for: 98, request: 0xC8, kind: Kind::GroundCombo },
     Spec { motion: 151, stands_for: 100, request: 0xCA, kind: Kind::GroundCombo },
@@ -329,6 +336,7 @@ const SPECS: [Spec; 42] = [
     jump_spec(0),
     jump_spec(1),
     LAND,
+    CHEST,
 ];
 
 /// Valor Form's motions on KH1's own requests (Valor on KH1's own states, `form::native`; the
@@ -2105,6 +2113,16 @@ unsafe fn current(actor: usize) -> Option<&'static Move> {
     slot_of_motion(pose::ptr(rd::<u32>(t + i * 4))).and_then(moved)
 }
 
+/// KH1's time in the motion playing on `actor` now (frames, `+0x16C`), whatever slot it is (KH1's own
+/// too): KH1's actor motion code adds to it each frame (Checked (exe): the motion step near
+/// `0x14029F300` reads and writes `+0x16C`).
+pub unsafe fn kh1_time_now(actor: usize) -> Option<f32> {
+    if actor < 0x10000 {
+        return None;
+    }
+    Some(rd::<f32>(actor + TIME_NOW)).filter(|t| t.is_finite() && *t >= 0.0)
+}
+
 /// KH1's time in our slot playing on `actor` (frames), if it is `slot` (our move's id).
 pub unsafe fn kh1_time(actor: usize, slot: usize) -> Option<f32> {
     current(actor).filter(|m| m.slot == slot).map(|_| rd::<f32>(actor + TIME_NOW)).filter(|t| t.is_finite() && *t >= 0.0)
@@ -2754,6 +2772,8 @@ unsafe fn redirect(p: &mut Placed) {
                 // m19. KH1's own slot otherwise: KH1's whole cast, as the Cure row at KH1, m4.)
                 let style = match cast_spell(req) {
                     Some(spell) if matches!(kind, Kind::Magic | Kind::AirMagic) => super::formmagic::anim_kh2(spell),
+                    // (KH1's open request: the Chest Animation row, t783.)
+                    _ if req == CHEST_REQUEST => super::chest::kh2_animation(),
                     _ => super::styles::kh2(kind),
                 };
                 *e = if own || form.is_some() || on && (style || (forced(req) && want == Some(id))) { (kh1 & !0xFFF) | ours } else { kh1 };
