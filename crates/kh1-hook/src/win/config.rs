@@ -225,8 +225,8 @@ enum Row {
     SoftReset,
     /// QoL > In-game Scene Skip (Off | On, `ingameskip`).
     IngameSkip,
-    /// QoL > Chest Opening (KH1 | KH2, `chest`).
-    Chest,
+    /// QoL > Chest Animation (KH1 | KH2, `chest::anim_kh2`), shown only with Chest Opening on Quick.
+    ChestAnim,
     /// Command Menu > Drive Page (Page 1 | Page 2, `cmdmenu::drive_page2`).
     DrivePage,
     /// Command Menu > D-Pad Left (KH1 | KH2, `cmdmenu::dpad_kh2`).
@@ -254,12 +254,15 @@ enum Pick {
     KnockNumbers,
     /// QoL > Cutscene Skip (Off | Seen | All, `cutsceneskip`).
     CutsceneSkip,
+    /// QoL > Chest Opening (Vanilla | Quick | Skip, `chest::style`).
+    Chest,
 }
 
 fn pick_value(what: Pick) -> usize {
     match what {
         Pick::KnockNumbers => super::hitreact::numbers() as usize,
         Pick::CutsceneSkip => super::cutsceneskip::mode() as usize,
+        Pick::Chest => super::chest::style() as usize,
     }
 }
 
@@ -267,6 +270,7 @@ fn pick_set(what: Pick, v: usize) {
     match what {
         Pick::KnockNumbers => super::hitreact::set_numbers(super::hitreact::Numbers::ALL[v.min(2)]),
         Pick::CutsceneSkip => super::cutsceneskip::set(v.min(2) as u8),
+        Pick::Chest => super::chest::set_style(v.min(2) as u8),
     }
 }
 
@@ -326,7 +330,14 @@ impl List {
             }
             List::MagicAnim => &MAGIC_ANIM,
             List::Tweaks => &TWEAKS,
-            List::QoL => &QOL,
+            // (Chest Animation only with Chest Opening on Quick: the user, t770; it is the list's last row.)
+            List::QoL => {
+                if super::chest::style() == super::chest::QUICK {
+                    &QOL
+                } else {
+                    &QOL[..QOL.len() - 1]
+                }
+            }
             List::Cosmetics => &COSMETICS,
             List::CommandMenu => &COMMAND_MENU,
         }
@@ -369,12 +380,16 @@ const COMMAND_MENU: [Item; 5] = [
 // cutscene fully, then if any flags give you an item the game gives you the item after the fact".)
 // (Chest Opening: the tester Mr Bugs, kh2-chest: "a config in the tweaks menu that lets use quickly open and
 // move from the chest opening animation like in kh2", then round 2: "(b) and move it in QOL", KH2 by default.)
-const QOL: [Item; 5] = [
+// (Chest Opening Vanilla | Quick | Skip and the Chest Animation row under it: the user, t770: "make it a three
+// setting toggle. Vanilla (formerly KH1), quick (formerly kh2), Skip ... when you have it selected as quick
+// another hidden config in the menu appears that lets you choose the animation".)
+const QOL: [Item; 6] = [
     Item::Set([0x7F00_0111, 0x7F00_0113, 0x7F00_0114, 0x7F00_0112], Row::Gummi),
     Item::Set([0x7F00_021B, 0x7F00_011D, 0x7F00_011E, 0x7F00_021C], Row::SoftReset),
     Item::Pick([0x7F00_021D, 0x7F00_011D, 0x7F00_021E, 0x7F00_021F, 0x7F00_0220], Pick::CutsceneSkip),
     Item::Set([0x7F00_0221, 0x7F00_011D, 0x7F00_011E, 0x7F00_0222], Row::IngameSkip),
-    Item::Set(kh(0x7F00_0225, 0x7F00_0226), Row::Chest),
+    Item::Pick([0x7F00_0225, 0x7F00_0231, 0x7F00_0232, 0x7F00_0233, 0x7F00_0226], Pick::Chest),
+    Item::Set(kh(0x7F00_0234, 0x7F00_0235), Row::ChestAnim),
 ];
 // (Cosmetics: the user, t704: "a new menu called cosmetics and put a setting in there for keyblades to
 // always have their trail on".)
@@ -459,7 +474,7 @@ const BUTTON_HELP: u32 = 0x7F00_0202;
 /// Misc's help, and the same without the debug menu (its row isn't there without the debug tools).
 const MISC_HELP: u32 = 0x7F00_020C;
 const MISC_HELP_NO_DEBUG: &str = "Battle quotes.";
-const STRINGS: [(u32, &str); 126] = [
+const STRINGS: [(u32, &str); 131] = [
     (0x7F00_0201, "KH1 in KH2"),
     (0x7F00_0202, "Choose KH1's or KH2's camera, combat, movement and more."),
     (0x7F00_0203, "Camera"),
@@ -506,7 +521,7 @@ const STRINGS: [(u32, &str); 126] = [
     (0x7F00_022F, "Command Lock"),
     (0x7F00_0230, "KH2: a spell, item or summon is taken only once Sora can act, the\nlist stays open until then and nothing greys while he acts. KH1: KH1's."),
     (0x7F00_0211, "QoL"),
-    (0x7F00_0212, "Quality of life: Gummi routes, Soft Reset, Cutscene Skip, In-game Scene Skip."),
+    (0x7F00_0212, "Quality of life: Gummi routes, Soft Reset, Cutscene Skip, In-game Scene Skip,\nChest Opening."),
     (0x7F00_021B, "Soft Reset"),
     (0x7F00_021C, "On: L1 + L2 + R1 + R2 + Start + Select held for a second return to the title screen."),
     (0x7F00_021D, "Cutscene Skip"),
@@ -528,7 +543,12 @@ const STRINGS: [(u32, &str); 126] = [
     (0x7F00_0193, "Enemy Weight"),
     (0x7F00_0194, "On: KH2's knock-back on enemies times KH1's weight for each\nenemy. Off: KH2's own numbers for every enemy."),
     (0x7F00_0225, "Chest Opening"),
-    (0x7F00_0226, "KH1: Sora waits for the item window. KH2: Sora can move at once;\nwhat the chest held shows in the box at the top left."),
+    (0x7F00_0226, "Vanilla: KH1's chest opening. Quick: Sora plays a chest animation,\nthen moves on. Skip: no animation, Sora moves at once. Quick and\nSkip: no item window, the item shows in the box at the top left."),
+    (0x7F00_0231, "Vanilla"),
+    (0x7F00_0232, "Quick"),
+    (0x7F00_0233, "Skip"),
+    (0x7F00_0234, "Chest Animation"),
+    (0x7F00_0235, "The animation Sora plays when he opens a chest on Quick."),
     (0x7F00_0197, "Cast from Glide"),
     (0x7F00_0198, "On: a KH2 spell ends the glide and is cast in the air, as in\nKH2. Off: no spell while gliding."),
     (0x7F00_0199, "Clash Combo"),
@@ -610,7 +630,7 @@ fn value(what: Row) -> bool {
         Row::TrailAlways => super::cosmetics::always(),
         Row::SoftReset => super::softreset::enabled(),
         Row::IngameSkip => super::ingameskip::enabled(),
-        Row::Chest => super::chest::kh2(),
+        Row::ChestAnim => super::chest::anim_kh2(),
         Row::DrivePage => super::cmdmenu::drive_page2(),
         Row::DpadLeft => super::cmdmenu::dpad_kh2(),
         Row::CursorMemory => super::cmdmenu::memory_kh2(),
@@ -650,7 +670,7 @@ fn set(what: Row, v: bool) {
         Row::TrailAlways => super::cosmetics::set_always(v),
         Row::SoftReset => super::softreset::set(v),
         Row::IngameSkip => super::ingameskip::set(v),
-        Row::Chest => super::chest::set(v),
+        Row::ChestAnim => super::chest::set_anim_kh2(v),
         Row::DrivePage => super::cmdmenu::set_drive_page2(v),
         Row::DpadLeft => super::cmdmenu::set_dpad_kh2(v),
         Row::CursorMemory => super::cmdmenu::set_memory_kh2(v),
@@ -880,7 +900,12 @@ unsafe fn free_windows() -> usize {
 /// create, link next / parent, cursor row, the help line, front). 0 when the pool is full.
 unsafe fn create_list(list: List, row: i32, after: usize) -> usize {
     let base = BASE.load(Ordering::Relaxed);
-    let w = call2(CREATE_STEAM, def_of(list), OPEN_TYPE as usize);
+    // (The def's row count follows the list's rows now: QoL's Chest Animation row comes and goes.)
+    let n = list.items().len() as u16;
+    let d = def_of(list);
+    wr::<u16>(d + 0x26, n);
+    wr::<u16>(d + 0x28, n);
+    let w = call2(CREATE_STEAM, d, OPEN_TYPE as usize);
     if w == 0 {
         log!(Menus, "Config menu: no free window for our list");
         return 0;
@@ -1022,6 +1047,9 @@ unsafe extern "system" fn list_update(win: usize) {
                 Some(Item::Pick(_, what)) => {
                     pick_set(*what, (pick_value(*what) + 1) % 3);
                     sound(1);
+                    if list.items().len() != items.len() {
+                        return rebuild(win, list, row);
+                    }
                 }
                 Some(Item::Open(_, _, child)) => {
                     SAVED_ROW[list.index()].store(row, Ordering::Relaxed);
@@ -1065,6 +1093,9 @@ unsafe extern "system" fn list_update(win: usize) {
                 if let Some(n) = new {
                     pick_set(*what, n);
                     sound(1);
+                    if list.items().len() != items.len() {
+                        return rebuild(win, list, row);
+                    }
                 }
             }
         }
@@ -1077,6 +1108,18 @@ unsafe extern "system" fn list_update(win: usize) {
             Item::Pick(ids, what) => picker(win, i as i32, row == i as i32, ids, pick_value(*what)),
         }
     }
+}
+
+/// A list whose rows changed (a row shown or hidden by another's value): it is made again in its place,
+/// the cursor on the same row, as a list opened from its parent is (`open`).
+unsafe fn rebuild(win: usize, list: List, row: i32) {
+    // (No room in KH1's window pool: the list keeps its rows until it is next opened.)
+    if free_windows() < 2 {
+        return;
+    }
+    let after = call1(CHAIN_END_STEAM, win);
+    call1(CLOSE_STEAM, win);
+    create_list(list, row, after);
 }
 
 /// Page 1's glint at the selected label's top-right corner (x 153, y 71 + row x the rows' pitch),

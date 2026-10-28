@@ -255,9 +255,13 @@ cutscene_seen =\r\n\
 ; pause menu can't skip) with KH1's own skip: items, abilities and story flags the scene gives are still given.\r\n\
 ; Talks, shops, scenes with a choice and the pause menu's skippable cutscenes are left alone (QoL > In-game Scene Skip)\r\n\
 ingame_skip = off\r\n\
-; chest_style: kh1 = KH1's chest opening (Sora stands still until the item window is closed); kh2 = as KH2 (the\r\n\
-; default): Sora is free at once and the item shows at the top of the screen, no window to close (QoL > Chest Opening)\r\n\
-chest_style = kh2\r\n\
+; chest_style: vanilla = KH1's chest opening (Sora stands still until the item window is closed); quick = Sora plays\r\n\
+; a chest animation (chest_anim), then moves on; skip = as KH2 (the default): no animation, Sora is free at once.\r\n\
+; Quick and skip show the item in the box at the top left, no window to close (QoL > Chest Opening; the old kh1 /\r\n\
+; kh2 values read as vanilla / skip)\r\n\
+chest_style = skip\r\n\
+; chest_anim: quick's animation: kh1 = KH1's open motion; kh2 = KH2's (QoL > Chest Animation, shown on Quick)\r\n\
+chest_anim = kh1\r\n\
 ; trace: (debug tools: only with debug_menu = on) on = the last trace_seconds of Sora's frames (position, KH1's and KH2's states, the pad)\r\n\
 ; are kept and written to the kh1-kh2-traces folder on Select + Triangle, or on their own when\r\n\
 ; something looks wrong; always = every frame is also written to kh1-kh2.trace.csv; off = none\r\n\
@@ -439,8 +443,11 @@ pub struct Settings {
     pub cutscene_seen: String,
     /// Skips the in-game (low-poly) event scenes with KH1's own skip (`ingame_skip = on`, `ingameskip.rs`).
     pub ingame_skip: bool,
-    /// KH2's chest opening (`chest_style = kh2`, `chest.rs`).
-    pub chest_kh2: bool,
+    /// The chest opening (`chest_style = vanilla | quick | skip`: 0, 1, 2; the old kh1 / kh2 read as 0 / 2;
+    /// `chest.rs`).
+    pub chest_style: u8,
+    /// Quick's animation is KH2's (`chest_anim = kh2`).
+    pub chest_anim_kh2: bool,
     /// KH1's own states own base Sora (`shared = on`, `shared.rs`): KH2's animations on KH1's
     /// states per move style (its physics by `physics_rule`), KH2's controller only for KH2's own
     /// moves. Off: the old
@@ -698,7 +705,12 @@ fn load(first: bool) -> Option<Settings> {
         },
         cutscene_seen: setting(&text, "cutscene_seen").unwrap_or_default(),
         ingame_skip: on(&text, "ingame_skip", "on", false),
-        chest_kh2: on(&text, "chest_style", "kh2", true),
+        chest_style: match setting(&text, "chest_style").as_deref() {
+            Some("vanilla") | Some("kh1") | Some("off") => 0,
+            Some("quick") => 1,
+            _ => 2,
+        },
+        chest_anim_kh2: on(&text, "chest_anim", "kh2", false),
         shared: on(&text, "shared", "on", true),
         kh1_slots: match setting(&text, "kh1_slots").as_deref() {
             Some("off") | Some("0") | Some("no") => None,

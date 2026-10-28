@@ -479,3 +479,16 @@ at KH2 Sora is free as soon as a plain chest is opened and what it held shows in
 with no window to close. New text ids `0x7F000225` / `0x7F000226`. How it works and what is
 checked: `docs/kh1-chest.md`. **Assumption** until seen: thirteen rows at the list's smaller scale
 still clear the help box (`list_scale` sizes it).
+
+
+### 6.z7 Chest Opening: Vanilla | Quick | Skip, and Chest Animation (t770)
+
+The owner: "make it a three setting toggle. Vanilla (formerly KH1), quick (formerly kh2), Skip ... when you
+have it selected as quick another hidden config in the menu appears that lets you choose the animation".
+QoL's Chest Opening is a three-value row now (`Item::Pick`, `Pick::Chest`; ini `chest_style = vanilla |
+quick | skip`, the old `kh1` / `kh2` read as vanilla / skip, skip by default). With it on Quick, QoL has a
+sixth row, Chest Animation (KH1 | KH2, ini `chest_anim`), its last; on the other values the list has five.
+Our lists' window defs now take their row count from the list each time one is made (`create_list`), and a
+three-value change that adds or takes away a row makes the list again in its place, the cursor on the same
+row (`config::rebuild`, as `open` does; not when KH1's window pool is short, then at the next opening).
+Not checked in game.

@@ -207,6 +207,24 @@ contexts.
 - **Not checked:** in game; the evidence's names come from KH1's item names (`equip::item_name`), and a
   583 record that isn't an item reads "Reward".
 
+## Round 4 (t770): Vanilla | Quick | Skip
+
+- The owner: three values. **Vanilla** is KH1's (nothing installed). **Skip** is t768 / t769 as they were
+  (no animation, Sora free at once, the notice). **Quick**: the same, but Sora plays a chest animation first:
+  the Open handler's own request for KH1's open motion (`0x900A6`) is made (`open_request` lets it through)
+  and KH1's lock (`+0x444` bit 1) is kept; the treasure script's wait on Sora's motion (event function 103,
+  `0x1401A96F0`) is KH1's own then, and the frame it goes on the mod clears the lock (`quick_release`). For a
+  room script's box the mod makes the same request and sets the same lock at the pick, and lets go at the
+  box's wait or its 512. The 8 s window's end lets go too. Assumption: KH1's open motion plays whole with the
+  lock on (the t743 trace had it replaced after 3 frames with the lock off).
+- **Chest Animation (KH1 | KH2)**, shown only on Quick: KH1 is KH1's open motion. **KH2 has none to port:**
+  KH2's Open (`0x1A5`) is a message to the box; the handlers that take it (Steam KH2 `0x140405ED0`, in the
+  vtable at `0x1405CC2B0`, and `0x140406020`) play motion `0x98` on the object they belong to, the box's
+  set-up (`0x140402200`) picks `0x98` (open) or `0x97` (shut) for the same object, and no player code asks
+  Sora for a motion on it. Checked (decomp + exe). Sora's own KH2 motion set (`P_EX100.mset`) has entries
+  at `0x97` / `0x98` (`A300`, `A301`), but nothing ties them to chests. Checked (files). Until a KH2 motion
+  is chosen, KH2 on this row plays KH1's (logged).
+
 ## Not checked (Assumption)
 
 - (t724, now answered) KH2's own chest: see "KH2's own chest opening" above (checked in files and

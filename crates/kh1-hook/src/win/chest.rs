@@ -1,4 +1,4 @@
-//! Chest Opening (KH1 | KH2), the Config menu's QoL row (KH2 by default; it was Combat > Tweaks in t724) (the tester Mr Bugs, thread
+//! Chest Opening (Vanilla | Quick | Skip since t770; KH1 | KH2 before), the Config menu's QoL row (KH2 by default; it was Combat > Tweaks in t724) (the tester Mr Bugs, thread
 //! kh2-chest: "quickly open and move from the chest opening animation like in kh2 ... open the chest,
 //! move then the pop up for the item plays at the top of the game letting you know what you got").
 //! `docs/kh1-chest.md`.
@@ -67,8 +67,16 @@ use crate::kh1script::{read_box, BoxOpen, FN_ADD_ITEM, FN_GIVE_REWARD, FN_RELEAS
 use std::sync::OnceLock;
 use std::time::Instant;
 
-/// KH2 (`chest_style = kh2`).
-static KH2: AtomicBool = AtomicBool::new(false);
+/// The row's value (`chest_style = vanilla | quick | skip`, t770): 0 KH1's, 1 Quick (Sora plays a chest
+/// animation, then moves on), 2 Skip (no animation: as KH2).
+static STYLE: AtomicU8 = AtomicU8::new(SKIP);
+pub const VANILLA: u8 = 0;
+pub const QUICK: u8 = 1;
+pub const SKIP: u8 = 2;
+/// Quick's animation (`chest_anim = kh1 | kh2`): KH2's (true) or KH1's open motion.
+static ANIM_KH2: AtomicBool = AtomicBool::new(false);
+/// Quick: Sora's lock is the mod's until his open motion is over (the actor it was set on, 0: none).
+static QUICK_LOCK: AtomicUsize = AtomicUsize::new(0);
 static INSTALLED: AtomicBool = AtomicBool::new(false);
 static ORIG_OPEN: AtomicUsize = AtomicUsize::new(0);
 /// KH1's message functions as the table held them (called for anything not ours).
@@ -226,29 +234,71 @@ fn base() -> usize {
     unsafe { super::sys::GetModuleHandleA(std::ptr::null()) as usize }
 }
 
-/// The row's value: KH2's chest opening.
+/// The open is the mod's (Quick or Skip): no item window, no hold beyond the animation.
 pub fn kh2() -> bool {
-    KH2.load(Ordering::Relaxed)
+    STYLE.load(Ordering::Relaxed) != VANILLA
+}
+
+/// The row's value: `VANILLA`, `QUICK` or `SKIP`.
+pub fn style() -> u8 {
+    STYLE.load(Ordering::Relaxed)
+}
+
+/// Quick's animation is KH2's.
+pub fn anim_kh2() -> bool {
+    ANIM_KH2.load(Ordering::Relaxed)
+}
+
+fn style_name(v: u8) -> &'static str {
+    match v {
+        VANILLA => "Vanilla",
+        QUICK => "Quick",
+        _ => "Skip",
+    }
 }
 
 pub unsafe fn install() {
-    let on = super::settings::get().chest_kh2;
-    KH2.store(on, Ordering::Relaxed);
-    if on {
+    let s = super::settings::get();
+    STYLE.store(s.chest_style.min(SKIP), Ordering::Relaxed);
+    ANIM_KH2.store(s.chest_anim_kh2, Ordering::Relaxed);
+    if kh2() {
         hook_in();
     }
-    log!(Menus, "Chest Opening: {} (chest_style)", if on { "KH2" } else { "KH1" });
+    log!(Menus, "Chest Opening: {} (chest_style), Quick's animation {} (chest_anim)", style_name(style()), if anim_kh2() { "KH2" } else { "KH1" });
 }
 
 /// The Config menu's Chest Opening row, kept in the ini.
-pub fn set(v: bool) {
-    KH2.store(v, Ordering::Relaxed);
-    if v {
+pub fn set_style(v: u8) {
+    let v = v.min(SKIP);
+    STYLE.store(v, Ordering::Relaxed);
+    if v != VANILLA {
         unsafe { hook_in() };
     }
     FAST_AT.store(0, Ordering::Relaxed);
-    super::settings::save("chest_style", if v { "kh2" } else { "kh1" });
-    log!(Menus, "Config menu: Chest Opening {}", if v { "KH2" } else { "KH1" });
+    super::settings::save("chest_style", match v {
+        VANILLA => "vanilla",
+        QUICK => "quick",
+        _ => "skip",
+    });
+    log!(Menus, "Config menu: Chest Opening {}", style_name(v));
+}
+
+/// The Config menu's Chest Animation row (shown on Quick), kept in the ini.
+pub fn set_anim_kh2(v: bool) {
+    ANIM_KH2.store(v, Ordering::Relaxed);
+    super::settings::save("chest_anim", if v { "kh2" } else { "kh1" });
+    log!(Menus, "Config menu: Chest Animation {}", if v { "KH2" } else { "KH1" });
+}
+
+/// Quick: KH1's lock on Sora (`+0x444` bit 1) is let go once his open motion is over (t770).
+unsafe fn quick_release(why: &str) {
+    let sora = QUICK_LOCK.swap(0, Ordering::Relaxed);
+    if sora < 0x10000 {
+        return;
+    }
+    let lock = sora + ACTOR_LOCK;
+    std::ptr::write_unaligned(lock as *mut u32, rd::<u32>(lock) & !LOCK_BIT);
+    log!(Cutscenes, "Chest Opening: Quick: Sora free ({why})");
 }
 
 /// The Open handler hook and the four table entries (Steam only, once).
@@ -323,7 +373,13 @@ unsafe extern "system" fn open(sora: usize, chest: usize) {
         return;
     }
     let lock = sora + ACTOR_LOCK;
-    std::ptr::write_unaligned(lock as *mut u32, rd::<u32>(lock) & !LOCK_BIT);
+    if style() == QUICK {
+        // Quick (t770): KH1's lock stays on while the open motion `open_request` asked for plays; it is
+        // let go when the treasure script's wait on Sora's motion (event function 103) sees it end.
+        QUICK_LOCK.store(sora, Ordering::Relaxed);
+    } else {
+        std::ptr::write_unaligned(lock as *mut u32, rd::<u32>(lock) & !LOCK_BIT);
+    }
     SORA.store(sora, Ordering::Relaxed);
     MODE.store(MODE_TREASURE, Ordering::Relaxed);
     FAST_AT.store(ms() + 1, Ordering::Relaxed);
@@ -354,7 +410,7 @@ unsafe extern "system" fn open(sora: usize, chest: usize) {
         }
     };
     super::menu::queue_notice("Obtained", &line);
-    log!(Cutscenes, "Chest Opening: KH2 open (kind {kind}, contents {what:#x}): Sora free at once, notice \"Obtained / {line}\", the treasure script's windows skipped");
+    log!(Cutscenes, "Chest Opening: {} open (kind {kind}, contents {what:#x}): notice \"Obtained / {line}\", the treasure script's windows skipped", style_name(style()));
 }
 
 /// The Open handler's request for Sora's open motion (`0x1402B59CC`'s call of `0x14029F980`, t768). On a
@@ -364,9 +420,14 @@ unsafe extern "system" fn open(sora: usize, chest: usize) {
 /// instruction loads `rcx` again).
 unsafe extern "system" fn open_request(actor: usize, request: u32, blend: f32) -> usize {
     let base = base();
-    if kh2() && request == OPEN_REQUEST && fast_kind(base) {
-        log!(Cutscenes, "Chest Opening: KH1's open motion not asked for (KH2: Sora keeps his motion)");
+    if style() == SKIP && request == OPEN_REQUEST && fast_kind(base) {
+        log!(Cutscenes, "Chest Opening: KH1's open motion not asked for (Skip: Sora keeps his motion)");
         return actor + ACTOR_REQUEST;
+    }
+    if style() == QUICK && request == OPEN_REQUEST && fast_kind(base) {
+        // (KH2's animation isn't chosen yet: KH2's Sora has no chest motion of his own, `docs/kh1-chest.md`;
+        // until it is, Quick plays KH1's.)
+        log!(Cutscenes, "Chest Opening: Quick: KH1's open motion{}", if anim_kh2() { " (KH2's animation not chosen yet: KH1's plays)" } else { "" });
     }
     let f: unsafe extern "system" fn(usize, u32, f32) -> usize = std::mem::transmute(base + REQUEST_STEAM);
     f(actor, request, blend)
@@ -426,6 +487,16 @@ unsafe extern "system" fn pick(object: usize, b: usize, command: i32) -> u32 {
                 return r;
             }
             SORA.store(sora, Ordering::Relaxed);
+            if style() == QUICK {
+                // Quick (t770): KH1's open motion and KH1's lock, as KH1's Open handler does for a chest
+                // (`0x14029F980 (sora, 0x900A6, 0)`, `+0x444` bit 1); let go when the box's wait on his
+                // motion sees it end, or at its 512.
+                let req: unsafe extern "system" fn(usize, u32, f32) -> usize = std::mem::transmute(base + REQUEST_STEAM);
+                req(sora, OPEN_REQUEST, 0.0);
+                let lock = sora + ACTOR_LOCK;
+                std::ptr::write_unaligned(lock as *mut u32, rd::<u32>(lock) | LOCK_BIT);
+                QUICK_LOCK.store(sora, Ordering::Relaxed);
+            }
             BOX_CTXS.store(list, Ordering::Relaxed);
             BOX_COUNT.store(count_at, Ordering::Relaxed);
             MODE.store(MODE_BOX, Ordering::Relaxed);
@@ -496,6 +567,7 @@ unsafe fn ours_to_skip(ctx: usize) -> bool {
         return false;
     }
     if ms() + 1 - at > FAST_MS {
+        quick_release("the open's time is over");
         FAST_AT.store(0, Ordering::Relaxed);
         MODE.store(MODE_NONE, Ordering::Relaxed);
         log!(
@@ -562,6 +634,7 @@ unsafe extern "system" fn script_call(ctx: usize, n: i32) -> u64 {
     let at = FAST_AT.load(Ordering::Relaxed);
     if at == 0 || ms() + 1 - at > FAST_MS {
         if at != 0 {
+            quick_release("the open's time is over");
             FAST_AT.store(0, Ordering::Relaxed);
             MODE.store(MODE_NONE, Ordering::Relaxed);
             log!(
@@ -583,6 +656,14 @@ unsafe extern "system" fn script_call(ctx: usize, n: i32) -> u64 {
         box_notice(base, ctx, n as u32);
     }
     if n as usize == FN_WAIT_MOTION && rd::<u64>(ctx + CTX_ACTOR) as usize == sora {
+        // Quick: KH1's own wait, so the script goes on with the motion's end, and Sora with it (t770).
+        if QUICK_LOCK.load(Ordering::Relaxed) == sora {
+            let r = orig(ctx, n);
+            if r & 2 != 0 {
+                quick_release("his open motion is over");
+            }
+            return r;
+        }
         note_release(&format!("its wait on Sora's motion (function 103, context {ctx:#x}) goes on"));
         return 2;
     }
@@ -592,6 +673,7 @@ unsafe extern "system" fn script_call(ctx: usize, n: i32) -> u64 {
         }
         // A box's part ends at its 512 (the player given back): the open is over (t769).
         if boxed && n as u32 == FN_RELEASE {
+            quick_release("the box's part has ended");
             FAST_AT.store(0, Ordering::Relaxed);
             MODE.store(MODE_NONE, Ordering::Relaxed);
             log!(
