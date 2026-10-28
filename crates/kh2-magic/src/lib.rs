@@ -28,6 +28,8 @@ use kh2_formats::bar::Bar;
 use kh2_formats::pax::Pax;
 
 pub use effect::Effect;
+/// The script machine (for a host that runs it on its own memory, `NativeHost`).
+pub use kh2_bdx;
 
 pub type ObjId = u32;
 
@@ -133,6 +135,8 @@ pub struct MagicAttack {
     pub reflected: bool,
     pub reflect_count: u8,
     pub freed: bool,
+    /// Freed and already shown to the host by an `update` (it goes at the next one).
+    pub(crate) freed_seen: bool,
 }
 
 impl MagicAttack {
@@ -186,6 +190,34 @@ pub enum Event {
     Error(String),
 }
 
+/// A host whose own script machine runs the spells' scripts (the mod: KH1's script processes,
+/// `docs/kh1-magic-native.md` §8). With one set (`Magic::native`), a cast's machine sits on the
+/// host's memory and its main context is one of the host's processes: the host steps it
+/// (`Magic::step_external`) when its own machine steps that process, and `update` leaves it alone.
+/// The context's registers live in the host's process between steps (`load` / `store`).
+pub trait NativeHost: Send {
+    /// A machine for spell `spell`'s script on the host's memory, with its main context on a new
+    /// process of the host's, for trigger `key`. `None`: the cast runs on our own arena as before.
+    fn machine(&mut self, file: &SpellFile, spell: usize, key: i32) -> Option<(Vm, CtxId)>;
+    /// The cast `id` is set up (its trigger's frame and arguments in the context): its process is
+    /// handed the registers and steps it from now on. False: the host couldn't take it (the cast
+    /// then runs on our side, its machine as it is).
+    fn started(&mut self, id: u64, vm: &Vm, main: CtxId) -> bool;
+    /// A thread the cast `id`'s script starts (`trap_magic_start_thread`): a context on a new
+    /// child process of the cast's process (its stack the child's, its work memory `wp`, shared),
+    /// which the host's machine steps after its parent. `None`: it runs inside its parent's step,
+    /// on our side, as before.
+    fn thread(&mut self, id: u64, vm: &mut Vm, wp: u32) -> Option<CtxId>;
+    /// A context's registers from its host process (before a step).
+    fn load(&mut self, id: u64, vm: &mut Vm, ctx: CtxId);
+    /// A context's registers into its host process (after a step, a trigger, a thread start).
+    fn store(&mut self, id: u64, vm: &Vm, ctx: CtxId);
+    /// The host's process is still there (a room change or reset may have dropped it).
+    fn alive(&self, id: u64) -> bool;
+    /// The cast is over: its process ends at its next step and its memory goes back.
+    fn ended(&mut self, id: u64);
+}
+
 pub(crate) struct Tables {
     pub caster: ObjId,
     pub spell: usize,
@@ -200,6 +232,10 @@ pub(crate) struct Tables {
     pub teamwork: HashMap<u32, u32>,
     pub statics: host::Statics,
     pub threads: Vec<CtxId>,
+    /// Threads on the host's child processes (`NativeHost::thread`), stepped by the host.
+    pub ext_threads: Vec<CtxId>,
+    /// The cast, when its main context is on the host's process (`NativeHost`).
+    pub native_id: Option<u64>,
     /// The caster's battle target, picked when the cast starts.
     pub target: Option<ObjId>,
 }
@@ -216,6 +252,10 @@ pub struct Cast {
     pub object: bool,
     /// Held by the host (`Magic::hold`): its script doesn't run and its effects don't age.
     pub held: bool,
+    /// This cast, for the host (`NativeHost`).
+    pub id: u64,
+    /// Its main context is one of the host's processes, stepped by the host (`step_external`).
+    pub external: bool,
 }
 
 impl Cast {
@@ -224,6 +264,14 @@ impl Cast {
     }
     pub fn spell(&self) -> usize {
         self.t.spell
+    }
+    /// Its main context.
+    pub fn main_ctx(&self) -> CtxId {
+        self.main
+    }
+    /// Its threads on the host's child processes (`NativeHost::thread`), in the order started.
+    pub fn host_threads(&self) -> &[CtxId] {
+        &self.t.ext_threads
     }
 }
 
@@ -242,6 +290,13 @@ pub struct Magic {
     /// KH2's teamwork blocks (`trap_teamwork_alloc`, Steam `0x1403F6DF0`): one per key, shared by
     /// every script.
     pub(crate) teamwork: HashMap<u32, Vec<u8>>,
+    /// The host's own script machine, when it runs the casts (`NativeHost`).
+    pub native: Option<Box<dyn NativeHost>>,
+    /// The host's frame number, when its machine steps casts outside `update`: the effects then
+    /// age once per frame, before the first script of the frame runs (as `update` has it), whether
+    /// that is `update` or `step_external`. `None`: every `update` ages them.
+    pub frame: Option<u64>,
+    ticked: Option<u64>,
 }
 
 impl Default for Magic {
@@ -253,7 +308,7 @@ impl Default for Magic {
 impl Magic {
     pub fn new() -> Magic {
         // Attack groups the game makes up start at 0x100.
-        Magic { spells: Vec::new(), casts: Vec::new(), attacks: Vec::new(), effects: Vec::new(), frametime: 1.0, trace: std::env::var_os("KH2_MAGIC_TRACE").is_some(), next_id: 1, next_group: 0x100, events: Vec::new(), teamwork: HashMap::new() }
+        Magic { spells: Vec::new(), casts: Vec::new(), attacks: Vec::new(), effects: Vec::new(), frametime: 1.0, trace: std::env::var_os("KH2_MAGIC_TRACE").is_some(), next_id: 1, next_group: 0x100, events: Vec::new(), teamwork: HashMap::new(), native: None, frame: None, ticked: None }
     }
 
     pub fn add_spell(&mut self, file: SpellFile) -> usize {
@@ -280,7 +335,12 @@ impl Magic {
     /// a target first for Fire, Blizzard, Thunder and Magnet only.
     pub fn cast(&mut self, spell: usize, caster: ObjId, element: u8, sub: i32, magi: &[u8], world: &mut dyn World) -> Result<usize, BdxError> {
         let file = self.spells.get(spell).ok_or_else(|| BdxError::Trap("no such spell".into()))?;
-        let mut vm = Vm::new(file.program.clone());
+        // On the host's own script machine when it has one (its memory, its process).
+        let made = self.native.as_mut().and_then(|n| n.machine(file, spell, 20));
+        let (mut vm, native_main) = match made {
+            Some((vm, main)) => (vm, Some(main)),
+            None => (Vm::new(file.program.clone()), None),
+        };
         vm.frametime = self.frametime;
         let statics = host::Statics::new(&mut vm);
         let mut t = Tables {
@@ -295,15 +355,22 @@ impl Magic {
             teamwork: HashMap::new(),
             statics,
             threads: Vec::new(),
+            ext_threads: Vec::new(),
+            native_id: None,
             target: if matches!(element, 0 | 1 | 2 | 4) { world.target_of(caster) } else { None },
         };
         let player = host::obj_record(&mut vm, &mut t, caster);
         t.pax_rec = vm.mem.alloc(16);
         let magi_at = vm.mem.alloc(magi.len() as u32);
         vm.mem.write(magi_at, magi)?;
-        let main = vm.spawn(None);
+        let main = native_main.unwrap_or_else(|| vm.spawn(None));
         vm.trigger(main, 20, &[Cell::addr(player), Cell::addr(t.pax_rec), Cell::int(sub), Cell::addr(magi_at)])?;
-        self.casts.push(Cast { vm, t, main, released: false, finished: false, fresh: true, object: false, held: false });
+        let id = self.fresh_id();
+        let external = native_main.is_some() && self.native.as_mut().is_some_and(|n| n.started(id, &vm, main));
+        if external {
+            t.native_id = Some(id);
+        }
+        self.casts.push(Cast { vm, t, main, released: false, finished: false, fresh: true, object: false, held: false, id, external });
         // It first runs with the next `update` (the game's magic manager
         // runs every script once per frame, after the player).
         Ok(self.casts.len() - 1)
@@ -330,6 +397,8 @@ impl Magic {
             teamwork: HashMap::new(),
             statics,
             threads: Vec::new(),
+            ext_threads: Vec::new(),
+            native_id: None,
             target: world.target_of(owner),
         };
         let obj = host::obj_record(&mut vm, &mut t, owner);
@@ -337,7 +406,8 @@ impl Magic {
         let effect = host::start_object_effect(self, &mut vm, &mut t, n as u16, owner, world);
         let main = vm.spawn(None);
         vm.trigger(main, 0x10, &[Cell::addr(obj), Cell::int(n as i32), Cell::addr(effect)])?;
-        self.casts.push(Cast { vm, t, main, released: true, finished: false, fresh: false, object: true, held: false });
+        let id = self.fresh_id();
+        self.casts.push(Cast { vm, t, main, released: true, finished: false, fresh: false, object: true, held: false, id, external: false });
         // The trigger runs at once (same frame), like the game's call.
         let i = self.casts.len() - 1;
         self.run_cast(i, world);
@@ -356,7 +426,20 @@ impl Magic {
         let c = &mut self.casts[i];
         c.released = true;
         let main = c.main;
-        match c.vm.trigger(main, 21, &[]) {
+        // (On the host's process: its registers brought here first, and the trigger's frame
+        // handed back to it.)
+        if c.external {
+            if let Some(n) = self.native.as_mut() {
+                n.load(c.id, &mut c.vm, main);
+            }
+        }
+        let r = c.vm.trigger(main, 21, &[]);
+        if c.external {
+            if let Some(n) = self.native.as_mut() {
+                n.store(c.id, &c.vm, main);
+            }
+        }
+        match r {
             Ok(true) => {
                 c.finished = false;
                 true
@@ -372,7 +455,17 @@ impl Magic {
     fn run_cast(&mut self, i: usize, world: &mut dyn World) {
         let mut cast = std::mem::replace(&mut self.casts[i], placeholder());
         cast.fresh = false;
+        if cast.external {
+            if let Some(n) = self.native.as_mut() {
+                n.load(cast.id, &mut cast.vm, cast.main);
+            }
+        }
         let result = host::run(self, &mut cast, world);
+        if cast.external {
+            if let Some(n) = self.native.as_mut() {
+                n.store(cast.id, &cast.vm, cast.main);
+            }
+        }
         if let Err(e) = result {
             self.events.push(Event::Error(format!("{}: {e}", self.spells[cast.t.spell].name)));
             cast.finished = true;
@@ -382,10 +475,13 @@ impl Magic {
 
     /// One frame: effects age and follow their bones, then every script
     /// runs. Returns what the host should act on.
-    pub fn update(&mut self, world: &mut dyn World) -> Vec<Event> {
+    /// The effects age one frame (once per host frame when `frame` is set).
+    fn tick(&mut self, world: &mut dyn World) {
+        if self.frame.is_some() && self.ticked == self.frame {
+            return;
+        }
+        self.ticked = self.frame;
         let ft = self.frametime;
-        // Attacks freed last frame are gone now.
-        self.attacks.retain(|a| !a.freed);
         // A held cast's effects stand still in time (they still follow their owner).
         let held: Vec<u64> = self.casts.iter().filter(|c| c.held).flat_map(|c| c.t.effects.values().copied()).collect();
         for e in &mut self.effects {
@@ -397,13 +493,35 @@ impl Magic {
         }
         // Dead effects stay a little so scripts holding them read "dead".
         self.effects.retain(|e| e.alive() || e.linger > 0.0);
+    }
+
+    pub fn update(&mut self, world: &mut dyn World) -> Vec<Event> {
+        // Attacks freed before the last update are gone now (the host has seen them freed;
+        // one freed since, by the host's machine too, stays for it to see this time).
+        self.attacks.retain(|a| !(a.freed && a.freed_seen));
+        self.tick(world);
         for i in 0..self.casts.len() {
+            // (A cast on the host's process is stepped by the host's machine, `step_external`;
+            // one whose process is gone, a room change or a reset, is over.)
+            if self.casts[i].external {
+                let gone = self.native.as_ref().map_or(true, |n| !n.alive(self.casts[i].id));
+                if gone && !self.casts[i].finished {
+                    self.casts[i].finished = true;
+                    self.events.push(Event::Error(format!("{}: its script process is gone", self.spells[self.casts[i].t.spell].name)));
+                }
+                continue;
+            }
             if !self.casts[i].finished && !self.casts[i].held {
                 self.run_cast(i, world);
             }
         }
         // A finished cast's attacks go too (the scripts free their own).
         let live: Vec<bool> = self.casts.iter().map(|c| !c.finished).collect();
+        for c in self.casts.iter().filter(|c| c.finished && c.external) {
+            if let Some(n) = self.native.as_mut() {
+                n.ended(c.id);
+            }
+        }
         let mut keep = live.iter();
         self.casts.retain(|_| *keep.next().unwrap());
         // Attacks of casts that ended are freed with them.
@@ -411,8 +529,52 @@ impl Magic {
             if !self.casts.iter().any(|c| c.t.attacks.values().any(|k| *k == a.key)) {
                 a.freed = true;
             }
+            if a.freed {
+                a.freed_seen = true;
+            }
         }
         std::mem::take(&mut self.events)
+    }
+
+    /// The host's machine steps the process of cast `id` (`NativeHost`): its script runs once, as
+    /// `update` runs a cast of ours. Returns whether the process goes on (false: the cast is over,
+    /// or no longer here, and the process ends).
+    /// `ctx` is the cast's main context (its tree and any thread of ours run) or one of its threads
+    /// on the host's child processes (that thread alone runs; false once it is done).
+    pub fn step_external(&mut self, id: u64, ctx: CtxId, world: &mut dyn World) -> bool {
+        let Some(i) = self.casts.iter().position(|c| c.id == id && c.external) else { return false };
+        if self.casts[i].finished {
+            return false;
+        }
+        let main = self.casts[i].main;
+        if ctx != main && !self.casts[i].t.ext_threads.contains(&ctx) {
+            return false;
+        }
+        // The frame's effect ages first, as `update` has it before any script.
+        self.tick(world);
+        // Held: it waits, its process with it.
+        if self.casts[i].held {
+            return true;
+        }
+        if ctx == main {
+            self.run_cast(i, world);
+            return !self.casts[i].finished;
+        }
+        let mut cast = std::mem::replace(&mut self.casts[i], placeholder());
+        if let Some(n) = self.native.as_mut() {
+            n.load(id, &mut cast.vm, ctx);
+        }
+        let result = host::run_ctx(self, &mut cast, Some(ctx), world);
+        if let Some(n) = self.native.as_mut() {
+            n.store(id, &cast.vm, ctx);
+        }
+        if let Err(e) = result {
+            self.events.push(Event::Error(format!("{}: {e}", self.spells[cast.t.spell].name)));
+            cast.finished = true;
+        }
+        let goes = !cast.finished && cast.t.ext_threads.contains(&ctx);
+        self.casts[i] = cast;
+        goes
     }
 
     /// Events from casting or releasing outside `update`.
@@ -491,6 +653,8 @@ fn placeholder() -> Cast {
             teamwork: HashMap::new(),
             statics: host::Statics::default(),
             threads: Vec::new(),
+            ext_threads: Vec::new(),
+            native_id: None,
             target: None,
         },
         main: 0,
@@ -499,5 +663,7 @@ fn placeholder() -> Cast {
         fresh: false,
         object: false,
         held: false,
+        id: 0,
+        external: false,
     }
 }

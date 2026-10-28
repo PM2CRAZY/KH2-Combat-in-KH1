@@ -2531,6 +2531,207 @@ impl Strikes {
     }
 }
 
+// ---------------------------------------------------------------------------------------------
+// Reflect's barrier as a KH1 guard object (t796; the tester, kh2-magic-and-reflect-native m12
+// question 2 "(a)"; `docs/kh1-reflect-spell.md` "The barrier as a KH1 guard object").
+//
+// KH2 (Steam KH2, Checked (decomp)): the barrier is an attack of its own (ATKP 573, kind 3, a
+// special guard, refact self 2) that KH2's attack meeting `0x1403D2140` meets with every enemy
+// attack: a shot is marked over (`0x200`) and its script told, a melee attack is stopped and its
+// owner plays its clash reaction; each meeting counts on the barrier (`+0xB0`).
+//
+// KH1 (Steam KH1, Checked (decomp)): a guard is an attack object of priority 100 that KH1's
+// collision pass `0x1402B4460` builds into its entry list (`0x1402B3800`), tests against every
+// other attack entry (`0x1402B3BE0`) and, on an overlap that passes the pairing table, hands to its
+// meeting `0x1402B4A20`: the two directional tests `0x1402B4640`, then each side's half
+// `0x1402B4BC0` (the enemy's attack stopped, its owner's clash record; a free-flying shot met by a
+// guard is turned back, which is KH1's reflect).
+//
+// So the barrier is now a KH1 guard object of Sora's (clash type 4, a pure guard: it never meets a
+// body; priority 100; always live), standing on the barrier's own shapes (KH1's builder puts them
+// in as KH2's ellipsoids, `bodyhits::guard_shapes`). KH1's pass finds every enemy attack that
+// meets it. At KH1's meeting (`recoil`'s hook, `barrier_meeting`):
+// - a free-standing shot is stopped as KH2 stops it (`stop_shot`: KH1's "struck, no damage"
+//   result, its hit script told, its attack switched off), and KH1's halves don't run (they would
+//   turn it back);
+// - anything else (melee) goes to KH1's own halves: stopped, its owner's clash record, the barrier
+//   standing;
+// - either way the meeting is counted on the barrier (its counter) with the place they met (the
+//   contact effect), once per barrier and enemy attack.
+// Our own overlap test (`barrier_meet`) stays only where the meeting hook or KH1's builder hook
+// isn't in (Epic, or unexpected bytes).
+// ---------------------------------------------------------------------------------------------
+
+/// One barrier's guard object: the barrier's key in the spell runtime, the object, the enemy
+/// attacks it met (object, owner and data handles), where (KH1 world), and the shots it stopped
+/// (object, owner and data handles) for `stopped_check`.
+struct BarrierObj {
+    key: u64,
+    obj: usize,
+    met: Vec<(usize, u32, u32)>,
+    at: Vec<[f32; 3]>,
+    stopped: Vec<(usize, u32, u32)>,
+}
+
+static BARRIERS: std::sync::Mutex<Vec<BarrierObj>> = std::sync::Mutex::new(Vec::new());
+
+/// The barrier as a KH1 guard object KH1's pass meets (KH1's meeting hooked, KH2's shapes put in
+/// by KH1's builder).
+pub fn barrier_native() -> bool {
+    super::recoil::meeting_on() && super::bodyhits::native()
+}
+
+/// At KH1's meeting of two attack entries (`recoil`'s hook, before KH1's own): when one side is a
+/// barrier's guard object and the other an enemy's attack, KH2's barrier rule. Returns true when
+/// KH1's own halves must not run (a shot stopped, or a pair already met).
+pub unsafe fn barrier_meeting(a: usize, b: usize, sora: usize) -> bool {
+    let Ok(mut g) = BARRIERS.try_lock() else { return false };
+    if g.is_empty() {
+        return false;
+    }
+    let (oa, ob) = (rd::<usize>(a + 0x18), rd::<usize>(b + 0x18));
+    let (i, other, be, oe) = if let Some(i) = g.iter().position(|x| x.obj == oa) {
+        (i, ob, a, b)
+    } else if let Some(i) = g.iter().position(|x| x.obj == ob) {
+        (i, oa, b, a)
+    } else {
+        return false;
+    };
+    if other < 0x10000 {
+        return false;
+    }
+    let owner = pose::ptr(rd::<u32>(other + 0x34));
+    let team = |x: usize| (rd::<u32>(x + 0x374) >> 5) & 3;
+    // (Sora's own attacks, and his allies': KH1 decides, as for any guard of his.)
+    if owner < 0x10000 || owner == sora || team(owner) == team(sora) {
+        return false;
+    }
+    let id = (other, rd::<u32>(other + 0x34), rd::<u32>(other + 0x5C));
+    if g[i].met.contains(&id) {
+        return true;
+    }
+    // KH1's own meeting runs its two directional tests first and does nothing if either fails.
+    if let Some(faces) = super::recoil::faces_test() {
+        if faces(g[i].obj, other) == 0 || faces(other, g[i].obj) == 0 {
+            return false;
+        }
+    }
+    g[i].met.push(id);
+    // Where they met: halfway between the two entries' centres (as KH1's meeting places its
+    // spark).
+    let p: [f32; 4] = rd(be + 0x30);
+    let q: [f32; 4] = rd(oe + 0x30);
+    let at = [(p[0] + q[0]) * 0.5, (p[1] + q[1]) * 0.5, (p[2] + q[2]) * 0.5];
+    g[i].at.push(at);
+    let shot = rd::<u32>(other + 0x30) & 0x400 != 0;
+    if !shot || super::addr::Build::current() != super::addr::Build::Steam {
+        drop(g);
+        static MELEE: AtomicU32 = AtomicU32::new(0);
+        if super::log_on(super::LogCat::Combat) && MELEE.fetch_add(1, Ordering::Relaxed) < 100 {
+            log!(Combat, "Reflect barrier (KH1 guard object) met enemy attack {other:#x} of {owner:#x}: KH1's clash");
+        }
+        return false;
+    }
+    g[i].stopped.push(id);
+    drop(g);
+    let (told, ended, kept) = stop_shot(BASE.load(Ordering::Relaxed), sora, other);
+    static STOP: AtomicU32 = AtomicU32::new(0);
+    if super::log_on(super::LogCat::Combat) && STOP.fetch_add(1, Ordering::Relaxed) < 200 {
+        log!(Combat,
+            "Reflect barrier (KH1 guard object) stopped enemy shot {other:#x} of {owner:#x}: result 4 (struck, no damage), its hit script {}, attack {}",
+            if told { "told" } else { "none (no hit label)" },
+            if ended { if kept { "switched off (its owner keeps the object)" } else { "switched off (KH1's pass frees it)" } } else { "already gone" }
+        );
+    }
+    true
+}
+
+impl Strikes {
+    /// A Reflect barrier (`key`, its `shapes` KH2 y-up, its ATKP's reflect range and angle) as a
+    /// KH1 guard object of Sora's this frame (made the first frame it stands). Returns where enemy
+    /// attacks met it since last frame (KH1 world), each once.
+    pub unsafe fn barrier_guard(&mut self, sora: usize, key: u64, shapes: &[Shape], range: u8, angle: i8) -> Vec<[f32; 3]> {
+        if !self.rows_tried {
+            self.rows_tried = true;
+            self.rows = sora_rows(sora);
+        }
+        if shapes.is_empty() {
+            return Vec::new();
+        }
+        let base = BASE.load(Ordering::Relaxed);
+        let ours = |o: usize| {
+            let f = rd::<u32>(o);
+            f & 0x800 != 0 && f & 0x0020_0000 == 0 && pose::ptr(rd::<u32>(o + 0x34)) == sora
+        };
+        let have = BARRIERS.lock().ok().and_then(|g| g.iter().find(|x| x.key == key).map(|x| x.obj));
+        let obj = match have {
+            Some(o) if ours(o) => o,
+            _ => {
+                let Some(data) = self.guard_data(range, angle) else { return Vec::new() };
+                let free_bit: unsafe extern "system" fn() -> u32 = std::mem::transmute(base + FREE_BIT_RVA);
+                let new_attack: unsafe extern "system" fn(usize, u32, usize) -> usize = std::mem::transmute(base + NEW_ATTACK_RVA);
+                let o = new_attack(sora, free_bit(), pose::ptr(data));
+                if o < 0x10000 {
+                    return Vec::new();
+                }
+                // As `guard_step`'s: its own place (mode 0), always live (activity 3), a pure
+                // guard (clash type 4), not spent; priority 100; no power, no reaction; the arc of
+                // the barrier's ATKP.
+                let f = (rd::<u32>(o) & !0x3 & !0xC & !0xE0000 & !0x0010_0000 & !0x200) | 0xC | (4 << 17);
+                wr(o, f);
+                wr(o + 0x68, GUARD_PRIORITY);
+                wr(o + 0x2C, 0i32);
+                wr(o + 0x30, rd::<u32>(o + 0x30) & !0x1F);
+                wr(o + 0x50, GUARD_REARM);
+                wr(o + 0x5C, data);
+                let s = &shapes[0];
+                let c = [s.center[0], -s.center[1], s.center[2], 1.0f32];
+                for off in [0x10, 0x40, 0x70, 0x80] {
+                    wr(o + off, c);
+                }
+                wr(o + 0xC, s.radius.max(s.height));
+                if let Ok(mut g) = BARRIERS.lock() {
+                    g.retain(|x| x.key != key);
+                    g.push(BarrierObj { key, obj: o, met: Vec::new(), at: Vec::new(), stopped: Vec::new() });
+                }
+                log!(Combat, "Reflect barrier as KH1 guard object {o:#x} ({} shape(s), reflect range {range})", shapes.len());
+                o
+            }
+        };
+        // Its shapes this frame, for KH1's builder; kept live.
+        super::bodyhits::guard_shapes(obj, shapes);
+        wr(obj, rd::<u32>(obj) | 0x1_0000);
+        let Ok(mut g) = BARRIERS.lock() else { return Vec::new() };
+        let Some(b) = g.iter_mut().find(|x| x.key == key) else { return Vec::new() };
+        for (o, h_owner, h_data) in b.stopped.drain(..) {
+            self.stopped.retain(|s| s.0 != o);
+            self.stopped.push((o, h_owner, h_data, 0));
+        }
+        std::mem::take(&mut b.at)
+    }
+
+    /// The barriers standing this frame (`keep`); every other barrier's guard object freed.
+    pub unsafe fn barrier_guards_keep(&mut self, keep: &[u64]) {
+        let Ok(mut g) = BARRIERS.try_lock() else { return };
+        if g.is_empty() {
+            return;
+        }
+        let free: unsafe extern "system" fn(usize) = std::mem::transmute(BASE.load(Ordering::Relaxed) + FREE_ATTACK_RVA);
+        let sora = super::takeover::sora_actor();
+        g.retain(|b| {
+            if keep.contains(&b.key) {
+                return true;
+            }
+            super::bodyhits::guard_forget(b.obj);
+            let f = rd::<u32>(b.obj);
+            if f & 0x800 != 0 && f & 0x0020_0000 == 0 && pose::ptr(rd::<u32>(b.obj + 0x34)) == sora {
+                free(b.obj);
+            }
+            false
+        });
+    }
+}
+
 impl Strikes {
     /// Shots a Reflect barrier stopped: one KH1 still runs as active 10 frames on (its script
     /// switched it back on) is logged, so a shot that flies on after the barrier shows.

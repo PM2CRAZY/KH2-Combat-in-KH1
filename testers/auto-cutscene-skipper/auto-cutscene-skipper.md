@@ -51,6 +51,9 @@
 - [45. Assistant: t789: the "Obtained Blizzard." window should now open after ](#^m45)
 - [46. Assistant: t790: each "Obtained" line after a skipped scene now plays t](#^m46)
 - [47. Assistant: t791: the "Obtained" window should now come every time, also](#^m47)
+- [48. Assistant: t792: you were right that leftover state was the problem. Th](#^m48)
+- [49. Assistant: t793: the Entry Pass no longer holds Sora (your report in ch](#^m49)
+- [50. Assistant: t794: the Entry Pass part is now skipped like the other in-g](#^m50)
 
 ---
 
@@ -880,4 +883,50 @@ go ahead
 > Notes are in `docs/kh1-ingame-skip.md` (t791 section) and AGENTS.md Stage 791.
 
 ^m47
+
+
+> [!tip] Assistant
+> **t792**: you were right that leftover state was the problem. The window should now come every time, after room changes and soft resets too (your messages in chat: "still not working" and "I think soft resetting is not resetting the flags for our script to work properly").
+>
+> **What your log showed.** The Blizzard window came (frame 1525), then you changed rooms, and later the Thunder skip noted Thunder but no window came. My check for "is the treasure script busy?" read flags on the script's threads. When the room changes or the game resets, KH1 drops the running script without clearing those flags, so the check could stay "busy" forever. Checked (your log + the decomp).
+>
+> **The fix.** The mod now checks KH1's own list of running script tasks instead. The treasure script is busy only while its task is actually in that list, and KH1 removes it when the script ends or the room changes. Not run in game; `cargo test` couldn't run here.
+>
+> **Please test:** get Blizzard (window), change rooms or soft reset, then get Thunder from Phil. Both windows should come. Opening chests in between should be fine too.
+>
+> Notes are in `docs/kh1-ingame-skip.md` (t792 section) and AGENTS.md Stage 792.
+
+^m48
+
+
+> [!tip] Assistant
+> **t793**: the Entry Pass no longer holds Sora (your report in chat: "after you get thunder then go to get the entry pass the entry pass still locks your movement and plays like vanilla").
+>
+> **What your log and the room's script showed.** The Entry Pass scene in the Coliseum's first room is a pause-skippable part (Cutscene Skip skipped it), and then a short tail that isn't dialogue at all. The scene ends its scene mode, gives the Entry Pass, shows its own "Obtained" window with the get sound, and only then lets go of Sora. That's why you were frozen while the window showed. My earlier reading looked in the wrong thread and found nothing to do. Checked (your log + the room's script in your game files).
+>
+> **The fix.** When a scene ends its scene mode while still holding Sora, the mod reads what's left before it lets him go. If all that's left is a give and its window (no question, shop, menu or skippable part), KH1's own "give Sora back" step runs right then. The Entry Pass, its window and its sound are all KH1's own, and Sora can move while the window shows, like with chests. Not run in game; `cargo test` couldn't run here. Assumption (as with chests): the window doesn't stop Sora moving.
+>
+> **Please test:** get the Entry Pass. The window and sound should play and you should be able to move straight away. Also check that other scenes that end with a give still behave.
+>
+> Notes are in `docs/kh1-ingame-skip.md` (t793 section) and AGENTS.md Stage 793.
+
+^m49
+
+
+> [!tip] Assistant
+> **t794**: the Entry Pass part is now skipped like the other in-game scenes, so you can move and our "Obtained" window shows instead of the vanilla one (your report in chat: "wasn't able to move during that scene, it also didn't play our custom pop up text, but the vanilla one").
+>
+> **What your log showed.** t793 did let go of Sora right when the scene mode ended (frame 4705), but you still couldn't act until about frame 4770, which is how long the vanilla window was up. So letting him go early wasn't enough while KH1's window ran. Checked (your log).
+>
+> **The fix.** Instead of letting the window play, the mod now puts that last part into KH1's own skip, the same way it skips the dialogue after a high-poly part. The Entry Pass is given at once and noted, KH1's window and sound don't play, the part's own "give Sora back" step ends the skip, and then our window and sound show. The script function that gives the Entry Pass (add an item) is now watched like the other gives, so the window knows its name. Checked (decomp + your game files). Not run in game; `cargo test` couldn't run here. Assumption: you may see a short dip to black, like the other skipped scenes.
+>
+> **Please test:**
+> 1. Get the Entry Pass. You should be able to move right away and see our "Obtained Entry Pass." window with the get sound.
+> 2. Check that the Thunder and Blizzard scenes still show their windows.
+>
+> **Still open on my side (no answer needed):** I didn't find what kept Sora still while the vanilla window was up; with the skip it doesn't run.
+>
+> Notes are in `docs/kh1-ingame-skip.md` (t794 section) and AGENTS.md Stage 794.
+
+^m50
 

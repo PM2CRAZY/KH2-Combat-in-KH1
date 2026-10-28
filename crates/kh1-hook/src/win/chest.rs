@@ -65,7 +65,7 @@
 use super::addr::Build;
 use super::{hook, log};
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicU8, AtomicUsize, Ordering};
-use crate::kh1script::{read_box, BoxOpen, FN_ADD_ITEM, FN_GIVE_REWARD, FN_RELEASE};
+use crate::kh1script::{read_box, read_pickup, BoxOpen, FN_ADD_ITEM, FN_GIVE_REWARD, FN_RELEASE};
 use std::sync::OnceLock;
 use std::time::Instant;
 
@@ -124,6 +124,23 @@ static MODE: AtomicU8 = AtomicU8::new(0);
 const MODE_NONE: u8 = 0;
 const MODE_TREASURE: u8 = 1;
 const MODE_BOX: u8 = 2;
+/// (t795) An item picked up off the ground: a room script's part a Triangle command woke through KH1's
+/// event dispatch (QoL > Item Pickup), treated as a box, its holds skipped only from its own context.
+const MODE_PICKUP: u8 = 3;
+/// QoL > Item Pickup (`item_pickup = vanilla | skip`, t795): on Skip, a pickup leaves Sora free.
+static PICKUP: AtomicBool = AtomicBool::new(false);
+static PICKUP_INSTALLED: AtomicBool = AtomicBool::new(false);
+/// The pickup's own context (its holds and its 512 are the ones skipped).
+static PICKUP_CTX: AtomicUsize = AtomicUsize::new(0);
+static ORIG_EVENT: AtomicUsize = AtomicUsize::new(0);
+/// KH1's event dispatch `0x1401A1A10 (object id, event, argument)` (Steam; Checked (decomp)): run for the
+/// events queued by `0x14028DD80` and flushed by `0x14028E550`. Events 0 and 4 come only from the
+/// Triangle command step (`0x1402A3DB0` and `0x1402A4150`, command kinds 4 and 5; Checked (decomp): no
+/// other caller queues them). Event 0 wakes the object's context's sub-script 5 (`+0x90 + 5 * 4`), event 4
+/// its sub-script 3, in the room list (`0x142382AD0`) or the event list as the pick does. First bytes
+/// `mov [rsp+0x10], rbx; mov [rsp+0x18], rbp; push rsi; sub rsp, 0x20` (Checked (exe)).
+const EVENT_STEAM: usize = 0x1A1A10;
+const EVENT_PROLOGUE: [u8; 15] = [0x48, 0x89, 0x5C, 0x24, 0x10, 0x48, 0x89, 0x6C, 0x24, 0x18, 0x56, 0x48, 0x83, 0xEC, 0x20];
 static BOX_CTXS: AtomicUsize = AtomicUsize::new(0);
 static BOX_COUNT: AtomicUsize = AtomicUsize::new(0);
 static ORIG_PICK: AtomicUsize = AtomicUsize::new(0);
@@ -259,6 +276,9 @@ const CTX_CODE: usize = 0x80;
 const CTX_SUBS: usize = 0x88;
 const CTX_SUB_STARTS: usize = 0x90;
 const CTX_PC: usize = 0x190;
+/// A context's waiting starts by priority (`+0x30C`, 8 of them) and its current priority (`+0x32C`)
+/// (Checked (decomp): `0x1401A0AF0`).
+const CTX_WAKE_SLOTS: usize = 0x30C;
 const HANDLER_SUB: usize = 9;
 /// The commands the room scripts' boxes are opened with (Checked (files): across the 236 room files,
 /// the parts that take the player, give an item or a reward and give him back with no scene, choice,
@@ -331,6 +351,144 @@ pub unsafe fn install() {
         hook_in();
     }
     log!(Menus, "Chest Opening: {} (chest_style), Quick's animation {} (chest_anim)", style_name(style()), if anim_kh2() { "KH2" } else { "KH1" });
+    PICKUP.store(s.item_pickup, Ordering::Relaxed);
+    if pickup() {
+        pickup_hook_in();
+    }
+    log!(Menus, "Item Pickup: {} (item_pickup)", if pickup() { "Skip" } else { "Vanilla" });
+}
+
+/// QoL > Item Pickup is on Skip (t795).
+pub fn pickup() -> bool {
+    PICKUP.load(Ordering::Relaxed)
+}
+
+/// The Config menu's Item Pickup row, kept in the ini.
+pub fn set_pickup(v: bool) {
+    PICKUP.store(v, Ordering::Relaxed);
+    if v {
+        unsafe { pickup_hook_in() };
+    }
+    super::settings::save("item_pickup", if v { "skip" } else { "vanilla" });
+    log!(Menus, "Config menu: Item Pickup {}", if v { "Skip" } else { "Vanilla" });
+}
+
+/// The pickup's way in (t795): KH1's event dispatch (Steam only, once). Nothing of it runs until a
+/// Triangle command's event; on Vanilla the hook passes everything straight to KH1.
+unsafe fn pickup_hook_in() {
+    if PICKUP_INSTALLED.swap(true, Ordering::Relaxed) {
+        return;
+    }
+    if Build::current() != Build::Steam {
+        log!(Menus, "Item Pickup: Steam only (the addresses are the Steam build's): pickups stay KH1's");
+        return;
+    }
+    let base = base();
+    // KH1's script call handler and done queue as freeing Sora needs them (as `hook_in`).
+    let entry = rd::<u64>(base + CALL_ENTRY_STEAM) as usize;
+    let done = std::slice::from_raw_parts((base + DONE_PUSH_STEAM) as *const u8, DONE_PUSH_PROLOGUE.len());
+    let find = std::slice::from_raw_parts((base + FIND_ACTOR_STEAM) as *const u8, FIND_ACTOR_PROLOGUE.len());
+    let ours = script_call as *const () as usize;
+    if (entry != base + CALL_STEAM && entry != ours) || done != DONE_PUSH_PROLOGUE || find != FIND_ACTOR_PROLOGUE {
+        log!(Cutscenes, "Item Pickup: KH1's script call handler ({entry:#x}) or done queue isn't as expected: pickups stay KH1's");
+        return;
+    }
+    if hook::install(base + EVENT_STEAM, &EVENT_PROLOGUE, event as *const () as usize, &ORIG_EVENT, "KH1's event dispatch (item pickup)").is_none() {
+        log!(Menus, "Item Pickup: KH1's event dispatch not hooked: pickups stay KH1's");
+    }
+}
+
+/// KH1's event dispatch, then, for a Triangle command's event (0 or 4), a touch (1) or event 3 on Skip (t801), the woken part read as a
+/// pickup (`crate::kh1script::read_pickup`): one runs whole as KH1 wrote it (its give, its "Obtained" window
+/// 7, its sound), with its holds skipped and its actions on Sora done at once, as a box's (t769 / t776).
+unsafe extern "system" fn event(id: i32, ev: i32, arg: usize) {
+    let orig: unsafe extern "system" fn(i32, i32, usize) = std::mem::transmute(ORIG_EVENT.load(Ordering::Acquire));
+    // (t801) The sub-script each event wakes and the priority it is woken at (Checked (decomp): event 0
+    // sub-script 5 at 3, event 1 (a touch, `0x140297E80`) 6 at 2, event 3 (`0x1402B0610`) 7 at 4, event 4
+    // 3 at 3; event 2, a hit, is left out).
+    let (sub_n, prio) = match ev {
+        0 => (5usize, 3usize),
+        1 => (6, 2),
+        3 => (7, 4),
+        4 => (3, 3),
+        _ => return orig(id, ev, arg),
+    };
+    let at = FAST_AT.load(Ordering::Relaxed);
+    if !pickup() || (at != 0 && ms() + 1 - at <= FAST_MS) {
+        if pickup() && ev != 1 {
+            log!(Cutscenes, "Item Pickup: event {ev} on object {id:#x} during an open: KH1's");
+        }
+        return orig(id, ev, arg);
+    }
+    let base = base();
+    let (list, count_at) = if rd::<i32>(base + ENTRY_STEAM) == 0 { (base + ROOM_CTXS_STEAM, base + ROOM_COUNT_STEAM) } else { (base + EVENT_CTXS_STEAM, base + EVENT_COUNT_STEAM) };
+    orig(id, ev, arg);
+    let count = rd::<i32>(count_at).clamp(0, CTX_MAX as i32) as usize;
+    // (t801, the owner's t800 log: no Item Pickup line at all at Destiny Islands' pickups) Every way out is
+    // logged now, except for touches (event 1, frequent) that aren't pickups.
+    let quiet = ev == 1;
+    let Some(c) = (0..count).find(|&c| rd::<i32>(list + c * CTX_SIZE) == id) else {
+        if !quiet {
+            log!(Cutscenes, "Item Pickup: event {ev} on object {id:#x}: no context of the {} list has it: KH1's", if list == base + ROOM_CTXS_STEAM { "room" } else { "event" });
+        }
+        return;
+    };
+    let ctx = list + c * CTX_SIZE;
+    if rd::<i32>(ctx + CTX_SUBS).clamp(0, 64) as usize <= sub_n {
+        if !quiet {
+            log!(Cutscenes, "Item Pickup: event {ev}: context {c} has no sub-script {sub_n}: KH1's");
+        }
+        return;
+    }
+    let start = rd::<i32>(ctx + CTX_SUB_STARTS + sub_n * 4);
+    // KH1 woke it: its next instruction is the sub-script's start, or (t801) the context runs at a higher
+    // priority and the start waits in the slot of the wake's priority (`+0x30C + priority * 4`, run when
+    // that level ends; `0x1401A0AF0`, Checked (decomp)). t795 only took the first.
+    let pc = rd::<i32>(ctx + CTX_PC);
+    let pending = rd::<i32>(ctx + CTX_WAKE_SLOTS + prio * 4);
+    if start < 0 || (pc != start && pending != start) {
+        if !quiet {
+            log!(Cutscenes, "Item Pickup: event {ev}: context {c}'s sub-script {sub_n} (start {start}) wasn't woken (next {pc}, pending {pending}): KH1's");
+        }
+        return;
+    }
+    let word = |c: usize, i: usize| -> Option<u32> {
+        if c >= count {
+            return None;
+        }
+        let code = rd::<u64>(list + c * CTX_SIZE + CTX_CODE) as usize;
+        let at = code.checked_add(i.checked_mul(4)?)?;
+        (code >= 0x10000 && super::crash::readable(at) && super::crash::readable(at + 3)).then(|| rd::<u32>(at))
+    };
+    let sub = |c: usize, s: usize| -> Option<usize> {
+        if c >= count || s >= rd::<i32>(list + c * CTX_SIZE + CTX_SUBS).clamp(0, 64) as usize {
+            return None;
+        }
+        usize::try_from(rd::<i32>(list + c * CTX_SIZE + CTX_SUB_STARTS + s * 4)).ok()
+    };
+    match read_pickup(c, start as usize, word, sub, &BOX_PLAYS) {
+        BoxOpen::Give(n) => {
+            let sora = rd::<u64>(base + SORA_PTR_STEAM) as usize;
+            if sora < 0x10000 {
+                return;
+            }
+            SORA.store(sora, Ordering::Relaxed);
+            BOX_CTXS.store(list, Ordering::Relaxed);
+            BOX_COUNT.store(count_at, Ordering::Relaxed);
+            PICKUP_CTX.store(ctx, Ordering::Relaxed);
+            MODE.store(MODE_PICKUP, Ordering::Relaxed);
+            WINDOW_DUE.store(0, Ordering::Relaxed);
+            FAST_AT.store(ms() + 1, Ordering::Relaxed);
+            SKIPPED.store(0, Ordering::Relaxed);
+            RELEASED.store(0, Ordering::Relaxed);
+            HOLDS.store(0, Ordering::Relaxed);
+            call_handler_in(base);
+            log!(Cutscenes, "Item Pickup: event {ev} woke context {c}'s sub-script {sub_n} ({n} instructions read): a pickup: its holds skipped, Sora free, KH1's own window");
+        }
+        BoxOpen::Not(f) if !quiet => log!(Cutscenes, "Item Pickup: event {ev}'s part (context {c}, sub-script {sub_n}) isn't a pickup (event function {f}): KH1's"),
+        BoxOpen::Unread if !quiet => log!(Cutscenes, "Item Pickup: event {ev}'s part (context {c}, sub-script {sub_n}) couldn't be read: KH1's"),
+        _ => {}
+    }
 }
 
 /// The Config menu's Chest Opening row, kept in the ini.
@@ -370,7 +528,7 @@ fn quick_start(sora: usize, flags: u32, from: u32) {
 
 /// Quick, still holding: the open's actions on Sora and the waits on his motion are KH1's.
 fn quick_holding() -> bool {
-    style() == QUICK && !QUICK_FREE.load(Ordering::Relaxed)
+    style() == QUICK && !QUICK_FREE.load(Ordering::Relaxed) && MODE.load(Ordering::Relaxed) != MODE_PICKUP
 }
 
 /// Quick (t773): KH1's open motion plays, then the treasure script asks for his idle (slot 0) but keeps him
@@ -792,7 +950,7 @@ pub(super) fn strip_codes(s: &str) -> String {
 /// The call comes from the treasure script during a recent fast open.
 unsafe fn ours_to_skip(ctx: usize) -> bool {
     let at = FAST_AT.load(Ordering::Relaxed);
-    if at == 0 || !kh2() {
+    if at == 0 || !mode_on() {
         return false;
     }
     if ms() + 1 - at > FAST_MS {
@@ -811,10 +969,20 @@ unsafe fn ours_to_skip(ctx: usize) -> bool {
     open_ctx(base(), ctx)
 }
 
-/// A context of the script the open runs in: the treasure script's, or (a box of a room's script, t769)
-/// one of the context list the box's handler is in.
+/// The open in progress is still wanted: a chest's or a box's on Quick / Skip, a pickup's on Item
+/// Pickup's Skip (t795).
+fn mode_on() -> bool {
+    if MODE.load(Ordering::Relaxed) == MODE_PICKUP {
+        pickup()
+    } else {
+        kh2()
+    }
+}
+
+/// A context of the script the open runs in: the treasure script's, or (a box of a room's script, t769;
+/// a pickup, t795) one of the context list the box's handler is in.
 unsafe fn open_ctx(base: usize, ctx: usize) -> bool {
-    if MODE.load(Ordering::Relaxed) == MODE_BOX {
+    if matches!(MODE.load(Ordering::Relaxed), MODE_BOX | MODE_PICKUP) {
         let first = BOX_CTXS.load(Ordering::Relaxed);
         let count = (rd::<i32>(BOX_COUNT.load(Ordering::Relaxed)).clamp(0, CTX_MAX as i32)) as usize;
         return first != 0 && ctx >= first && ctx < first + count * CTX_SIZE && (ctx - first) % CTX_SIZE == 0;
@@ -882,7 +1050,8 @@ unsafe extern "system" fn script_call(ctx: usize, n: i32) -> u64 {
     if sora == 0 || !open_ctx(base, ctx) {
         return orig(ctx, n);
     }
-    let boxed = MODE.load(Ordering::Relaxed) == MODE_BOX;
+    let picked = MODE.load(Ordering::Relaxed) == MODE_PICKUP;
+    let boxed = MODE.load(Ordering::Relaxed) == MODE_BOX || picked;
     if !boxed && n == FN_PLACE_TEXT {
         puppy_text(base, ctx);
     }
@@ -903,8 +1072,12 @@ unsafe extern "system" fn script_call(ctx: usize, n: i32) -> u64 {
         return 2;
     }
     if HOLD_FNS.contains(&n) {
+        // (t795) A pickup's holds are skipped only from its own context: the room's other contexts keep theirs.
+        if picked && ctx != PICKUP_CTX.load(Ordering::Relaxed) {
+            return orig(ctx, n);
+        }
         if HOLDS.fetch_add(1, Ordering::Relaxed) < 8 {
-            log!(Cutscenes, "Chest Opening: {}'s player hold (event function {n}) skipped", if boxed { "the box's script" } else { "treasure script" });
+            log!(Cutscenes, "Chest Opening: {}'s player hold (event function {n}) skipped", if picked { "the pickup's script" } else if boxed { "the box's script" } else { "treasure script" });
         }
         // A box's part ends at its 512 (the player given back): the open is over (t769).
         if boxed && n as u32 == FN_RELEASE {

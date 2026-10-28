@@ -16,6 +16,7 @@
 - [10. Assistant: t607 to t610. Your two answers are in, and I found what was ](#^m10)
 - [11. Assistant: t624: Finishing Plus now works after a finisher cast. Drive ](#^m11)
 - [12. Assistant: From the What is still missing(../what-is-still-missing-for-](#^m12)
+- [13. Assistant: t796 to t800. Both answers are done, one system per version.](#^m13)
 
 ---
 
@@ -362,3 +363,41 @@ go ahead
 2. (a)
 
 go ahead
+
+> [!tip] Assistant
+> **t796 to t800.** Both answers are done, one system per version. Reflect's barrier is now a KH1 guard object. KH2's spell scripts now run as KH1 script processes on KH1's own script machine, with KH2's instruction set taught to it.
+>
+> - **t796, the barrier as a KH1 guard object (2 (a)).** Each barrier is a KH1 guard of Sora's: a pure guard that never hits a body, priority 100, standing on the barrier's own shapes. KH1's collision pass now finds every enemy attack that touches it, not our own check. At KH1's meeting:
+>   - a shot is stopped as before (not sent back);
+>   - a melee attack gets KH1's own clash (stopped, its owner recoils);
+>   - each one counts toward the counter, with the contact effect where they met.
+> - **t797, KH2's script machine on KH1's memory.** Groundwork only, nothing changes in game: the scripts can now run on memory KH1 owns, addressed by KH1's own 32-bit handles (KH2 uses the same scheme).
+> - **t798, the scripts as KH1 processes (1 (a)).** A KH2 cast (Fire, Blizzard, Thunder, Cure, Reflect, Wisdom's casts) now starts with KH1's own spell start, so KH1 makes the task, the process record, its stack and its work memory. KH1's task list steps it every frame. KH1's interpreter now reads KH2's instructions for those processes and KH1's for everything else. Our own update no longer runs them.
+> - **t799, threads as KH1 child processes.** Blizzard and Thunder each start a thread. It's now a KH1 child process made by KH1's own child start, run by KH1 right after its parent.
+> - **t800, KH2's calls in KH1's call table.** Each of our processes carries a KH1-format call table holding KH2's calls, and the call instruction goes through it the way KH1's does. What each call does is unchanged.
+>
+> **How I checked it**
+> - KH1's script machine, process and work-memory pools, child start, spell task list and pause are from the Steam KH1 decomp. Every new hook point's first bytes are checked in the exe and refused on a mismatch. KH2's interpreter (its instruction classes and its tagged 8-byte stack entries) is from the Steam KH2 decomp. The barrier's meeting is from both decomps.
+> - Offline, with your extracted spell files: every level of Fire, Blizzard, Thunder, Cure, Magnet and Reflect was run on a stand-in laid out like KH1's machine (registers moved in and out of a process record every step, threads on child records, calls through the table). It gave the same attacks in the same places, the same effects and the same hits, frame for frame, as before.
+> - Not checked in game.
+> - Assumption: where KH1's spell task list runs in the frame compared to our step. If it runs after, a spell's hits reach KH1's collision pass one frame later than before. The log answers it (below).
+> - Assumption: KH1's clash table lets the barrier's guard type meet every kind of enemy attack (the body guards rely on the same).
+>
+> Please test:
+> 1. Every spell at every level, on the ground and in the air: it casts, flies, hits and ends as before. Blizzard's shard and Thunder's bolts especially (their threads).
+> 2. Casting during a combo and spell into spell, then pausing mid-spell and unpausing: the spell picks up where it was.
+> 3. Changing rooms with a spell out. Nothing should be left behind, and KH1's own events and scripts in the next room should still work.
+> 4. Reflect against shots (Wakka's ball, Darkballs, casters): stopped at the barrier, not sent back.
+> 5. Reflect against melee enemies: they bounce off and the counter still fires, stronger with more hits.
+> 6. Two Reflects in a row while being hit.
+> 7. Log lines (Magic and Combat categories): "KH2 spell scripts run as KH1 script processes" at start-up, "handed to KH1 process ... at game frame", "KH1 first stepped cast ... at game frame", "as KH1 child process", "Reflect barrier as KH1 guard object", "Reflect barrier (KH1 guard object) stopped enemy shot ...". A line like "KH1 has no free process" or "runs on our machine" means a spell fell back, so tell me if you see one.
+>
+> Still open on my side (no answer needed):
+> - Wisdom Form's own shot script (the form model's, not its casts) still runs on our machine.
+> - The offline test for Reflect into Reflect (t610's chain) fails here, before and after these versions, so that chain is still unconfirmed in practice. It's on my list.
+> - The Finishing Plus question from my t624 message is still open.
+>
+> Notes: `docs/kh1-magic-native.md` §8 and `docs/kh1-reflect-spell.md` "The barrier as a KH1 guard object".
+
+^m13
+

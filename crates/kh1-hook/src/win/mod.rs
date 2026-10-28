@@ -32,6 +32,7 @@ mod hurt;
 mod recoil;
 mod rehit;
 mod kh2fx;
+mod kh2script;
 mod kh2dpx;
 mod kh2ppp;
 mod kh2slots;
@@ -441,6 +442,7 @@ pub unsafe extern "system" fn DllMain(_inst: *mut c_void, reason: u32, _reserved
         equipmenu::install();
         reflect::install();
         formmagic::install();
+        kh2script::install();
         formexp::install(base);
         mpcost::install();
         drive::install();

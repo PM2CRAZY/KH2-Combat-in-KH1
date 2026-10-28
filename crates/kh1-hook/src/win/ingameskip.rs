@@ -69,7 +69,7 @@
 //! skip mode), the item is given.
 
 use super::addr::Build;
-use crate::kh1script::{read_follow_up, started_entry, trinity_call, Call, Follow, CMD_TRINITY, FN_EVENT_OFF, FN_OFFER, FN_RELEASE, FN_START_ENTRY, FOLLOW_SUBS};
+use crate::kh1script::{read_follow_up, read_give_tail, started_entry, trinity_call, Call, Follow, CMD_TRINITY, FN_EVENT_OFF, FN_OFFER, FN_RELEASE, FN_START_ENTRY, FOLLOW_SUBS};
 use super::log;
 use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU32, AtomicU64, AtomicU8, AtomicUsize, Ordering};
 
@@ -105,7 +105,7 @@ static STARTER: AtomicU64 = AtomicU64::new(0);
 /// Times the flag byte was set again (for the log).
 static REARMED: AtomicU32 = AtomicU32::new(0);
 /// KH1's give functions (event functions 583, 458, 444, 570) as the table held them (t785).
-static ORIG_GIVE: [AtomicUsize; 4] = [const { AtomicUsize::new(0) }; 4];
+static ORIG_GIVE: [AtomicUsize; 5] = [const { AtomicUsize::new(0) }; 5];
 /// What KH1 gave during the mod's skip, shown in the notice box when the skip ends (t785).
 static GIVEN: std::sync::Mutex<Vec<(String, Option<u8>)>> = std::sync::Mutex::new(Vec::new());
 /// t786: the gives are ready to show (the skip has ended); the script file KH1's treasure machine is
@@ -147,6 +147,8 @@ const TRINITY_FNS: [(u32, usize); 2] = [(FN_OFFER, 0x1AF530), (FN_START_ENTRY, 0
 const BIT_SKIPPABLE: u32 = 1;
 const BIT_EVENT: u32 = 0x400;
 const BIT_TALK: u32 = 0x800;
+/// The runner word's bit 1: a script holds the player (event function 511 sets it, 512 clears it).
+const RUNNER_HELD: u32 = 2;
 /// The most threads and instructions read for one scene.
 const CTX_MAX: i32 = 64;
 const SCAN_MAX: usize = 8192;
@@ -174,8 +176,10 @@ const SECTION_ENDS: [(u32, usize); 4] = [(85, 0x1A8BD0), (140, 0x1AA120), (490, 
 /// stock, 1 an ability `>> 8` for party member `>> 4 & 0xF`), 458 a spell's level (`0x1401AF730`: the
 /// spell under the level on the stack; `0x14028F560` writes it to save `[0x142868BA0] + 0x492 + spell`
 /// unless it is already that), 444 munny (`0x1401AF190`, added to `[0x142E1F4D8] + 0x1C`), 570 a Gummi
-/// Block (`0x1401B12A0` -> `0x14020D3F0`, the call chests' Gummi Blocks use).
-const GIVE_FNS: [(u32, usize); 4] = [(583, 0x1B13E0), (458, 0x1AF730), (444, 0x1AF190), (570, 0x1B12A0)];
+/// Block (`0x1401B12A0` -> `0x14020D3F0`, the call chests' Gummi Blocks use). t794: 258, an item
+/// (`0x1401AC700`: the item one below the top, the count on top, added to save `[0x142868BA0] + 0x499 +
+/// item`, kept in 0..99; the Coliseum's Entry Pass).
+const GIVE_FNS: [(u32, usize); 5] = [(583, 0x1B13E0), (458, 0x1AF730), (444, 0x1AF190), (570, 0x1B12A0), (258, 0x1AC700)];
 const REWARDS_PTR_STEAM: usize = 0x2D36D58;
 const SPELL_SAVE_PTR_STEAM: usize = 0x2868BA0;
 const SPELL_LEVELS: usize = 0x492;
@@ -189,10 +193,9 @@ const MACHINE_START_STEAM: usize = 0x1A43A0;
 const MACHINE_START_BYTES: [u8; 16] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x6C, 0x24, 0x10, 0x48, 0x89, 0x74, 0x24, 0x18, 0x57];
 /// The treasure machine's contexts and their count (as the start fills them), a context's flags and its
 /// "ended" bit (Checked (decomp)).
-const MACHINE_CONTEXTS_STEAM: usize = 0x23BF0B0;
-const MACHINE_COUNT_STEAM: usize = 0x23AB2DC;
-const CTX_FLAGS: usize = 0x33C;
-const CTX_ENDED: u32 = 8;
+/// KH1's script task list and the treasure machine's step (t792, Checked (decomp)).
+const TASKS_STEAM: usize = 0x23D3E18;
+const MACHINE_STEP_STEAM: usize = 0x1A2CF0;
 const ICON_ITEM: u8 = 0x82;
 const ICON_ABILITY: u8 = 0x86;
 /// A context's stack: its top index (`+0x194`) and the values (`+0x198`, i32 each).
@@ -321,7 +324,7 @@ unsafe fn verify() {
     START_OK.store(at(MACHINE_START_STEAM, MACHINE_START_BYTES.len()) == MACHINE_START_BYTES, Ordering::Relaxed);
     // KH1's give functions (t785): what a skipped scene gives is noted for the notice box. A mismatch
     // only leaves that kind of give without a box.
-    let ours = [give_583 as *const () as usize, give_458 as *const () as usize, give_444 as *const () as usize, give_570 as *const () as usize];
+    let ours = [give_583 as *const () as usize, give_458 as *const () as usize, give_444 as *const () as usize, give_570 as *const () as usize, give_258 as *const () as usize];
     for (i, &(n, rva)) in GIVE_FNS.iter().enumerate() {
         let at = base + TABLE_STEAM + n as usize * 8;
         ORIG_GIVE[i].store(base + rva, Ordering::Release);
@@ -549,6 +552,24 @@ fn show_given() {
     }
 }
 
+/// Whether KH1's treasure machine has a task in KH1's script task list (t792).
+unsafe fn machine_busy(base: usize) -> bool {
+    use super::crash::readable;
+    let list = base + TASKS_STEAM;
+    let size = rd::<u16>(list) as usize;
+    let count = rd::<u16>(list + 2) as usize;
+    let pool = rd::<u64>(list + 8) as usize;
+    if !(0x18..=0x100).contains(&size) || count == 0 || count > 256 || pool < 0x10000 || !readable(pool) || !readable(pool + size * count - 1) {
+        // (Can't tell: treated as free, as before t789.)
+        return false;
+    }
+    let step = base + MACHINE_STEP_STEAM;
+    (0..count).any(|k| {
+        let e = pool + k * size;
+        rd::<u16>(e) != 0 && rd::<u64>(e + 0x10) as usize == step
+    })
+}
+
 /// t786 (the owner, (a): the chests' window for a skipped scene's gives): KH1's treasure-script machine
 /// shows them in window 7, as a chest's "Obtained" (`docs/kh1-chest.md` round 9). A script file of the
 /// treasure script's own window calls (`crate::kh1script::obtained_script`) is started the way KH1's event 5
@@ -563,14 +584,13 @@ unsafe fn show_now(base: usize) {
     if !SHOW.load(Ordering::Relaxed) || FORCED.load(Ordering::Relaxed) || rd::<u32>(base + RUNNER_STEAM) & 0xF != 0 {
         return;
     }
-    // The machine is free when its context 0 has ended (bit 3 of `+0x33C`, set by the class 5 handler
-    // `0x14019FAB0` when a context's last sub-script ends): its task (`0x1401A2CF0`) ends the whole script
-    // then, whatever the other contexts do (the treasure script's contexts 1..3 idle in a loop and never
-    // end). Checked (decomp). t791: t789 waited for every context, so after any chest's treasure script the
-    // window never came again (the owner's t790 log: Thunder noted at f11709, the Dalmatians' chests at
-    // f3400 / f4299 before it, no window).
-    let count = rd::<i32>(base + MACHINE_COUNT_STEAM);
-    if (1..=CTX_MAX).contains(&count) && rd::<u32>(base + MACHINE_CONTEXTS_STEAM + CTX_FLAGS) & CTX_ENDED == 0 {
+    // t792: the machine is busy while its task is in KH1's script task list (`0x1423D3E18`: entry size u16
+    // `+0`, count u16 `+2`, the entries `+8`; an entry's first u16 is 0 when free, its step `+0x10`;
+    // `0x14028A900` adds, `0x14028A710` runs each and frees it when it returns 4, as `0x1401A2CF0` does at the
+    // script's end). Checked (decomp). t789 / t791 read the contexts' "ended" bits, which a room load or a
+    // soft reset leaves as they were when the task went away (the owner: "soft resetting is not resetting
+    // the flags"; t791 log: the window at f1525, a room change at f1654, Thunder at f6904 and no window).
+    if machine_busy(base) {
         return;
     }
     SHOW.store(false, Ordering::Relaxed);
@@ -678,6 +698,21 @@ unsafe extern "system" fn give_444(ctx: usize) -> u64 {
         if after > before {
             note(format!("{} Munny", after - before), None);
         }
+    }
+    r
+}
+
+/// 258, an item and its count (t794).
+unsafe extern "system" fn give_258(ctx: usize) -> u64 {
+    if !noting() {
+        return orig_give(4, ctx);
+    }
+    let base = BASE.load(Ordering::Relaxed);
+    let (item, count) = (arg(ctx, 1), arg(ctx, 0));
+    let r = orig_give(4, ctx);
+    if (0..0x100).contains(&item) && count > 0 {
+        let name = super::equip::item_name(base, item as u8).map(|n| super::chest::strip_codes(&n)).unwrap_or_else(|| format!("Item {item:#x}"));
+        note(if count > 1 { format!("{name} x{count}") } else { name }, Some(ICON_ITEM));
     }
     r
 }
@@ -807,7 +842,50 @@ unsafe extern "system" fn release_fn(ctx: usize) -> u64 {
 unsafe extern "system" fn event_off_fn(ctx: usize) -> u64 {
     let f: unsafe extern "system" fn(usize) -> u64 = std::mem::transmute(ORIG_EVENT_OFF.load(Ordering::Acquire));
     let r = f(ctx);
-    end_skip(r, FN_EVENT_OFF)
+    let r = end_skip(r, FN_EVENT_OFF);
+    if r & 2 != 0 {
+        give_tail(ctx);
+    }
+    r
+}
+
+/// t793 (the owner: "after you get thunder then go to get the entry pass the entry pass still locks your
+/// movement and plays like vanilla"): a scene that ends its event mode (514) with the player still held
+/// (the runner word's bit 1, event function 511) and then only gives something and shows its "Obtained"
+/// window before its 512 (Checked (files): the Coliseum's first room, `he01` version 1, entry 1, context 0:
+/// the pause-skippable part in context 1, then 514, a wait, 258 (the Entry Pass, 0xE5), 364, window 7, 353
+/// with 0x1F, 107, 2, 512). t794 (the owner's t793 test: "wasn't able to move during that scene, it also
+/// didn't play our custom pop up text, but the vanilla one"; t793 ran KH1's 512 at the 514, the log showed
+/// the runner word clear from then, yet Sora stayed unable to act for about 65 more frames while the
+/// vanilla window was up): the tail is skipped the way a follow-up is, KH1's skip (bit 0 and the flag
+/// byte, started by KH1's script step), so the give runs at once and is noted, KH1's window and sound
+/// don't play, and the tail's own 512 ends the skip (`end_skip`), gives Sora back and shows the mod's
+/// "Obtained" window with its sound. A tail with a choice, shop, menu or pause skip, or with no give, is
+/// left as it is.
+unsafe fn give_tail(ctx: usize) {
+    if !ON.load(Ordering::Relaxed) || FORCED.load(Ordering::Relaxed) {
+        return;
+    }
+    let base = BASE.load(Ordering::Relaxed);
+    if base == 0 || rd::<u32>(base + RUNNER_STEAM) & RUNNER_HELD == 0 {
+        return;
+    }
+    let entry = rd::<i32>(base + ENTRY_STEAM);
+    let ctxs = if entry == 0 { Ctxs::room(base) } else { Ctxs::entry(base) };
+    let Some(ctxs) = ctxs else { return };
+    let Some(c) = ctxs.index(ctx) else { return };
+    let Ok(pc) = usize::try_from(rd::<i32>(ctx + CTX_PC)) else { return };
+    let plays: Vec<u32> = PLAYS.iter().chain(PAUSE_SKIP.iter()).map(|(n, _)| *n).collect();
+    let Some(n) = read_give_tail(c, pc + 1, |c, i| ctxs.word(c, i), |c, s| ctxs.sub(c, s), &plays) else { return };
+    wr(base + FLAGS2_STEAM, rd::<u32>(base + FLAGS2_STEAM) | BIT_SKIPPABLE);
+    wr(base + SKIP_FLAG_STEAM, 1u8);
+    SAW_SKIP.store(false, Ordering::Relaxed);
+    KIND.store(KIND_FOLLOW, Ordering::Relaxed);
+    FORCED.store(true, Ordering::Relaxed);
+    log!(
+        Cutscenes,
+        "in-game skip: entry {entry} context {c} ends event mode with only a give and its window left ({n} instructions read): skipped (bit 0 and the flag byte set), ends at its 512"
+    );
 }
 
 /// Ends the mod's skip the way KH1's own section ends do (event function 140: bit 0 off, then

@@ -11,7 +11,7 @@ pub mod traps;
 pub mod vm;
 
 pub use program::Program;
-pub use vm::{Cell, Context, CtxId, Host, Memory, Status, Tag, Vm};
+pub use vm::{run_call, Cell, Context, CtxId, Host, Memory, Native, Status, Tag, Vm};
 
 #[derive(Debug, thiserror::Error, Clone, PartialEq)]
 pub enum BdxError {

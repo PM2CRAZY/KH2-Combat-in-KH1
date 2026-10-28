@@ -50,33 +50,80 @@ impl Cell {
     }
 }
 
-/// The byte arena.
+/// Memory the host owns (`Memory::native`): addresses are the host's own 32-bit addresses (KH1's
+/// handles in the mod: `0x80000000 | segment << 25 | offset`, the same scheme KH2's PC port uses),
+/// and every access goes through the host's resolver, which turns an address range the scripts
+/// may touch into a pointer (`None` for anything else: the access fails as an address outside
+/// script memory, never a stray read). `alloc` hands out a block the host gave.
+#[derive(Clone, Copy, Debug)]
+pub struct Native {
+    /// `(address, length)` → the pointer to those bytes, when the whole range is script memory.
+    pub resolve: fn(u32, u32) -> Option<usize>,
+    /// The block `alloc` hands out: its address as the scripts see it, its size, and how much is
+    /// handed out.
+    pub block: u32,
+    pub size: u32,
+    pub used: u32,
+}
+
+/// Script memory: the byte arena, or memory the host owns (`Native`).
 #[derive(Clone, Debug)]
 pub struct Memory {
     bytes: Vec<u8>,
+    native: Option<Native>,
 }
 
 impl Default for Memory {
     fn default() -> Self {
         // Keep the first 16 bytes unused so 0 is never a valid block.
-        Memory { bytes: vec![0; 16] }
+        Memory { bytes: vec![0; 16], native: None }
     }
 }
 
 impl Memory {
-    /// A zeroed block, 16-byte aligned.
+    /// Memory the host owns: every address resolved by `n.resolve`, `alloc` from `n`'s block.
+    pub fn native(n: Native) -> Memory {
+        Memory { bytes: Vec::new(), native: Some(n) }
+    }
+
+    /// The host's memory, if this is it.
+    pub fn native_info(&self) -> Option<Native> {
+        self.native
+    }
+
+    /// A zeroed block, 16-byte aligned (0 when a host block is used up).
     pub fn alloc(&mut self, size: u32) -> u32 {
+        if let Some(n) = self.native.as_mut() {
+            let at = (n.used + 15) & !15;
+            let size = size.max(4);
+            if at.checked_add(size).map_or(true, |e| e > n.size) {
+                return 0;
+            }
+            n.used = at + size;
+            let a = n.block + at;
+            if let Some(p) = (n.resolve)(a, size) {
+                // SAFETY: the host's resolver vouches for `size` bytes at `p`.
+                unsafe { std::ptr::write_bytes(p as *mut u8, 0, size as usize) };
+            }
+            return a;
+        }
         let at = (self.bytes.len() + 15) & !15;
         self.bytes.resize(at + size.max(4) as usize, 0);
         at as u32
     }
 
     pub fn len(&self) -> u32 {
-        self.bytes.len() as u32
+        match self.native {
+            Some(n) => n.used,
+            None => self.bytes.len() as u32,
+        }
     }
 
     pub fn is_empty(&self) -> bool {
-        self.bytes.len() <= 16
+        match self.native {
+            Some(n) => n.used == 0,
+            None => self.bytes.len() <= 16,
+        }
     }
 
     fn range(&self, addr: u32, n: u32) -> Result<std::ops::Range<usize>, BdxError> {
@@ -87,12 +134,30 @@ impl Memory {
         Ok(a..a + n)
     }
 
+    /// The host's pointer for `n` bytes at `addr` (native memory).
+    fn host_ptr(&self, nat: &Native, addr: u32, n: u32) -> Result<usize, BdxError> {
+        if addr == 0 {
+            return Err(BdxError::BadAddress(addr));
+        }
+        (nat.resolve)(addr, n.max(1)).filter(|p| *p != 0).ok_or(BdxError::BadAddress(addr))
+    }
+
     pub fn bytes(&self, addr: u32, n: u32) -> Result<&[u8], BdxError> {
+        if let Some(nat) = &self.native {
+            let p = self.host_ptr(nat, addr, n)?;
+            // SAFETY: the host's resolver vouches for `n` bytes at `p`.
+            return Ok(unsafe { std::slice::from_raw_parts(p as *const u8, n as usize) });
+        }
         let r = self.range(addr, n)?;
         Ok(&self.bytes[r])
     }
 
     pub fn bytes_mut(&mut self, addr: u32, n: u32) -> Result<&mut [u8], BdxError> {
+        if let Some(nat) = &self.native {
+            let p = self.host_ptr(nat, addr, n)?;
+            // SAFETY: as `bytes`.
+            return Ok(unsafe { std::slice::from_raw_parts_mut(p as *mut u8, n as usize) });
+        }
         let r = self.range(addr, n)?;
         Ok(&mut self.bytes[r])
     }
@@ -133,6 +198,13 @@ impl Memory {
 
     pub fn copy(&mut self, dst: u32, src: u32, n: u32) -> Result<(), BdxError> {
         if n == 0 {
+            return Ok(());
+        }
+        if let Some(nat) = &self.native {
+            let s = self.host_ptr(nat, src, n)?;
+            let d = self.host_ptr(nat, dst, n)?;
+            // SAFETY: both ranges vouched for by the host; `copy` allows overlap.
+            unsafe { std::ptr::copy(s as *const u8, d as *mut u8, n as usize) };
             return Ok(());
         }
         let s = self.range(src, n)?;
@@ -221,6 +293,49 @@ pub struct Vm {
     /// Instructions one `run` may execute before it is treated as a hang.
     pub budget: u32,
     trap_info: std::collections::HashMap<(u8, u16), u32>,
+    /// The call instruction through the host's call tables (KH1's script-call tables): for a call
+    /// `(table, index)`, that entry's function (`extern "system" fn(*mut u32)`, KH1's call shape:
+    /// the arguments in push order, the result left in the first word) and its flag word (the
+    /// argument count in the low 16 bits, `0x40000000` when it returns a value). An entry made for
+    /// this machine is `run_call`, which runs the call through the host's `Host::syscall`. `None`:
+    /// calls go straight to the host, as before.
+    pub calls: Option<fn(u8, u16) -> Option<(usize, u32)>>,
+}
+
+/// The call `run_call` is running: the machine, its host, the calling context, the call and its
+/// arguments (tags kept), and an error to hand back.
+struct Calling {
+    vm: *mut Vm,
+    host: *mut (dyn Host + 'static),
+    ctx: CtxId,
+    table: u8,
+    index: u16,
+    cells: Vec<Cell>,
+    err: Option<BdxError>,
+}
+
+thread_local! {
+    static CALLING: std::cell::RefCell<Option<Calling>> = const { std::cell::RefCell::new(None) };
+}
+
+/// A call-table entry for this machine's calls (`Vm::calls`): runs the call the machine is making
+/// (through its host's `syscall`) on the arguments KH1's call shape passes, leaving the result in
+/// the first word.
+///
+/// # Safety
+/// `args` holds at least as many words as the call's arguments (and one); only called by a
+/// machine's call instruction, which sets the call up first.
+pub unsafe extern "system" fn run_call(args: *mut u32) {
+    let Some(mut c) = CALLING.with(|x| x.borrow_mut().take()) else { return };
+    for (i, cell) in c.cells.iter_mut().enumerate() {
+        cell.v = *args.add(i);
+    }
+    let r = (*c.host).syscall(&mut *c.vm, c.ctx, c.table, c.index, &mut c.cells);
+    if let Err(e) = r {
+        c.err = Some(e);
+    }
+    *args = c.cells[0].v;
+    CALLING.with(|x| *x.borrow_mut() = Some(c));
 }
 
 impl Vm {
@@ -229,7 +344,26 @@ impl Vm {
         let prog_base = mem.alloc(prog.bytes().len() as u32);
         mem.write(prog_base, prog.bytes()).expect("program fits");
         let trap_info = traps::TRAPS.iter().map(|(t, i, _, f)| ((*t, *i), *f)).collect();
-        Vm { prog, mem, ctxs: Vec::new(), prog_base, frametime: 1.0, owner: None, budget: 200_000, trap_info }
+        Vm { prog, mem, ctxs: Vec::new(), prog_base, frametime: 1.0, owner: None, budget: 200_000, trap_info, calls: None }
+    }
+
+    /// A machine on memory the host owns (`Memory::native`), the program already loaded there at
+    /// `prog_base` (once, by the host), so nothing is copied.
+    pub fn on_memory(prog: Program, mem: Memory, prog_base: u32) -> Vm {
+        let trap_info = traps::TRAPS.iter().map(|(t, i, _, f)| ((*t, *i), *f)).collect();
+        Vm { prog, mem, ctxs: Vec::new(), prog_base, frametime: 1.0, owner: None, budget: 200_000, trap_info, calls: None }
+    }
+
+    /// Where the program sits in script memory.
+    pub fn prog_base(&self) -> u32 {
+        self.prog_base
+    }
+
+    /// A new context on a stack and work memory the host gives (`stack_size` bytes from
+    /// `stack_base`; work memory at `wp`): the host's own process record and work slot.
+    pub fn spawn_at(&mut self, stack_base: u32, stack_size: u32, wp: u32) -> CtxId {
+        self.ctxs.push(Context { pc: 0, sp: stack_base, stack_base, stack_end: stack_base + stack_size, wp, tp: Vec::new(), done: true, children: Vec::new(), key: 0 });
+        self.ctxs.len() - 1
     }
 
     /// Address of code word `pc` (the `bd` space).
@@ -463,6 +597,48 @@ impl Vm {
                             self.push(ctx, Cell::float(trig(ssub, x)))?;
                         }
                         _ => return Err(BdxError::BadOpcode(at, w)),
+                    }
+                }
+                10 if self.calls.is_some() => {
+                    let index = imm16(self)?;
+                    let table = ssub as u8;
+                    let lookup = self.calls.ok_or(BdxError::UnknownTrap(table, index))?;
+                    let (entry, flags) = lookup(table, index).filter(|e| e.0 != 0).ok_or(BdxError::UnknownTrap(table, index))?;
+                    let argc = (flags & 0xffff) as usize;
+                    let tp = &mut self.ctxs[ctx].tp;
+                    if tp.len() < argc || argc > 31 {
+                        return Err(BdxError::StackUnderflow);
+                    }
+                    let mut cells: Vec<Cell> = tp.split_off(tp.len() - argc);
+                    if cells.is_empty() {
+                        cells.push(Cell::int(0));
+                    }
+                    let mut words = [0u32; 32];
+                    for (w, c) in words.iter_mut().zip(cells.iter()) {
+                        *w = c.v;
+                    }
+                    self.ctxs[ctx].pc = at + 2;
+                    // The entry runs the call as KH1's call instruction runs one: the arguments'
+                    // words, the result in the first.
+                    let host_ptr: *mut (dyn Host + '_) = host;
+                    // SAFETY: the pointers live for this call only; nothing else uses `self` or
+                    // `host` until it returns.
+                    let host_ptr: *mut (dyn Host + 'static) = unsafe { std::mem::transmute(host_ptr) };
+                    let prev = CALLING.with(|x| x.borrow_mut().replace(Calling { vm: self as *mut Vm, host: host_ptr, ctx, table, index, cells, err: None }));
+                    let f: unsafe extern "system" fn(*mut u32) = unsafe { std::mem::transmute(entry) };
+                    unsafe { f(words.as_mut_ptr()) };
+                    let done = CALLING.with(|x| std::mem::replace(&mut *x.borrow_mut(), prev));
+                    let tag = match done {
+                        Some(c) => {
+                            if let Some(e) = c.err {
+                                return Err(e);
+                            }
+                            c.cells[0].tag
+                        }
+                        None => Tag::Unknown,
+                    };
+                    if flags & 0x4000_0000 != 0 {
+                        self.push(ctx, Cell { v: words[0], tag })?;
                     }
                 }
                 10 => {
@@ -794,6 +970,92 @@ mod tests {
         code.push(RET);
         let (_, h, _) = run(&code);
         assert_eq!(h.0[1].2[0], Cell::int(1));
+    }
+
+    /// A host block for the native-memory test: addresses `0x8000_0000 + offset`.
+    static HOST: std::sync::Mutex<Option<Box<[u8; 0x4000]>>> = std::sync::Mutex::new(None);
+
+    fn host_resolve(a: u32, n: u32) -> Option<usize> {
+        let g = HOST.lock().ok()?;
+        let b = g.as_ref()?;
+        let off = a.checked_sub(0x8000_0000)? as usize;
+        (off + n as usize <= b.len()).then(|| b.as_ptr() as usize + off)
+    }
+
+    #[test]
+    fn runs_on_host_memory() {
+        *HOST.lock().unwrap() = Some(Box::new([0u8; 0x4000]));
+        // The same program as `calls_and_returns`, on host memory: the program at 0x8000_0000,
+        // the context's stack and work memory where the host says.
+        let mut code = Vec::new();
+        code.extend(push(5));
+        let jal_at = code.len();
+        code.extend([0x0008 | 4 << 6, 0]);
+        code.extend(push(0));
+        code.extend([0x000a, 0]);
+        code.push(RET);
+        let f = code.len();
+        code[jal_at + 1] = (f as i32 - (jal_at as i32 + 2)) as u16;
+        code.extend([0x0001, 0]);
+        code.extend([0x0030, 0]);
+        code.extend([0x0030, 0]);
+        code.push(0x0006);
+        code.push(RET);
+        let prog = program(&code);
+        let bytes = prog.bytes().to_vec();
+        let mut mem = Memory::native(Native { resolve: host_resolve, block: 0x8000_1000, size: 0x1000, used: 0 });
+        mem.write(0x8000_0000, &bytes).unwrap();
+        let mut vm = Vm::on_memory(prog, mem, 0x8000_0000);
+        let c = vm.spawn_at(0x8000_2000, 0x400, 0x8000_3000);
+        vm.trigger(c, 1, &[]).unwrap();
+        let mut h = Rec(Vec::new());
+        assert_eq!(vm.run(c, &mut h).unwrap(), Status::Done);
+        assert_eq!(h.0[0].2[0], Cell::int(10));
+        // The frame went on the host's stack: the call's return word sits there.
+        assert_eq!(vm.mem.u32(0x8000_2000).unwrap(), 0);
+        assert_eq!(vm.code_addr(0), 0x8000_0010);
+        // alloc hands out the host's block, zeroed and aligned; outside script memory fails.
+        let a = vm.mem.alloc(20);
+        assert_eq!(a, 0x8000_1000);
+        assert_eq!(vm.mem.alloc(4), 0x8000_1020);
+        assert!(vm.mem.u32(0x9000_0000).is_err());
+        assert!(vm.mem.u32(0).is_err());
+        vm.mem.set_f32(a + 4, 2.5).unwrap();
+        vm.mem.copy(a + 8, a + 4, 4).unwrap();
+        assert_eq!(vm.mem.f32(a + 8).unwrap(), 2.5);
+    }
+
+    /// The call table: trap_frametime (0, 3) and trap_puti (0, 0) through `run_call`.
+    fn table(t: u8, i: u16) -> Option<(usize, u32)> {
+        crate::traps::TRAPS.iter().find(|r| r.0 == t && r.1 == i).map(|r| (run_call as *const () as usize, r.3))
+    }
+
+    #[test]
+    fn calls_through_a_host_table() {
+        // puti(frametime() + 2 as an int... ) : push 0x0a 3 (frametime, returns 1.0), cvt.s.w,
+        // push 2, add, push 0, puti
+        let mut code = Vec::new();
+        code.extend([0x000a, 3]);
+        code.push(0x0005 | 1 << 4 | 1 << 6); // cvt.s.w
+        code.extend(push(2));
+        code.push(0x0006); // add
+        code.extend(push(0));
+        code.extend([0x000a, 0]);
+        code.push(RET);
+        let mut vm = Vm::new(program(&code));
+        vm.calls = Some(table);
+        let c = vm.spawn(None);
+        vm.trigger(c, 1, &[]).unwrap();
+        let mut h = Rec(Vec::new());
+        assert_eq!(vm.run(c, &mut h).unwrap(), Status::Done);
+        assert_eq!(h.0.len(), 2);
+        assert_eq!(h.0[1], (0, 0, vec![Cell::int(3), Cell::int(0)]));
+        // An entry the table doesn't have is an unknown call.
+        let mut vm = Vm::new(program(&[0x000a | 9 << 6, 999, RET]));
+        vm.calls = Some(table);
+        let c = vm.spawn(None);
+        vm.trigger(c, 1, &[]).unwrap();
+        assert!(matches!(vm.run(c, &mut Rec(Vec::new())), Err(BdxError::UnknownTrap(9, 999))));
     }
 
     #[test]

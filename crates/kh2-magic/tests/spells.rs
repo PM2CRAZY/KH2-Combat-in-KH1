@@ -583,3 +583,270 @@ fn effects_live_their_length_in_30_hz_ticks() {
     }
     assert_eq!(frames, 54);
 }
+
+// ---------------------------------------------------------------------------------------------
+// The host's own script machine (`NativeHost`, the mod's KH1 script processes, t798..t800): a fake
+// host with the same layout KH1's has (the program loaded once, each cast's memory a block of the
+// host's, its main context's stack and KH2's 8-byte evaluation stack in a process record that the
+// host's machine steps, the registers moved in and out at every step). Every spell must run there
+// exactly as on our own arena: the same attacks at the same places on the same script run.
+// ---------------------------------------------------------------------------------------------
+
+use kh2_magic::kh2_bdx::{Cell, CtxId, Memory, Native, Tag, Vm};
+use kh2_magic::NativeHost;
+
+/// The fake host's memory: addresses `0x8000_0000 + offset` (KH1's handles have that form).
+static HOST_MEM: std::sync::Mutex<Option<Box<[u8]>>> = std::sync::Mutex::new(None);
+const HOST_SIZE: usize = 0x40_0000;
+const PROGS_AT: u32 = 0x8000_0000;
+const BLOCKS_AT: u32 = 0x8010_0000;
+const RECORDS_AT: u32 = 0x8030_0000;
+
+fn host_resolve(a: u32, n: u32) -> Option<usize> {
+    let g = HOST_MEM.lock().ok()?;
+    let b = g.as_ref()?;
+    let off = a.checked_sub(0x8000_0000)? as usize;
+    (off + n as usize <= b.len()).then(|| b.as_ptr() as usize + off)
+}
+
+/// A process record as the fake host keeps it (KH1's: pc, stack pointer, evaluation stack as
+/// value and tag words, work memory).
+#[derive(Default, Clone)]
+struct Record {
+    pc: u32,
+    sp: u32,
+    wp: u32,
+    eval: Vec<(u32, u32)>,
+}
+
+struct FakeHost {
+    next: u32,
+    pending: Option<u32>,
+    /// Each cast's processes: (context, its record), the main one first, then its children in the
+    /// order they started (the order the host's machine steps them).
+    records: std::collections::HashMap<u64, Vec<(CtxId, Record)>>,
+    pending_main: Option<CtxId>,
+    programs: Vec<(Vec<u8>, u32)>,
+    prog_used: u32,
+}
+
+impl FakeHost {
+    fn new() -> FakeHost {
+        FakeHost { next: 0, pending: None, records: Default::default(), pending_main: None, programs: Vec::new(), prog_used: 0 }
+    }
+    fn record(&mut self, id: u64, ctx: CtxId) -> Option<&mut Record> {
+        self.records.get_mut(&id)?.iter_mut().find(|r| r.0 == ctx).map(|r| &mut r.1)
+    }
+}
+
+fn tag_word(t: Tag) -> u32 {
+    match t {
+        Tag::Int => 0x544E_4940,
+        Tag::Float => 0x544C_4640,
+        Tag::Addr => 0x5244_4140,
+        Tag::Unknown => 0x3F3F_3F40,
+    }
+}
+
+fn tag_of(w: u32) -> Tag {
+    match w {
+        0x544E_4940 => Tag::Int,
+        0x544C_4640 => Tag::Float,
+        0x5244_4140 => Tag::Addr,
+        _ => Tag::Unknown,
+    }
+}
+
+/// The host's call table: every KH2 call an entry of `run_call` with its flag word.
+fn host_call_table(t: u8, i: u16) -> Option<(usize, u32)> {
+    kh2_magic::kh2_bdx::traps::TRAPS.iter().find(|r| r.0 == t && r.1 == i).map(|r| (kh2_magic::kh2_bdx::run_call as *const () as usize, r.3))
+}
+
+impl NativeHost for FakeHost {
+    fn machine(&mut self, file: &SpellFile, _spell: usize, _key: i32) -> Option<(Vm, CtxId)> {
+        let bytes = file.program.bytes().to_vec();
+        let prog = match self.programs.iter().find(|p| p.0 == bytes) {
+            Some(p) => p.1,
+            None => {
+                let at = PROGS_AT + self.prog_used;
+                self.prog_used += (bytes.len() as u32 + 15) & !15;
+                let p = host_resolve(at, bytes.len() as u32)?;
+                unsafe { std::ptr::copy_nonoverlapping(bytes.as_ptr(), p as *mut u8, bytes.len()) };
+                self.programs.push((bytes, at));
+                at
+            }
+        };
+        let slot = self.next;
+        self.next += 1;
+        let block = BLOCKS_AT + slot * 0x2_0000;
+        let record = RECORDS_AT + slot * 0x1000;
+        let mem = Memory::native(Native { resolve: host_resolve, block, size: 0x2_0000, used: 0 });
+        let mut vm = Vm::on_memory(file.program.clone(), mem, prog);
+        // (KH2's calls through a host call table, as KH1's script-call tables.)
+        vm.calls = Some(host_call_table);
+        // (Stack at the record's +0x40, 0x400 bytes; work memory at +0x800.)
+        let main = vm.spawn_at(record + 0x40, 0x400, record + 0x800);
+        self.pending = Some(slot);
+        self.pending_main = Some(main);
+        Some((vm, main))
+    }
+    fn started(&mut self, id: u64, vm: &Vm, main: CtxId) -> bool {
+        if self.pending.take().is_none() || self.pending_main.take() != Some(main) {
+            return false;
+        }
+        self.records.insert(id, vec![(main, Record::default())]);
+        self.store(id, vm, main);
+        true
+    }
+    fn thread(&mut self, id: u64, vm: &mut Vm, wp: u32) -> Option<CtxId> {
+        let n = self.records.get(&id)?.len() as u32;
+        // (A child record of its own: its stack there, the work memory shared.)
+        let record = RECORDS_AT + 0x8_0000 + (id as u32 % 32) * 0x2000 + n * 0x800;
+        let c = vm.spawn_at(record + 0x40, 0x400, wp);
+        self.records.get_mut(&id)?.push((c, Record::default()));
+        Some(c)
+    }
+    fn load(&mut self, id: u64, vm: &mut Vm, ctx: CtxId) {
+        let Some(r) = self.record(id, ctx).cloned() else { return };
+        let c = &mut vm.ctxs[ctx];
+        c.pc = r.pc;
+        c.sp = r.sp;
+        c.wp = r.wp;
+        c.tp = r.eval.iter().map(|&(v, t)| Cell { v, tag: tag_of(t) }).collect();
+    }
+    fn store(&mut self, id: u64, vm: &Vm, ctx: CtxId) {
+        let c = &vm.ctxs[ctx];
+        // (KH1's record has room for 96 entries.)
+        assert!(c.tp.len() <= 96, "evaluation stack {} deep", c.tp.len());
+        let eval = c.tp.iter().map(|x| (x.v, tag_word(x.tag))).collect();
+        let (pc, sp, wp) = (c.pc, c.sp, c.wp);
+        let Some(r) = self.record(id, ctx) else { return };
+        r.pc = pc;
+        r.sp = sp;
+        r.wp = wp;
+        r.eval = eval;
+    }
+    fn alive(&self, id: u64) -> bool {
+        self.records.contains_key(&id)
+    }
+    fn ended(&mut self, id: u64) {
+        self.records.remove(&id);
+    }
+}
+
+/// The host's machine steps cast `id`: its process, then each child in turn (KH1's
+/// `0x1402BCEC0`: the parent, then the chain read after it, so a child started this step runs
+/// this step); a child that ends is dropped. Returns whether the main process goes on.
+fn host_step(magic: &mut Magic, id: u64, w: &mut Fake) -> bool {
+    let Some(main) = magic.casts.iter().find(|c| c.id == id).map(|c| c.main_ctx()) else { return false };
+    let goes = magic.step_external(id, main, w);
+    let thread = |m: &Magic, i: usize| m.casts.iter().find(|c| c.id == id).and_then(|c| c.host_threads().get(i).copied());
+    let mut i = 0;
+    while let Some(ctx) = thread(magic, i) {
+        // (One that ended leaves the list; one still there goes on, or its cast is over.)
+        if magic.step_external(id, ctx, w) || thread(magic, i) == Some(ctx) {
+            i += 1;
+        }
+    }
+    goes
+}
+
+/// (frame, atk, sub, position) of every live placed attack, frame by frame.
+/// And every live effect's element (atk 0xFFFF, its element in `sub`'s place) and every strike
+/// (atk 0xFFFE).
+fn attack_trace(magic: &Magic, f: u32, out: &mut Vec<(u32, u16, u8, [i32; 3])>) {
+    for a in magic.attacks.iter().filter(|a| !a.freed && a.pos.is_some()) {
+        let p = a.pos.unwrap();
+        out.push((f, a.atk, a.sub, [(p.x * 10.0) as i32, (p.y * 10.0) as i32, (p.z * 10.0) as i32]));
+    }
+    for e in magic.effects.iter().filter(|e| e.alive()) {
+        out.push((f, 0xFFFF, e.element.id as u8, [0; 3]));
+    }
+}
+
+#[test]
+fn native_host_runs_every_spell_as_our_arena() {
+    let d = dir();
+    let Ok(system) = std::fs::read(d.join("03system.bin")) else {
+        eprintln!("skipped: no extracted files in {}", d.display());
+        return;
+    };
+    *HOST_MEM.lock().unwrap() = Some(vec![0u8; HOST_SIZE].into_boxed_slice());
+    let pref = kh2_formats::pref::Pref::from_03system(&system).unwrap();
+    let mut checked = 0;
+    for (element, name) in ["FIRE", "BLIZZARD", "THUNDER", "CURE", "MAGNET", "REFLECT"].into_iter().enumerate() {
+        for level in 1..=3 {
+            let file = format!("{name}_{level}.mag");
+            let Ok(bytes) = std::fs::read(d.join(&file)) else { continue };
+            let sub = (level as i32) * 2 - 2;
+            // Our arena, `update` running the scripts.
+            let mut arena = Vec::new();
+            {
+                let mut magic = Magic::new();
+                let spell = magic.add_spell(SpellFile::parse(&file, &bytes).unwrap());
+                let mut w = Fake { frame: 0, release_at: 22, motion_end: 60, seed: 1 };
+                magic.cast(spell, SORA, element as u8, sub, pref.magi.get(sub).unwrap(), &mut w).unwrap();
+                for f in 1..400 {
+                    w.frame = f;
+                    if f == w.release_at {
+                        assert!(magic.release(SORA, &mut w));
+                    }
+                    for e in magic.update(&mut w) {
+                        match e {
+                            Event::Error(s) => panic!("{file} (arena): {s}"),
+                            Event::Strike { .. } => arena.push((f, 0xFFFE, 0, [0; 3])),
+                            _ => {}
+                        }
+                    }
+                    attack_trace(&magic, f, &mut arena);
+                    if magic.casts.is_empty() && magic.attacks.iter().all(|a| a.freed) {
+                        break;
+                    }
+                }
+            }
+            // The host's machine: its step of the process, then `update` (the host's machine
+            // stepping before the host's own frame, the order KH1's task list may have).
+            let mut native = Vec::new();
+            let mut threads_seen = 0;
+            {
+                let mut magic = Magic::new();
+                magic.native = Some(Box::new(FakeHost::new()));
+                let spell = magic.add_spell(SpellFile::parse(&file, &bytes).unwrap());
+                let mut w = Fake { frame: 0, release_at: 22, motion_end: 60, seed: 1 };
+                magic.frame = Some(0);
+                magic.cast(spell, SORA, element as u8, sub, pref.magi.get(sub).unwrap(), &mut w).unwrap();
+                assert!(magic.casts[0].external, "{file}: on the host's process");
+                let id = magic.casts[0].id;
+                for f in 1..400u32 {
+                    w.frame = f;
+                    magic.frame = Some(f as u64);
+                    if f == w.release_at {
+                        assert!(magic.release(SORA, &mut w));
+                    }
+                    let goes = host_step(&mut magic, id, &mut w);
+                    threads_seen = threads_seen.max(magic.casts.iter().map(|c| c.host_threads().len()).sum::<usize>());
+                    for e in magic.update(&mut w) {
+                        match e {
+                            Event::Error(s) => panic!("{file} (host): {s}"),
+                            Event::Strike { .. } => native.push((f, 0xFFFE, 0, [0; 3])),
+                            _ => {}
+                        }
+                    }
+                    attack_trace(&magic, f, &mut native);
+                    let _ = goes;
+                    if magic.casts.is_empty() && magic.attacks.iter().all(|a| a.freed) {
+                        break;
+                    }
+                }
+            }
+            assert_eq!(arena, native, "{file}: the host's machine ran it differently");
+            // (Blizzard's and Thunder's scripts start a thread: on a child process of the host's.)
+            if matches!(name, "BLIZZARD" | "THUNDER") {
+                assert!(threads_seen > 0, "{file}: its thread on a child process");
+            }
+            eprintln!("{file}: {} attack frames, the same on the host's machine ({threads_seen} child process(es))", arena.len());
+            checked += 1;
+        }
+    }
+    assert!(checked > 0);
+}

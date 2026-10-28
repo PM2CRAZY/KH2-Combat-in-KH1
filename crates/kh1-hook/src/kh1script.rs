@@ -205,6 +205,76 @@ pub fn read_box(ctx: usize, start: usize, cmd: u32, word: impl Fn(usize, usize) 
     }
 }
 
+/// Event functions 0 and 177 open a message window (the window's number pushed right before the call);
+/// window 7 is the one the "Obtained" lines use (the treasure script's, the evidence boxes', Destiny
+/// Islands' gathered items). Checked (exe + files).
+pub const FN_OPEN_WINDOW: u32 = 0;
+pub const FN_OPEN_WINDOW_AT: u32 = 177;
+pub const WINDOW_OBTAINED: u32 = 7;
+
+/// t795: a room script's part that a Triangle command woke through KH1's event dispatch (`0x1401A1A10`:
+/// event 0 wakes the object's context's sub-script 5, event 4 its sub-script 3), read as an item pickup:
+/// the whole sub-script from `start` to its first 512 (or 514), with every sub-script it wakes. A pickup
+/// takes the player (511), gives (258 / 583 / 458 / 444 / 570) and gives him back (512) with no scene,
+/// choice, shop or menu (`plays`), and every window its own sub-script opens is window 7 (the "Obtained"
+/// one: a talk opens its own windows). Destiny Islands' gathered items read `511, 113, 115, wake (Sora's
+/// motion), 2, 644, 258, 364, window 7 (4 / 5 / 6 / 83 / 80 / 3, 0, 1), 353 0x1F, 107, 2, wake, 112, 114,
+/// 512` (Checked (files): `di01`).
+pub fn read_pickup(ctx: usize, start: usize, word: impl Fn(usize, usize) -> Option<u32>, sub: impl Fn(usize, usize) -> Option<usize>, plays: &[u32]) -> BoxOpen {
+    let op = |w: u32| (w >> 24) as u8;
+    let arg = |w: u32| w & 0xFF_FFFF;
+    // The windows its own sub-script opens, up to its 512 / 514 or its end.
+    let mut last: Option<u32> = None;
+    let mut i = start;
+    loop {
+        if i - start >= FOLLOW_MAX {
+            return BoxOpen::Unread;
+        }
+        let Some(w) = word(ctx, i) else { return BoxOpen::Unread };
+        i += 1;
+        match op(w) {
+            CLASS_END => break,
+            CLASS_CALL => {
+                let f = arg(w);
+                if f == FN_OPEN_WINDOW || f == FN_OPEN_WINDOW_AT {
+                    match last {
+                        Some(w) if op(w) == CLASS_PUSH && arg(w) == WINDOW_OBTAINED => {}
+                        _ => return BoxOpen::Not(f),
+                    }
+                }
+                if f == FN_RELEASE || f == FN_EVENT_OFF {
+                    break;
+                }
+            }
+            _ => {}
+        }
+        last = Some(w);
+    }
+    let mut seen = Vec::new();
+    match walk_follow_up(ctx, start, &word, &sub, plays, &mut seen) {
+        Follow::Skip(n) if seen.contains(&FN_HOLD) && seen.contains(&FN_RELEASE) && seen.iter().any(|f| TAIL_GIVES.contains(f)) => BoxOpen::Give(n),
+        Follow::Skip(_) | Follow::NoEnd => BoxOpen::Not(0),
+        Follow::Plays(f) => BoxOpen::Not(f),
+        Follow::Unread => BoxOpen::Unread,
+    }
+}
+
+/// t793: what's left of a scene after its event mode ends (514) while the player is still held: from
+/// context `ctx`'s instruction `pc` to its 512 (the player given back), with every sub-script it wakes.
+/// `Some(n)` when it gives something (258 / 583 an item or reward, 458 a spell, 444 munny, 570 a Gummi
+/// Block) and has no choice, shop, menu or pause skip (`plays`): the scene's give and its "Obtained" window
+/// (the Coliseum's Entry Pass after Phil's scene: 514, then 258, window 7, 353, 107, 2, 512).
+pub fn read_give_tail(ctx: usize, pc: usize, word: impl Fn(usize, usize) -> Option<u32>, sub: impl Fn(usize, usize) -> Option<usize>, plays: &[u32]) -> Option<usize> {
+    let mut seen = Vec::new();
+    match walk_follow_up(ctx, pc, &word, &sub, plays, &mut seen) {
+        Follow::Skip(n) if seen.contains(&FN_RELEASE) && !seen.contains(&FN_EVENT_OFF) && seen.iter().any(|f| TAIL_GIVES.contains(f)) => Some(n),
+        _ => None,
+    }
+}
+
+/// The gives a held tail can have (t793).
+pub const TAIL_GIVES: [u32; 5] = [258, 583, 458, 444, 570];
+
 /// Whether the instruction before `pc` is `call 126` with `push entry` before it: the context started
 /// `entry` there and carries on at `pc` when it has ended (126 from the room script advances past the
 /// call, `0x1401A9D90` returns 10). `word(i)` is the context's instruction `i`.
@@ -360,6 +430,47 @@ mod tests {
     }
 
     #[test]
+    fn reads_a_pickup() {
+        let plays = [88u32, 126];
+        // Context 0's sub-script 3 (woken by the Triangle command): a guard, hold, wake context 1's
+        // sub-script 1 (Sora's motion), give item 0xC0, window 7 with its line, give the player back.
+        let c0 = vec![
+            ins(0x10, 0x958), ins(CLASS_PUSH, 0), ins(CLASS_CMP, 6), ins(CLASS_JUMP_NOT, 0x15),
+            ins(CLASS_CALL, 511), ins(CLASS_CALL, 113), ins(CLASS_PUSH, 6), ins(CLASS_CTX, 1), ins(CLASS_WAKE, 1),
+            ins(CLASS_PUSH, 0xC0), ins(CLASS_PUSH, 1), ins(CLASS_CALL, 258),
+            ins(CLASS_PUSH, 7), ins(CLASS_CALL, 0), ins(CLASS_PUSH, 7), ins(CLASS_PUSH, 0x1EF), ins(CLASS_CALL, 1),
+            ins(CLASS_PUSH, 7), ins(CLASS_CALL, 107), ins(CLASS_CALL, 112), ins(CLASS_CALL, 512), ins(CLASS_END, 0x10),
+        ];
+        let c1 = vec![ins(CLASS_CALL, 55), ins(CLASS_END, 0x10), ins(CLASS_PUSH, 0xA6), ins(CLASS_CALL, 108), ins(CLASS_CALL, 103), ins(CLASS_END, 0x10)];
+        let ctxs = [c0.clone(), c1.clone()];
+        let word = |c: usize, i: usize| ctxs.get(c).and_then(|v| v.get(i)).copied();
+        let sub = |c: usize, s: usize| match (c, s) { (0, 3) => Some(0), (1, 0) => Some(0), (1, 1) => Some(2), _ => None };
+        assert_eq!(read_pickup(0, 0, word, sub, &plays), BoxOpen::Give(25));
+        // A talk's window (window 0) isn't a pickup's.
+        let mut c0b = c0.clone();
+        c0b[12] = ins(CLASS_PUSH, 0);
+        let ctxs = [c0b, c1.clone()];
+        let word = |c: usize, i: usize| ctxs.get(c).and_then(|v| v.get(i)).copied();
+        assert_eq!(read_pickup(0, 0, word, sub, &plays), BoxOpen::Not(0));
+        // A choice plays; a part that gives nothing, or never takes the player, isn't a pickup.
+        let mut c0c = c0.clone();
+        c0c[18] = ins(CLASS_CALL, 88);
+        let ctxs = [c0c, c1.clone()];
+        let word = |c: usize, i: usize| ctxs.get(c).and_then(|v| v.get(i)).copied();
+        assert_eq!(read_pickup(0, 0, word, sub, &plays), BoxOpen::Not(88));
+        let mut c0d = c0.clone();
+        c0d[11] = ins(CLASS_CALL, 459);
+        let ctxs = [c0d, c1.clone()];
+        let word = |c: usize, i: usize| ctxs.get(c).and_then(|v| v.get(i)).copied();
+        assert_eq!(read_pickup(0, 0, word, sub, &plays), BoxOpen::Not(0));
+        let mut c0e = c0.clone();
+        c0e[4] = ins(CLASS_CALL, 459);
+        let ctxs = [c0e, c1];
+        let word = |c: usize, i: usize| ctxs.get(c).and_then(|v| v.get(i)).copied();
+        assert_eq!(read_pickup(0, 0, word, sub, &plays), BoxOpen::Not(0));
+    }
+
+    #[test]
     fn reads_a_follow_up() {
         let plays = [88u32, 222];
         // Context 0 carries on after `push 1, call 126`: an item, a message, a wake of context 7's
@@ -431,5 +542,26 @@ mod tests {
         // "Obtained" as the treasure texts spell it; a text ends at its 0 after `06 52 00`.
         assert_eq!(&texts[0][8..17], &[0x39, 0x46, 0x58, 0x45, 0x4D, 0x52, 0x49, 0x48, 0x01]);
         assert_eq!(&texts[0][texts[0].len() - 4..], &[0x06, 0x52, 0x00, 0x00]);
+    }
+
+    #[test]
+    fn reads_a_give_tail() {
+        let plays = [88u32, 139];
+        // After 514: a wait, the give (258), the window, 512.
+        let c0 = vec![
+            ins(CLASS_PUSH, 10), ins(CLASS_CALL, 8), ins(CLASS_PUSH, 0xE5), ins(CLASS_PUSH, 1), ins(CLASS_CALL, 258),
+            ins(CLASS_PUSH, 7), ins(CLASS_CALL, 0), ins(CLASS_PUSH, 7), ins(CLASS_CALL, 107), ins(CLASS_CALL, 512), ins(CLASS_END, 0x10),
+        ];
+        let ctxs = [c0.clone()];
+        let word = |c: usize, i: usize| ctxs.get(c).and_then(|v| v.get(i)).copied();
+        let sub = |_: usize, _: usize| None;
+        assert_eq!(read_give_tail(0, 0, word, sub, &plays), Some(10));
+        // No give: nothing to do. A choice: it plays. No 512: nothing.
+        let none = [vec![ins(CLASS_PUSH, 7), ins(CLASS_CALL, 0), ins(CLASS_CALL, 512), ins(CLASS_END, 0x10)]];
+        assert_eq!(read_give_tail(0, 0, |c: usize, i: usize| none.get(c).and_then(|v| v.get(i)).copied(), sub, &plays), None);
+        let choice = [vec![ins(CLASS_CALL, 258), ins(CLASS_CALL, 88), ins(CLASS_CALL, 512), ins(CLASS_END, 0x10)]];
+        assert_eq!(read_give_tail(0, 0, |c: usize, i: usize| choice.get(c).and_then(|v| v.get(i)).copied(), sub, &plays), None);
+        let open = [vec![ins(CLASS_CALL, 258), ins(CLASS_END, 0x10)]];
+        assert_eq!(read_give_tail(0, 0, |c: usize, i: usize| open.get(c).and_then(|v| v.get(i)).copied(), sub, &plays), None);
     }
 }

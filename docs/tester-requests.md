@@ -73,6 +73,9 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [45. Assistant: t789: the "Obtained Blizzard." window should now open after ](../testers/auto-cutscene-skipper/auto-cutscene-skipper.md#^m45)
   - [46. Assistant: t790: each "Obtained" line after a skipped scene now plays t](../testers/auto-cutscene-skipper/auto-cutscene-skipper.md#^m46)
   - [47. Assistant: t791: the "Obtained" window should now come every time, also](../testers/auto-cutscene-skipper/auto-cutscene-skipper.md#^m47)
+  - [48. Assistant: t792: you were right that leftover state was the problem. Th](../testers/auto-cutscene-skipper/auto-cutscene-skipper.md#^m48)
+  - [49. Assistant: t793: the Entry Pass no longer holds Sora (your report in ch](../testers/auto-cutscene-skipper/auto-cutscene-skipper.md#^m49)
+  - [50. Assistant: t794: the Entry Pass part is now skipped like the other in-g](../testers/auto-cutscene-skipper/auto-cutscene-skipper.md#^m50)
 - [Baking the rest of the base animations](../testers/baking-the-rest-of-the-base-animations/baking-the-rest-of-the-base-animations.md)
   - [1. Assistant: I started this thread from What is still missing(../what-is-](../testers/baking-the-rest-of-the-base-animations/baking-the-rest-of-the-base-animations.md#^m1)
   - [2. Assistant: Thanks! Three versions, one step of the plan each:](../testers/baking-the-rest-of-the-base-animations/baking-the-rest-of-the-base-animations.md#^m2)
@@ -212,6 +215,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [10. Assistant: t607 to t610. Your two answers are in, and I found what was ](../testers/kh2-magic-and-reflect-native/kh2-magic-and-reflect-native.md#^m10)
   - [11. Assistant: t624: Finishing Plus now works after a finisher cast. Drive ](../testers/kh2-magic-and-reflect-native/kh2-magic-and-reflect-native.md#^m11)
   - [12. Assistant: From the What is still missing(../what-is-still-missing-for-](../testers/kh2-magic-and-reflect-native/kh2-magic-and-reflect-native.md#^m12)
+  - [13. Assistant: t796 to t800. Both answers are done, one system per version.](../testers/kh2-magic-and-reflect-native/kh2-magic-and-reflect-native.md#^m13)
 - [KH2 MP and MP Charge](../testers/kh2-mp-and-mp-charge/kh2-mp-and-mp-charge.md)
   - [1. Assistant: Started from What is still missing(../what-is-still-missing-](../testers/kh2-mp-and-mp-charge/kh2-mp-and-mp-charge.md#^m1)
 - [KH2 player model through KH1's model system](../testers/kh2-player-model-through-kh1s-model-system/kh2-player-model-through-kh1s-model-system.md)
@@ -347,6 +351,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [18. Assistant: Thanks! Three versions this round.](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m18)
   - [19. Assistant: Thanks! I made the two new threads:](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m19)
   - [20. Assistant: I made two threads for that line:](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m20)
+  - [21. Assistant: Here's the list brought up to date, from t676 to t793. Since](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m21)
 
 ---
 

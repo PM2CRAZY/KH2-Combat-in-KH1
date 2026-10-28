@@ -71,6 +71,11 @@ pub(crate) fn start_object_effect(magic: &mut Magic, vm: &mut Vm, t: &mut Tables
 }
 
 pub(crate) fn run(magic: &mut Magic, cast: &mut Cast, world: &mut dyn World) -> Result<(), BdxError> {
+    run_ctx(magic, cast, None, world)
+}
+
+/// `run`, or (`only`) one of the cast's threads on the host's child processes alone.
+pub(crate) fn run_ctx(magic: &mut Magic, cast: &mut Cast, only: Option<CtxId>, world: &mut dyn World) -> Result<(), BdxError> {
     let main = cast.main;
     let vm = &mut cast.vm;
     // The teamwork blocks this cast holds: KH2's are one block per key for every script
@@ -81,15 +86,29 @@ pub(crate) fn run(magic: &mut Magic, cast: &mut Cast, world: &mut dyn World) -> 
             vm.mem.write(*addr, block)?;
         }
     }
-    let result = run_trees(magic, vm, &mut cast.t, main, world);
+    let result = match only {
+        None => run_trees(magic, vm, &mut cast.t, main, world).map(|_| ()),
+        Some(c) => run_one(magic, vm, &mut cast.t, c, world),
+    };
     for (key, addr) in &cast.t.teamwork {
         if let Some(block) = magic.teamwork.get_mut(key) {
             let n = block.len() as u32;
             block.copy_from_slice(vm.mem.bytes(*addr, n)?);
         }
     }
-    let main_done = result?;
-    cast.finished = main_done && cast.t.threads.is_empty();
+    result?;
+    let main_done = vm.ctxs[main].done && vm.ctxs[main].children.is_empty();
+    cast.finished = main_done && cast.t.threads.is_empty() && cast.t.ext_threads.is_empty();
+    Ok(())
+}
+
+/// One thread on the host's child process (its tree), dropped from the cast's once done.
+fn run_one(magic: &mut Magic, vm: &mut Vm, t: &mut Tables, c: CtxId, world: &mut dyn World) -> Result<(), BdxError> {
+    let mut b = Bridge { magic, t, world };
+    vm.owner = None;
+    if vm.run_tree(c, &mut b)? {
+        b.t.ext_threads.retain(|x| *x != c);
+    }
     Ok(())
 }
 
@@ -201,6 +220,7 @@ impl Bridge<'_> {
             reflected: false,
             reflect_count: 0,
             freed: false,
+            freed_seen: false,
         });
         let rec = vm.mem.alloc(16);
         self.t.attacks.insert(rec, key);
@@ -515,9 +535,21 @@ impl Host for Bridge<'_> {
             (2, 20) => {
                 let owner = vm.owner.unwrap_or(ctx);
                 let wp = vm.ctxs[owner].wp;
-                let c = vm.spawn(Some(wp));
+                // (On the host's machine: a child process of the cast's, stepped after it.)
+                let id = self.t.native_id;
+                let hosted = match (id, self.magic.native.as_mut()) {
+                    (Some(id), Some(n)) => n.thread(id, vm, wp),
+                    _ => None,
+                };
+                let c = hosted.unwrap_or_else(|| vm.spawn(Some(wp)));
                 vm.start_at(c, a(0).v, &[a(1)])?;
-                self.t.threads.push(c);
+                match (hosted, id, self.magic.native.as_mut()) {
+                    (Some(_), Some(id), Some(n)) => {
+                        n.store(id, vm, c);
+                        self.t.ext_threads.push(c);
+                    }
+                    _ => self.t.threads.push(c),
+                }
                 let rec = vm.mem.alloc(16);
                 vm.mem.set_u32(rec, c as u32)?;
                 Some(Cell::addr(rec))

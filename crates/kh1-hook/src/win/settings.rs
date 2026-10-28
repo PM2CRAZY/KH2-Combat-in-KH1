@@ -262,6 +262,10 @@ ingame_skip = off\r\n\
 chest_style = skip\r\n\
 ; chest_anim: quick's animation: kh1 = KH1's open motion; kh2 = KH2's (QoL > Chest Animation, shown on Quick)\r\n\
 chest_anim = kh1\r\n\
+; item_pickup: vanilla = KH1's (Sora stands still until the item window is gone); skip = an item picked up off the\r\n\
+; ground (Destiny Islands' raft things and the like) leaves Sora free: KH1's item window shows while he keeps moving\r\n\
+; (QoL > Item Pickup)\r\n\
+item_pickup = vanilla\r\n\
 ; trace: (debug tools: only with debug_menu = on) on = the last trace_seconds of Sora's frames (position, KH1's and KH2's states, the pad)\r\n\
 ; are kept and written to the kh1-kh2-traces folder on Select + Triangle, or on their own when\r\n\
 ; something looks wrong; always = every frame is also written to kh1-kh2.trace.csv; off = none\r\n\
@@ -448,6 +452,8 @@ pub struct Settings {
     pub chest_style: u8,
     /// Quick's animation is KH2's (`chest_anim = kh2`).
     pub chest_anim_kh2: bool,
+    /// An item picked up off the ground leaves Sora free (`item_pickup = vanilla | skip`, t795; `chest.rs`).
+    pub item_pickup: bool,
     /// KH1's own states own base Sora (`shared = on`, `shared.rs`): KH2's animations on KH1's
     /// states per move style (its physics by `physics_rule`), KH2's controller only for KH2's own
     /// moves. Off: the old
@@ -711,6 +717,7 @@ fn load(first: bool) -> Option<Settings> {
             _ => 2,
         },
         chest_anim_kh2: on(&text, "chest_anim", "kh2", false),
+        item_pickup: on(&text, "item_pickup", "skip", false),
         shared: on(&text, "shared", "on", true),
         kh1_slots: match setting(&text, "kh1_slots").as_deref() {
             Some("off") | Some("0") | Some("no") => None,

@@ -889,6 +889,10 @@ struct Runtime {
     burst_heard: std::collections::HashSet<u64>,
     /// KH1 has had Sora since (the Reflect paused, `kh1_frame`).
     paused: Option<Instant>,
+    /// The world as the scripts saw it at our last step, for KH1's script machine stepping a cast
+    /// (`kh1_step`, `kh2script`), Sora's place brought up to date there.
+    world: Option<KhWorld>,
+    actor: usize,
 }
 
 /// The burst attacks (tiers 1..3, by the hits the barrier counted), whose first frame plays the
@@ -1024,6 +1028,8 @@ pub unsafe fn before_step(actor: usize, ch: &mut Character) {
 fn runtime(g: &mut Option<Runtime>) -> Option<&mut Runtime> {
     if g.is_none() {
         let mut magic = Magic::new();
+        // (KH1's script machine runs the scripts, `kh2script`, t798.)
+        magic.native = super::kh2script::machine(super::kh2script::Kind::Reflect);
         let (mut spells, mut levels) = ([None; 3], Vec::new());
         for (i, f) in PARSED.get()?.iter().enumerate() {
             if let Some(f) = f {
@@ -1034,7 +1040,7 @@ fn runtime(g: &mut Option<Runtime>) -> Option<&mut Runtime> {
         if levels.is_empty() {
             return None;
         }
-        *g = Some(Runtime { magic, spells, levels, fresh: None, casting: None, fx: HashMap::new(), barrier: false, hold: Hold::default(), blocks: 0, counter_hits: 0, started: None, carry: 0, burst_heard: Default::default(), paused: None });
+        *g = Some(Runtime { magic, spells, levels, fresh: None, casting: None, fx: HashMap::new(), barrier: false, hold: Hold::default(), blocks: 0, counter_hits: 0, started: None, carry: 0, burst_heard: Default::default(), paused: None, world: None, actor: 0 });
     }
     g.as_mut()
 }
@@ -1217,6 +1223,7 @@ unsafe fn step(actor: usize, out: &Output, airborne: bool, strikes: &mut combat:
     let Ok(mut g) = RT.lock() else { return };
     let Some(rt) = g.as_mut() else {
         BARRIER.store(false, Ordering::Relaxed);
+        strikes.barrier_guards_keep(&[]);
         return;
     };
     if rt.paused.take().is_some() {
@@ -1225,9 +1232,13 @@ unsafe fn step(actor: usize, out: &Output, airborne: bool, strikes: &mut combat:
     if rt.fresh.is_none() && rt.magic.casts.is_empty() && rt.magic.effects.is_empty() && rt.fx.is_empty() {
         BARRIER.store(false, Ordering::Relaxed);
         BLOCKS.store(0, Ordering::Relaxed);
+        strikes.barrier_guards_keep(&[]);
         return;
     }
     let mut world = world_now(actor, out, airborne, strikes, lock, 0x1234_5678 ^ (rt.counter_hits.wrapping_mul(2_654_435_761)));
+    // (KH1's script machine steps the casts on its processes: the effects age once a game frame,
+    // before the frame's first script, whichever of the two runs first, `kh2_magic::Magic::frame`.)
+    rt.magic.frame = rt.magic.native.is_some().then(|| super::takeover::GAME_FRAME.load(Ordering::Relaxed));
     // A cast that started this frame (trigger 20), then the release (trigger 21) at the cast
     // motion's magic-cast event (Reflect's: frame 0).
     if let Some((motion, finisher, level)) = rt.fresh.take() {
@@ -1311,6 +1322,9 @@ unsafe fn step(actor: usize, out: &Output, airborne: bool, strikes: &mut combat:
             Event::Strike { .. } => {}
         }
     }
+    // (Kept for KH1's script machine, which steps the casts on its own processes, `kh1_step`.)
+    rt.world = Some(world);
+    rt.actor = actor;
     // Effects: each the script starts plays from the spell's package, with its sound; ends,
     // kills and fades follow the script's.
     let mut seen = Vec::new();
@@ -1369,7 +1383,7 @@ unsafe fn step(actor: usize, out: &Output, airborne: bool, strikes: &mut combat:
         }
         if first.kind == 3 {
             barrier = true;
-            guards.push((a.id | SPELL_KEY, kh1_sized_shapes(actor, shapes)));
+            guards.push((a.id | SPELL_KEY, kh1_sized_shapes(actor, shapes), first.reflect_range, first.reflect_angle));
             continue;
         }
         // Each attack the script makes strikes with its own row, as in KH2 (t572): the counter
@@ -1396,10 +1410,20 @@ unsafe fn step(actor: usize, out: &Output, airborne: bool, strikes: &mut combat:
     // barrier's contact effect where it met (element 11, which the script never starts itself:
     // KH2 plays it on a blocked hit; its sound 174 is empty in the PC files, so the barrier's
     // own chime, element 1's, with it).
+    // (t796: the barrier is a KH1 guard object KH1's own pass meets, `combat::barrier_guard`;
+    // our own overlap test only where KH1's meeting or builder isn't hooked.)
+    let native_barrier = combat::barrier_native();
+    let mut standing = Vec::new();
     if !combo_wait {
         let level = rt.magic.attacks.iter().find(|a| !a.freed && a.owner == SORA).and_then(|a| rt.levels.get(a.spell).copied()).unwrap_or(1);
-        for (key, shapes) in &guards {
-            for at in strikes.barrier_meet(actor, *key, shapes) {
+        for (key, shapes, range, angle) in &guards {
+            let met = if native_barrier {
+                standing.push(*key);
+                strikes.barrier_guard(actor, *key, shapes, *range, *angle)
+            } else {
+                strikes.barrier_meet(actor, *key, shapes)
+            };
+            for at in met {
                 // Counted on the barrier it met (each cast's own count, as KH2's meeting counts on
                 // its own attack, `0x1403D2140` `+0xB0`; t572).
                 if let Some(a) = rt.magic.attacks.iter_mut().find(|a| !a.freed && a.id | SPELL_KEY == *key) {
@@ -1417,6 +1441,8 @@ unsafe fn step(actor: usize, out: &Output, airborne: bool, strikes: &mut combat:
             }
         }
     }
+    // Barriers gone, or hidden while the combo goes on: their guard objects freed.
+    strikes.barrier_guards_keep(&standing);
     if !attacks.is_empty() {
         // (KH1 attack objects of ours that KH1's own collision pass collides, `bodyhits`; else our
         // own sweep, as before.)
@@ -1446,6 +1472,36 @@ unsafe fn step(actor: usize, out: &Output, airborne: bool, strikes: &mut combat:
     if rt.magic.casts.is_empty() && rt.casting.is_none() && rt.fresh.is_none() && rt.started.is_some() {
         note(|| format!("Reflect done: {} hit(s) blocked, {} counter hit(s)", rt.blocks, rt.counter_hits));
         rt.started = None;
+    }
+}
+
+/// KH1's script machine steps one of Reflect's casts on its KH1 process, or one of its threads on a
+/// KH1 child process (`kh2script`, t798 / t799): its script (or that thread) runs once with the
+/// world of our last step, Sora's place read again. Returns whether its process goes on.
+pub unsafe fn kh1_step(id: u64, ctx: kh2_magic::kh2_bdx::CtxId) -> bool {
+    // (Our own step has the runtime: the script waits a frame.)
+    let Ok(mut g) = RT.try_lock() else { return true };
+    let Some(rt) = g.as_mut() else { return false };
+    let Some(mut world) = rt.world.take() else { return true };
+    refresh(&mut world, rt.actor);
+    rt.magic.frame = Some(super::takeover::GAME_FRAME.load(Ordering::Relaxed));
+    let goes = rt.magic.step_external(id, ctx, &mut world);
+    rt.world = Some(world);
+    goes
+}
+
+/// Sora's place in a kept world read again from KH1.
+pub(super) unsafe fn refresh(world: &mut KhWorld, actor: usize) {
+    if actor < 0x10000 || actor != super::takeover::sora_actor() {
+        return;
+    }
+    let p = rd::<[f32; 3]>(actor + 0x10);
+    if let Some(me) = world.objs.iter_mut().find(|o| o.id == SORA) {
+        let now = Vec3::new(p[0], -p[1], p[2]);
+        let moved = now - me.pos;
+        me.pos = now;
+        me.centre += moved;
+        me.target += moved;
     }
 }
 
@@ -1532,6 +1588,8 @@ pub fn kh1_frame() {
     }
     let file = rt.magic.spells.clone();
     rt.magic = Magic::new();
+    rt.magic.native = super::kh2script::machine(super::kh2script::Kind::Reflect);
+    rt.world = None;
     for f in file {
         rt.magic.add_spell(f);
     }

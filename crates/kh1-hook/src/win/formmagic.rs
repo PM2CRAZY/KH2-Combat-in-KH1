@@ -275,6 +275,10 @@ struct Runtime {
     kh1_clock: Option<(u32, f32, f32, bool)>,
     fired: u32,
     hits: u32,
+    /// The world as the scripts saw it at our last step, for KH1's script machine stepping a cast
+    /// (`kh1_step`, `kh2script`).
+    world: Option<KhWorld>,
+    actor: usize,
 }
 
 static RT: Mutex<Option<Runtime>> = Mutex::new(None);
@@ -285,6 +289,8 @@ static NO_WISD: AtomicBool = AtomicBool::new(false);
 fn runtime(g: &mut Option<Runtime>) -> &mut Runtime {
     g.get_or_insert_with(|| {
         let mut magic = Magic::new();
+        // (KH1's script machine runs the spell scripts, `kh2script`, t798.)
+        magic.native = super::kh2script::machine(super::kh2script::Kind::Form);
         let mut package = HashMap::new();
         let wisd = pose::kh2().and_then(|k| k.wisdom.as_ref()).and_then(|f| {
             let made = (|| {
@@ -307,7 +313,7 @@ fn runtime(g: &mut Option<Runtime>) -> &mut Runtime {
                 }
             }
         });
-        Runtime { magic, wisd, files: HashMap::new(), package, fx: HashMap::new(), queued: Vec::new(), arrival: Vec::new(), arrival_age: 0, fresh: None, casting: None, kh1_clock: None, fired: 0, hits: 0 }
+        Runtime { magic, wisd, files: HashMap::new(), package, fx: HashMap::new(), queued: Vec::new(), arrival: Vec::new(), arrival_age: 0, fresh: None, casting: None, kh1_clock: None, fired: 0, hits: 0, world: None, actor: 0 }
     })
 }
 
@@ -1262,6 +1268,21 @@ unsafe fn heal(actor: usize, power: u16) -> Option<(i32, i32)> {
     Some((hp, now))
 }
 
+/// KH1's script machine steps one of these casts on its KH1 process, or one of its threads on a KH1
+/// child process (`kh2script`, t798 / t799): its script (or that thread) runs once with the world
+/// of our last step, Sora's place read again. Returns whether its process goes on.
+pub unsafe fn kh1_step(id: u64, ctx: kh2_magic::kh2_bdx::CtxId) -> bool {
+    // (Our own step has the runtime: the script waits a frame.)
+    let Ok(mut g) = RT.try_lock() else { return true };
+    let Some(rt) = g.as_mut() else { return false };
+    let Some(mut world) = rt.world.take() else { return true };
+    super::reflect::refresh(&mut world, rt.actor);
+    rt.magic.frame = Some(super::takeover::GAME_FRAME.load(Ordering::Relaxed));
+    let goes = rt.magic.step_external(id, ctx, &mut world);
+    rt.world = Some(world);
+    goes
+}
+
 /// After KH2's step and the swings: the form's scripts' frame (casts, shots, effects, hits).
 pub unsafe fn shots_step(actor: usize, out: &Output, airborne: bool, strikes: &mut combat::Strikes, battle: &Battle, lock: Option<u32>) {
     let Ok(mut g) = RT.try_lock() else { return };
@@ -1270,6 +1291,9 @@ pub unsafe fn shots_step(actor: usize, out: &Output, airborne: bool, strikes: &m
         return;
     }
     let mut world = world_now(actor, out, airborne, strikes, lock, 0x51A7_0000 ^ rt.fired.wrapping_mul(2_654_435_761));
+    // (KH1's script machine steps the casts on its processes: the effects age once a game frame,
+    // before the frame's first script, whichever of the two runs first, `kh2_magic::Magic::frame`.)
+    rt.magic.frame = rt.magic.native.is_some().then(|| super::takeover::GAME_FRAME.load(Ordering::Relaxed));
     if world.target.is_none() {
         world.target = auto_target(&world, out.facing);
     }
@@ -1386,6 +1410,9 @@ pub unsafe fn shots_step(actor: usize, out: &Output, airborne: bool, strikes: &m
             Event::Strike { .. } => {}
         }
     }
+    // (Kept for KH1's script machine, which steps the casts on its own processes, `kh1_step`.)
+    rt.world = Some(world);
+    rt.actor = actor;
     // Effects: bound ones follow Sora's bones; unbound ones go where the script has them.
     let mut seen = Vec::new();
     for e in &rt.magic.effects {

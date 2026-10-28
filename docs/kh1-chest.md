@@ -448,6 +448,41 @@ contexts.
   unnamed. KH2's own hold length (the box's script) not followed; Sora is held by KH1's script until the
   motion ends. Not checked in game.
 
+## Round 5 (t795): items picked up off the ground (QoL > Item Pickup)
+
+- **What it is.** The owner: picking an item up off the ground holds Sora until the window is gone. These are not
+  chests nor the evidence boxes' 454 commands: the Triangle command's kind 4 / 5 (`0x1402A3DB0` and
+  `0x1402A4150`) queues event 0 / 4 on the object (`0x14028DD80`), and KH1's event dispatch (`0x1401A1A10`,
+  run by `0x14028E550`) wakes the object's context's sub-script 5 (event 0) or 3 (event 4). Checked (decomp).
+- **The part** (Destiny Islands `di01`, the owner's t794 log at f3289): a guard on a variable, 511, 113, 115, a
+  wake of Sora's context (his pick-up motion), 644, 258 (`push item, push 1`), 364, window 7 (4 / 5 / 6 / 83 /
+  80 / 3, then 0 and 1 with a line picked by a variable), 353 0x1F, 107, 2, a wake, 112, 114, 512. Checked
+  (files + log).
+- **Where they are.** Across the 239 room files, whole sub-scripts that read 511, a give (258 / 583 / 458 / 444
+  / 570), window 7 only and 512, with no scene, choice, shop or menu: `di01` / `di03` (Destiny Islands, items
+  0xC0..0xC7), `tw*` (0xD3), `pc05` / `pc06` (0xB2..0xBF), `tz13` (0xD9..0xDE), `lm*`, `pp10`, `po*`, `pi37`,
+  `nm01` / `nm11`, `he01` / `he04`, `ew22`, `aw*`. Checked (files; a byte scan, not every one tied to its
+  command; the world of each room code other than `di` is an Assumption).
+- **Skip (t795).** KH1's dispatch is hooked: for events 0 and 4, after KH1's own wake, the woken sub-script is
+  read in place (`crate::kh1script::read_pickup`, unit-tested). A pickup gets the box's treatment for that
+  context list until its 512: the holds (511 / 512 / 112..115) skipped from the pickup's own context only,
+  actions on Sora to KH1's done queue (no pick-up motion), his motion waits passed. Its give, window 7, sound
+  and flags run as KH1 wrote them. Anything else is KH1's. Vanilla: nothing changes (the hook is installed the
+  first time the row is set to Skip and then passes everything to KH1).
+- **Not checked:** in game. Assumption: the window doesn't hold Sora (as with chests). If the part's guard
+  jumps past the give, the mode ends at the open's 8-second time instead of a 512.
+
+## Round 6 (t801): pickups that wait, touches, a log for every way out
+
+- The owner's t800 log: Destiny Islands' pickups still held Sora, and no Item Pickup line showed at all.
+- **Why one can be missed** (Checked (decomp)): KH1's wake `0x1401A0AF0` pops the context and a priority (0..7).
+  If the priority is at least the context's current one (`+0x32C`), the next instruction (`+0x190`) becomes the
+  sub-script's start at once; otherwise the start waits in `+0x30C + priority * 4` and runs when that level ends.
+  t795 checked only the next instruction. t801 also takes the waiting slot.
+- **Events read** (Checked (decomp)): 0 (sub-script 5, priority 3) and 4 (3, priority 3) from the Triangle command
+  step; 1 (6, priority 2) from contact (`0x140297E80`); 3 (7, priority 4) from `0x1402B0610`. Event 2 (hits) is not.
+- **Log:** every way out for events 0, 3 and 4 says why (Cutscenes). Not checked: which event the island's items use.
+
 ## Not checked (Assumption)
 
 - (t724, now answered) KH2's own chest: see "KH2's own chest opening" above (checked in files and

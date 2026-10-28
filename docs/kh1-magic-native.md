@@ -1127,3 +1127,82 @@ What runs now (`combat::kh2_spell_refused`, from `combat::command`):
 
 None of these is borrowed by KH2's controller any more. A spell at Magic KH2 can still be borrowed
 in a state KH1 casts in when its slot didn't build (the fallback). Not checked in game.
+
+## 8. KH2's spell scripts as KH1 script processes (the tester, m12 question 1 "(a)"; t797..t800)
+
+What KH1's script machine is (Steam KH1, **Checked (decomp)**, first bytes **Checked (exe)**):
+- KH1's spell start `0x14028F5E0 (actor, target, arg, effects, code, data, second data)` adds a
+  task to the spell task list `0x142D22D08` (`0x14028A900`; entries: size u16 `+0`, count u16
+  `+2`, entries at `+8`, a free one's first u16 0) and makes its process with `0x1402BD420 (code)`.
+  The list runs every frame (`0x14028F6B0`, task priority 0x21728, through `0x14028A710`); the
+  task's step `0x14028F6D0` sets the actor's `+0x374` bit 0x800000 (nothing in the decomp reads
+  that bit), skips the step while `0x142867364` bit 0x4000 (the pause) and otherwise runs
+  `0x1402BCEC0`; once the process is gone it ends (4).
+- A process: one of 64 records of 0x758 at `0x142DC7BE0` (`0x1402BD5B0`: flags `+0` 1 in use,
+  2 running, 4 a child, 8 stopped; `+8` / `+0x10` the code it started on; `+0x18` pc; `+0x20` the
+  stack pointer, its stack the record's `+0x40..+0x440` with four zero words pushed; `+0x28` the
+  evaluation stack pointer, `+0x440..+0x740`; `+0x30` the work memory; `+0x38` the call-table
+  list; `+0x740` the next child) and one of 32 work slots of 0x800 at `0x142DB7BE0` (in use: the
+  bytes at `0x142DE51E0`). Neither allocator checks for a free one. KH1's reset `0x1402BCFD0`
+  clears them all and gives every record KH1's call-table list `0x140529FA0`.
+- `0x1402BCEC0` runs the process (if running), then reads its chain and runs each child, all
+  through the interpreter `0x1402CC620 (record + 0x18, callback, record)`, which returns 0 when the
+  script halted for the frame and `0xFFFFFFFF` when it ended; an ended process stops running, and
+  once no child runs either it is freed (`0x1402BD390`). A child comes from `0x1402BD4D0 (parent,
+  code)`: its own record, flag 4, the parent's program and work memory, appended to the chain.
+- KH1's instructions put the class in the low 4 bits (push 2, the call 11 through the record's
+  call tables: the list's table by bits 6..7, an entry of 0x10 by the operand, function `+0`, flag
+  word `+8`: argument count, 0x40000000 when it returns). KH2's interpreter (Steam KH2
+  `0x14041B400`) has push 0 and call 10 (tables by bits 6+), keeps an 8-byte evaluation entry
+  (value and a tag: "@INT", "@FLT", "@ADR", "@???"), and addresses memory with the same 32-bit
+  handles as KH1 (`0x80000000 | segment << 25 | offset`; KH1 `0x14038AD90` / `0x14038ADC0`, KH2
+  `0x1404AD240` / `0x1404AD270`).
+
+What was ours: each cast's script ran on our own machine (`kh2_bdx::Vm` with a private byte arena,
+stepped by `Magic::update` from our frame step).
+
+Now:
+- **t797** (`kh2-bdx`): the machine can run on memory the host owns (`Memory::native`): addresses
+  are the host's handles, every access goes through the host's resolver (anything outside script
+  memory fails, never a stray read), and a context's stack and work memory are where the host says
+  (`Vm::on_memory`, `Vm::spawn_at`). Nothing changes in game with this version alone.
+- **t798** (`kh2script`): a KH2 cast (Fire, Blizzard, Thunder, Cure, Reflect; Wisdom's casts too)
+  is started with KH1's spell start on the cast's KH2 code (loaded once into a block of ours), so
+  KH1 makes its task, record, stack, evaluation stack and work slot. The script's memory (its
+  records, vectors, effect and attack records) is a 128 KB block of ours that KH1's handles
+  address. KH1's interpreter is hooked (first bytes `4C 8B DC 49 89 5B 20 55`, Checked (exe)): a
+  process whose program is in our block is run with KH2's instruction set (`kh2_bdx`'s decoder on
+  the record's registers: pc, stack, KH2's 8-byte evaluation entries with their tags, work memory,
+  moved in and out at every step), any other with KH1's own. KH1's task list steps it every frame;
+  `Magic::update` no longer runs it. Its effects age once per game frame before the frame's first
+  script, whichever steps first (`Magic::frame`), and an attack freed by a KH1 step stays for our
+  step to see it freed (`freed_seen`), so the order matches what `update` had. A cast KH1 has no
+  free record, work slot or task entry for runs on our machine as before (logged). A process KH1
+  drops (a room change, a reset) ends its cast.
+- **t799**: a thread a script starts (`trap_magic_start_thread`, Blizzard's and Thunder's) is a
+  KH1 child process of its cast's (KH1's `0x1402BD4D0`), its stack in its own record, its work
+  memory its parent's; KH1's step runs it after its parent. Only while more than 8 of KH1's 64
+  records are free (KH1's allocators check nothing; its own scripts keep the rest); otherwise it
+  runs inside its parent's step as before.
+- **t800**: KH2's calls are a call-table list in KH1's layout on every record of ours (`+0x38`):
+  tables 0..10, each entry KH2's flag word and `kh2_bdx::run_call`, which runs that call. The call
+  instruction looks its call up there and calls the entry as KH1's call instruction does (the
+  arguments' words, the result in the first). A record goes back to the list it had when it ends,
+  and any record of KH1's found with our list gets KH1's own back before KH1's instructions run.
+  What each call does is still ours (`kh2_magic`: attacks as KH1 attack objects, effects through
+  KH1's effect system). Wisdom Form's own shot script (the form model's, `Magic::object_effect`)
+  still runs on our machine.
+
+How it was checked: KH1's machine, allocators, child start, task list and pause in the Steam KH1
+decomp, their first bytes in the exe; KH2's interpreter in the Steam KH2 decomp. Offline test
+`native_host_runs_every_spell_as_our_arena` (`kh2-magic`, with the tester's own extracted files):
+every level of Fire, Blizzard, Thunder, Cure, Magnet and Reflect run on a fake host laid out as
+KH1's (the program loaded once, the memory a host block addressed by handles, each context's
+registers moved in and out of a record every step, KH2's tagged evaluation entries, the threads on
+child records stepped after their parent, the calls through a host table) gives the same attacks
+at the same places, the same effects and the same strikes, frame for frame, as our own machine.
+
+Not checked: in game. **Assumption:** where KH1's spell task list runs in the frame against our
+frame step. If it runs after our step, a cast's attacks reach KH1's collision pass a frame later
+than before; the log says on which game frame KH1 first stepped each cast and on which our step
+handed it over ("KH1 first stepped cast ..."), which settles it.

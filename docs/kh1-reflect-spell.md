@@ -412,3 +412,41 @@ barrier and the contact effect as before. Melee attacks unchanged (t573). Epic k
   `Magic::teamwork` holds one block per key, and each cast's copy is brought up to date before its
   script runs and written back after (scripts run one at a time, so this is the same as KH2's one
   block). Test `reflect_chain_shares_the_teamwork_block` (needs the extracted files; not run here).
+
+## The barrier as a KH1 guard object (t796; the tester, m12 question 2 "(a)")
+
+- **KH2** (Steam KH2, **Checked (decomp)**): the barrier is its own attack (ATKP 573, kind 3, a
+  special guard, refact self 2). KH2's attack meeting `0x1403D2140` meets it with every enemy
+  attack: a shot is marked over (`0x200`) and its script told, a melee attack is stopped and its
+  owner plays its clash reaction, and each meeting counts on the barrier (`+0xB0`).
+- **KH1** (Steam KH1, **Checked (decomp)**): a guard is an attack object of priority 100. KH1's
+  collision pass `0x1402B4460` builds each live object into its entry list (`0x1402B3800`), tests
+  every new entry against the ones already in (`0x1402B3BE0`) and hands an overlapping pair that
+  passes the pairing table (`0x1405299B8`) to its meeting `0x1402B4A20`: the two directional tests
+  `0x1402B4640`, then each side's half `0x1402B4BC0` (the enemy attack stopped, its owner's clash
+  record; a free-flying shot met by a guard is turned back, KH1's reflect).
+- **Now:** the barrier is a KH1 guard object of Sora's (`combat::Strikes::barrier_guard`), made
+  the way the body guards are (`guard_step`): KH1's row maker on a copy of his swing row with the
+  barrier ATKP's reflect arc, clash type 4 (a pure guard: KH1's pass never meets it with a body),
+  priority 100, always live. KH1's builder puts the barrier's own shapes in as KH2's ellipsoids
+  (`bodyhits::guard_shapes`, the hook on `0x1402B3800` the spell attacks already use). KH1's pass
+  finds every enemy attack that meets it. At KH1's meeting (`recoil`'s hook, now first
+  `combat::barrier_meeting`):
+  - a free-standing shot (`+0x30` bit 0x400) is stopped as t582 stops one (`stop_shot`: KH1's
+    "struck, no damage" result, its hit script told, its attack switched off), and KH1's halves
+    are skipped, since they would turn it back;
+  - anything else (melee) goes to KH1's own halves: stopped, its owner's clash record, the barrier
+    standing;
+  - either way the meeting counts on the barrier (its counter) and the contact effect plays where
+    the two entries met, once per barrier and enemy attack.
+- The barrier's object is freed when the barrier goes, and while it is hidden waiting for the
+  combo (as before, it stops nothing then). Our own overlap test (`barrier_meet`) only runs where
+  KH1's meeting or builder hook isn't in (Epic, or unexpected bytes).
+- Same KH2 rule as before for what happens to each attack; what changed is who finds the meeting
+  (KH1's pass, its pairing table and directional tests, at the barrier's real shape). Not checked
+  in game. **Assumption:** KH1's pairing table lets a clash type 4 guard meet every enemy attack
+  type the old test met (the body guards rely on the same, `docs/kh1-clash.md`).
+- The offline test of the chain (`reflect_chain_shares_the_teamwork_block`) ran for the first time
+  with the tester's own extracted files during t796..t800: it fails ("the first barrier still
+  stands" at frame 20) both before these versions and after them, so t610's chain is still
+  unconfirmed. Open.

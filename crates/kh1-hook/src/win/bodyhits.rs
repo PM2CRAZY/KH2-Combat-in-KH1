@@ -193,6 +193,76 @@ struct State {
     playing: Option<(u16, f32, u32)>,
 }
 
+/// Reflect's barriers as KH1 guard objects (`combat::Strikes::barrier_guard`, t796): each one's
+/// shapes this frame (KH1 world centre, KH1 type, radius, half height), its shape count and the
+/// game frame they are from. KH1's entry builder (`entries`) puts them in as KH2's own ellipsoids,
+/// so KH1's pass meets enemy attacks with the barrier's real shape; a barrier not given shapes this
+/// frame or the last puts in none (it meets nothing).
+struct GuardShapes {
+    obj: usize,
+    shapes: [([f32; 3], u32, f32, f32); SPELL_SHAPES],
+    n: usize,
+    seen: u64,
+}
+
+static GUARDS: Mutex<Vec<GuardShapes>> = Mutex::new(Vec::new());
+
+/// A barrier's guard object `obj` stands on `shapes` (KH2 y-up) this frame.
+pub fn guard_shapes(obj: usize, shapes: &[combat_core::Shape]) {
+    use combat_core::ShapeKind;
+    let Ok(mut g) = GUARDS.try_lock() else { return };
+    let frame = super::takeover::GAME_FRAME.load(Ordering::Relaxed);
+    let mut gs = GuardShapes { obj, shapes: [([0.0; 3], 1, 0.0, 0.0); SPELL_SHAPES], n: 0, seen: frame };
+    for s in shapes {
+        let t = match s.kind {
+            ShapeKind::Ellipsoid | ShapeKind::Sphere => 1u32,
+            ShapeKind::Column => 2,
+            ShapeKind::Cube => continue,
+        };
+        if gs.n < SPELL_SHAPES {
+            gs.shapes[gs.n] = ([s.center[0], -s.center[1], s.center[2]], t, s.radius, s.height);
+            gs.n += 1;
+        }
+    }
+    match g.iter_mut().find(|x| x.obj == obj) {
+        Some(x) => *x = gs,
+        None => g.push(gs),
+    }
+}
+
+/// A barrier's guard object freed (`combat::Strikes::barrier_guards_keep`).
+pub fn guard_forget(obj: usize) {
+    if let Ok(mut g) = GUARDS.try_lock() {
+        g.retain(|x| x.obj != obj);
+    }
+}
+
+/// `entries` for a barrier's guard object: `Some(new count)` when `obj` is one.
+unsafe fn guard_entries(obj: usize, list: usize, count: i32) -> Option<i32> {
+    let g = GUARDS.try_lock().ok()?;
+    let gs = g.iter().find(|x| x.obj == obj)?;
+    let frame = super::takeover::GAME_FRAME.load(Ordering::Relaxed);
+    let (shapes, n, seen) = (gs.shapes, gs.n, gs.seen);
+    drop(g);
+    if n == 0 || frame.saturating_sub(seen) > 1 || !TEST_OK.load(Ordering::Relaxed) || list < 0x10000 {
+        return Some(count);
+    }
+    let owner = pose::ptr(rd::<u32>(obj + 0x34));
+    if owner < 0x10000 {
+        return Some(count);
+    }
+    let bit = rd::<u32>(obj + 0x54);
+    let c = shapes[0].0;
+    let c4 = [c[0], c[1], c[2], 1.0f32];
+    wr(obj + 0x10, c4);
+    wr(obj + 0x40, c4);
+    let mut count = count;
+    for &(q, t, r, h) in &shapes[..n] {
+        count = put_entry(obj, owner, bit, list, count, t, r, h, q);
+    }
+    Some(count)
+}
+
 static STATE: Mutex<State> = Mutex::new(State { live: [None; POOL_COUNT], spells: Vec::new(), counts: Vec::new(), results: Vec::new(), current: None, data: Vec::new(), page: 0, playing: None });
 
 /// A KH2 spell attack on a KH1 object of ours: its key in the spell runtime, ATKP rows by hits in
@@ -755,6 +825,10 @@ unsafe extern "system" fn entries(obj: usize, list: usize, count: i32) -> i32 {
     // (Valor's left Keyblade's object: its bone-source actor brought up to date, then KH1's own
     // builder, as for the right Keyblade's, `lefthits`.)
     super::lefthits::before_build(obj);
+    // (A Reflect barrier's guard object: KH2's barrier shapes, t796.)
+    if let Some(n) = guard_entries(obj, list, count) {
+        return n;
+    }
     let Some(i) = pool_index(obj) else { return f(obj, list, count) };
     let Ok(mut g) = STATE.try_lock() else { return f(obj, list, count) };
     if !g.live[i].is_some_and(|l| l.obj == obj && still_ours(&l)) {

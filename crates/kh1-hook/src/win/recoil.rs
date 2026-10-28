@@ -201,11 +201,34 @@ pub unsafe fn install() {
     }
     let base = GetModuleHandleA(std::ptr::null()) as usize;
     BASE.store(base, Ordering::Relaxed);
-    super::hook::install(base + MEET_STEAM, &MEET_PROLOGUE, meet as *const () as usize, &ORIG_MEET, "KH1's attack meeting (KH2's refact self 2 against guards)");
+    if super::hook::install(base + MEET_STEAM, &MEET_PROLOGUE, meet as *const () as usize, &ORIG_MEET, "KH1's attack meeting (KH2's refact self 2 against guards, Reflect's barrier)").is_some() {
+        MEET_ON.store(true, Ordering::Relaxed);
+    }
+}
+
+/// The meeting hook went in.
+static MEET_ON: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// KH1's attack meeting is hooked (Reflect's barrier meets through it, `combat::barrier_meeting`).
+pub fn meeting_on() -> bool {
+    MEET_ON.load(Ordering::Relaxed)
+}
+
+/// KH1's directional test, when its first bytes are KH1's.
+pub unsafe fn faces_test() -> Option<unsafe extern "system" fn(usize, usize) -> i32> {
+    faces()
 }
 
 unsafe extern "system" fn meet(a: usize, b: usize) {
     let orig: unsafe extern "system" fn(usize, usize) = std::mem::transmute(ORIG_MEET.load(Ordering::Relaxed));
+    // A Reflect barrier's guard object meeting an enemy attack: KH2's barrier rule first (a shot
+    // stopped without KH1's halves, which would turn it back), t796.
+    {
+        let sora = super::takeover::sora_actor();
+        if sora > 0x10000 && super::combat::barrier_meeting(a, b, sora) {
+            return;
+        }
+    }
     orig(a, b);
     let counts = clash_count();
     let refact = kh2() && on();

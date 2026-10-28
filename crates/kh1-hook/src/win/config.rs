@@ -225,6 +225,8 @@ enum Row {
     SoftReset,
     /// QoL > In-game Scene Skip (Off | On, `ingameskip`).
     IngameSkip,
+    /// QoL > Item Pickup (Vanilla | Skip, `chest::pickup`, t795).
+    ItemPickup,
     /// QoL > Chest Animation (KH1 | KH2, `chest::anim_kh2`), shown only with Chest Opening on Quick (back
     /// since t783: KH2's chest motion found, the box's capture set, `pose::CHEST_MOTION`).
     ChestAnim,
@@ -385,11 +387,15 @@ const COMMAND_MENU: [Item; 5] = [
 // (Chest Opening Vanilla | Quick | Skip and the Chest Animation row under it: the user, t770: "make it a three
 // setting toggle. Vanilla (formerly KH1), quick (formerly kh2), Skip ... when you have it selected as quick
 // another hidden config in the menu appears that lets you choose the animation".)
-const QOL: [Item; 6] = [
+// (Item Pickup: the user, t795: "when you collect an item off the ground ... a new setting in QoL that lets you
+// toggle the ability for when you collect an item it doesn't stop your movement and the text box that appears is
+// the same as our chest and in game cutscene settings". Before Chest Opening: Chest Animation stays the last row.)
+const QOL: [Item; 7] = [
     Item::Set([0x7F00_0111, 0x7F00_0113, 0x7F00_0114, 0x7F00_0112], Row::Gummi),
     Item::Set([0x7F00_021B, 0x7F00_011D, 0x7F00_011E, 0x7F00_021C], Row::SoftReset),
     Item::Pick([0x7F00_021D, 0x7F00_011D, 0x7F00_021E, 0x7F00_021F, 0x7F00_0220], Pick::CutsceneSkip),
     Item::Set([0x7F00_0221, 0x7F00_011D, 0x7F00_011E, 0x7F00_0222], Row::IngameSkip),
+    Item::Set([0x7F00_0236, 0x7F00_0113, 0x7F00_0114, 0x7F00_0237], Row::ItemPickup),
     Item::Pick([0x7F00_0225, 0x7F00_0231, 0x7F00_0232, 0x7F00_0233, 0x7F00_0226], Pick::Chest),
     // (t783: the Chest Animation row, back: KH2's chest motion found.)
     Item::Set(kh(0x7F00_0234, 0x7F00_0235), Row::ChestAnim),
@@ -477,7 +483,7 @@ const BUTTON_HELP: u32 = 0x7F00_0202;
 /// Misc's help, and the same without the debug menu (its row isn't there without the debug tools).
 const MISC_HELP: u32 = 0x7F00_020C;
 const MISC_HELP_NO_DEBUG: &str = "Battle quotes.";
-const STRINGS: [(u32, &str); 131] = [
+const STRINGS: [(u32, &str); 133] = [
     (0x7F00_0201, "KH1 in KH2"),
     (0x7F00_0202, "Choose KH1's or KH2's camera, combat, movement and more."),
     (0x7F00_0203, "Camera"),
@@ -524,7 +530,7 @@ const STRINGS: [(u32, &str); 131] = [
     (0x7F00_022F, "Command Lock"),
     (0x7F00_0230, "KH2: a spell, item or summon is taken only once Sora can act, the\nlist stays open until then and nothing greys while he acts. KH1: KH1's."),
     (0x7F00_0211, "QoL"),
-    (0x7F00_0212, "Quality of life: Gummi routes, Soft Reset, Cutscene Skip, In-game Scene Skip,\nChest Opening."),
+    (0x7F00_0212, "Quality of life: Gummi routes, Soft Reset, Cutscene Skip, In-game Scene Skip,\nItem Pickup, Chest Opening."),
     (0x7F00_021B, "Soft Reset"),
     (0x7F00_021C, "On: L1 + L2 + R1 + R2 + Start + Select held for a second return to the title screen."),
     (0x7F00_021D, "Cutscene Skip"),
@@ -550,6 +556,8 @@ const STRINGS: [(u32, &str); 131] = [
     (0x7F00_0231, "Vanilla"),
     (0x7F00_0232, "Quick"),
     (0x7F00_0233, "Skip"),
+    (0x7F00_0236, "Item Pickup"),
+    (0x7F00_0237, "Vanilla: KH1's. Skip: picking an item up off the ground doesn't stop\nSora; KH1's item window shows while he keeps moving."),
     (0x7F00_0234, "Chest Animation"),
     (0x7F00_0235, "The animation Sora plays when he opens a chest on Quick."),
     (0x7F00_0197, "Cast from Glide"),
@@ -633,6 +641,7 @@ fn value(what: Row) -> bool {
         Row::TrailAlways => super::cosmetics::always(),
         Row::SoftReset => super::softreset::enabled(),
         Row::IngameSkip => super::ingameskip::enabled(),
+        Row::ItemPickup => super::chest::pickup(),
         Row::ChestAnim => super::chest::anim_kh2(),
         Row::DrivePage => super::cmdmenu::drive_page2(),
         Row::DpadLeft => super::cmdmenu::dpad_kh2(),
@@ -673,6 +682,7 @@ fn set(what: Row, v: bool) {
         Row::TrailAlways => super::cosmetics::set_always(v),
         Row::SoftReset => super::softreset::set(v),
         Row::IngameSkip => super::ingameskip::set(v),
+        Row::ItemPickup => super::chest::set_pickup(v),
         Row::ChestAnim => super::chest::set_anim_kh2(v),
         Row::DrivePage => super::cmdmenu::set_drive_page2(v),
         Row::DpadLeft => super::cmdmenu::set_dpad_kh2(v),

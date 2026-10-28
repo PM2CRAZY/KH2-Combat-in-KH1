@@ -24,6 +24,7 @@
 - [18. Assistant: Thanks! Three versions this round.](#^m18)
 - [19. Assistant: Thanks! I made the two new threads:](#^m19)
 - [20. Assistant: I made two threads for that line:](#^m20)
+- [21. Assistant: Here's the list brought up to date, from t676 to t793. Since](#^m21)
 
 ---
 
@@ -911,4 +912,52 @@ create a new thread for both of these:
 > Each has where it stands now and the plan. Your go-ahead is noted in both. The PC couldn't be reached this round, so the code waits for the next round, when I can check it against the decomps.
 
 ^m20
+
+
+> [!tip] Assistant
+> Here's the list brought up to date, from t676 to t793. Since the last list, Valor and Wisdom moved onto KH1's own states, and most of their pieces are now KH1's own: the weapon, draw, trail, pose, blend and form levels. What's left is mostly our per-frame range rules, the spell scripts, and the four forms still on the old controller. This is a status list only, so there's no new version.
+>
+> **Moved to native since the last list**
+> - **KH2's sound, voice, effect and rumble triggers** are KH1 motion events now, fired by KH1's own motion pass (t677, t687, t695). Rumble plays through KH1's vibration player and follows KH1's Vibration setting.
+> - **Valor and Wisdom run on KH1's own states** (t678, t688, t689). Their moves are baked KH1 slots, KH1's picker picks their combos, and KH1's states run their numbers. The change and the revert never hand Sora to KH2's controller. That also covers their Square moves (t679, t732), Wisdom's magic and Reflect on KH1's cast state (t691, t735), the stance after the change (t694), and the landing speed (t762).
+> - **Valor's second Keyblade** hits as a KH1 attack object that scales by Keyblade like the main one (t680, t683). It's KH1's own weapon object (t697), drawn by KH1's actor draw (t698), trailed by KH1's trail step (t699), posed by KH1's pose pass (t702) and blended by KH1's blend (t713).
+> - **Form levels** are in KH1 by KH2's rule and kept in the save (t700). Base Sora's growth comes from them (t703, t718).
+> - **KH1's picker refuses a press** the way KH2 does (t693), with KH2's missed-swing rule (t692) and the Clash Combo row (t701).
+> - **The ledge carry** sits inside KH1's own ground-to-fall step (t696).
+> - **KH2's abilities** have their own KH2 list in KH1's Abilities menu (t722).
+> - **From other threads, also on KH1's own systems:** the KH2 command menu pages, Cursor Memory and Command Lock (t751 to t756); the battle quotes on KH1's sound engine (t742 to t750); Chest Opening on KH1's treasure script and item window (t724 to t783); and In-game Scene Skip's "Obtained" window (t785 to t793).
+>
+> **Still running along KH1 (our KH2 logic beside KH1's)**
+> 1. **The spell scripts**, Wisdom's shot flight included, still run in our own interpreter. Your go-ahead for (a), KH1's script machine learning KH2's instruction set, is in the [magic thread](../kh2-magic-and-reflect-native/kh2-magic-and-reflect-native.md). Not started yet.
+> 2. **Reflect's barrier meeting enemy attacks** is still our own check. What happens to a shot it stops is already KH1's own (t582).
+> 3. **Magnet Burst's pull** is still our own push on the caught enemies.
+> 4. **The invulnerable frames and the Keyblade guard's facing** are still decided in our hit hook. Both threads ([invulnerable frames](../invulnerable-frames-native/invulnerable-frames-native.md), [guard facing](../keyblade-guard-facing-native/keyblade-guard-facing-native.md)) have your go-ahead and the plan, but no code yet.
+> 5. **KH2's motion-range rules** are still our per-frame code reading KH2's ranges, not KH1 motion events. That's turn to target, edge stop, the no-gravity hold, rise start, the Keyblade re-arm, guard windows, the Aerial Dodge apex and the glide clock, and now also the ledge carry's test (t696) and the forms' lift-off (t758).
+> 6. **KH2's row choice** for each press is still worked out on our KH2 controller object, fed with KH1's state. The Finishing Plus counter is still ours too. Both were the next steps after t693.
+> 7. **The second Keyblade's holder**: KH1 draws, trails and poses it, but on a copy of Sora's actor that we keep.
+> 8. **Hood, coat and shorts** still use t375's rules at bake time, and foot IK is off. Both wait for the [sleeves thread](../missing-sleeves-animation/missing-sleeves-animation.md).
+>
+> **Still on the deprecated KH2 controller**
+> 9. **Master, Final, Limit and Anti.** You said to deprecate the controller and leave Final alone unless you change your mind, so nothing is being done there. See the question.
+>
+> **Left out, as you said:** the base-Sora fallbacks when a slot doesn't build, Epic, the drawn-over pose, and the KH2 player model.
+>
+> **Not started:**
+> - the Drive gauge and orbs (Form Boost and the gauge's length by form level wait on it);
+> - MP Charge (KH1's MP Haste from Wisdom LV6 becomes its MP Haste then);
+> - the Auto forms;
+> - Limits, KH2 summons and reaction commands;
+> - KH2's knock-back on Sora himself, and KH2's ledge hang and climb;
+> - Valor's arrival light, which needs KH2's KeTh particle programs added to KH1's effect engine.
+>
+> **Next on my side**, in the order from message 13, with the forms done: 5 (the range rules as KH1 motion events), then 1 (the scripts on KH1's script machine), then 2, 3 and 4. 6 and 7 go in right after 5, because they read the same data. Your go-ahead from message 11 covers all of these.
+>
+> **How I checked it:** AGENTS.md stages t676 to t793, and the latest messages in the magic, Drive Forms, invulnerable frames, guard facing and sleeves threads. I didn't make new decomp checks this round, because nothing changed in code.
+>
+> Question:
+> 1. Master, Limit and Anti (Final stays as you said): should they (a) stay on the old controller for now, like Final, or (b) move onto KH1's states the way Valor and Wisdom did, after the list above? (b) also unlocks KH2's Dodge Roll and Aerial Dodge growth, which waits on Limit and Master. My recommendation is (b), so nothing in base play depends on the deprecated controller.
+>
+> Write "go ahead" with your answer.
+
+^m21
 
