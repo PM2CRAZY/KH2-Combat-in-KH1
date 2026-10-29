@@ -1215,41 +1215,28 @@ unsafe fn kh1_lock(base: usize, targets: &mut Vec<TargetInfo>) -> Option<u32> {
 }
 
 
-/// The next `kh2_would_take*` tests KH2's line ahead (`combomods::drop_ahead`, along the
-/// selector's direction there, `Character::selector_aim`) for row 1 (`Character::set_drop_ahead`):
-/// the ground combo's press only, so the air, Square and hand-back asks never see it.
-static DROP_TEST: AtomicBool = AtomicBool::new(false);
-
-pub fn test_drop_ahead(on: bool) {
-    DROP_TEST.store(on, Ordering::Relaxed);
-}
-
-/// KH2's ability rows inside KH1's own row picker (`combomods::picker`, Base / Aerial Base Combo
-/// KH1): the first equipped ability row of the kind KH1's count is at (`finisher`), playable on
-/// KH1's rows (`usable`), not the KH2 motion playing (`playing`), that passes KH2's own row checks
-/// against base Sora's targets and KH1's lock as KH2's step sees them, with its hop
-/// (`Character::ability_row`). KH2's combo length and selector walk aren't run.
-pub unsafe fn kh2_ability_row(actor: usize, finisher: bool, air: bool, playing: Option<u16>, usable: &dyn Fn(&character_core::ComboRow) -> bool) -> Option<(character_core::ComboRow, Option<character_core::Launch>)> {
-    kh2_rows(actor, air, |ch, stick, env| ch.ability_row(finisher, air, playing, usable, stick, env)).flatten()
-}
-
-/// KH2's row checks for KH1's own walk (`combomods::finisher_walk`, Base / Aerial Base Combo KH1):
-/// `f` gets KH2's rows and checks (`Character::ability_row_id`, `row_in_range`) with base Sora's
-/// targets and KH1's lock as KH2's step sees them, the stick, and his place; nothing of KH2's
-/// controller moves him. `None` without KH2's data.
-pub unsafe fn kh2_rows<R>(actor: usize, air: bool, f: impl FnOnce(&mut Character, [f32; 2], &Env) -> R) -> Option<R> {
+/// The hop KH2's row `id` starts at this press (`Character::would_take_row`'s launch: Steam KH2
+/// `0x1403D78D0`, its height and sideways speed for the primary target), for a row KH1's own
+/// picker took by KH2's walk on KH1's state (`combomods::Kh1Press`, t889): KH2's primary target is
+/// KH1's own target for the press (`primary`, the actor; its lock), `from` the press's combo. Only
+/// the hop is asked here: the row is already chosen (`None` for a row with no hop, or one KH2's
+/// numbers don't start). **Not native yet**: worked out by KH2's controller data with base Sora's
+/// targets as `combat::Strikes` sees them (the owner's plan: the hop moves onto the rows' records
+/// next).
+pub unsafe fn kh2_hop(actor: usize, id: u8, from: character_core::ComboState, air: bool, primary: Option<u32>) -> Option<character_core::Launch> {
     let base = BASE.load(Ordering::Relaxed);
     let kh2 = pose::kh2()?;
     let mut g = DRIVER.try_lock().ok()?;
     let d = g.get_or_insert_with(|| new_driver(kh2));
-    d.growth.update(base, &mut d.character);
-    super::form::abilities(&mut d.drive, &mut d.character);
+    if !d.character.moveset.combo_rows.iter().any(|r| r.id == id && r.is_jump()) {
+        return None;
+    }
     let mut targets = d.strikes.look(actor);
     let lock = kh1_lock(base, &mut targets);
     let tilt = move_tilt();
     let stick = if tilt > 0.0 { (stick_dir(actor, tilt) * tilt).to_array() } else { [0.0, 0.0] };
     d.character.set_facing(rd::<f32>(actor + 0x3C));
-    d.character.set_lock(lock);
+    d.character.set_lock(primary.filter(|id| targets.iter().any(|t| t.id == *id)).or(lock));
     d.character.set_auto_target(super::settings::get().auto_aim);
     d.character.set_face_lock(true);
     d.character.set_combo_direction_lock(true);
@@ -1257,47 +1244,10 @@ pub unsafe fn kh2_rows<R>(actor: usize, air: bool, f: impl FnOnce(&mut Character
     let above = rd::<f32>(actor + 0x3D4);
     let env = Env { pos: [p[0], -p[1], p[2]], grounded: !air, height_above_ground: above.max(0.0), targets: &targets, ledges: &[] };
     d.character.set_drop_ahead(false);
-    Some(f(&mut d.character, stick, &env))
-}
-
-/// `kh2_would_take`, with the hop KH2's row starts there (`Character::would_take_launch`: a row
-/// with `jump`, its height and sideways velocity for that target).
-pub unsafe fn kh2_would_take_launch(actor: usize, from: Option<character_core::ComboState>, playing: Option<u16>, air: bool, square: bool) -> Option<(character_core::ComboRow, u8, u8, Option<character_core::Launch>)> {
-    kh2_walk(actor, from, playing, air, square).flatten()
-}
-
-/// `kh2_would_take_launch`, telling "KH2's walk takes nothing" (`Some(None)`) from "KH2's walk
-/// couldn't be asked" (`None`: no KH2 data loaded, or its tables busy this instant), which KH1's
-/// picker treats apart (`kh1picker::at_kh2`: a refusal is no attack, as KH2's; an unasked press
-/// keeps KH1's own row).
-pub unsafe fn kh2_walk(actor: usize, from: Option<character_core::ComboState>, playing: Option<u16>, air: bool, square: bool) -> Option<Option<(character_core::ComboRow, u8, u8, Option<character_core::Launch>)>> {
-    let base = BASE.load(Ordering::Relaxed);
-    let kh2 = pose::kh2()?;
-    let mut g = DRIVER.try_lock().ok()?;
-    let d = g.get_or_insert_with(|| new_driver(kh2));
-    d.growth.update(base, &mut d.character);
-    super::form::abilities(&mut d.drive, &mut d.character);
-    let mut targets = d.strikes.look(actor);
-    let lock = kh1_lock(base, &mut targets);
-    let tilt = move_tilt();
-    let stick = if tilt > 0.0 { (stick_dir(actor, tilt) * tilt).to_array() } else { [0.0, 0.0] };
-    // (Set as KH2's step sets them; KH1 has him, so KH2's controller starts over from KH1's facing
-    // when it next has him anyway.)
-    if from.is_some() {
-        d.character.set_facing(rd::<f32>(actor + 0x3C));
-    }
+    let hop = d.character.would_take_row(id, Some(from), air, stick, &env).and_then(|(_, l)| l);
+    // (KH1's lock again, as every ask of KH2's rows leaves it.)
     d.character.set_lock(lock);
-    d.character.set_auto_target(super::settings::get().auto_aim);
-    d.character.set_face_lock(true);
-    d.character.set_combo_direction_lock(true);
-    let p = rd::<[f32; 3]>(actor + 0x10);
-    let above = rd::<f32>(actor + 0x3D4);
-    let env = Env { pos: [p[0], -p[1], p[2]], grounded: !air, height_above_ground: above.max(0.0), targets: &targets, ledges: &[] };
-    // (KH2's selector's direction, to the primary target or along his facing, `0x1404028D0`.)
-    let drop = DROP_TEST.swap(false, Ordering::Relaxed) && !air && super::combomods::drop_ahead(actor, d.character.selector_aim(&env));
-    d.character.set_drop_ahead(drop);
-    let Some((row, launch)) = d.character.would_take_launch(from, playing, air, square, stick, &env) else { return Some(None) };
-    Some(Some((row, d.character.combo_length(air), d.character.abilities.negative_combo, launch)))
+    hop
 }
 
 /// KH2's forced row `id` for base Sora now, KH1's own states having him (`Character::

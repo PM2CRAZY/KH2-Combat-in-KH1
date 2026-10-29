@@ -593,24 +593,31 @@ impl Host for Bridge<'_> {
             (2, 20) => {
                 let owner = vm.owner.unwrap_or(ctx);
                 let wp = vm.ctxs[owner].wp;
-                // (On the host's machine: a child process of the cast's, stepped after it.)
+                // (On the host's machine: a child process of the cast's, stepped after it. No
+                // fallback onto our arena then: a thread the host can't make doesn't start and the
+                // call gives a null record, t886.)
                 let id = self.t.native_id;
                 let hosted = match (id, self.magic.native.as_mut()) {
-                    (Some(id), Some(n)) => n.thread(id, vm, wp),
+                    (Some(id), Some(n)) => Some(n.thread(id, vm, wp)),
                     _ => None,
                 };
-                let c = hosted.unwrap_or_else(|| vm.spawn(Some(wp)));
-                vm.start_at(c, a(0).v, &[a(1)])?;
-                match (hosted, id, self.magic.native.as_mut()) {
-                    (Some(_), Some(id), Some(n)) => {
-                        n.store(id, vm, c);
-                        self.t.ext_threads.push(c);
+                match hosted {
+                    Some(None) => Some(Cell::addr(0)),
+                    _ => {
+                        let c = hosted.flatten().unwrap_or_else(|| vm.spawn(Some(wp)));
+                        vm.start_at(c, a(0).v, &[a(1)])?;
+                        match (hosted.flatten(), id, self.magic.native.as_mut()) {
+                            (Some(_), Some(id), Some(n)) => {
+                                n.store(id, vm, c);
+                                self.t.ext_threads.push(c);
+                            }
+                            _ => self.t.threads.push(c),
+                        }
+                        let rec = vm.mem.alloc(16);
+                        vm.mem.set_u32(rec, c as u32)?;
+                        Some(Cell::addr(rec))
                     }
-                    _ => self.t.threads.push(c),
                 }
-                let rec = vm.mem.alloc(16);
-                vm.mem.set_u32(rec, c as u32)?;
-                Some(Cell::addr(rec))
             }
             (2, 21) => {
                 // KH2's `trap_teamwork_alloc (key, size)` (Steam `0x1403F6DF0`, Checked (decomp)): one

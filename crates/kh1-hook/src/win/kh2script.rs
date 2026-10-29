@@ -39,8 +39,13 @@
 //! instruction goes through, t800. What each call does is ours (`kh2_magic`'s calls on KH1's
 //! systems: attacks as KH1 attack objects, effects through KH1's effect system).
 //!
-//! Steam only; a script runs on our own machine, as before, if any hook or check here fails or KH1
-//! has no free process for it (logged).
+//! Steam only. There is no fallback onto our own machine: if a hook or first-byte check here fails
+//! at start (or the build isn't Steam), KH2's spells don't cast at all (logged, t887). With the
+//! hook in (t886) a cast KH1 has no free
+//! record, work slot or task entry for doesn't start, and a thread KH1 has no free record for
+//! doesn't start (both logged). KH1's own allocators check nothing (`0x1402BD5B0` returns nothing
+//! and `0x1402BD420` takes slot 32 past its 32 when none is free, Checked (decomp)), so the check
+//! stays only to keep KH1's start from writing past its pools.
 
 use super::addr::Build;
 use super::sys::*;
@@ -173,19 +178,26 @@ pub unsafe fn install() {
     for (what, at, want) in [("spell start", SPELL_START_STEAM, &SPELL_START_BYTES[..]), ("pointer → handle", TO_HANDLE_STEAM, &TO_HANDLE_BYTES[..])] {
         let have = std::slice::from_raw_parts((base + at) as *const u8, want.len());
         if have != want {
-            log!(Magic, "KH2 spell scripts: KH1's {what} has unexpected bytes {have:02x?}: the scripts stay on our own machine");
+            log!(Magic, "KH2 spell scripts: KH1's {what} has unexpected bytes {have:02x?}: KH2's spells won't cast");
             return;
         }
     }
     if super::hook::install(base + INTERP_STEAM, &INTERP_PROLOGUE, interp as *const () as usize, &ORIG, "KH1's script interpreter (KH2's instruction set)").is_some() {
         ON.store(true, Ordering::Relaxed);
         log!(Magic, "KH2 spell scripts run as KH1 script processes (KH1's interpreter taught KH2's instructions)");
+    } else {
+        log!(Magic, "KH2 spell scripts: KH1's script interpreter couldn't be hooked: KH2's spells won't cast");
     }
 }
 
 /// KH2's spell scripts run on KH1's script machine.
 pub fn on() -> bool {
     ON.load(Ordering::Relaxed)
+}
+
+/// Why a cast doesn't start with no KH1 script machine for it (t887: no fallback onto our own).
+pub fn off() -> kh2_magic::kh2_bdx::BdxError {
+    kh2_magic::kh2_bdx::BdxError::Trap("KH1's script machine isn't hooked (no fallback onto our own)".into())
 }
 
 /// A host for a runtime's `Magic` (`kh2_magic::NativeHost`), when the hook is in.
@@ -338,8 +350,6 @@ const R_NEXT: usize = 0x740;
 /// every record (Steam `0x140529FA0`, Checked (decomp)).
 const R_CALLS: usize = 0x38;
 const KH1_CALLS_STEAM: usize = 0x529FA0;
-/// Records left free for KH1's own scripts: a thread takes one only above this.
-const RESERVE: usize = 8;
 
 impl NativeHost for Kh1Machine {
     fn machine(&mut self, file: &SpellFile, _spell: usize, key: i32) -> Option<(Vm, CtxId)> {
@@ -351,11 +361,15 @@ impl NativeHost for Kh1Machine {
             }
             let entry = file.program.trigger(key)?;
             let prog = program_ptr(file.program.bytes())?;
+            // (No fallback onto our machine, t886: with no room the cast doesn't start.)
             if !room() {
-                note(|| format!("KH2 spell scripts: KH1 has no free process for {} (it runs on our machine)", file.name));
+                log!(Magic, "KH2 spell scripts: KH1 has no free process for {}: not cast", file.name);
                 return None;
             }
-            let block = take_block()?;
+            let Some(block) = take_block() else {
+                log!(Magic, "KH2 spell scripts: no free block of ours for {}: not cast", file.name);
+                return None;
+            };
             let code = prog + 0x10 + entry as usize * 2;
             let start: unsafe extern "system" fn(usize, usize, u32, usize, usize, usize, usize) -> usize = std::mem::transmute(base + SPELL_START_STEAM);
             let task = start(actor, 0, 0, 0, code, 0, 0);
@@ -414,12 +428,13 @@ impl NativeHost for Kh1Machine {
             };
             let have = std::slice::from_raw_parts((base + CHILD_STEAM) as *const u8, CHILD_BYTES.len());
             if have != CHILD_BYTES {
-                note(|| format!("KH2 spell scripts: KH1's child start has unexpected bytes {have:02x?}: the thread runs in its parent's step"));
+                note(|| format!("KH2 spell scripts: KH1's child start has unexpected bytes {have:02x?}: cast {id}'s thread not started"));
                 return None;
             }
-            let free = (0..PROC_COUNT).filter(|i| rd::<u32>(base + PROCS_STEAM + i * PROC_SIZE + R_FLAGS) & 1 == 0).count();
-            if free <= RESERVE {
-                note(|| format!("KH2 spell scripts: {free} KH1 process(es) free: cast {id}'s thread runs in its parent's step"));
+            // (No fallback onto our machine, t886: with no free record the thread doesn't start.
+            // KH1's record maker checks nothing, so it isn't called with none free.)
+            if !(0..PROC_COUNT).any(|i| rd::<u32>(base + PROCS_STEAM + i * PROC_SIZE + R_FLAGS) & 1 == 0) {
+                log!(Magic, "KH2 spell scripts: KH1 has no free process: cast {id}'s thread not started");
                 return None;
             }
             let start: unsafe extern "system" fn(usize, usize) = std::mem::transmute(base + CHILD_STEAM);
@@ -432,7 +447,7 @@ impl NativeHost for Kh1Machine {
                 guard += 1;
             }
             if !is_record(child) || rd::<u32>(child + R_FLAGS) & 4 == 0 || rd::<usize>(child + R_PROGRAM) != code {
-                log!(Magic, "KH2 spell scripts: KH1's child start gave {child:#x} for cast {id}: the thread runs in its parent's step");
+                log!(Magic, "KH2 spell scripts: KH1's child start gave {child:#x} for cast {id}: thread not started");
                 return None;
             }
             let ctx = vm.spawn_at(handle(child + STACK_AT), STACK_SIZE as u32, wp);

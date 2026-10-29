@@ -600,7 +600,7 @@ unsafe fn yellow(sora: usize) -> u16 {
 // - the swap: Sora's actor keeps its object; his requests point at Valor's own slots instead of
 //   base Sora's (`kh2slots::redirect`: idle, walk, run, jump, fall, landing, reactions, recoils,
 //   item use, the ground and air combo on KH1's requests and our own combo rows), KH2's combo pick
-//   in KH1's picker reads Valor's PTYA (KH2's controller's data, only read, `takeover::kh2_rows`), and
+//   in KH1's picker reads Valor's PTYA (its records, `kh2table`, walked on KH1's state, t889), and
 //   KH2's physics numbers on KH1's states are Valor's (`takeover::refresh_kh2_numbers`: run 12,
 //   High Jump at its form level, `formexp`); then Valor's arrival 53 on its request of ours.
 // - Revert: everything back to base Sora's, what was playing cut into KH1's idle (or fall).

@@ -913,6 +913,13 @@ travel can carry it is a separate check, done after part 2.
   cast. Through a blend KH1's time is held at the start, as KH2's is, so the hold starts that much
   later after a blend than our old frame count did.
 - **Left:** KH2's dodge and glide clocks (`combomods::dodge_clock`, `glide::kh2_clock`) read only
-  which KH2 motion our slot plays and KH1's time; no clip. KH2's row selection
-  (`takeover::kh2_rows` → `Character::would_take_launch` / `would_take_square_exe`) still runs
-  KH2's selector, which reads the playing clip's windows itself.
+  which KH2 motion our slot plays and KH1's time; no clip.
+- **KH2's row selection (correction, after t885):** it doesn't read the playing clip's windows on
+  the native path (Checked (code)). The callers in `combomods` hand it the combo as KH1 has it
+  (`ComboState`: KH1's count, the swing connected, the finisher next from KH1's combo window, which
+  the Finishing Plus window opens from 8.6 since t879) and the playing motion only for KH2's
+  anti-repeat (`press_state_from`: no current motion, so `plan_press` asks no window). The Square
+  moves get the combo / finisher / free flags from 8.8 / 8.6 / 8.9 (t881). The selector reads only
+  the candidate row's own motion: that a clip exists for it, and whether it has an allow-movement
+  range anywhere (Wisdom's air shots keep their speed). Those describe the move, not a window in
+  time, so nothing is left to move here.

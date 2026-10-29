@@ -1895,3 +1895,83 @@ What we add (`kh1picker::air`, `combomods::flight_pick` / `take_flight`, `kh1row
 - **Assumptions**: our requests resolve in Neverland's own motion set while flying (our set copies
   are made for every set KH1 binds, §2, but not seen in flight); KH1's flight case reads the row
   only through `0x1402A3980` at the runner's start. Not checked in game.
+
+### 7.z.11 Which attack a press gives and the Finishing Plus count, native (t888 .. t891)
+
+The owner (chat): "The combo. Which attack a press gives, and the Finishing Plus counter, are
+still ours. If you have a native implementation of this let me know how you would do it", then
+"go ahead" with answers 1 (a) (KH1's own targets) and 2 (a) (KH2's length in KH1's stats).
+
+**Before.** At the combo style KH2, KH1's pickers asked our KH2 controller object
+(`takeover::DRIVER`'s `Character`, `kh2_walk`) which row to take: it held its own copy of his
+abilities, its own target list (`combat::Strikes::look`), its own facing and lock, all set from
+KH1 at each press, and KH1's picker returned what it answered. The KH1 style's KH2 ability rows
+and both finisher walks asked the same object (`kh2_ability_row`, `kh2_rows`). The finisher count
+(KH2's `+0xD75`) and the combo's last step were statics of ours (`FINISHERS`, `SPENT`, `LAST`).
+KH2's length was written into KH1's length byte around each picker call and KH1's put back.
+
+**KH2 (OG rewrite's `combo.rs`, the Steam KH2 addresses in it, Checked (decomp)).** The count
+step `0x1403D6CA0`: in the finisher window (`+0x194` bit 5) with the swing connected and
+`+0xD75` under the most (`[+0x5C0] + 0x202`), the count and `+0xD75` one more; in the combo
+window with the swing connected, the count one more; in a free state counts 1 / 1 (`0x101`).
+The walk `0x140402D20`: each row's condition (`0x140402750`: ability, ground / air, the finisher
+or normal test), range (`0x1404029F0`: distance less the target's radius, the height window, the
+facing window; kind 1 the primary target, kind 2 any target), then the first marked row whose
+motion isn't the one playing (or whose `sub` is itself), else the first skipped row's `sub`;
+with none, row 5 / 9 marked and walked again.
+
+**KH1 (Steam decomp, Checked (decomp)).**
+- The Attack step `0x1402A7510` writes the press's target (the command's handle and lock point)
+  into the combat info's `+0x54` before it asks its picker.
+- KH1's ground picker counts targets with `0x1402A7320`: every enemy from `0x140291AB0 (actor,
+  previous)` (live, `+0x374` bits 0 / 1; another team; not `+0` bit 9), each of its lock points
+  from `0x1402B0110 (target, point)`, each point's place and radius from `0x1402B04C0`.
+- The combat info: nine 0x60-byte records at `0x14296B1E0`, handed out by `0x140286D60` /
+  `0x140286EC0` (they set `+0x18`, `+0x20`, `+0x40` as a u16, `+0x48`). No access to `+0x44 ..
+  +0x47` or `+0x5C .. +0x5F` found through the actor's `+0x14C` handle (**Assumption**: none
+  through another path).
+- The stats builder `0x1402A5130 (character, stats)` writes `+0xD4` = copies of Combo Plus (6)
+  + 3 and `+0xD5` = copies of Air Combo Plus (7) + 3 (`0x140284BE0` counts an ability in the
+  character's list).
+- First bytes checked against the Steam exe: `0x140291AB0` (`4C 8B C1`), `0x1402B0110` and
+  `0x1402B04C0` (`48 89 5C 24 08 48 89 74 24 10 57 48 83 EC 20`), `0x1402A5130` (`48 89 5C 24 10
+  48 89 6C 24 18`), `0x140284BE0` (`4C 8B 05 .. .. .. .. 44 8B C9 83 FA 09`).
+
+**Now.**
+- t888, the records (`kh2table`): one table a moveset (base Sora's; Valor's, Wisdom's, Final's on
+  KH1's states), built once from KH2's data as loaded: KH2's PTYA rows in table order, the KH1
+  row of ours that plays each (`kh1rows`), the motions KH2 has clips of, the combo rules and
+  jump height. KH2's walk as a function of a host's state alone (`character_core::HostPress`):
+  the same rules as the controller's press, tested against it on 4000 made-up cases
+  (`crates/character-core/tests/host_combo.rs`). Not cached in the slot cache file: it is a few
+  dozen rows read with KH2's battle file every start already.
+- t889, the walk in KH1's pickers (`combomods::Kh1Press`): KH1's count `+0x41`, its press's
+  target `+0x54` (KH2's primary target: KH1's lock-on or KH1's own aim), every enemy's lock
+  points by KH1's own calls (KH2's kind-2 pass), his place and facing, the KH2 motion playing on
+  KH1's request. Used by the KH2 style's press (`kh2_press`, Finishing Plus's next finisher
+  included), the KH1 style's ability rows (`picker`) and both finisher walks
+  (`finisher_walk`, `kh2_finisher_walk`). `takeover::kh2_walk`, `kh2_rows`, `kh2_ability_row`
+  and the drop-ahead flag are gone.
+- t890, the count in KH1's combat info: `+0x44` KH2's `+0xD75` (1 at a new combo; one more for
+  each press taken in a Finishing Plus window, a finisher's or Magnet's mid-combo; up to 100),
+  `+0x45` / `+0x46` / `+0x5C` the last step (flags, KH1 request, KH1's count). A record handed to
+  Sora anew is cleared first. `FINISHERS`, `SPENT`, `LAST` are gone; the Square moves' carried
+  combo now counts a Magnet spend too, as KH2's `+0xD75` does.
+- t891, KH2's length in KH1's stats: with the Base / Aerial Base Combo at KH2 (or a Drive Form on
+  KH1's states) Sora's `+0xD4` / `+0xD5` hold KH2's length (KH2's base, Combo Plus / Air Combo
+  Plus, Negative Combo), written after KH1's stats builder runs (hooked) and at each press in
+  KH1's pickers; KH1's own length goes back (KH1's rule, its counter) when the style is KH1
+  again. KH1's code and ours (the walk, the cast step in `formmagic`) read the one byte.
+
+**Not native yet (what's left).**
+- The hop of the row taken (`takeover::kh2_hop`): the controller object's `would_take_row`, with
+  KH1's press target as its lock.
+- His abilities as KH2's numbers come from our reading of KH1's lists (`takeover::with_abilities`).
+- The Square moves, Counterguard and Retaliating Slash still ask the controller object.
+- Berserk Charge: KH1 has no MP charge state for it to read (never refuses, as before).
+
+**Assumptions.** KH1's lock point has no height of its own (its radius stands for it, as
+before). A target is now each lock point of each enemy KH1's walk gives (before: one target a
+body near him, its first lock point, its widest part's radius). KH1's own aim with no lock-on is
+what KH2's primary target was by its own nearest-target rule (the Auto Aim setting no longer
+changes the walk, only the hop).

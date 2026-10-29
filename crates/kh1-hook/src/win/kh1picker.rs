@@ -185,11 +185,14 @@ unsafe fn ours_kh2(actor: usize, air: bool) -> bool {
 /// KH1's picker at the combo style KH2 (the tester, combo row selection m23: "I can't do any kh1
 /// finisher on kh2 combat settings"; m24: "(a)", KH2's whole pick in KH1's picker): KH2's pick at
 /// this press first (`combomods::kh2_press`, the only time KH2's selector runs for it), then KH1's
-/// picker with KH2's combo length on the length it reads (`kh2_length_for_picker`) and its
+/// picker with KH2's combo length in the length it reads (`sync_length`, t891) and its
 /// ability finisher bits held back (`held`), then the walk (`combomods::kh2_finisher_walk`), and,
 /// where KH2's pick stands, the KH1 row that plays it (`combomods::kh2_pick_in_picker`).
 unsafe fn at_kh2(actor: usize, air: bool, held: u32, dir: usize, flight: bool, f: impl FnOnce() -> i32) -> i32 {
     use super::combomods::Ask;
+    // (KH2's combo length in KH1's stats, kept there, t891: KH2's walk and KH1's picker both read
+    // it.)
+    sync_length(actor, air);
     let press = match super::combomods::kh2_press(actor, air) {
         Ask::Took(p) => Some(p),
         // KH2's walk takes no row (the tester, what-is-still-missing m14 answer 8: KH1's own combo
@@ -206,12 +209,10 @@ unsafe fn at_kh2(actor: usize, air: bool, held: u32, dir: usize, flight: bool, f
         let row = f();
         return super::combomods::kh2_pick_in_picker(actor, row, dir, air, None);
     }
-    let saved = press.as_ref().and_then(|p| super::combomods::kh2_length_for_picker(actor, air, p.len));
     // (In Valor Form, `form::native_now`, none of KH1's own ability finishers: KH2's Valor has its
     // own table only. Every one of KH1's bits held back for its picker's call, no walk.)
     let valor = super::form::native_now();
     let (row, bits) = holding(if valor { held | HELD_GROUND | ALL_FINISHER_BITS } else { held }, f);
-    put_back(saved);
     if !valor {
         if let Some(n) = super::combomods::kh2_finisher_walk(actor, row, air, bits, press.as_ref()) {
             return n;
@@ -228,6 +229,7 @@ unsafe extern "system" fn ground(actor: usize, target: usize, dir: usize) -> u64
     if rd::<i32>(actor + 0x70) != 0 || !ours(actor, false) {
         return f(actor, target, dir);
     }
+    sync_length(actor, false);
     let saved = shorten(actor, false);
     let (row, bits) = holding(HELD_GROUND, || f(actor, target, dir));
     put_back(saved);
@@ -253,10 +255,90 @@ unsafe extern "system" fn air(actor: usize, target: usize, dir: usize) -> i32 {
     if rd::<i32>(actor + 0x70) != 2 || !ours(actor, true) {
         return f(actor, target, dir);
     }
+    sync_length(actor, true);
     let saved = shorten(actor, true);
     let (row, bits) = holding(HELD_AIR, || f(actor, target, dir));
     put_back(saved);
     super::combomods::picker(actor, row, dir, true, bits)
+}
+
+/// KH1's stats builder (Steam `0x1402A5130 (character, stats)`, Checked (decomp)): it writes the
+/// combo's length into the stats, `+0xD4` (ground) = Combo Plus (ability 6) equipped + 3 and
+/// `+0xD5` (air) = Air Combo Plus (7) + 3, counted in the character's ability list by
+/// `0x140284BE0 (ability, character)`; called whenever KH1 rebuilds a party member's stats
+/// (`0x1402A5AE0`, the party loop at `0x140284C30`'s callers, the menus). KH1's pickers'
+/// finisher test reads those bytes (`0x1402A6EE0` / `0x1402A6C70`: `len <= count`). Ours runs it,
+/// then puts KH2's length in Sora's own stats where KH2's length is his (`sync_length`).
+/// `mov [rsp+0x10], rbx; mov [rsp+0x18], rbp` (Checked (exe)).
+const STATS_STEAM: usize = 0x2A5130;
+const STATS_PROLOGUE: [u8; 10] = [0x48, 0x89, 0x5C, 0x24, 0x10, 0x48, 0x89, 0x6C, 0x24, 0x18];
+static ORIG_STATS: AtomicUsize = AtomicUsize::new(0);
+type StatsFn = unsafe extern "system" fn(i32, usize);
+/// KH1's ability counter `0x140284BE0 (ability, character) -> copies equipped`: `mov r8, [rip+..]`
+/// then `mov r9d, ecx; cmp edx, 9` (Checked (exe); the first instruction's offset not compared).
+const COUNT_STEAM: usize = 0x284BE0;
+const COUNT_HEAD: [u8; 3] = [0x4C, 0x8B, 0x05];
+const COUNT_NEXT: [u8; 6] = [0x44, 0x8B, 0xC9, 0x83, 0xFA, 0x09];
+static COUNT: AtomicUsize = AtomicUsize::new(0);
+/// KH2's length is in the byte (ground, air): KH1's own goes back when it is no longer KH2's.
+static KH2_LENGTH_IN: [AtomicBool; 2] = [AtomicBool::new(false), AtomicBool::new(false)];
+
+unsafe extern "system" fn stats(character: i32, out: usize) {
+    let f: StatsFn = std::mem::transmute(ORIG_STATS.load(Ordering::Acquire));
+    f(character, out);
+    let actor = super::takeover::sora_actor();
+    if actor >= 0x10000 && out >= 0x10000 && super::pose::ptr(rd::<u32>(actor + 0x6C)) == out {
+        // (KH1 wrote its own length just now: none of KH2's is in it.)
+        KH2_LENGTH_IN[0].store(false, Ordering::Relaxed);
+        KH2_LENGTH_IN[1].store(false, Ordering::Relaxed);
+        sync_length(actor, false);
+        sync_length(actor, true);
+    }
+}
+
+/// KH1's own combo length for Sora (`0x1402A5130`'s rule: the copies of Combo Plus or Air Combo
+/// Plus equipped, `0x140284BE0`, plus 3), if KH1's counter is the expected code.
+unsafe fn kh1_own_length(actor: usize, air: bool) -> Option<u8> {
+    let at = COUNT.load(Ordering::Relaxed);
+    let obj = super::pose::ptr(rd::<u32>(actor + 0x130));
+    if at == 0 || obj < 0x10000 {
+        return None;
+    }
+    let count: unsafe extern "system" fn(u32, u32) -> i32 = std::mem::transmute(at);
+    let n = count(if air { 7 } else { 6 }, rd::<u16>(obj + 0x4C) as u32);
+    Some((n.clamp(0, 250) + 3) as u8)
+}
+
+/// KH2's combo length in Sora's own stats (the owner's plan, answer 2 (a), t891): base Sora
+/// with the Base / Aerial Base Combo at KH2 where he is, or a Drive Form on KH1's own states,
+/// has KH2's length (`kh2table`'s rule on his abilities: KH2's base, Combo Plus / Air Combo Plus,
+/// Negative Combo) in the byte KH1's code reads (`+0xD4` / `+0xD5`), kept there: written after
+/// KH1's own stats builder runs (`stats`) and at each Attack press in KH1's pickers (an ability or
+/// a Config change between the two). Elsewhere KH1's own length goes back once (`kh1_own_length`)
+/// where ours was in it.
+pub unsafe fn sync_length(actor: usize, air: bool) {
+    let stats = super::pose::ptr(rd::<u32>(actor + 0x6C));
+    if stats < 0x10000 {
+        return;
+    }
+    let at = stats + if air { 0xD5 } else { 0xD4 };
+    let flag = &KH2_LENGTH_IN[air as usize];
+    if ours_kh2(actor, air) {
+        let Some(len) = super::kh2table::now().zip(super::takeover::with_abilities(|a| a.clone())).map(|(t, a)| t.length(&a, air)) else { return };
+        if rd::<u8>(at) != len {
+            std::ptr::write_unaligned(at as *mut u8, len);
+        }
+        flag.store(true, Ordering::Relaxed);
+    } else if flag.swap(false, Ordering::Relaxed) {
+        if let Some(len) = kh1_own_length(actor, air) {
+            std::ptr::write_unaligned(at as *mut u8, len);
+        }
+    }
+}
+
+/// KH2's length is in Sora's stats byte for this press (`sync_length`).
+pub fn kh2_length_in(air: bool) -> bool {
+    KH2_LENGTH_IN[air as usize].load(Ordering::Relaxed)
 }
 
 pub unsafe fn install() {
@@ -264,6 +346,12 @@ pub unsafe fn install() {
         return;
     }
     let base = GetModuleHandleA(std::ptr::null()) as usize;
+    if rd::<[u8; 3]>(base + COUNT_STEAM) == COUNT_HEAD && rd::<[u8; 6]>(base + COUNT_STEAM + 7) == COUNT_NEXT {
+        COUNT.store(base + COUNT_STEAM, Ordering::Relaxed);
+    } else {
+        super::log!(Combat, "KH1's ability counter (0x140284BE0) isn't the expected code here: KH1's own combo length isn't put back after KH2's");
+    }
+    super::hook::install(base + STATS_STEAM, &STATS_PROLOGUE, stats as *const () as usize, &ORIG_STATS, "KH1's stats builder (KH2's combo length)");
     if rd::<[u8; 10]>(base + RANDOM_STEAM) == RANDOM_PROLOGUE {
         RANDOM.store(base + RANDOM_STEAM, Ordering::Relaxed);
     } else {

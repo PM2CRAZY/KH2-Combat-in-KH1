@@ -1326,8 +1326,8 @@ party call gives only Sora), so a Cure that would reach them in KH2 heals Sora o
   parent's step. Offline test `wisdom_shot_on_the_host_as_our_arena` (the tester's own Wisdom
   files): the same shot and effects frame for frame as our own machine.
 
-Not checked: in game. Left: our own script machine (the fallback when KH1 has no free process)
-still can't end another cast's effect (its casts' handles aren't unique), so Reflect into Reflect
+Not checked: in game. Left: our own script machine (the fallback when KH1 had no free process,
+removed in t886, §8c; now only a host-less `Magic`) still can't end another cast's effect (its casts' handles aren't unique), so Reflect into Reflect
 is fixed only on KH1's processes (`reflect_chain_shares_the_teamwork_block` still fails there).
 
 - **t828, Cure's heal and max MP** (the owner, chat: "tie it to the amount of max mp you have, in
@@ -1361,3 +1361,30 @@ is fixed only on KH1's processes (`reflect_chain_shares_the_teamwork_block` stil
   400 / 709 power 200): 4 HP a max MP point on Sora, 2 on Donald and Goofy; Cure 2 and 3 (500 /
   600) more. t828's share of max HP × max MP factor is gone. KH1's own Cure (15 / 27 / 36 + max MP)
   isn't used for KH2's Cure.
+
+### 8c. No fallback onto our own machine (the owner, chat: "We don't need a fallback for kh1's pools so this should be removed"; t886)
+
+- **t886.** With KH1's interpreter hook in, nothing runs on our own script machine any more:
+  - A cast (and Wisdom's shot script) KH1 has no free record, work slot or spell task entry for
+    doesn't start (logged "didn't start"). It used to run on our machine.
+  - A thread (`trap_magic_start_thread`) takes any free KH1 record. The 8 records kept back for
+    KH1's own scripts are gone. A thread KH1 has no free record for doesn't start, and the call
+    gives a null record. It used to run inside its parent's step on our side.
+  - A cast the host couldn't take after making its process doesn't start. KH1 ends that process
+    at its next step, as before.
+- The check for a free record, work slot and task entry stays. It isn't a fallback: KH1's
+  allocators check nothing. With none free, the record maker (`0x1402BD5B0`) returns nothing and
+  the work slot maker (`0x1402BD420`) takes the slot after its last one, writing past the pool
+  (**Checked (decomp)**). So the check keeps KH1's start from being called full.
+- Our machine stays only where there is no host at all: the offline tests (t887 below).
+- **Assumption:** KH2's own thread start gives 0 when it can't start a thread. Not checked in KH2's
+  decomp. None of `kh2-magic`'s calls read the thread record back.
+
+Not checked: in game, and how often KH1's 64 records or 32 work slots fill in play.
+
+- **t887** (the owner, chat: "continue with (b) spells run native now"). The game no longer uses
+  our machine at all. With no KH1 script machine for KH2's scripts, KH2's spells don't cast:
+  Fire, Blizzard, Thunder, Cure, Reflect and Wisdom's shots. Each one logs "didn't start", and the
+  start of the game logs why. That happens when the interpreter hook or a first-byte check fails,
+  or on a non-Steam build. Before, every script ran on our machine then. Our machine stays only for
+  `kh2-magic`'s offline tests, which have no KH1.

@@ -234,16 +234,17 @@ pub enum Event {
 /// The context's registers live in the host's process between steps (`load` / `store`).
 pub trait NativeHost: Send {
     /// A machine for spell `spell`'s script on the host's memory, with its main context on a new
-    /// process of the host's, for trigger `key`. `None`: the cast runs on our own arena as before.
+    /// process of the host's, for trigger `key`. `None`: the cast doesn't start (no fallback onto
+    /// our own arena while a host is set).
     fn machine(&mut self, file: &SpellFile, spell: usize, key: i32) -> Option<(Vm, CtxId)>;
     /// The cast `id` is set up (its trigger's frame and arguments in the context): its process is
     /// handed the registers and steps it from now on. False: the host couldn't take it (the cast
-    /// then runs on our side, its machine as it is).
+    /// doesn't start; the host ends the process it made).
     fn started(&mut self, id: u64, vm: &Vm, main: CtxId) -> bool;
     /// A thread the cast `id`'s script starts (`trap_magic_start_thread`): a context on a new
     /// child process of the cast's process (its stack the child's, its work memory `wp`, shared),
-    /// which the host's machine steps after its parent. `None`: it runs inside its parent's step,
-    /// on our side, as before.
+    /// which the host's machine steps after its parent. `None`: the thread doesn't start (the
+    /// call returns a null record).
     fn thread(&mut self, id: u64, vm: &mut Vm, wp: u32) -> Option<CtxId>;
     /// A context's registers from its host process (before a step).
     fn load(&mut self, id: u64, vm: &mut Vm, ctx: CtxId);
@@ -372,8 +373,12 @@ impl Magic {
     /// a target first for Fire, Blizzard, Thunder and Magnet only.
     pub fn cast(&mut self, spell: usize, caster: ObjId, element: u8, sub: i32, magi: &[u8], world: &mut dyn World) -> Result<usize, BdxError> {
         let file = self.spells.get(spell).ok_or_else(|| BdxError::Trap("no such spell".into()))?;
-        // On the host's own script machine when it has one (its memory, its process).
-        let made = self.native.as_mut().and_then(|n| n.machine(file, spell, 20));
+        // On the host's own script machine when it has one (its memory, its process); no fallback
+        // onto our arena then.
+        let made = match self.native.as_mut() {
+            Some(n) => Some(n.machine(file, spell, 20).ok_or_else(|| BdxError::Trap("the host has no process for it".into()))?),
+            None => None,
+        };
         let (mut vm, native_main) = match made {
             Some((vm, main)) => (vm, Some(main)),
             None => (Vm::new(file.program.clone()), None),
@@ -403,7 +408,10 @@ impl Magic {
         let main = native_main.unwrap_or_else(|| vm.spawn(None));
         vm.trigger(main, 20, &[Cell::addr(player), Cell::addr(t.pax_rec), Cell::int(sub), Cell::addr(magi_at)])?;
         let id = self.fresh_id();
-        let external = native_main.is_some() && self.native.as_mut().is_some_and(|n| n.started(id, &vm, main));
+        let external = native_main.is_some();
+        if external && !self.native.as_mut().is_some_and(|n| n.started(id, &vm, main)) {
+            return Err(BdxError::Trap("the host couldn't take it".into()));
+        }
         if external {
             t.native_id = Some(id);
         }
@@ -419,8 +427,12 @@ impl Magic {
     /// Wisdom Form's shots come from here.
     pub fn object_effect(&mut self, file: usize, owner: ObjId, n: i16, world: &mut dyn World) -> Result<usize, BdxError> {
         let f = self.spells.get(file).ok_or_else(|| BdxError::Trap("no such object script".into()))?;
-        // On the host's own script machine when it has one, as a cast (t827).
-        let made = self.native.as_mut().and_then(|n| n.machine(f, file, 0x10));
+        // On the host's own script machine when it has one, as a cast (t827); no fallback onto
+        // our arena then.
+        let made = match self.native.as_mut() {
+            Some(n) => Some(n.machine(f, file, 0x10).ok_or_else(|| BdxError::Trap("the host has no process for it".into()))?),
+            None => None,
+        };
         let (mut vm, native_main) = match made {
             Some((vm, main)) => (vm, Some(main)),
             None => (Vm::new(f.program.clone()), None),
@@ -449,7 +461,10 @@ impl Magic {
         let main = native_main.unwrap_or_else(|| vm.spawn(None));
         vm.trigger(main, 0x10, &[Cell::addr(obj), Cell::int(n as i32), Cell::addr(effect)])?;
         let id = self.fresh_id();
-        let external = native_main.is_some() && self.native.as_mut().is_some_and(|h| h.started(id, &vm, main));
+        let external = native_main.is_some();
+        if external && !self.native.as_mut().is_some_and(|h| h.started(id, &vm, main)) {
+            return Err(BdxError::Trap("the host couldn't take it".into()));
+        }
         if external {
             t.native_id = Some(id);
         }

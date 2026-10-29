@@ -717,15 +717,16 @@ wisdom can behave correctly without overwriting kh1's vanilla logic". Step 1:
   picker hooked (`kh1picker::hooked`) it no longer does (KH1's own row, as unasked).
 - Combo style KH1, vanilla KH1 and flight: unchanged.
 - **Still running along (what's left, one working step each):**
-  1. KH2's walk still runs on our KH2 controller object (`takeover::DRIVER`'s `Character`): its
-     row table and numbers, with KH1's count, facing, lock and targets set on it each press, and
-     its own last speed for the hop of a row that keeps his speed (Wisdom's moving air shots).
-     Next: the walk as a function of KH1's state alone (no controller object), its targets from
-     KH1's actor list.
-  2. Finishing Plus's finisher count (`combomods::FINISHERS`, `LAST`) is ours: KH1 has no
-     finisher counter. Next: a field of KH1's combat info its Attack step reads.
-  3. The Square moves, Counterguard and the KH1-style ability rows ask the same controller
-     object (`kh2_would_take_square`, `kh2_would_take_row`, `kh2_ability_row`): moved with 1.
+  1. Done in t888 / t889 (`docs/kh1-anim-slots.md` §7.z.11): KH2's walk for an Attack press (and
+     the KH1-style ability rows and finisher walks) runs on KH1's state alone
+     (`combomods::Kh1Press`, `character_core::HostPress`) over the moveset's records
+     (`kh2table`), its targets KH1's own (the press's target, every enemy's lock points). Left:
+     the hop of the row taken (and the last speed a moving air row keeps, Wisdom's shots) is
+     still worked out by the controller object (`takeover::kh2_hop`).
+  2. Done in t890: Finishing Plus's finisher count and the combo's last step live in KH1's
+     combat info (`+0x44`, `+0x45` / `+0x46` / `+0x5C`), no state of ours.
+  3. The Square moves, Counterguard and Retaliating Slash still ask the controller object
+     (`kh2_would_take_square`, `kh2_would_take_row`).
 
 #### 7.4.3 The Drive and the arrival in the air
 

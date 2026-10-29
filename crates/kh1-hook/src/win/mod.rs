@@ -36,6 +36,7 @@ mod kh2script;
 mod kh2dpx;
 mod kh2ppp;
 mod kh2slots;
+mod kh2table;
 mod kh1bank;
 mod kh1picker;
 mod kh1rows;

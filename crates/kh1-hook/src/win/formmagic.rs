@@ -1289,7 +1289,9 @@ pub unsafe fn shots_step(actor: usize, out: &Output, airborne: bool, strikes: &m
             // (Wisdom's subs from 10; base Sora's from 0, `form::magic_sub`.)
             let sub = f.level as i32 * 2 - 2 + f.finisher as i32 + super::form::magic_sub();
             let magi = pose::kh2().and_then(|k| k.magi.get(sub).map(|r| r.to_vec())).unwrap_or_else(|| vec![0; kh2_formats::pref::MagiTable::RECORD]);
-            match rt.magic.cast(file, SORA, f.spell, sub, &magi, &mut world) {
+            // (Only on KH1's script machine: no fallback onto our own, t887.)
+            let made = if rt.magic.native.is_some() { rt.magic.cast(file, SORA, f.spell, sub, &magi, &mut world) } else { Err(super::kh2script::off()) };
+            match made {
                 Ok(_) => {
                     rt.casting = Some((f.motion, 0));
                     rt.kh1_clock = f.kh1_anim.map(|(request, at)| (request, 0.0, at, false));
@@ -1331,7 +1333,8 @@ pub unsafe fn shots_step(actor: usize, out: &Output, airborne: bool, strikes: &m
     if let Some(file) = rt.wisd {
         for n in std::mem::take(&mut rt.queued) {
             let before = rt.magic.effects.iter().map(|e| e.id).max().unwrap_or(0);
-            match rt.magic.object_effect(file, SORA, n, &mut world) {
+            let made = if rt.magic.native.is_some() { rt.magic.object_effect(file, SORA, n, &mut world) } else { Err(super::kh2script::off()) };
+            match made {
                 Ok(_) => {
                     if out.motion == super::form::ARRIVE_MOTION {
                         rt.arrival.extend(rt.magic.effects.iter().filter(|e| e.id > before && e.element.id != AURA).map(|e| e.id));

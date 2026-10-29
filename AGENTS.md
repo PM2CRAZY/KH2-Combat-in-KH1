@@ -1,3 +1,44 @@
+### 2026-10-29: Stage 891 (testing branch: KH2's combo length kept in KH1's own stats)
+- The owner (chat, the native plan for "which attack a press gives, and the Finishing Plus counter", part 4, answer 2 (a): "go ahead").
+  - Before: at the combo style KH2, `combomods::kh2_length_for_picker` wrote KH2's length into Sora's stats length byte (`+0xD4` ground, `+0xD5` air) for the call of KH1's picker and put KH1's back after it, so every other reader saw KH1's length.
+  - Now: `kh1picker::sync_length` keeps KH2's length (KH2's base, Combo Plus / Air Combo Plus, Negative Combo, `kh2table::Table::length`) in the byte while it is his (base Sora with the Base / Aerial Base Combo at KH2, or a Drive Form on KH1's states). Written after KH1's own stats builder `0x1402A5130` runs (hooked, prologue `48 89 5C 24 10 48 89 6C 24 18`, Checked (exe)) and at each Attack press in KH1's pickers; KH1's own length (copies of ability 6 / 7 + 3, counted by `0x140284BE0`, Checked (decomp) and (exe)) goes back when the style is KH1 again. KH2's walk reads it from there (`Kh1Press::read`). `kh2_length_for_picker` removed.
+  - Side effect: the cast step (`formmagic`, KH2 magic) reads KH2's length at the combo style KH2 now, where it read KH1's.
+  - Not checked in game; `cargo test` not run for `kh1-hook` here (no crate registry reachable). docs/kh1-anim-slots.md §7.z.11.
+
+### 2026-10-29: Stage 890 (testing branch: the Finishing Plus count and the combo's last step in KH1's combat info)
+- The owner (chat, the same plan, part 3: "go ahead").
+  - Before: KH2's finisher count `+0xD75` and the combo's last step were statics of ours (`combomods::FINISHERS`, `SPENT`, `LAST`).
+  - Now: in Sora's KH1 combat info (his `+0x14C` record, KH1's nine 0x60-byte records at `0x14296B1E0`, Checked (decomp)): `+0x44` KH2's finisher count (1 at a new combo, one more for each press taken in a Finishing Plus window, a finisher's or Magnet's mid-combo, up to 100: Steam KH2 `0x1403D6CA0`, Checked (decomp)); `+0x45` the last step's flags, `+0x46` its KH1 request, `+0x5C` KH1's count at it. A record handed to Sora anew is cleared first (`combo_info`). A press while the combo's finisher still plays keeps the count even when KH1's count went back to 1. The Square moves' carried combo counts a mid-combo Magnet spend too, as KH2's count does.
+  - **Assumption**: KH1 reads and writes none of those bytes through another path than the actor's `+0x14C` handle (none found through it, Checked (decomp)).
+  - Not checked in game; `cargo test` not run for `kh1-hook` here. docs/kh1-anim-slots.md §7.z.11.
+
+### 2026-10-29: Stage 889 (testing branch: KH2's row walk inside KH1's pickers on KH1's own state and targets)
+- The owner (chat, the same plan, part 2, answer 1 (a): KH1's own targets).
+  - Before: KH1's pickers asked our KH2 controller object (`takeover::kh2_walk`, `kh2_rows`, `kh2_ability_row`) which row a press gives, with its own copy of his abilities, target list, facing and lock set from KH1 at each press.
+  - Now: `combomods::Kh1Press` reads KH1 at the press: its count, the press's target in the combat info `+0x54` (written by KH1's Attack step `0x1402A7510` before its picker, Checked (decomp)) as KH2's primary target, every enemy's lock points by KH1's own calls (`0x140291AB0`, `0x1402B0110`, `0x1402B04C0`, as KH1's `0x1402A7320` makes them, Checked (decomp); first bytes checked, Checked (exe)), his place, facing and the KH2 motion playing; KH2's walk on it (`character_core::HostPress`). Used by the KH2 style's press and Finishing Plus's next finisher (`kh2_press`), the KH1 style's ability rows (`picker`) and both finisher walks. `kh2_walk`, `kh2_rows`, `kh2_ability_row`, `kh2_would_take_launch` and the drop-ahead flag removed from `takeover`.
+  - **Not native yet**: the hop of the row taken (`takeover::kh2_hop`: the controller's `would_take_row`, KH1's press target as its lock); his abilities as KH2's numbers from our reading of KH1's lists.
+  - **Assumption**: KH1's lock point radius stands for the target's height too (as before); each lock point of each enemy is a target now (before: one a body near him).
+  - Not checked in game; `cargo test` not run for `kh1-hook` here. docs/kh1-anim-slots.md §7.z.11.
+
+### 2026-10-29: Stage 888 (testing branch: KH2's combo row records for KH1's pickers, and KH2's walk as a function of a host's state)
+- The owner (chat, the same plan, part 1: "go ahead").
+  - `kh2table`: one table a moveset (base Sora's, each Drive Form's), built once from KH2's data as loaded (PTYA rows in KH2's order, the KH1 row of ours that plays each, the motions KH2 has clips of, the combo rules and jump height). `combomods::ours_for` finds a row's KH1 row through it first.
+  - `character_core::HostPress`: KH2's Attack press (`0x1403D6CA0`'s steps, the walk `0x140402D20`), the KH1 style's ability rows, row range checks and normal finisher, from inputs a host gives alone; `crates/character-core/tests/host_combo.rs` checks it against the controller's own press on 4000 made-up cases (run here: passes). Nothing plays differently with this stage alone.
+  - docs/kh1-anim-slots.md §7.z.11.
+
+### 2026-10-29: Stage 887 (testing branch: KH2's spells only on KH1's script machine: no fallback onto our own when the hook is missing)
+- The owner (chat, after t886's question: "continue with (b) spells run native now").
+  - Before: with KH1's interpreter hook not in (a hook or first-byte check failing at start, a non-Steam build), `Magic::native` was none and every KH2 script (Fire, Blizzard, Thunder, Cure, Reflect, Wisdom's shots) ran on our own machine, stepped by `Magic::update`.
+  - Now: `formmagic` and `reflect` start a cast or Wisdom's shot script only with KH1's machine as the host; without it the start is an error (`kh2script::off`), logged "didn't start" as any failed start. `kh2script::install` logs that KH2's spells won't cast when it can't hook. Our machine stays only for a host-less `Magic` (`kh2-magic`'s offline tests).
+  - Not checked in game; `cargo test` not run here (no crate registry reachable). docs/kh1-magic-native.md §8c.
+
+### 2026-10-29: Stage 886 (testing branch: KH2's spell scripts with no fallback onto our own script machine when KH1's pools are full)
+- The owner (chat: "We don't need a fallback for kh1's pools so this should be removed", about the spell scripts' own machine as a fallback when KH1's pools are full).
+  - Before: with the KH1 interpreter hook in, a cast (or Wisdom's shot script) KH1 had no free record, work slot or spell task entry for ran on our own machine (`kh2_bdx::Vm` on a private arena, stepped by `Magic::update`); a thread (`trap_magic_start_thread`) ran inside its parent's step on our side while 8 or fewer of KH1's 64 records were free (`RESERVE`), or when KH1's child start didn't give a child; a cast the host couldn't take (`started` false) ran on our side too.
+  - Now: with a host set (`Magic::native`) there is no fallback. `machine` giving none, or `started` false, is an error from `Magic::cast` / `Magic::object_effect` (logged by `formmagic` / `reflect` as "didn't start"; a process KH1 made for it ends at KH1's next step, as before). A thread the host can't make doesn't start and the call gives a null record (`kh2-magic` host trap 2,20). `kh2script`: `RESERVE` removed (a thread takes any free record); the free-record / work-slot / task check stays only so KH1's allocators, which check nothing (`0x1402BD5B0` returns nothing with none free, `0x1402BD420` takes the slot past its 32, Checked (decomp)), are never called full. Our machine stays only for a host-less `Magic` (the offline tests, and a hook or first-byte check failing at start).
+  - **Assumption:** KH2's `trap_magic_start_thread` gives 0 when it can't start a thread (not checked in KH2's decomp); no spell script reads the record back as far as `kh2-magic`'s calls go.
+  - Not checked in game; `cargo test` not run here (no crate registry reachable). docs/kh1-magic-native.md §8c.
+
 ### 2026-10-29: Stage 885 (testing branch: Air Physics KH2's hover on KH1's own air cast animation as KH1 motion data)
 - The owner (chat, after t882: "go ahead with what you need"; §14.14 of docs/kh1-anim-baking.md).
   - Before: `shared::physics::kh1_cast_hold` (Air Physics KH2, KH1's own air cast animation; the tester's "hold him like kh2") counted 60 Hz frames itself from the first frame it saw the air cast request and searched KH2's air cast clip for the request (`kh2slots::CASTS`) for its no-gravity range every frame.

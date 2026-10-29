@@ -49,7 +49,7 @@
 
 use super::addr::{Build, Rva};
 use super::{log, pose, takeover};
-use character_core::{Character, ComboRow, ComboState};
+use character_core::{ComboRow, ComboState};
 use std::sync::atomic::{AtomicU32, AtomicU64, AtomicU8, Ordering};
 use std::sync::Mutex;
 
@@ -81,38 +81,125 @@ fn note(s: impl FnOnce() -> String) {
     }
 }
 
-/// KH1's last swing of its own combo that ran: its count, its motion, whether it was KH1's
-/// finisher, in the air.
-static LAST: Mutex<Option<(u8, u32, bool, bool)>> = Mutex::new(None);
 /// When KH1 last knocked him away itself (`hurt`, game frames).
 static BLOWN_AT: AtomicU64 = AtomicU64::new(0);
-/// Finishers in a row so far in KH1's combo (KH2's `+0xD75`, which Finishing Plus counts against:
-/// `finisher_base` + Finishing Plus): 1 after a finisher, one more for each next finisher, 0 after
-/// a swing.
-static FINISHERS: AtomicU8 = AtomicU8::new(0);
-/// Finishing Plus windows taken out of a cast that was no finisher (Stop as KH2's Magnet mid-combo,
-/// `formmagic::Role::Magnet`) in this combo: KH2's `+0xD75` went one more for each (Steam KH2
-/// `0x1403D6CA0`'s finisher window branch, Checked (decomp)), and only a new combo sets it back
-/// (`0x101`), so they count on top of `FINISHERS` (which the swings after it set back to 0) until
-/// the combo ends (`new_combo`).
-static SPENT: AtomicU8 = AtomicU8::new(0);
 
-/// KH2's finisher count `+0xD75` as ours: the finishers in a row (at least 1, as a new combo's
-/// `0x101`) and the Finishing Plus windows spent out of a mid-combo Magnet (`SPENT`).
-fn finishers_now() -> u8 {
-    FINISHERS.load(Ordering::Relaxed).max(1).saturating_add(SPENT.load(Ordering::Relaxed))
+/// KH2's finisher count and the combo's last step, kept in KH1's own combat info of Sora (t890;
+/// the owner: "the Finishing Plus counter ... still ours", plan part 3). The combat info is the
+/// 0x60-byte record his `+0x14C` handle gives (KH1's nine at `0x14296B1E0`, handed out by
+/// `0x140286D60` / `0x140286EC0`, which set `+0x18`, `+0x20`, `+0x40` (a u16: the count `+0x41`
+/// with it) and `+0x48`; Steam, Checked (decomp)), beside KH1's own count `+0x41`, the swing's hit
+/// flags `+0x50` and the press's target `+0x54`. KH1 reads and writes none of these bytes
+/// (Checked (decomp): no access to `+0x44..+0x47` or `+0x5C..+0x5F` of it in KH1's code through
+/// the actor's handle; **Assumption**: none through another path either):
+/// - `+0x44` KH2's finisher count `+0xD75` (Steam KH2 `0x1403D6CA0`, Checked (decomp)): 1 at a new
+///   combo (KH2's `0x101`), one more each time a press is taken in a Finishing Plus window (a
+///   finisher's, or Magnet's mid-combo), up to 100; Finishing Plus's next finisher is there while
+///   it is under one plus Finishing Plus's copies;
+/// - `+0x45` the last step's flags (bit 0 a finisher, bit 1 in the air, bit 7 there is one), `+0x46`
+///   its KH1 request (u16), `+0x5C` KH1's count at it: a press while that request still plays is a
+///   press in that step (Finishing Plus's next finisher after a finisher).
+/// A record KH1 hands Sora anew (another map, another actor) starts with these cleared
+/// (`combo_info`), as the record's bytes are another actor's from before.
+const INFO_FINISHERS: usize = 0x44;
+const INFO_LAST_FLAGS: usize = 0x45;
+const INFO_LAST_REQUEST: usize = 0x46;
+const INFO_LAST_COUNT: usize = 0x5C;
+/// The combat info these were last cleared on.
+static INFO_SEEN: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// Sora's combat info (`+0x14C`), 0 if none; cleared of our bytes when it is a record we haven't
+/// seen him with (`INFO_SEEN`).
+unsafe fn combo_info() -> usize {
+    let a = takeover::sora_actor();
+    if a < 0x10000 {
+        return 0;
+    }
+    let info = pose::ptr(rd::<u32>(a + 0x14C));
+    if info < 0x10000 {
+        return 0;
+    }
+    if INFO_SEEN.swap(info, Ordering::Relaxed) != info {
+        wr(info + INFO_FINISHERS, 1u8);
+        wr(info + INFO_LAST_FLAGS, 0u8);
+        wr(info + INFO_LAST_REQUEST, 0u16);
+        wr(info + INFO_LAST_COUNT, 0u8);
+    }
+    info
+}
+
+/// The combo's last step (KH1's count at it, its request, a finisher, in the air), from KH1's
+/// combat info (`combo_info`).
+fn last_step() -> Option<(u8, u32, bool, bool)> {
+    unsafe {
+        let info = combo_info();
+        if info == 0 {
+            return None;
+        }
+        let f = rd::<u8>(info + INFO_LAST_FLAGS);
+        (f & 0x80 != 0).then(|| (rd::<u8>(info + INFO_LAST_COUNT), rd::<u16>(info + INFO_LAST_REQUEST) as u32, f & 1 != 0, f & 2 != 0))
+    }
+}
+
+/// The combo's last step noted in KH1's combat info (`None`: none).
+fn set_last_step(step: Option<(u8, u32, bool, bool)>) {
+    unsafe {
+        let info = combo_info();
+        if info == 0 {
+            return;
+        }
+        match step {
+            Some((count, request, finisher, air)) => {
+                wr(info + INFO_LAST_COUNT, count);
+                wr(info + INFO_LAST_REQUEST, request as u16);
+                wr(info + INFO_LAST_FLAGS, 0x80u8 | finisher as u8 | (air as u8) << 1);
+            }
+            None => wr(info + INFO_LAST_FLAGS, 0u8),
+        }
+    }
+}
+
+/// KH2's finisher count `+0xD75` now (at least 1), from KH1's combat info.
+fn finisher_count() -> u8 {
+    unsafe {
+        let info = combo_info();
+        if info == 0 {
+            return 1;
+        }
+        rd::<u8>(info + INFO_FINISHERS).max(1)
+    }
+}
+
+/// A press taken in a Finishing Plus window: KH2's finisher count one more (`0x1403D6CA0`, up to
+/// 100).
+fn chain_finisher() {
+    unsafe {
+        let info = combo_info();
+        if info != 0 {
+            let n = rd::<u8>(info + INFO_FINISHERS).max(1);
+            wr(info + INFO_FINISHERS, if n < 100 { n + 1 } else { n });
+        }
+    }
 }
 
 /// An Attack or a spell was taken in the Finishing Plus window of a cast that was no finisher
-/// (Stop as Magnet mid-combo, `formmagic::magnet_window`): one Finishing Plus spent (`SPENT`).
+/// (Stop as Magnet mid-combo, `formmagic::magnet_window`): one Finishing Plus spent, KH2's count
+/// one more (Steam KH2 `0x1403D6CA0`'s finisher window branch, Checked (decomp)); only a new
+/// combo sets it back (`0x101`).
 pub fn spend_finisher_window() {
-    let n = SPENT.fetch_add(1, Ordering::Relaxed).saturating_add(1);
-    note(|| format!("Magnet's Finishing Plus window taken mid-combo: {n} Finishing Plus spent"));
+    chain_finisher();
+    let n = finisher_count();
+    note(|| format!("Magnet's Finishing Plus window taken mid-combo: KH2's finisher count {n}"));
 }
 
-/// A new combo starts (KH1's count back to 1): nothing spent (`SPENT`).
+/// A new combo starts (KH1's count back to 1): KH2's finisher count back to 1 (`0x101`).
 pub fn new_combo() {
-    SPENT.store(0, Ordering::Relaxed);
+    unsafe {
+        let info = combo_info();
+        if info != 0 {
+            wr(info + INFO_FINISHERS, 1u8);
+        }
+    }
 }
 /// A KH2 move on a KH1 row of its own (`kh1rows`) for KH1's Attack step this frame (`control`:
 /// a Square move in KH1's combo window): ours, KH2's hop for it, the game frame.
@@ -127,6 +214,10 @@ fn ours_for(row: &ComboRow) -> Option<usize> {
     use super::kh1rows as k;
     // (Attack rows only: the guard's row 11 is started by its request, `guard_press`.)
     let plays = |n: usize| k::OURS[n].attack && k::OURS[n].motion == row.motion && k::installed() && super::kh2slots::has(k::request(n) as usize, row.motion);
+    // (The moveset's records link each of KH2's rows to its KH1 row, `kh2table`, t888.)
+    if let Some(n) = super::kh2table::now().and_then(|t| t.kh1_row(row.id)).filter(|&n| plays(n)) {
+        return Some(n);
+    }
     k::by_kh2_row(row.id).filter(|&n| plays(n)).or_else(|| k::by_combo_motion(row.motion).filter(|&n| plays(n)))
 }
 
@@ -170,10 +261,7 @@ unsafe fn ours_combo_run(actor: usize, n: usize, launch: Option<character_core::
             wr(info + 0x41, 1u8);
         }
         let r = k::row(n);
-        if let Ok(mut g) = LAST.lock() {
-            *g = request_of(r).map(|m| (1, m, false, true));
-        }
-        FINISHERS.store(0, Ordering::Relaxed);
+        set_last_step(request_of(r).map(|m| (1, m, false, true)));
         new_combo();
         note(|| format!("KH2's hop {} (motion {}) on KH1's air row {r} of its own (request {:#x}) out of KH1's air state, {:.0} high, {:.1}/frame sideways", o.name, o.motion, k::request(n), l.height, l.velocity[0].hypot(l.velocity[1])));
         return Run::Hop(r, l);
@@ -189,13 +277,8 @@ unsafe fn ours_combo_run(actor: usize, n: usize, launch: Option<character_core::
 fn ours_run(n: usize, launch: Option<character_core::Launch>, air: bool, count: u8, request_of: &dyn Fn(i32) -> Option<u32>) -> Run {
     let o = &super::kh1rows::OURS[n];
     let r = super::kh1rows::row(n);
-    if let Ok(mut l) = LAST.lock() {
-        *l = request_of(r).map(|m| (count, m, o.kind.finisher(), air || o.rises));
-    }
-    // (A next finisher's caller counts it on, `next_finisher`.)
-    if !o.next_finisher {
-        FINISHERS.store(o.kind.finisher() as u8, Ordering::Relaxed);
-    }
+    set_last_step(request_of(r).map(|m| (count, m, o.kind.finisher(), air || o.rises)));
+    // (KH2's finisher count stays: a next finisher's caller counts it on, `next_finisher`.)
     note(|| format!("KH2's {} (row {}, motion {}) on KH1's row {r} of its own (request {:#x}){}", o.name, o.kh2_row, o.motion, super::kh1rows::request(n), if o.rises && !air { ", out of KH1's air state" } else { "" }));
     if o.rises && !air {
         // (Its first frames before its no-gravity range held off the floor, `kh2slots::rise_start`.)
@@ -274,6 +357,186 @@ unsafe fn kh1_combo(actor: usize, air: bool) -> Option<(u8, u8, bool)> {
     Some((rd::<u8>(info + 0x41), len, rd::<u32>(info + 0x50) != 0))
 }
 
+/// KH1's own calls KH2's walk measures its targets with (t889), as KH1's ground picker's target
+/// count `0x1402A7320` makes them (Steam, Checked (decomp)): the enemy walk `0x140291AB0 (actor,
+/// previous)` (KH1's live actors of another team than his, not hidden: `+0x374` bits 0 / 1 and
+/// 5..6, `+0` bit 9), each one's next lock point `0x1402B0110 (target, point)` (from -1; the points
+/// its collision record has, `+0x3AC` not masking them, kind 0) and a lock point's place and size
+/// `0x1402B04C0 (target, point, out) -> radius` (KH1 world, y down). Their first bytes, checked
+/// once before the first call (Checked (exe)).
+const FOES_STEAM: usize = 0x291AB0;
+const FOES_BYTES: [u8; 3] = [0x4C, 0x8B, 0xC1];
+const NEXT_POINT_STEAM: usize = 0x2B0110;
+const POINT_STEAM: usize = 0x2B04C0;
+/// `mov [rsp+8], rbx; mov [rsp+0x10], rsi; push rdi; sub rsp, 0x20` (both, Checked (exe)).
+const POINT_BYTES: [u8; 15] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x74, 0x24, 0x10, 0x57, 0x48, 0x83, 0xEC, 0x20];
+/// 0 not checked yet, 1 the three calls are KH1's code here, 2 not.
+static KH1_CALLS: AtomicU8 = AtomicU8::new(0);
+
+/// The game's base when KH1's three target calls are the expected code (Steam only).
+unsafe fn kh1_calls() -> Option<usize> {
+    if Build::current() != Build::Steam {
+        return None;
+    }
+    let base = takeover::game_base();
+    if base == 0 {
+        return None;
+    }
+    match KH1_CALLS.load(Ordering::Relaxed) {
+        1 => Some(base),
+        2 => None,
+        _ => {
+            let ok = rd::<[u8; 3]>(base + FOES_STEAM) == FOES_BYTES && rd::<[u8; 15]>(base + NEXT_POINT_STEAM) == POINT_BYTES && rd::<[u8; 15]>(base + POINT_STEAM) == POINT_BYTES;
+            KH1_CALLS.store(if ok { 1 } else { 2 }, Ordering::Relaxed);
+            if !ok {
+                log!(Combat, "KH1's enemy walk / lock point calls (0x140291AB0, 0x1402B0110, 0x1402B04C0) aren't the expected code here: KH2's combo walk measures no targets");
+            }
+            ok.then_some(base)
+        }
+    }
+}
+
+/// A KH1 actor's live flags (`0x140291FF0`: `+0x374` bit 0 set, bit 1 clear, Checked (decomp)).
+unsafe fn kh1_alive(a: usize) -> bool {
+    a >= 0x10000 && rd::<u32>(a + 0x374) & 3 == 1
+}
+
+/// One of KH1's lock points as KH2's target (KH2 measures a target by its target shape: its point
+/// and size; KH1's lock point is that, its radius both its size and, as before, its height:
+/// **Assumption**, KH1's lock point has no height of its own). Its id: the actor (as
+/// `combat::Strikes`' targets).
+unsafe fn kh1_point(base: usize, actor: usize, point: i32) -> Option<character_core::HostTarget> {
+    let f: unsafe extern "system" fn(usize, i32, *mut [f32; 4]) -> f32 = std::mem::transmute(base + POINT_STEAM);
+    let mut v = [0.0f32; 4];
+    let r = f(actor, point, &mut v);
+    (r.is_finite() && r >= 0.0 && r < 1000.0 && v[..3].iter().all(|x| x.is_finite())).then(|| character_core::HostTarget { id: actor as u32, pos: [v[0], -v[1], v[2]], radius: r.max(10.0), height: r.max(10.0) })
+}
+
+/// KH2's walk on KH1's own state at an Attack press (t889; the owner: "the combo ... still ours",
+/// plan part 2, answer 1 (a)): the moveset's records (`kh2table`), and everything KH2's walk reads,
+/// read from KH1 at this press:
+/// - KH1's own target for the press, the combat info's `+0x54` (its handle and lock point, written
+///   by KH1's Attack step `0x1402A7510` before it asks its picker, Checked (decomp)): KH2's
+///   primary target (kind-1 rows, the selector's direction); KH1's lock-on or its own aim, as KH1
+///   chose it;
+/// - every lock point of every enemy KH1's own walk gives (`kh1_calls`): KH2's kind-2 pass;
+/// - his place and facing (`+0x10`, `+0x3C`), the KH2 motion playing on KH1's request (KH2's
+///   anti-repeat, `kh2slots::playing_motion`);
+/// - Sora's abilities as KH1's lists give them (`takeover::with_abilities`: KH1's own and the KH2
+///   list, read from the save each frame: **not native yet**, our reading of those lists into
+///   KH2's ability numbers), the combo's length and most finishers by KH2's rule on them.
+/// Nothing of it is kept after the press.
+pub struct Kh1Press {
+    table: &'static super::kh2table::Table,
+    pub air: bool,
+    pos: [f32; 3],
+    facing: f32,
+    pub primary: Option<character_core::HostTarget>,
+    targets: Vec<character_core::HostTarget>,
+    equipped: Vec<u16>,
+    pub max_count: u8,
+    pub max_finishers: u8,
+    playing: Option<u16>,
+    drop_ahead: bool,
+}
+
+impl Kh1Press {
+    /// KH1's state at this press (`air`: KH1's air states). `None` without KH2's data or abilities.
+    pub unsafe fn read(actor: usize, air: bool) -> Option<Kh1Press> {
+        let table = super::kh2table::now()?;
+        let a = takeover::with_abilities(|a| a.clone())?;
+        let p = rd::<[f32; 3]>(actor + 0x10);
+        let mut press = Kh1Press {
+            table,
+            air,
+            pos: [p[0], -p[1], p[2]],
+            facing: rd::<f32>(actor + 0x3C),
+            primary: None,
+            targets: Vec::new(),
+            equipped: a.equipped.clone(),
+            // (KH2's length in KH1's own stats where it is his, t891, `kh1picker::sync_length`;
+            // else KH2's rule on his abilities, as KH2's own row checks take it.)
+            max_count: match kh1_combo(actor, air) {
+                Some((_, len, _)) if super::kh1picker::kh2_length_in(air) && len > 0 => len,
+                _ => table.length(&a, air),
+            },
+            max_finishers: table.most_finishers(&a),
+            playing: super::kh2slots::playing_motion(actor),
+            drop_ahead: false,
+        };
+        if let Some(base) = kh1_calls() {
+            let info = pose::ptr(rd::<u32>(actor + 0x14C));
+            if info >= 0x10000 {
+                let t = pose::ptr(rd::<u32>(info + 0x54));
+                if kh1_alive(t) {
+                    press.primary = kh1_point(base, t, rd::<i32>(info + 0x58).max(0));
+                }
+            }
+            let foes: unsafe extern "system" fn(usize, usize) -> usize = std::mem::transmute(base + FOES_STEAM);
+            let next_point: unsafe extern "system" fn(usize, i32) -> i32 = std::mem::transmute(base + NEXT_POINT_STEAM);
+            let mut foe = foes(actor, 0);
+            let mut n = 0;
+            while foe != 0 && n < 256 {
+                n += 1;
+                let mut point = next_point(foe, -1);
+                let mut k = 0;
+                while point >= 0 && k < 32 {
+                    k += 1;
+                    if let Some(t) = kh1_point(base, foe, point) {
+                        press.targets.push(t);
+                    }
+                    point = next_point(foe, point);
+                }
+                foe = foes(actor, foe);
+            }
+        }
+        Some(press)
+    }
+
+    /// KH2's walk on it (`character_core::HostPress`).
+    pub fn with<R>(&self, f: impl FnOnce(&character_core::HostPress) -> R) -> R {
+        let clips = &self.table.clips;
+        let has = |m: u16| clips.contains(&m);
+        let p = character_core::HostPress {
+            rows: &self.table.rows,
+            has_motion: &has,
+            air: self.air,
+            pos: self.pos,
+            facing: self.facing,
+            primary: self.primary,
+            targets: &self.targets,
+            equipped: &self.equipped,
+            jump_height: self.table.jump_height,
+            max_count: self.max_count,
+            max_finishers: self.max_finishers,
+            // (KH2's MP Charge has no state of KH1's to read: Berserk Charge never refuses, as
+            // before.)
+            berserk: false,
+            drop_ahead: self.drop_ahead,
+            playing: self.playing,
+        };
+        f(&p)
+    }
+
+    /// KH2's line ahead for row 1 (on the ground: the floor gives out along the selector's
+    /// direction, `drop_ahead`), tested now for this press.
+    pub unsafe fn test_drop_ahead(&mut self, actor: usize) {
+        if !self.air && rd::<i32>(actor + 0x70) == 0 {
+            let aim = self.with(|p| p.aim());
+            self.drop_ahead = drop_ahead(actor, aim);
+        }
+    }
+
+    /// The hop KH2's row starts at this press (`takeover::kh2_hop`; a row with no hop gives none).
+    pub unsafe fn hop(&self, actor: usize, row: &ComboRow, from: ComboState) -> Option<character_core::Launch> {
+        if !row.is_jump() {
+            return None;
+        }
+        takeover::kh2_hop(actor, row.id, from, self.air, self.primary.map(|t| t.id))
+    }
+
+}
+
 /// Negative Combo on KH1's own combo (the combo style KH1; the tester, m19: "the ability should
 /// not ignore the combat settings"): KH1's length (the stats' `+0xD4` / `+0xD5`, Combo Plus and
 /// Air Combo Plus already in it) less one a copy, at least 1, as KH2's length takes it off its own
@@ -297,7 +560,7 @@ pub fn kh1_length(len: u8) -> u8 {
 /// finisher indefinitely, it needs to behave exact like kh1").
 pub fn finisher_chain_open() -> bool {
     let plus = takeover::with_abilities(|a| a.finishing_plus).unwrap_or(0);
-    finishers_now() < 1 + plus
+    finisher_count() < 1 + plus
 }
 
 /// Finishing Plus's next finisher is left (KH2's own test in its Attack and command check, Steam
@@ -307,7 +570,7 @@ pub fn finisher_chain_open() -> bool {
 /// (the maximum's reading as `finisher_chain_open` takes it), Finishing Plus equipped.
 pub fn finisher_left() -> bool {
     let plus = takeover::with_abilities(|a| a.finishing_plus).unwrap_or(0);
-    plus > 0 && finishers_now() < 1 + plus
+    plus > 0 && finisher_count() < 1 + plus
 }
 
 /// A KH2 cast on KH1's cast state took its step of KH1's combo (`formmagic::take_step`): noted as
@@ -318,11 +581,10 @@ pub fn finisher_left() -> bool {
 /// `+0xD75` one more, `0x1403D6CA0`), else the combo's first finisher (`+0xD75` 1, KH2's new
 /// combo `0x101`) or no finisher (0, as after a swing).
 pub fn cast_step(step: u8, request: u32, finisher: bool, chained: bool, air: bool) {
-    if let Ok(mut l) = LAST.lock() {
-        *l = Some((step, request, finisher, air));
+    set_last_step(Some((step, request, finisher, air)));
+    if finisher && chained {
+        chain_finisher();
     }
-    let f = if !finisher { 0 } else if chained { FINISHERS.load(Ordering::Relaxed).max(1).saturating_add(1) } else { 1 };
-    FINISHERS.store(f, Ordering::Relaxed);
 }
 
 /// KH2's normal finishers whose Finishing Plus window KH1's own finishers take (the tester, m20
@@ -346,7 +608,7 @@ pub unsafe fn kh1_finisher_window(actor: usize) {
     if Build::current() != Build::Steam || actor < 0x10000 || !super::shared::active() || super::form::in_form() {
         return;
     }
-    let Some((_, request, true, air)) = LAST.try_lock().ok().and_then(|l| *l) else { return };
+    let Some((_, request, true, air)) = last_step() else { return };
     // (Not a cast noted as the combo's finisher, `cast_step`: a cast's Finishing Plus window is its
     // own clip's (`kh2slots::finisher_window`) or `formmagic`'s, never 155's / 183's.)
     if matches!(request & 0xFFFF, 0x36..=0x3D | 0x83..=0x8A) {
@@ -360,7 +622,7 @@ pub unsafe fn kh1_finisher_window(actor: usize) {
     // KH1's own, `kh2_finisher_walk`; another finisher is left by KH2's count, `+0xD75` against
     // one plus Finishing Plus's copies.)
     let plus = takeover::with_abilities(|a| a.finishing_plus).unwrap_or(0);
-    let left = if super::styles::kh2(kind) { finishers_now() < 1 + plus } else { finisher_chain_open() };
+    let left = if super::styles::kh2(kind) { finisher_count() < 1 + plus } else { finisher_chain_open() };
     if plus == 0 || !left {
         return;
     }
@@ -457,12 +719,8 @@ pub enum Run {
 /// its place where KH2's row selection takes that (`kh2_row`), or KH2's hop on KH1's air state
 /// (`kh2_hop`). `request_of`: a KH1 row's motion request (its `+0`).
 pub unsafe fn attack(actor: usize, row: i32, _dir: usize, request_of: &dyn Fn(i32) -> Option<u32>) -> Run {
-    // (On the ground: KH2's line ahead, for its row 1, tested in KH2's trial along the
-    // selector's direction, `drop_ahead`.)
-    takeover::test_drop_ahead(rd::<i32>(actor + 0x70) == 0 && style_kh2(super::styles::Kind::GroundCombo));
-    let run = attack_row(actor, row, request_of);
-    takeover::test_drop_ahead(false);
-    run
+    // (KH2's line ahead for its row 1 is tested by the walk on KH1's state itself, `kh2_press`.)
+    attack_row(actor, row, request_of)
 }
 
 unsafe fn attack_row(actor: usize, row: i32, request_of: &dyn Fn(i32) -> Option<u32>) -> Run {
@@ -476,10 +734,14 @@ unsafe fn attack_row(actor: usize, row: i32, request_of: &dyn Fn(i32) -> Option<
     let made = take_kh2_pick(row, air);
     let Some((count, kh1_len, _)) = kh1_combo(actor, air) else { return Run::Row(row) };
     // (KH2's finisher count: a new combo sets it back; an Attack in a mid-combo Magnet's Finishing
-    // Plus window spends one Finishing Plus, `spend_finisher_window`.)
-    if count <= 1 {
+    // Plus window spends one Finishing Plus, `spend_finisher_window`. Not a press while the
+    // combo's finisher still plays: that is Finishing Plus's, whatever KH1's count did, and the
+    // count is KH2's `+0xD75` going on, as it went on before t890 (KH2 sets it back only in a free
+    // state, `0x1403D6CA0`).)
+    let in_finisher = last_step().is_some_and(|l| l.2 && l.3 == air && l.1 & 0xFFFF == rd::<u32>(actor + 0x164) & 0xFFFF);
+    if count <= 1 && !in_finisher {
         new_combo();
-    } else if super::formmagic::magnet_window(actor) == Some(true) && !LAST.try_lock().ok().and_then(|l| *l).is_some_and(|l| l.2) {
+    } else if super::formmagic::magnet_window(actor) == Some(true) && !last_step().is_some_and(|l| l.2) {
         spend_finisher_window();
     }
     // A Square move of KH2's on its own KH1 row (`control` / `valor_square` gave KH1 this Attack
@@ -497,14 +759,13 @@ unsafe fn attack_row(actor: usize, row: i32, request_of: &dyn Fn(i32) -> Option<
     // One of KH1's own ability finishers the KH2 setting's walk took in KH1's picker
     // (`kh2_finisher_walk`): KH1's row runs whole.
     if let Some((n, chained)) = take_kh1_take().filter(|&(n, _)| n == row) {
-        if let Ok(mut l) = LAST.lock() {
-            *l = request_of(n).map(|m| (count, m, true, air));
+        set_last_step(request_of(n).map(|m| (count, m, true, air)));
+        if chained {
+            chain_finisher();
         }
-        let f = if chained { FINISHERS.load(Ordering::Relaxed).max(1).saturating_add(1) } else { 1 };
-        FINISHERS.store(f, Ordering::Relaxed);
         return Run::Row(n);
     }
-    let last = LAST.try_lock().ok().and_then(|l| *l);
+    let last = last_step();
     // Finishing Plus: a press during KH1's finisher (its motion still playing) is KH2's next one.
     // (At the combo style KH1 KH1's own picker picks it: below.)
     let playing = rd::<u32>(actor + 0x164) & 0xFFFF;
@@ -515,25 +776,28 @@ unsafe fn attack_row(actor: usize, row: i32, request_of: &dyn Fn(i32) -> Option<
     // here, as before.
     let made = if kh2_style { made } else { None };
     if let Some((n, _, true, _)) = last.filter(|l| kh2_style && l.3 == air && l.1 & 0xFFFF == playing) {
-        let finishers = FINISHERS.load(Ordering::Relaxed).max(1);
+        let finishers = finisher_count();
         // (The last finisher already ran: nothing after it until it ends, as at the KH1 setting
         // and in KH2, `finisher_chain_open`; not a new combo out of the finisher.)
         if !finisher_chain_open() {
             note(|| format!("Attack in KH1's finisher (count {n}, finisher {finishers}): no next finisher left (Finishing Plus): no attack"));
             return Run::Nothing;
         }
-        let from = ComboState { count: n, finishers, hit: true, finisher_next: true };
         // (KH1's picker made KH2's pick at this press, `kh1picker::at_kh2`: no second ask of KH2's
-        // walk here. Only where that picker isn't hooked (not the Steam build) is it asked here.)
+        // walk here. Only where that picker isn't hooked (not the Steam build) is it asked here,
+        // the same walk on KH1's state, `kh2_press`.)
         let chained = match &made {
             Some(p) => p.as_ref().filter(|p| p.chained).map(|p| (p.row.clone(), p.len, p.neg, p.launch)),
             None if super::kh1picker::hooked(air) => None,
-            None => takeover::kh2_would_take_launch(actor, Some(from), super::kh2slots::playing_motion(actor), air, false).filter(|(r, ..)| r.is_finisher()),
+            None => match kh2_press(actor, air) {
+                Ask::Took(p) if p.chained => Some((p.row, p.len, p.neg, p.launch)),
+                _ => None,
+            },
         };
         if let Some((next, _, _, launch)) = chained {
             note(|| format!("Attack in KH1's finisher (count {n}, finisher {finishers}): KH2's next finisher, row {} motion {} (Finishing Plus)", next.id, next.motion));
             if let Some(run) = next_finisher(actor, &next, launch, air, n, playing, request_of) {
-                FINISHERS.store(finishers.saturating_add(1), Ordering::Relaxed);
+                chain_finisher();
                 return run;
             }
             // Its slot didn't build at load (a row of ours is always free for it otherwise,
@@ -564,14 +828,12 @@ unsafe fn attack_row(actor: usize, row: i32, request_of: &dyn Fn(i32) -> Option<
         // a second time beside it; KH1's own row, as an unasked press.)
         (None, None)
     } else {
-        // (Not the Steam build: KH1's picker isn't hooked.) KH2's combo at KH1's count (this press
-        // counted: `count` is this swing's).
-        let from = ComboState { count: count.saturating_sub(1), finishers: 1, hit: true, finisher_next: false };
-        // (KH2's motion KH1 plays now for its swing: KH2's anti-repeat passes over it, as over its
-        // own swing playing.)
-        let taken = takeover::kh2_would_take_launch(actor, Some(from), super::kh2slots::playing_motion(actor), air, false);
-        let launch = taken.as_ref().and_then(|t| t.3);
-        (taken.map(|(r, len, neg, _)| (r, len, neg)), launch)
+        // (Not the Steam build: KH1's picker isn't hooked.) KH2's walk on KH1's state at KH1's
+        // count (this press counted: `count` is this swing's), `kh2_press`.
+        match kh2_press(actor, air) {
+            Ask::Took(p) if !p.chained => (Some((p.row, p.len, p.neg)), p.launch),
+            _ => (None, None),
+        }
     };
     // A Drive Form on KH1's own states (`form::native_now`): KH2's pick or no attack. KH2 refuses a
     // press its rows don't take (Steam KH2's Attack step `0x1403D6CA0` / row walk `0x140402D20`,
@@ -603,14 +865,12 @@ unsafe fn attack_row(actor: usize, row: i32, request_of: &dyn Fn(i32) -> Option<
         // (KH2's: nothing after the last finisher until it ends; no fallback onto KH1's row, the
         // tester, after m26, answer 1).
         if let Some((_, _, true, _)) = last.filter(|l| l.3 == air && l.1 & 0xFFFF == playing && count >= kh1_len) {
-            let finishers = FINISHERS.load(Ordering::Relaxed).max(1);
+            let finishers = finisher_count();
             // (KH1's own finisher its picker took, not a swing of its combo, its request not the
             // one playing.)
             let own = || {
                 request_of(row).filter(|&q| !combo.swings.contains(&(q & 0xFFFF)) && q & 0xFFFF != playing).map(|q| {
-                    if let Ok(mut l) = LAST.lock() {
-                        *l = Some((count, q, true, air));
-                    }
+                    set_last_step(Some((count, q, true, air)));
                     let _ = select_swing(combo, Some(q), None);
                     Run::Row(row)
                 })
@@ -636,7 +896,7 @@ unsafe fn attack_row(actor: usize, row: i32, request_of: &dyn Fn(i32) -> Option<
                 }
             ));
             let Some(run) = run else { return Run::Nothing };
-            FINISHERS.store(finishers.saturating_add(1), Ordering::Relaxed);
+            chain_finisher();
             return run;
         }
         // (One with a KH1 row of its own, `kh1rows`: every combo row, and Guard Break.)
@@ -688,9 +948,7 @@ unsafe fn attack_row(actor: usize, row: i32, request_of: &dyn Fn(i32) -> Option<
     }
     if !air {
         if let Some((r, l)) = pick.as_ref().zip(launch).and_then(|((p, ..), l)| kh2_hop(actor, row, p, l, request_of)) {
-            if let Ok(mut g) = LAST.lock() {
-                *g = request_of(r).map(|m| (1, m, false, true));
-            }
+            set_last_step(request_of(r).map(|m| (1, m, false, true)));
             return Run::Hop(r, l);
         }
     }
@@ -698,12 +956,11 @@ unsafe fn attack_row(actor: usize, row: i32, request_of: &dyn Fn(i32) -> Option<
     // no row swapped here after the fact.)
     let row = if made.is_some() { row } else { kh2_row(actor, combo, row, pick.as_ref().map(|(r, ..)| r), request_of) };
     let plays = select_swing(combo, request_of(row), pick.as_ref().map(|(r, ..)| r));
-    if let Ok(mut l) = LAST.lock() {
+    {
         // (KH1's finisher: its finisher request; KH2's row selection can run KH1's swing row past
         // KH1's length (Combo Plus) or its finisher row before it (Negative Combo).)
         let finisher = |m: u32| if combo.swings.contains(&(m & 0xFFFF)) || m & 0xFFFF == combo.finisher { m & 0xFFFF == combo.finisher } else { count >= kh1_len };
-        *l = request_of(row).map(|m| (count, m, finisher(m), air));
-        FINISHERS.store(l.is_some_and(|x| x.2) as u8, Ordering::Relaxed);
+        set_last_step(request_of(row).map(|m| (count, m, finisher(m), air)));
     }
     if air {
         if let Some(l) = pick.as_ref().zip(launch).filter(|_| plays).and_then(|((p, ..), l)| air_hop(row, p, l)) {
@@ -783,8 +1040,14 @@ pub unsafe fn picker(actor: usize, row: i32, dir: usize, air: bool, bits: u32) -
         note(|| format!("KH1's {what} row picker, swing {count} of {kh1_len}: KH1's own row {row} (one of its own abilities' or its drop ahead), kept"));
         return row;
     }
-    let playing = super::kh2slots::playing_motion(actor);
-    let Some((pick, launch)) = takeover::kh2_ability_row(actor, finisher, air, playing, &kh1_plays) else {
+    // (KH2's row checks on KH1's own state, `Kh1Press`, t889.)
+    let taken = Kh1Press::read(actor, air).and_then(|p| {
+        let row = p.with(|h| h.ability_row(finisher, &kh1_plays))?;
+        let from = ComboState { count: if finisher { p.max_count } else { 0 }, finishers: 1, hit: true, finisher_next: false };
+        let launch = p.hop(actor, &row, from);
+        Some((row, launch))
+    });
+    let Some((pick, launch)) = taken else {
         note(|| format!("KH1's {what} row picker, swing {count} of {kh1_len}: KH1's row {row}; no KH2 ability {} passes KH2's checks", if finisher { "finisher" } else { "swing" }));
         return row;
     };
@@ -997,7 +1260,6 @@ unsafe fn finisher_walk(actor: usize, row: i32, dir: usize, air: bool, bits: u32
     // KH1's stay out there, as in KH1. KH2's take its place, as since t557.)
     let dash = row == 1;
     let chance = super::kh1picker::chance();
-    let kh2_playing = super::kh2slots::playing_motion(actor);
     let mut rules = Kh1Rules::new(row, bits, dash);
     let mut trail: Vec<String> = Vec::new();
     let mut kh1_step = |n: i32, bit: u32, rule: Kh1Rule, name: &'static str, trail: &mut Vec<String>| -> bool { rules.pass(n, bit, rule, name, &plays_now, trail) };
@@ -1008,11 +1270,18 @@ unsafe fn finisher_walk(actor: usize, row: i32, dir: usize, air: bool, bits: u32
     // `Character::normal_finisher`).
     let kh1_finisher_free = request_of(plain).is_some_and(|q| q & 0xFFFF == combo.finisher);
     let kh2_normal = count > kh1_len && !kh1_finisher_free;
-    let walked = takeover::kh2_rows(actor, air, |ch, stick, env| {
-        let plain_step = |ch: &mut Character| -> Took {
+    // (KH2's row checks on KH1's own state, `Kh1Press`, t889; a KH2 row's hop as it is taken.)
+    let press = Kh1Press::read(actor, air);
+    let walked = press.as_ref().map(|press| {
+        let from = ComboState { count: press.max_count, finishers: 1, hit: true, finisher_next: false };
+        let kh2 = |r: ComboRow| -> Took {
+            let l = press.hop(actor, &r, from);
+            Took::Kh2(r, l)
+        };
+        let plain_step = || -> Took {
             if kh2_normal {
-                if let Some((r, l)) = ch.normal_finisher(air, kh2_playing, stick, env) {
-                    return Took::Kh2(r, l);
+                if let Some(r) = press.with(|h| h.normal_finisher()) {
+                    return kh2(r);
                 }
             }
             Took::Plain
@@ -1020,7 +1289,7 @@ unsafe fn finisher_walk(actor: usize, row: i32, dir: usize, air: bool, bits: u32
         let groups: &[Group] = if air { &AIR_FINISHERS } else { &GROUND_FINISHERS };
         for g in groups {
             if let Some(gate) = g.gate {
-                if !ch.row_in_range(gate, env) {
+                if !press.with(|h| h.row_in_range(gate)) {
                     continue;
                 }
             }
@@ -1032,15 +1301,15 @@ unsafe fn finisher_walk(actor: usize, row: i32, dir: usize, air: bool, bits: u32
                         }
                     }
                     Step::Kh2(id) => {
-                        if let Some((r, l)) = ch.ability_row_id(id, true, air, kh2_playing, &kh1_plays, stick, env) {
-                            return Took::Kh2(r, l);
+                        if let Some(r) = press.with(|h| h.ability_row_id(id, true, &kh1_plays)) {
+                            return kh2(r);
                         }
                     }
-                    Step::Plain => return plain_step(ch),
+                    Step::Plain => return plain_step(),
                 }
             }
         }
-        plain_step(ch)
+        plain_step()
     });
     let no_kh2 = walked.is_none();
     let took = walked.unwrap_or_else(|| {
@@ -1127,24 +1396,37 @@ pub enum Ask {
 /// KH2's pick at this press at the combo style KH2, made once, in KH1's picker (`kh1picker`), at
 /// KH1's count (this press counted); Finishing Plus's next finisher when KH1's last row was a
 /// finisher still playing.
+///
+/// KH2's walk on KH1's own state (t889, `Kh1Press`): KH1's count, KH1's target for the press and
+/// its enemies' lock points, the moveset's records (`kh2table`); only a row's hop is still KH2's
+/// controller data's (`Kh1Press::hop`).
 pub unsafe fn kh2_press(actor: usize, air: bool) -> Ask {
     let Some((count, _, _)) = kh1_combo(actor, air) else { return Ask::Unasked };
     let playing = rd::<u32>(actor + 0x164) & 0xFFFF;
-    let kh2_playing = super::kh2slots::playing_motion(actor);
-    if let Some((n, _, true, _)) = LAST.try_lock().ok().and_then(|l| *l).filter(|l| l.3 == air && l.1 & 0xFFFF == playing) {
-        let from = ComboState { count: n, finishers: FINISHERS.load(Ordering::Relaxed).max(1), hit: true, finisher_next: true };
-        if let Some((row, len, neg, launch)) = takeover::kh2_would_take_launch(actor, Some(from), kh2_playing, air, false).filter(|(r, ..)| r.is_finisher()) {
+    let Some(mut press) = Kh1Press::read(actor, air) else { return Ask::Unasked };
+    let neg = takeover::with_abilities(|a| a.negative_combo).unwrap_or(0);
+    let len = press.max_count;
+    if let Some((n, _, true, _)) = last_step().filter(|l| l.3 == air && l.1 & 0xFFFF == playing) {
+        let finishers = finisher_count();
+        if let Some(row) = press.with(|p| p.next_finisher(n, finishers)) {
+            let from = ComboState { count: n, finishers, hit: true, finisher_next: true };
+            let launch = press.hop(actor, &row, from);
+            note(|| format!("KH2's walk on KH1's state (Finishing Plus, count {n}, finisher {finishers}): row {} motion {}", row.id, row.motion));
             return Ask::Took(Press { row, len, neg, launch, chained: true });
         }
     }
-    takeover::test_drop_ahead(!air && rd::<i32>(actor + 0x70) == 0);
+    press.test_drop_ahead(actor);
     let from = ComboState { count: count.saturating_sub(1), finishers: 1, hit: true, finisher_next: false };
-    let taken = takeover::kh2_walk(actor, Some(from), kh2_playing, air, false);
-    takeover::test_drop_ahead(false);
-    match taken {
-        None => Ask::Unasked,
-        Some(None) => Ask::Refused,
-        Some(Some((row, len, neg, launch))) => Ask::Took(Press { row, len, neg, launch, chained: false }),
+    match press.with(|p| p.press(count)) {
+        None => {
+            note(|| format!("KH2's walk on KH1's state (swing {count} of {len}, {} targets, KH1's target {}): no row", press.targets.len(), if press.primary.is_some() { "there" } else { "none" }));
+            Ask::Refused
+        }
+        Some(row) => {
+            let launch = press.hop(actor, &row, from);
+            note(|| format!("KH2's walk on KH1's state (swing {count} of {len}, {} targets, KH1's target {}): row {} motion {}", press.targets.len(), if press.primary.is_some() { "there" } else { "none" }, row.id, row.motion));
+            Ask::Took(Press { row, len, neg, launch, chained: false })
+        }
     }
 }
 
@@ -1322,13 +1604,13 @@ pub unsafe fn kh2_finisher_walk(actor: usize, row: i32, air: bool, bits: u32, pr
     let request_of = |r: i32| super::combat::row_motion(actor, r);
     let playing = rd::<i32>(actor + 0x164);
     let plays_now = |r: i32| request_of(r).is_some_and(|q| q as u16 as i32 == playing & 0xFFFF);
-    let kh2_playing = super::kh2slots::playing_motion(actor);
     let mut rules = Kh1Rules::new(row, bits, false);
     let mut trail: Vec<String> = Vec::new();
-    let walked = takeover::kh2_rows(actor, air, |ch, stick, env| {
+    // (KH2's row checks on KH1's own state, `Kh1Press`, t889.)
+    let walked = Kh1Press::read(actor, air).map(|press| {
         let groups: &[Group] = if air { &AIR_FINISHERS } else { &GROUND_FINISHERS };
         for g in groups {
-            if g.gate.is_some_and(|gate| !ch.row_in_range(gate, env)) {
+            if g.gate.is_some_and(|gate| !press.with(|h| h.row_in_range(gate))) {
                 continue;
             }
             for st in g.steps {
@@ -1339,7 +1621,7 @@ pub unsafe fn kh2_finisher_walk(actor: usize, row: i32, air: bool, bits: u32, pr
                         }
                     }
                     Step::Kh2(id) => {
-                        if let Some((r, _)) = ch.ability_row_id(id, true, air, kh2_playing, &|_| true, stick, env) {
+                        if let Some(r) = press.with(|h| h.ability_row_id(id, true, &|_| true)) {
                             trail.push(format!("KH2's row {} motion {} first", r.id, r.motion));
                             return None;
                         }
@@ -1361,24 +1643,6 @@ pub unsafe fn kh2_finisher_walk(actor: usize, row: i32, air: bool, bits: u32, pr
         *g = Some((n, chained, frame()));
     }
     Some(n)
-}
-
-/// KH2's combo length on the length byte KH1's picker reads (the stats' `+0xD4` ground / `+0xD5`
-/// air, the pickers' own finisher test `len <= count`, Steam `0x1402A6EE0` / `0x1402A6C70`,
-/// Checked (decomp)) for its call at the combo style KH2 (`kh1picker`): the byte's address and
-/// value, to put back.
-pub unsafe fn kh2_length_for_picker(actor: usize, air: bool, kh2_len: u8) -> Option<(usize, u8)> {
-    let stats = pose::ptr(rd::<u32>(actor + 0x6C));
-    if stats < 0x10000 || kh2_len == 0 {
-        return None;
-    }
-    let at = stats + if air { 0xD5 } else { 0xD4 };
-    let was = rd::<u8>(at);
-    if was == kh2_len {
-        return None;
-    }
-    wr(at, kh2_len);
-    Some((at, was))
 }
 
 /// KH2's air swing's own hop on KH1's air swing (Aerial Combo KH2; the tester: "(a)", KH2's own
@@ -1788,7 +2052,7 @@ pub fn control(s: &super::shared::Seen, jump_fresh: bool, square_fresh: bool) ->
         if count == 0 {
             return None;
         }
-        let from = ComboState { count, finishers: FINISHERS.load(Ordering::Relaxed).max(1), hit, finisher_next: false };
+        let from = ComboState { count, finishers: finisher_count(), hit, finisher_next: false };
         let Some((row, launch)) = (unsafe { takeover::kh2_would_take_square(actor, from, combo, finisher, free, &[], air) }) else {
             note(|| format!("Square in a swing (count {count}, combo window {combo}, finisher window {finisher}, connected {hit}): KH2 takes no Square move here"));
             return None;
@@ -1845,7 +2109,7 @@ pub fn valor_square(s: &super::shared::Seen, square_fresh: bool) -> Option<u32> 
     let windows = unsafe { super::kh2slots::windows_now(actor) };
     if let Some((m, f, combo, finisher, free)) = windows.filter(|w| w.2 || w.3) {
         let (count, _, hit) = unsafe { kh1_combo(actor, air) }?;
-        let from = ComboState { count, finishers: FINISHERS.load(Ordering::Relaxed).max(1), hit, finisher_next: false };
+        let from = ComboState { count, finishers: finisher_count(), hit, finisher_next: false };
         let Some((row, launch)) = (unsafe { takeover::kh2_would_take_square(actor, from, combo, finisher, free, &pose::PORTED_TO_VALOR, air) }) else {
             note(|| format!("Valor: Square in KH2 motion {m} frame {f} (combo window {combo}, finisher window {finisher}, count {count}, connected {hit}): KH2 takes no Square move here"));
             return None;
@@ -1938,9 +2202,7 @@ unsafe fn recover(actor: usize) -> bool {
     };
     super::shared::physics::kh2_hop(actor, character_core::AIR_RECOVERY_HOP, vel);
     super::shared::mark_air_dodged();
-    if let Ok(mut l) = LAST.lock() {
-        *l = None;
-    }
+    set_last_step(None);
     note(|| format!("jump while KH1 has him knocked away: KH2's Aerial Recovery on KH1's request {request:#x} of its own, {:.0} high, {:.1}/frame", character_core::AIR_RECOVERY_HOP, vel[0].hypot(vel[1])));
     true
 }
@@ -2171,10 +2433,7 @@ unsafe fn start_own(actor: usize, motion: u16, face: Option<f32>) -> bool {
     let queue: unsafe extern "system" fn(usize, u32, f32) -> usize = std::mem::transmute(base + QUEUE_MOTION_RVA);
     set(actor, request | 0x0100_0000, 0.0);
     queue(actor, 0x4000_0000, 0.0);
-    if let Ok(mut l) = LAST.lock() {
-        *l = None;
-    }
-    FINISHERS.store(0, Ordering::Relaxed);
+    set_last_step(None);
     new_combo();
     true
 }

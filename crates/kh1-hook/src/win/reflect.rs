@@ -1466,7 +1466,9 @@ unsafe fn step(actor: usize, out: &Output, airborne: bool, strikes: &mut combat:
         if chained {
             note(|| "Reflect cast again in flight: the new one ends the last one's barrier and counts its hits (KH2's teamwork block)".to_string());
         }
-        match rt.magic.cast(spell, SORA, ELEMENT, sub, &magi, &mut world) {
+        // (Only on KH1's script machine: no fallback onto our own, t887.)
+        let made = if rt.magic.native.is_some() { rt.magic.cast(spell, SORA, ELEMENT, sub, &magi, &mut world) } else { Err(super::kh2script::off()) };
+        match made {
             Ok(_) => {
                 rt.casting = Some((motion, 0));
                 rt.hold = Hold::default();
