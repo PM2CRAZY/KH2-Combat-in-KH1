@@ -628,6 +628,30 @@ Checked (files): all 12 `di*.ard` and 28 `di*.evm`, every script version; identi
   skip-mode way (Checked (exe): the values each pops), and the box's pickup line uses `{05}`, so it closes after its
   0x52 frames with no button.
 
+## Item Pickup, round 11 (t812): Deep Jungle and Hollow Bastion
+
+Checked (files): every `tz*.ard` (Deep Jungle) and `pc*.ard` (Hollow Bastion), every script version.
+
+| Part | Room | Quick (t811 / t812) | Why |
+|---|---|---|---|
+| Slides 0xD9..0xDE | `tz13` | yes | the pickup form, one window |
+| Emblem pieces 0xBC, 0xBE, 0xBF | `pc05` | yes | the pickup form |
+| Books 0xB2, 0xB4, 0xB7, 0xB8, 0xB9 | `pc06` | yes | the pickup form |
+| Hi-Potion / Ether parts (0x2, 0x3) | `tz13` | no (t812) | 3..11 windows of their own lines around the give |
+| reward 0x18, the spell part | `pc06` | no (t812) | party held, Sora's motions, 177 / 605: small scenes |
+| Emblem piece 0xBD | `pc05` | no | a small cinematic with no hold of its own |
+| bookshelf rewards (0x4, 0x9A, 0xFE, 0x6), books put back | `pc06` | no | no hold; already the small box |
+| rewards | `tz11`, `tz15`..`tz20` | no | scenes, or no hold |
+
+- t812's rule: a pickup opens exactly one window, with 0 (no 177 / 605). All of Destiny Islands' still read.
+
+## Item Pickup, round 12 (t815): Deep Jungle's slides
+
+- t812 log: every slide's touch part (context N, sub-script 6) read as no pickup. Checked (files, `tz13`): the touch
+  wakes a sub-script of another context (Assumption: the room's main one), which holds, gives the slide and shows window 7.
+- t815: sub-scripts the part wakes count as its own whatever their context; holds and window calls from any of
+  them are skipped, and the pickup is over when none of those contexts is still in the part.
+
 ## Not checked (Assumption)
 
 - (t724, now answered) KH2's own chest: see "KH2's own chest opening" above (checked in files and

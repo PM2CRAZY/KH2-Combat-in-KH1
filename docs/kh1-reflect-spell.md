@@ -450,3 +450,27 @@ barrier and the contact effect as before. Melee attacks unchanged (t573). Epic k
   with the tester's own extracted files during t796..t800: it fails ("the first barrier still
   stands" at frame 20) both before these versions and after them, so t610's chain is still
   unconfirmed. Open.
+
+
+### Every enemy attack type meets the barrier (t813, t814; the owner: "do (a) then also let it meet any guard types it can't like (b)")
+
+- KH1's pairing table (Steam `0x140528CB8`, **Checked (exe)**): rows by clash type 0..7 are
+  `1F 09 09 3F 29 18 00 00` (bit n: meets type n). KH1's entry test (`0x1402B3BE0`, **Checked
+  (decomp)**) reads the existing entry's row with the new entry's bit. Types 6 and 7 meet nothing.
+- A body meets an attack of types 0, 3, 5, 6 and 7 in that test (pure guards: 1, 2, 4), unless the
+  attack's result word (`+4`) has 0x30; KH1's attack pass clears that word for every object right
+  before building its entries (`0x1402B47A0`). **Checked (decomp)**.
+- Enemy attacks in the testers' logs (lines "enemy attack near Sora", 203 of them, **Checked
+  (trace)**): type 0 (melee and shots) 157, type 1 melee 7, type 2 melee 19, type 4 melee 2, type 6
+  shots 18. t796's type 4 guard met only 0, 3, 5: 46 of them went through the barrier uncounted.
+- **t813:** the barrier's guard is clash type 3 (meets 0..5). Its result word is set to "clashed"
+  (0x10) in the entry hook each pass, so the body branch skips it; the one-hit bit 0x80 is cleared
+  so the attack branch still meets it; KH1's half for it then does nothing (the barrier stands),
+  and the "spent" bit a half sets is cleared each pass.
+- **t814:** enemy attacks of types 6 and 7 (which KH1 meets with nothing, its own guards included)
+  are tested against the barrier's entries in the same pass with KH1's own overlap test
+  (`0x1402B5EF0`) and, on contact, handed to KH1's meeting (`0x1402B4A20`), where the barrier's rule
+  runs as for any other attack.
+- **Assumption:** KH1's pass skips an attack of a body-striking type whose carrier is switched off
+  (`+0x88` bit 0, `0x1402B47A0`); with type 3 the barrier then meets nothing while Sora is in that
+  state (which states set it isn't known yet).

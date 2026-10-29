@@ -256,11 +256,89 @@ unsafe fn guard_entries(obj: usize, list: usize, count: i32) -> Option<i32> {
     let c4 = [c[0], c[1], c[2], 1.0f32];
     wr(obj + 0x10, c4);
     wr(obj + 0x40, c4);
+    // (t813) Its result word held at "clashed" (0x10): KH1's attack pass clears it just before
+    // building the entries (`0x1402B47A0`), and KH1's entry test skips a body against an attack
+    // whose result has 0x30 (`0x1402B3BE0`), so the barrier's clash type 3 never strikes a body.
+    // Attack-against-attack it still meets (that path reads no result without the one-hit bit
+    // 0x80), and KH1's half for it (`0x1402B4BC0`) does nothing to an attack already "clashed":
+    // the barrier stands. A half that marks it spent (0x100000) is undone here each pass.
+    wr(obj + 4, 0x10u32);
+    wr(obj, rd::<u32>(obj) & !0x0010_0080);
+    let first = list + count.max(0) as usize * 0x40;
     let mut count = count;
+    let start = count;
     for &(q, t, r, h) in &shapes[..n] {
         count = put_entry(obj, owner, bit, list, count, t, r, h, q);
     }
+    // (t814) The enemy attacks KH1's pairing table lets nothing meet (types 6 and 7): met here
+    // against the barrier's entries with KH1's own overlap test and KH1's meeting.
+    let mine = (count - start).max(0) as usize;
+    if mine > 0 {
+        unmet_types(owner, first, mine);
+    }
     Some(count)
+}
+
+/// KH1's overlap of two entries' shapes (Steam `0x1402B5EF0 (shape, shape) -> bool`, the test
+/// `0x1402B3BE0` calls on `entry + 0x20`; first bytes checked, Checked (exe)).
+const OVERLAP_STEAM: usize = 0x2B5EF0;
+const OVERLAP_BYTES: [u8; 8] = [0x48, 0x89, 0x5C, 0x24, 0x18, 0x55, 0x56, 0x57];
+/// KH1's attack meeting (Steam `0x1402B4A20`; `recoil`'s hook on it runs the barrier's rule first).
+const MEET_STEAM: usize = 0x2B4A20;
+
+/// (t814) The tester's owner: "let it meet any guard types it can't". KH1's pairing table
+/// (`0x140528CB8`, Checked (exe)) has rows of 0 for clash types 6 and 7, so KH1's test
+/// (`0x1402B3BE0`) never meets an attack of those types with any other: KH1's own guards don't stop
+/// them either. KH2's barrier meets every enemy attack (`0x1403D2140`, Checked (decomp) KH2). So
+/// each live enemy attack of type 6 or 7 in KH1's pool is tested against the barrier's entries this
+/// pass with KH1's own overlap test, and one that touches goes to KH1's meeting (`0x1402B4A20`),
+/// where the barrier's rule takes it (`combat::barrier_meeting`: a shot stopped, melee to KH1's
+/// halves, counted, the contact effect), once per barrier and attack.
+unsafe fn unmet_types(sora: usize, entries: usize, n: usize) {
+    let base = BASE.load(Ordering::Relaxed);
+    if std::slice::from_raw_parts((base + OVERLAP_STEAM) as *const u8, OVERLAP_BYTES.len()) != OVERLAP_BYTES {
+        return;
+    }
+    let overlap: unsafe extern "system" fn(usize, usize) -> u8 = std::mem::transmute(base + OVERLAP_STEAM);
+    let meet: unsafe extern "system" fn(usize, usize) = std::mem::transmute(base + MEET_STEAM);
+    let team = |a: usize| (rd::<u32>(a + 0x374) >> 5) & 3;
+    let ours = team(sora);
+    for k in 0..POOL_COUNT {
+        let g = base + POOL_STEAM + k * OBJ;
+        let flags = rd::<u32>(g);
+        // In use, active, not freed or turned back, of a type KH1 meets with nothing.
+        if flags & 0x800 == 0 || flags & 0xC == 0 || flags & (0x0020_0000 | 0x0100_0000) != 0 || (flags >> 17) & 7 < 6 {
+            continue;
+        }
+        let owner = pose::ptr(rd::<u32>(g + 0x34));
+        if owner < 0x10000 || owner == sora || team(owner) == ours {
+            continue;
+        }
+        let r = rd::<f32>(g + 0xC);
+        let c = rd::<[f32; 3]>(g + 0x10);
+        if !(r > 0.0 && r < 500.0) || !c.iter().all(|v| v.is_finite()) {
+            continue;
+        }
+        // Its entry as KH1's builder lays one out (a sphere at its place).
+        let mut e = [0u8; 0x40];
+        let p = e.as_mut_ptr() as usize;
+        wr(p, (flags >> 12) & 3);
+        wr(p + 8, owner as u64);
+        wr(p + 0x10, rd::<u32>(g + 0x54));
+        wr(p + 0x18, g as u64);
+        wr(p + 0x20, 1u32);
+        wr(p + 0x24, r);
+        wr(p + 0x28, r);
+        wr(p + 0x30, [c[0], c[1], c[2], 1.0f32]);
+        for i in 0..n {
+            let mine = entries + i * 0x40;
+            if overlap(mine + 0x20, p + 0x20) != 0 {
+                meet(mine, p);
+                note(|| format!("Reflect barrier: enemy attack {g:#x} of clash type {} (one KH1's table meets with nothing) met it", (flags >> 17) & 7));
+                break;
+            }
+        }
+    }
 }
 
 static STATE: Mutex<State> = Mutex::new(State { live: [None; POOL_COUNT], spells: Vec::new(), counts: Vec::new(), results: Vec::new(), current: None, data: Vec::new(), page: 0, playing: None });

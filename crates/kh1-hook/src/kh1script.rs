@@ -220,7 +220,9 @@ pub const WINDOW_OBTAINED: u32 = 7;
 /// "Obtained" one: a talk opens its own windows; t809: the raft's building in `di01` holds, takes items with
 /// 258 and opens none), and has no scene, choice, shop or menu (`plays`, or 514) anywhere. Destiny Islands'
 /// gathered items read `511, 113, 115, wake (Sora's motion), 2, 644, 258, 364, window 7 (4 / 5 / 6 / 83 / 80 /
-/// 3, 0, 1), 353 0x1F, 107, 2, wake, 112, 114, 512` (Checked (files): `di01`, `di03`).
+/// 3, 0, 1), 353 0x1F, 107, 2, wake, 112, 114, 512` (Checked (files): `di01`, `di03`). t812: exactly one window
+/// opened, with 0 (no 177 / 605); Deep Jungle's slides (`tz13`) and Hollow Bastion's emblem pieces and books
+/// (`pc05`, `pc06`) read the same way.
 pub fn read_pickup(ctx: usize, start: usize, word: impl Fn(usize, usize) -> Option<u32>, sub: impl Fn(usize, usize) -> Option<usize>, plays: &[u32]) -> BoxOpen {
     let op = |w: u32| (w >> 24) as u8;
     let arg = |w: u32| w & 0xFF_FFFF;
@@ -250,6 +252,11 @@ pub fn read_pickup(ctx: usize, start: usize, word: impl Fn(usize, usize) -> Opti
                     if plays.contains(&f) || f == FN_EVENT_OFF {
                         return BoxOpen::Not(f);
                     }
+                    // (t812) A pickup opens its window with 0 only: 177 and 605 come in the scenes and the
+                    // multi-line messages (Deep Jungle's `tz13`, Hollow Bastion's `pc06`; Checked (files)).
+                    if own && (f == FN_OPEN_WINDOW_AT || f == FN_ITEM_LINE) {
+                        return BoxOpen::Not(f);
+                    }
                     if own && (f == FN_OPEN_WINDOW || f == FN_OPEN_WINDOW_AT) {
                         match last {
                             Some(p) if op(p) == CLASS_PUSH && arg(p) == WINDOW_OBTAINED => opened += 1,
@@ -270,7 +277,11 @@ pub fn read_pickup(ctx: usize, start: usize, word: impl Fn(usize, usize) -> Opti
                             }
                             woken.push((to, s));
                             let Some(at) = sub(to, s) else { return BoxOpen::Unread };
-                            todo.push((to, at, to == ctx));
+                            // (t815) Every sub-script it wakes counts as the part's own, of any context: Deep
+                            // Jungle's slides (`tz13`) have the object's touch part wake the room context's part
+                            // that holds, gives and shows the window (the owner's t812 log: "event 1's part
+                            // (context 10, sub-script 6) isn't a pickup itself").
+                            todo.push((to, at, true));
                         }
                     }
                 }
@@ -281,7 +292,9 @@ pub fn read_pickup(ctx: usize, start: usize, word: impl Fn(usize, usize) -> Opti
     }
     let gives = seen.iter().any(|f| TAIL_GIVES.contains(f));
     let held = (seen.contains(&FN_HOLD) && seen.contains(&FN_RELEASE)) || (seen.contains(&FN_LOCK) && seen.contains(&FN_UNLOCK));
-    if gives && held && opened > 0 {
+    // (t812) Exactly one window: the "Obtained" one. A part that opens several shows a message of its own
+    // (`tz13`'s Hi-Potion and Ether parts: several lines in window 7 before and after the give).
+    if gives && held && opened == 1 {
         BoxOpen::Give(total)
     } else {
         BoxOpen::Not(0)
@@ -291,7 +304,39 @@ pub fn read_pickup(ctx: usize, start: usize, word: impl Fn(usize, usize) -> Opti
 /// Event functions 113 and 114: the engine's command lock and its clear (bit 4 of `0x142867364`, which stops
 /// KH1's command input; `0x1401A9A80`, `0x1401A9AA0`), Checked (exe).
 pub const FN_LOCK: u32 = 113;
+/// Event function 605: a message line with an item (as 1, with the item's name).
+pub const FN_ITEM_LINE: u32 = 605;
 pub const FN_UNLOCK: u32 = 114;
+
+/// t815: every sub-script the part runs, of any context: (context, first instruction, end), the part's own first,
+/// then each it (or one of those) wakes.
+pub fn pickup_parts(ctx: usize, start: usize, word: impl Fn(usize, usize) -> Option<u32>, sub: impl Fn(usize, usize) -> Option<usize>) -> Vec<(usize, usize, usize)> {
+    let mut out: Vec<(usize, usize, usize)> = Vec::new();
+    let mut todo = vec![(ctx, start)];
+    while let Some((c, first)) = todo.pop() {
+        if out.iter().any(|&(oc, f, _)| oc == c && f == first) || out.len() >= FOLLOW_SUBS {
+            continue;
+        }
+        let Some(end) = sub_end(c, first, &word) else { continue };
+        out.push((c, first, end));
+        let mut last_ctx = None;
+        for i in first..end {
+            let Some(w) = word(c, i) else { break };
+            match (w >> 24) as u8 {
+                CLASS_CTX => last_ctx = Some((w & 0xFF_FFFF) as usize),
+                CLASS_WAKE => {
+                    if let Some(to) = last_ctx {
+                        if let Some(at) = sub(to, (w & 0xFF_FFFF) as usize) {
+                            todo.push((to, at));
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    out
+}
 
 /// t810: the instruction ranges (first, end) the pickup's own context runs: the sub-script starting at
 /// `start` and every sub-script of context `ctx` it (or one of those) wakes.
@@ -548,6 +593,16 @@ mod tests {
         let none = |_: usize, _: usize| None;
         assert_eq!(read_pickup(0, 0, word2, none, &plays), BoxOpen::Give(12));
         assert_eq!(read_pickup(1, 0, word2, none, &plays), BoxOpen::Not(0));
+        // (t812) Two windows opened, or a 177 / 605, isn't a pickup.
+        let mut two = ctxs2[0].clone();
+        two.insert(7, ins(CLASS_CALL, 0));
+        two.insert(7, ins(CLASS_PUSH, 7));
+        let mut at = ctxs2[0].clone();
+        at[6] = ins(CLASS_CALL, 177);
+        let ctxs4 = [two, at];
+        let word4 = |c: usize, i: usize| ctxs4.get(c).and_then(|v| v.get(i)).copied();
+        assert_eq!(read_pickup(0, 0, word4, none, &plays), BoxOpen::Not(0));
+        assert_eq!(read_pickup(1, 0, word4, none, &plays), BoxOpen::Not(177));
         // (t810) A touch part that only wakes a sub-script of its own context, which does the pickup.
         let touch = vec![
             ins(CLASS_PUSH, 0), ins(CLASS_PUSH, 6), ins(CLASS_CTX, 0), ins(CLASS_WAKE, 7), ins(CLASS_END, 0x10),
@@ -559,6 +614,18 @@ mod tests {
         let sub3 = |c: usize, s: usize| match (c, s) { (0, 6) => Some(0), (0, 7) => Some(5), _ => None };
         assert_eq!(read_pickup(0, 0, word3, sub3, &plays), BoxOpen::Give(13));
         assert_eq!(own_subs(0, 0, word3, sub3), vec![(0, 4), (5, 12)]);
+        assert_eq!(pickup_parts(0, 0, word3, sub3), vec![(0, 0, 4), (0, 5, 12)]);
+        // (t815) A touch part that wakes another context's sub-script, which does the pickup (the slides).
+        let t5 = vec![ins(CLASS_PUSH, 0), ins(CLASS_PUSH, 6), ins(CLASS_CTX, 1), ins(CLASS_WAKE, 7), ins(CLASS_END, 0x10)];
+        let p5 = vec![
+            ins(CLASS_CALL, 511), ins(CLASS_PUSH, 0xD9), ins(CLASS_PUSH, 1), ins(CLASS_CALL, 258),
+            ins(CLASS_PUSH, 7), ins(CLASS_CALL, 0), ins(CLASS_CALL, 512), ins(CLASS_END, 0x10),
+        ];
+        let ctxs5 = [t5, p5];
+        let word5 = |c: usize, i: usize| ctxs5.get(c).and_then(|v| v.get(i)).copied();
+        let sub5 = |c: usize, s: usize| match (c, s) { (0, 6) => Some(0), (1, 7) => Some(0), _ => None };
+        assert_eq!(read_pickup(0, 0, word5, sub5, &plays), BoxOpen::Give(13));
+        assert_eq!(pickup_parts(0, 0, word5, sub5), vec![(0, 0, 4), (1, 0, 7)]);
         assert_eq!(releases_after_give(0, 5, word3), (1, FN_RELEASE));
         assert_eq!(releases_after_give(0, 0, word2), (1, FN_UNLOCK));
         // A talk's window (window 0) isn't a pickup's.

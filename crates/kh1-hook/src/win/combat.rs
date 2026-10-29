@@ -2674,10 +2674,15 @@ impl Strikes {
                 if o < 0x10000 {
                     return Vec::new();
                 }
-                // As `guard_step`'s: its own place (mode 0), always live (activity 3), a pure
-                // guard (clash type 4), not spent; priority 100; no power, no reaction; the arc of
-                // the barrier's ATKP.
-                let f = (rd::<u32>(o) & !0x3 & !0xC & !0xE0000 & !0x0010_0000 & !0x200) | 0xC | (4 << 17);
+                // As `guard_step`'s: its own place (mode 0), always live (activity 3), not spent;
+                // priority 100; no power, no reaction; the arc of the barrier's ATKP. Clash type 3
+                // (t813): the one KH1's pairing table (Steam `0x140528CB8`: 1F 09 09 3F 29 18 00 00,
+                // Checked (exe)) lets meet every type 0..5, where t796's pure guard (4) met only
+                // 0, 3 and 5 (the testers' logs had enemy attacks of types 0, 1, 2, 4 and 6). Type 3
+                // also meets bodies in KH1's test (`0x1402B3BE0`); `bodyhits::guard_entries` holds
+                // its result word at "clashed" every pass so that test skips it (Checked (decomp)).
+                // No one-hit bit (0x80): with it, an attack holding a result meets nothing.
+                let f = (rd::<u32>(o) & !0x3 & !0xC & !0xE0000 & !0x0010_0000 & !0x200 & !0x80) | 0xC | (3 << 17);
                 wr(o, f);
                 wr(o + 0x68, GUARD_PRIORITY);
                 wr(o + 0x2C, 0i32);

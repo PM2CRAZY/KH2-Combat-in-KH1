@@ -216,6 +216,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [11. Assistant: t624: Finishing Plus now works after a finisher cast. Drive ](../testers/kh2-magic-and-reflect-native/kh2-magic-and-reflect-native.md#^m11)
   - [12. Assistant: From the What is still missing(../what-is-still-missing-for-](../testers/kh2-magic-and-reflect-native/kh2-magic-and-reflect-native.md#^m12)
   - [13. Assistant: t796 to t800. Both answers are done, one system per version.](../testers/kh2-magic-and-reflect-native/kh2-magic-and-reflect-native.md#^m13)
+  - [14. Assistant: t813 and t814. A correction to t796: the barrier was letting](../testers/kh2-magic-and-reflect-native/kh2-magic-and-reflect-native.md#^m14)
 - [KH2 MP and MP Charge](../testers/kh2-mp-and-mp-charge/kh2-mp-and-mp-charge.md)
   - [1. Assistant: Started from What is still missing(../what-is-still-missing-](../testers/kh2-mp-and-mp-charge/kh2-mp-and-mp-charge.md#^m1)
 - [KH2 player model through KH1's model system](../testers/kh2-player-model-through-kh1s-model-system/kh2-player-model-through-kh1s-model-system.md)

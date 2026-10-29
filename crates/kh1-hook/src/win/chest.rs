@@ -65,7 +65,7 @@
 use super::addr::Build;
 use super::{hook, log};
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicU8, AtomicUsize, Ordering};
-use crate::kh1script::{own_subs, read_box, read_pickup, releases_after_give, BoxOpen, FN_ADD_ITEM, FN_GIVE_REWARD, FN_RELEASE};
+use crate::kh1script::{pickup_parts, read_box, read_pickup, releases_after_give, BoxOpen, FN_ADD_ITEM, FN_GIVE_REWARD, FN_RELEASE};
 use std::sync::{Mutex, OnceLock};
 use std::time::Instant;
 
@@ -139,7 +139,9 @@ static PICKUP_LEFT: AtomicU64 = AtomicU64::new(0);
 const PICKUP_AFTER_MS: u64 = 500;
 /// (t810) The instruction ranges of the pickup's own context (`kh1script::own_subs`: the part and the
 /// sub-scripts of its context it wakes).
-static PICKUP_RANGES: Mutex<Vec<(usize, usize)>> = Mutex::new(Vec::new());
+/// (t815) Every context the part runs in, by address, with the range of each sub-script it runs there
+/// (`kh1script::pickup_parts`): the slides' part runs in the room context their touch wakes.
+static PICKUP_RANGES: Mutex<Vec<(usize, usize, usize)>> = Mutex::new(Vec::new());
 /// (t810) A polled pickup: the touch only sets a flag, and the context's running sub-script (its main loop)
 /// does the pickup when it sees it (the rope in `di01`: its touch part, sub-script 6, sets local 0 and calls
 /// 26; sub-script 1, a loop, holds, gives and shows the window when local 0 is 1; Checked (files + the t809
@@ -577,7 +579,7 @@ unsafe extern "system" fn event(id: i32, ev: i32, arg: usize) {
     BOX_CTXS.store(list, Ordering::Relaxed);
     BOX_COUNT.store(count_at, Ordering::Relaxed);
     PICKUP_CTX.store(ctx, Ordering::Relaxed);
-    let ranges = own_subs(c, if polled { first } else { start as usize }, word, sub);
+    let ranges: Vec<(usize, usize, usize)> = pickup_parts(c, if polled { first } else { start as usize }, word, sub).into_iter().map(|(pc, f, e)| (list + pc * CTX_SIZE, f, e)).collect();
     if let Ok(mut r) = PICKUP_RANGES.lock() {
         *r = ranges.clone();
     }
@@ -1144,8 +1146,16 @@ unsafe fn pickup_over() -> bool {
         }
         return left != 0 && ms() + 1 - left > PICKUP_AFTER_MS;
     }
-    let pc = rd::<i32>(ctx + CTX_PC);
-    let inside = pc >= 0 && PICKUP_RANGES.lock().map(|r| r.iter().any(|&(f, e)| (f..=e).contains(&(pc as usize)))).unwrap_or(false);
+    // (t815) Inside while any of the part's contexts is in one of its sub-scripts.
+    let inside = PICKUP_RANGES
+        .lock()
+        .map(|r| {
+            r.iter().any(|&(c, f, e)| {
+                let pc = rd::<i32>(c + CTX_PC);
+                pc >= 0 && (f..=e).contains(&(pc as usize))
+            })
+        })
+        .unwrap_or(false);
     if inside {
         PICKUP_LEFT.store(0, Ordering::Relaxed);
         return false;
@@ -1155,6 +1165,11 @@ unsafe fn pickup_over() -> bool {
         return false;
     }
     ms() + 1 - left > PICKUP_AFTER_MS
+}
+
+/// (t815) `ctx` is one the pickup's part runs in (its own, or one it woke).
+fn pickup_ctx(ctx: usize) -> bool {
+    ctx == PICKUP_CTX.load(Ordering::Relaxed) || PICKUP_RANGES.lock().map(|r| r.iter().any(|&(c, _, _)| c == ctx)).unwrap_or(false)
 }
 
 /// The open in progress is still wanted: a chest's or a box's on Quick / Skip, a pickup's on Item
@@ -1259,7 +1274,7 @@ unsafe extern "system" fn script_call(ctx: usize, n: i32) -> u64 {
     // skip-mode way too: their arguments popped, 2 returned (Checked (exe): 2 and 107 pop 1, 3 and 4 pop 3, 5, 6,
     // 80 and 83 pop 2, 365 pops 4; each returns 2, 107 returns 4 while it waits). So the part neither waits on
     // nor closes nor moves the in-game skip's box.
-    if picked && ctx == PICKUP_CTX.load(Ordering::Relaxed) {
+    if picked && pickup_ctx(ctx) {
         if let Some(&(_, pops)) = PICKUP_WINDOW_FNS.iter().find(|&&(f, _)| f == n) {
             let sp = rd::<i32>(ctx + CTX_SP);
             // The window is the call's first argument (the deepest of its values).
@@ -1286,7 +1301,7 @@ unsafe extern "system" fn script_call(ctx: usize, n: i32) -> u64 {
     if boxed && (n as u32 == FN_ADD_ITEM || n as u32 == FN_GIVE_REWARD) {
         let line = box_notice(base, ctx, n as u32);
         // (t806) A pickup's give shows in the in-game skip's "Obtained" window (its own window is skipped).
-        if picked && ctx == PICKUP_CTX.load(Ordering::Relaxed) {
+        if picked && pickup_ctx(ctx) {
             PICKUP_GIVEN.store(true, Ordering::Relaxed);
             if let Some(line) = line {
                 super::ingameskip::queue_obtained(line);
@@ -1333,7 +1348,7 @@ unsafe extern "system" fn script_call(ctx: usize, n: i32) -> u64 {
     }
     if HOLD_FNS.contains(&n) {
         // (t795) A pickup's holds are skipped only from its own context: the room's other contexts keep theirs.
-        if picked && ctx != PICKUP_CTX.load(Ordering::Relaxed) {
+        if picked && !pickup_ctx(ctx) {
             return orig(ctx, n);
         }
         // (t810) A polled pickup's give-backs after its give count down to its end.
@@ -1436,7 +1451,7 @@ unsafe fn call(ctx: usize, which: usize) -> u64 {
     // shown: Checked (decomp), 0 and 177 pop 1, 1 and 605 pop 2, and return 2), its waits on the window (107)
     // pass and its close (2) closes nothing, as in KH1's skip mode. What it gave shows in the in-game skip's
     // "Obtained" window instead (`script_call`).
-    if MODE.load(Ordering::Relaxed) == MODE_PICKUP && ctx == PICKUP_CTX.load(Ordering::Relaxed) && ours_to_skip(ctx) {
+    if MODE.load(Ordering::Relaxed) == MODE_PICKUP && pickup_ctx(ctx) && ours_to_skip(ctx) {
         let pops = MESSAGE_FNS[which].2;
         let sp = rd::<i32>(ctx + CTX_SP);
         std::ptr::write_unaligned((ctx + CTX_SP) as *mut i32, (sp - pops).max(0));

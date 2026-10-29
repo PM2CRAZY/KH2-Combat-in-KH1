@@ -17,6 +17,7 @@
 - [11. Assistant: t624: Finishing Plus now works after a finisher cast. Drive ](#^m11)
 - [12. Assistant: From the What is still missing(../what-is-still-missing-for-](#^m12)
 - [13. Assistant: t796 to t800. Both answers are done, one system per version.](#^m13)
+- [14. Assistant: t813 and t814. A correction to t796: the barrier was letting](#^m14)
 
 ---
 
@@ -400,4 +401,25 @@ go ahead
 > Notes: `docs/kh1-magic-native.md` §8 and `docs/kh1-reflect-spell.md` "The barrier as a KH1 guard object".
 
 ^m13
+
+
+> [!tip] Assistant
+> **t813 and t814.** A correction to t796: the barrier was letting some enemy attacks straight through. It now meets every kind.
+>
+> - **What was wrong:** KH1 only lets certain kinds of attack meet each other (a pairing table in the exe). The guard kind I gave the barrier in t796 meets only 3 of KH1's 8 kinds. In the testers' old logs, 46 of 203 enemy attacks near Sora were of other kinds (melee of kinds 1, 2 and 4, and shots of kind 6). Those went through the barrier without being counted or stopped. KH2's barrier meets every enemy attack.
+> - **t813:** the barrier is now the guard kind that meets kinds 0 to 5. That kind would also strike enemies' bodies in KH1, so each frame the barrier is marked as having already clashed, which KH1's body test skips. The barrier never hits a body.
+> - **t814:** kinds 6 and 7 meet nothing in KH1, not even KH1's own guards. Those enemy attacks are now tested against the barrier with KH1's own overlap test in the same pass, and one that touches goes through KH1's meeting like any other: a shot is stopped, melee bounces, and it counts.
+>
+> **How I checked it:** the pairing table is read from the exe. KH1's entry test, attack pass, meeting and clash half are from the Steam KH1 decomp. The attack kinds are from the "enemy attack near Sora" lines in the testers' logs. Not checked in game. One assumption: KH1's pass drops a body-striking attack while its carrier is "switched off". If Sora ever is, the barrier would meet nothing for that time. I don't yet know which of Sora's states do that.
+>
+> Please test:
+> 1. Reflect against as many different enemies as you can, melee and ranged: every attack that touches the barrier should be stopped and counted.
+> 2. Enemies standing inside the barrier: they shouldn't take any hit or flinch from the barrier itself.
+> 3. Log lines: "Reflect barrier (KH1 guard object) ...", and "Reflect barrier: enemy attack ... of clash type 6" (or 7) for the kinds KH1 meets with nothing.
+>
+> Still open on my side (no answer needed): Reflect into Reflect. When you recast, the second cast can't find the first cast's barrier to end it, so you get two barriers and two counters. I found the cause and have a fix ready to post when it's wanted.
+>
+> Notes: `docs/kh1-reflect-spell.md` "Every enemy attack type meets the barrier".
+
+^m14
 
