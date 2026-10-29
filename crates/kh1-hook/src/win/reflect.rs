@@ -87,6 +87,8 @@ const WAIT_S: f32 = 5.0;
 /// Sora in the spell scripts' world; enemies are `FOE0 + i`.
 pub(super) const SORA: ObjId = 1;
 pub(super) const FOE0: ObjId = 100;
+/// Donald and Goofy (KH1's party slots 1 and 2) in the scripts' world: `PARTY0 + slot` (t822).
+pub(super) const PARTY0: ObjId = 50;
 /// Spell attacks' keys in the hit records (apart from KH2's swing ids).
 const SPELL_KEY: u64 = 1 << 60;
 
@@ -849,13 +851,13 @@ unsafe fn cast_voice(actor: usize, level: u8, finisher: bool) {
 /// frame of base Sora's while `busy`): `out` the slot's KH2 motion at KH1's time in it and KH1's
 /// facing; the script as KH2's controller's casts run it (`step`), and Sora out of reach of KH1's
 /// hits through the cast and barrier (`intangible`), as `after_step` has it.
-pub unsafe fn native_step(actor: usize, out: &Output, airborne: bool, strikes: &mut combat::Strikes, battle: &Battle, lock: Option<u32>) {
+pub unsafe fn native_step(actor: usize, out: &Output, airborne: bool, strikes: &mut combat::Strikes, battle: &Arc<Battle>, lock: Option<u32>) {
     step(actor, out, airborne, strikes, battle, lock);
     // Behind the barrier only: KH2's Reflect casts (71 / 72 / 73) have no invulnerable range
     // (range id 27, Checked (files)), so before the barrier stands and after it falls he can be
     // hit, as in KH2 (t572; main's s179 kept him out of reach all through the cast).
     let reflecting = BARRIER.load(Ordering::Relaxed);
-    intangible(actor, reflecting);
+    intangible(actor, reflecting | star_tick());
 }
 
 /// Something of a Reflect's still runs or plays.
@@ -1045,23 +1047,103 @@ fn runtime(g: &mut Option<Runtime>) -> Option<&mut Runtime> {
     g.as_mut()
 }
 
-/// The world as the spell script sees it this frame (y up).
+/// An object of the spell scripts' world: a KH1 actor, read from KH1 when a script asks (t817).
 pub(super) struct Obj {
     pub(super) id: ObjId,
-    pub(super) pos: Vec3,
-    pub(super) facing: f32,
+    /// Its KH1 actor.
+    pub(super) actor: usize,
+    /// The KH2 motion the scripts see it in this frame: Sora's our step's (KH2's controller's, or
+    /// the KH2 motion KH1 plays in our slot, `kh2slots::now_playing`), with a cast KH1 hasn't
+    /// started playing yet seen as playing (`formmagic::shots_step`); an enemy's 0.
     pub(super) motion: u16,
+    /// In the air as our step saw it: Sora's while KH2's controller has him (KH1's state field
+    /// `+0x70` isn't his air state then; `takeover` sets it only around its own moves).
     pub(super) air: bool,
-    pub(super) target: Vec3,
-    pub(super) centre: Vec3,
 }
 
-/// (Also Wisdom Form's shots', `form`.)
+/// The spell scripts' world (also Wisdom Form's shots', `form`): KH1's own actors, each call read
+/// from KH1 at the time the script makes it (KH1's script machine runs them after the actors'
+/// update and the collision pass, `kh2script`). Sora (`SORA`) and the enemies near him (`FOE0 +
+/// i`, from `strikes`' look). (Until t816 a copy made at our step, moved along with Sora's position.)
 pub(super) struct KhWorld {
     pub(super) objs: Vec<Obj>,
-    pub(super) target: Option<ObjId>,
-    pub(super) floor: f32,
+    /// Sora's target when KH1 has no lock (Wisdom's unlocked shots, `formmagic::auto_target`).
+    pub(super) auto: Option<ObjId>,
     pub(super) rng: u32,
+    /// Where the scripts' attacks become KH1 attack objects (t819), if anywhere.
+    pub(super) sink: Option<Sink>,
+}
+
+/// How a runtime's spell attacks become KH1 attack objects, made and moved by the scripts' own
+/// calls (`KhWorld::attack_set`, t819): its ATKP rows and how it turns an attack into one.
+pub(super) struct Sink {
+    pub(super) battle: Arc<Battle>,
+    pub(super) kind: SinkKind,
+}
+
+pub(super) enum SinkKind {
+    /// Reflect's: each spell's level (by spell index), and whether its barrier is hidden now (the
+    /// combo waits for it: it stands nowhere, stops nothing).
+    Reflect(Vec<u8>, bool),
+    /// The KH2 spells' and Wisdom's (`formmagic`): each spell's effect package.
+    Form(HashMap<usize, u8>),
+}
+
+impl Sink {
+    /// The attack as KH1 strikes with it, with its key, or `None` (not one that strikes).
+    unsafe fn attack(&self, a: &kh2_magic::MagicAttack) -> Option<combat::SpellAttack> {
+        match &self.kind {
+            SinkKind::Reflect(levels, _) => counter_attack(a, &self.battle, levels),
+            SinkKind::Form(package) => super::formmagic::spell_attack(takeover::sora_actor(), a, &self.battle, package),
+        }
+    }
+
+    /// An effect its script starts now (t820): its KH1 effect instance started at once, with its
+    /// sound, as the step used to at its next frame. `None`: not drawn.
+    unsafe fn effect_start(&self, e: &kh2_magic::Effect) -> Option<u32> {
+        if !e.alive() {
+            return None;
+        }
+        match &self.kind {
+            SinkKind::Reflect(levels, _) => {
+                let level = levels.get(e.spell).copied().unwrap_or(1);
+                let h = super::kh2fx::spell_start(level, e.element.id);
+                super::kh2sound::spell_element(level, e.element.id);
+                note(|| format!("Reflect effect: level {level} element {} (sound {}){}", e.element.id, e.element.sound, if h.is_some() { "" } else { ", not drawn" }));
+                h
+            }
+            SinkKind::Form(package) => {
+                let package = package.get(&e.spell).copied().unwrap_or(super::kh2fx::WISDOM);
+                let h = super::kh2fx::spell_start(package, e.element.id);
+                if let (Some(h), None) = (h, e.owner) {
+                    super::kh2fx::spell_place(h, super::formmagic::place(e.pos, e.dir));
+                }
+                super::kh2sound::spell_element(package, e.element.id);
+                h
+            }
+        }
+    }
+
+    fn key(&self, a: &kh2_magic::MagicAttack) -> u64 {
+        match &self.kind {
+            SinkKind::Reflect(..) => a.id | SPELL_KEY,
+            SinkKind::Form(_) => super::formmagic::attack_key(a),
+        }
+    }
+}
+
+/// A Reflect attack that strikes KH1's enemies (its counter and burst; not the barrier, kind 3):
+/// each with its own row, as in KH2 (t572).
+pub(super) fn counter_attack(a: &kh2_magic::MagicAttack, battle: &Battle, levels: &[u8]) -> Option<combat::SpellAttack> {
+    if a.freed || a.owner != SORA {
+        return None;
+    }
+    let first = row(battle, a.atk, a.sub, 0)?;
+    let shapes = a.shapes();
+    if shapes.is_empty() || first.kind == 3 {
+        return None;
+    }
+    Some(combat::SpellAttack { kh1_data: None, package: Some(levels.get(a.spell).copied().unwrap_or(1)), key: a.id | SPELL_KEY, group: if first.combo_group != 0 { first.combo_group as i64 } else { a.group }, atk: a.atk, sub: a.sub, shapes })
 }
 
 /// The barrier's shapes (ATKP 573, the script's own, KH2 Sora's size) at KH1 Sora's size: their
@@ -1085,27 +1167,52 @@ pub(super) unsafe fn kh1_sized_shapes(actor: usize, mut shapes: Vec<combat_core:
     shapes
 }
 
-/// The world as the scripts see it this frame: Sora (`SORA`) and the enemies near him
-/// (`FOE0 + i`, from `strikes`' look), the lock's one as Sora's target.
-pub(super) unsafe fn world_now(actor: usize, out: &Output, airborne: bool, strikes: &combat::Strikes, lock: Option<u32>, seed: u32) -> KhWorld {
-    let p = rd::<[f32; 3]>(actor + 0x10);
-    let pos = Vec3::new(p[0], -p[1], p[2]);
-    // Sora's body centre: KH2's hips (bone 0) as drawn, else 90 up.
-    let centre = pose::kh2_pose(|b, w| b.first().map(|h| (flip() * *w).transform_point3(h.w_axis.truncate()))).flatten().unwrap_or(pos + Vec3::Y * 90.0);
-    let mut objs = vec![Obj { id: SORA, pos, facing: out.facing, motion: out.motion, air: airborne, target: centre, centre }];
-    let targets = strikes.targets();
-    for (i, (_, feet, aim)) in targets.iter().enumerate() {
-        objs.push(Obj { id: FOE0 + i as u32, pos: Vec3::from(*feet), facing: 0.0, motion: 0, air: false, target: Vec3::from(*aim), centre: Vec3::from(*aim) });
+/// The world as the scripts see it: Sora (`SORA`) and the enemies near him (`FOE0 + i`, from
+/// `strikes`' look); everything else is read from KH1 when a script asks.
+pub(super) unsafe fn world_now(actor: usize, out: &Output, airborne: bool, strikes: &combat::Strikes, _lock: Option<u32>, seed: u32) -> KhWorld {
+    let mut objs = vec![Obj { id: SORA, actor, motion: out.motion, air: airborne }];
+    // KH1's party (slots 1 and 2, `PARTY_STEAM`): the scripts' party members (Cure's circle, t822).
+    let base = takeover::game_base();
+    for slot in 1..3usize {
+        let a = if base != 0 { rd::<u64>(base + PARTY_STEAM + slot * 8) as usize } else { 0 };
+        if a > 0x10000 && a != actor {
+            objs.push(Obj { id: PARTY0 + slot as u32, actor: a, motion: 0, air: false });
+        }
     }
-    let target = lock.and_then(|l| targets.iter().position(|t| t.0 == l)).map(|i| FOE0 + i as u32);
-    let floor = -rd::<f32>(actor + 0x324);
-    KhWorld { objs, target, floor, rng: seed }
+    for (i, a) in strikes.target_actors().into_iter().enumerate() {
+        objs.push(Obj { id: FOE0 + i as u32, actor: a, motion: 0, air: false });
+    }
+    KhWorld { objs, auto: None, rng: seed, sink: None }
 }
 
 impl KhWorld {
     fn get(&self, o: ObjId) -> Option<&Obj> {
         self.objs.iter().find(|x| x.id == o)
     }
+
+    fn actor(&self, o: ObjId) -> Option<usize> {
+        self.get(o).map(|x| x.actor).filter(|a| *a > 0x10000)
+    }
+
+    /// The object KH1 has as `actor`.
+    fn of_actor(&self, actor: usize) -> Option<ObjId> {
+        self.objs.iter().find(|x| x.actor == actor).map(|x| x.id)
+    }
+
+    /// The KH1 actor of one of ours.
+    pub(super) fn actor_of(&self, o: ObjId) -> Option<usize> {
+        self.actor(o)
+    }
+
+    /// KH1's lock-on target as one of ours, if KH1 has one (read now).
+    pub(super) fn locked(&self) -> Option<ObjId> {
+        unsafe { takeover::kh1_locked() }.and_then(|(a, _)| self.of_actor(a))
+    }
+}
+
+/// KH1's world (y down) <-> the scripts' (y up).
+fn up(p: [f32; 3]) -> Vec3 {
+    Vec3::new(p[0], -p[1], p[2])
 }
 
 /// y up <-> KH1's y down.
@@ -1113,63 +1220,225 @@ pub(super) fn flip() -> Mat4 {
     Mat4::from_scale(Vec3::new(1.0, -1.0, 1.0))
 }
 
+/// KH1's alive test (`0x140291FF0`, Checked (decomp)): `+0x374` bit 0 set, bit 1 clear.
+unsafe fn kh1_alive(actor: usize) -> bool {
+    actor > 0x10000 && rd::<u32>(actor + 0x374) & 3 == 1
+}
+
+/// KH1's floor ray (`0x1401910E0 (query, 0)`, as `feet` uses it: the query's start `+0`, length
+/// down `+0x14`; out: the face `+0x30` (-1 none), the floor's height `+0x24`): the floor under a
+/// point of the scripts' world (y up) within `depth` below it, its height (y up).
+const FLOOR_RAY_RVA: Rva = Rva(0x1910E0);
+
+unsafe fn kh1_floor(from: Vec3, depth: f32) -> Option<f32> {
+    let base = takeover::game_base();
+    if base == 0 || !from.is_finite() || !(depth.is_finite() && depth > 0.0) {
+        return None;
+    }
+    // (From a unit above the point, so a floor right at it is found.)
+    let mut q = [0u8; 0x48];
+    let p = q.as_mut_ptr() as usize;
+    std::ptr::write_unaligned(p as *mut [f32; 3], [from.x, -from.y - 1.0, from.z]);
+    std::ptr::write_unaligned((p + 0xC) as *mut f32, 1.0);
+    std::ptr::write_unaligned((p + 0x14) as *mut f32, depth.min(5000.0) + 1.0);
+    std::ptr::write_unaligned((p + 0x1C) as *mut f32, 1.0);
+    std::ptr::write_unaligned((p + 0x30) as *mut i16, -1);
+    let ray: unsafe extern "system" fn(usize, u32) = std::mem::transmute(base + FLOOR_RAY_RVA);
+    ray(p, 0);
+    if rd::<i16>(p + 0x30) == -1 {
+        return None;
+    }
+    let y = rd::<f32>(p + 0x24);
+    y.is_finite().then_some(-y)
+}
+
+/// KH1's party table (Steam `0x142D37280`, three actors; Checked (decomp): KH1's per-frame
+/// ability pass `0x1402A6380` walks it).
+const PARTY_STEAM: usize = 0x2D37280;
+/// KH2's Leaf Bracer (ability 114, Checked (files): `03system` item 0x192) and KH1's (62).
+const KH2_LEAF_BRACER: u32 = 114;
+const KH1_LEAF_BRACER: i32 = 62;
+
 impl World for KhWorld {
     fn exists(&self, o: ObjId) -> bool {
-        self.get(o).is_some()
+        self.actor(o).is_some_and(|a| unsafe { kh1_alive(a) })
     }
     fn pos(&self, o: ObjId) -> Vec3 {
-        self.get(o).map_or(Vec3::ZERO, |x| x.pos)
+        self.actor(o).map_or(Vec3::ZERO, |a| up(unsafe { rd::<[f32; 3]>(a + 0x10) }))
     }
     fn facing(&self, o: ObjId) -> f32 {
-        self.get(o).map_or(0.0, |x| x.facing)
+        // (KH1's yaw; KH2's controller writes its facing there each step, `takeover`.)
+        self.actor(o).map_or(0.0, |a| unsafe { rd::<f32>(a + 0x3C) })
     }
     fn motion(&self, o: ObjId) -> u16 {
         self.get(o).map_or(0, |x| x.motion)
     }
     fn airborne(&self, o: ObjId) -> bool {
-        self.get(o).is_some_and(|x| x.air)
+        // (Sora under KH2's controller: its air state, as our step saw it this frame.)
+        if o == SORA && takeover::kh2_has() {
+            return self.get(o).is_some_and(|x| x.air);
+        }
+        // (KH1's air states: 1 jump, 2 fall, 8 flight.)
+        self.actor(o).is_some_and(|a| matches!(unsafe { rd::<i32>(a + 0x70) }, 1 | 2 | 8))
     }
     fn jumping(&self, o: ObjId) -> bool {
-        self.get(o).is_some_and(|x| x.air)
+        self.airborne(o)
     }
     fn bone(&self, o: ObjId, code: u16) -> Option<Mat4> {
-        let x = self.get(o)?;
-        let frame = |at: Vec3| Mat4::from_rotation_translation(Quat::from_rotation_y(x.facing), at);
+        let a = self.actor(o)?;
+        let frame = |at: Vec3| Mat4::from_rotation_translation(Quat::from_rotation_y(self.facing(o)), at);
+        let centre = || unsafe { takeover::kh1_bone_point(a, 0x8003, 1.0) }.map(up).unwrap_or_else(|| self.pos(o) + Vec3::Y * 90.0);
         Some(match code {
-            0x4000 => frame(x.pos),
-            0x4001 => frame(x.centre),
-            0x4009 => frame(x.target),
-            // Sora's model and bones: KH2's pose as drawn (model -> KH1's world), y flipped.
-            0x4002 if o == SORA => pose::kh2_pose(|_, w| flip() * *w).unwrap_or_else(|| frame(x.pos)),
-            0x4003..=0x4008 if o == SORA => pose::kh2_pose(|p, w| p.get(178).map(|h| flip() * *w * *h)).flatten().unwrap_or_else(|| frame(x.centre)),
-            c if c < 0x4000 && o == SORA => pose::kh2_pose(|p, w| p.get(c as usize).map(|b| flip() * *w * *b)).flatten().unwrap_or_else(|| frame(x.centre)),
-            _ => frame(x.centre),
+            0x4000 => frame(self.pos(o)),
+            0x4001 => frame(centre()),
+            0x4009 => frame(self.target_point(o)),
+            _ if o == SORA => bones::sora(a, code).unwrap_or_else(|| frame(centre())),
+            _ => frame(centre()),
         })
     }
     fn target_point(&self, o: ObjId) -> Vec3 {
-        self.get(o).map_or(Vec3::ZERO, |x| x.target)
+        let Some(a) = self.actor(o) else { return Vec3::ZERO };
+        // KH1's lock point: the one KH1's lock is on for the locked actor, its first for others.
+        let part = unsafe { takeover::kh1_locked() }.filter(|l| l.0 == a).map_or(0, |l| l.1);
+        let p = if o == SORA { unsafe { takeover::kh1_bone_point(a, 0x8003, 1.0) } } else { unsafe { takeover::kh1_lock_point(a, part) } };
+        p.map(up).unwrap_or_else(|| self.pos(o) + Vec3::Y * 90.0)
     }
     fn target_of(&self, o: ObjId) -> Option<ObjId> {
         if o == SORA {
-            self.target
+            match unsafe { takeover::kh1_locked() } {
+                Some((a, _)) => self.of_actor(a),
+                None => self.auto,
+            }
+        } else if (PARTY0..FOE0).contains(&o) {
+            // (A party member's target: Sora's, as KH1's party fights his.)
+            self.target_of(SORA)
         } else {
             Some(SORA)
         }
     }
     fn party(&self, n: u32) -> Option<ObjId> {
-        (n == 0).then_some(SORA)
+        // (KH1's party slot `n`: Sora, Donald, Goofy, as they stand in KH1's table now.)
+        let base = takeover::game_base();
+        let a = if base != 0 && n < 3 { unsafe { rd::<u64>(base + PARTY_STEAM + n as usize * 8) as usize } } else { 0 };
+        if a > 0x10000 {
+            self.of_actor(a)
+        } else {
+            (n == 0).then_some(SORA)
+        }
     }
-    fn has_ability(&self, _: ObjId, _: u32) -> bool {
-        false
+    fn has_ability(&self, o: ObjId, n: u32) -> bool {
+        let Some(a) = self.actor(o) else { return false };
+        let kh1 = match n {
+            KH2_LEAF_BRACER => KH1_LEAF_BRACER,
+            _ => {
+                note(|| format!("spell script asked for KH2 ability {n}: no KH1 ability for it"));
+                return false;
+            }
+        };
+        // The actor's party member (`+0x130`'s record `+0x4C`, as KH1's ability pass reads it).
+        let rec = pose::ptr(unsafe { rd::<u32>(a + 0x130) });
+        let member = if rec > 0x10000 { unsafe { rd::<u16>(rec + 0x4C) as i32 } } else { 0 };
+        unsafe { takeover::kh1_ability(kh1, member) > 0 }
     }
     fn ground(&self, from: Vec3, depth: f32) -> Option<Vec3> {
-        (from.y >= self.floor && from.y - depth <= self.floor).then(|| Vec3::new(from.x, self.floor, from.z))
+        // KH1's floor ray down from the point (t823; until t822 Sora's own floor height).
+        let y = unsafe { kh1_floor(from, depth) }?;
+        Some(Vec3::new(from.x, y, from.z))
+    }
+    fn attack_hit_bg(&self, a: &kh2_magic::MagicAttack) -> bool {
+        // Its last move through the map's walls: KH1's background ray, the one KH1's own attacks
+        // use (`combat::wall_between`, t823).
+        match (a.prev, a.pos) {
+            (Some(p), Some(q)) if p.distance(q) > 0.5 => unsafe { combat::wall_between([p.x, -p.y, p.z], [q.x, -q.y, q.z]).is_some() },
+            _ => false,
+        }
     }
     fn bg_hit(&self, _: Vec3, _: Vec3) -> bool {
         false
     }
-    fn hitback(&mut self, o: ObjId, _: Vec3, dist: f32) {
-        note(|| format!("Reflect: script pushed object {o} by {dist:.0} (not applied)"));
+    fn hitback(&mut self, o: ObjId, dir: Vec3, dist: f32) {
+        // Sora on KH1's own push, KH2's numbers in it (`hitreact::script_push`, t821).
+        let applied = o == SORA && self.actor(SORA).is_some_and(|a| unsafe { super::hitreact::script_push(a, [dir.x, -dir.y, dir.z], dist) });
+        note(|| format!("spell script pushed object {o} by {dist:.0}{}", if applied { " (KH1's push, KH2's curve)" } else { " (not applied: not Sora on KH1's states)" }));
+    }
+    fn attack_set(&mut self, a: &kh2_magic::MagicAttack) {
+        let Some(sink) = &self.sink else { return };
+        let sora = self.actor(SORA).unwrap_or(0);
+        // Reflect's barrier (its row's kind 3): its KH1 guard object placed by the call (t825),
+        // at KH1 Sora's size, unless the combo has it hidden.
+        if let SinkKind::Reflect(_, hidden) = &sink.kind {
+            let first = row(&sink.battle, a.atk, a.sub, 0);
+            if let Some(first) = first.filter(|r| r.kind == 3) {
+                if !*hidden && !a.freed && a.owner == SORA && combat::barrier_native() && sora > 0x10000 {
+                    let shapes = unsafe { kh1_sized_shapes(sora, a.shapes()) };
+                    let (key, range, angle) = (a.id | SPELL_KEY, first.reflect_range, first.reflect_angle);
+                    takeover::with_strikes(|s| unsafe { s.barrier_place(sora, key, &shapes, range, angle) });
+                }
+                return;
+            }
+        }
+        if !super::bodyhits::spells_native() {
+            return;
+        }
+        if let Some(sa) = unsafe { sink.attack(a) } {
+            let battle = &sink.battle;
+            unsafe { super::bodyhits::spell_place(sora, &sa, &|atk, sub, count| row(battle, atk, sub, count).cloned()) };
+        }
+    }
+    fn attack_free(&mut self, a: &kh2_magic::MagicAttack) {
+        if let (Some(sink), true) = (&self.sink, a.owns_id) {
+            unsafe { super::bodyhits::spell_forget(sink.key(a)) };
+            // (A barrier's guard object too, t825.)
+            if matches!(sink.kind, SinkKind::Reflect(..)) {
+                unsafe { combat::barrier_free(sink.key(a)) };
+            }
+        }
+    }
+    fn effect_start(&mut self, e: &kh2_magic::Effect) -> Option<u32> {
+        let sink = self.sink.as_ref()?;
+        Some(unsafe { sink.effect_start(e) }.unwrap_or(0))
+    }
+    fn effect_kill(&mut self, e: &kh2_magic::Effect) {
+        if let Some(h) = e.host.filter(|h| *h != 0) {
+            super::kh2fx::spell_kill(h);
+        }
+    }
+    fn effect_end(&mut self, e: &kh2_magic::Effect) -> bool {
+        // (Its instance's loop ended by the call, t826; none drawn: nothing to end.)
+        match e.host {
+            Some(0) => true,
+            Some(h) => {
+                super::kh2fx::spell_end(h);
+                true
+            }
+            None => false,
+        }
+    }
+    fn effect_fade(&mut self, e: &kh2_magic::Effect, frames: f32) -> bool {
+        // (Its fade run on its instance by the effect tick, t826.)
+        match e.host {
+            Some(0) => true,
+            Some(h) => {
+                super::kh2fx::spell_fade(h, frames);
+                true
+            }
+            None => false,
+        }
+    }
+    fn effect_place(&mut self, e: &kh2_magic::Effect) {
+        // (An unbound one put where the script has it, at the call, t826.)
+        if let (Some(h), None) = (e.host.filter(|h| *h != 0), e.owner) {
+            super::kh2fx::spell_place(h, super::formmagic::place(e.pos, e.dir));
+        }
+    }
+    fn attack_hit(&self, a: &kh2_magic::MagicAttack) -> bool {
+        self.sink.as_ref().is_some_and(|sink| super::bodyhits::spell_hit(sink.key(a)))
+    }
+    fn star(&mut self, o: ObjId, frames: f32) {
+        if o == SORA {
+            star(frames);
+            note(|| format!("spell script: Sora out of reach for {frames:.0} frames (KH2's star, Leaf Bracer)"));
+        }
     }
     fn random(&mut self) -> f32 {
         self.rng ^= self.rng << 13;
@@ -1179,15 +1448,84 @@ impl World for KhWorld {
     }
 }
 
+/// Sora's bones for the scripts (KH2 bone codes) on KH1's skeleton as KH1 posed him this frame
+/// (t818). The codes the five spells use (Checked (files): their PAX elements' bones and Cure's
+/// `trap_obj_apply_bone_matrix`): 0, 0x4000 (the object), 0x4001 (its body), 0x4003 / 0x4004 (the
+/// weapon) and 0x4009 (its target point); the last three are `KhWorld::bone`'s.
+mod bones {
+    use super::*;
+
+    /// KH2's bone `code` of Sora (`a`, KH1's actor) on KH1's skeleton, y up.
+    pub(super) fn sora(a: usize, code: u16) -> Option<Mat4> {
+        let facing = Quat::from_rotation_y(unsafe { rd::<f32>(a + 0x3C) });
+        match code {
+            // The weapon: KH1's Keyblade tip (KH1's point along bone 0x30 at 1, its blade's end
+            // for the Keyblade he holds), turned as he faces.
+            0x4003 | 0x4004 => unsafe { takeover::kh1_bone_point(a, 0x30, 1.0) }.map(|p| Mat4::from_rotation_translation(facing, up(p))),
+            // KH2's bone 0, his hips: KH1's bone 0, his hips too (Checked (code): both bind poses'
+            // bone 0 are the hips `Retarget::hip_ratio` measures), its matrix as KH1 drew it.
+            0 => unsafe { kh1_bone(a, 0) }.map(|m| flip() * m),
+            _ => None,
+        }
+    }
+
+    /// KH1's world matrix of bone `b` of `a` as KH1 posed it (the model instance `+0x15C`, its
+    /// world matrices `+0x1B4`, 0x40 each, row vectors; Checked (code): `bodyhits` reads them so),
+    /// KH1 world.
+    unsafe fn kh1_bone(a: usize, b: usize) -> Option<Mat4> {
+        let inst = pose::ptr(rd::<u32>(a + 0x15C));
+        let mats = if inst > 0x10000 { pose::ptr(rd::<u32>(inst + 0x1B4)) } else { 0 };
+        if mats < 0x10000 {
+            return None;
+        }
+        let m = Mat4::from_cols_array(&rd::<[f32; 16]>(mats + b * 0x40));
+        m.is_finite().then_some(m)
+    }
+}
+
+/// KH2's star on Sora (`trap_obj_star`, KH2's `+0xD70` no-hit time, 60 Hz frames: Checked
+/// (decomp) `0x14042F9C0` -> `0x1403D7E40`, counted down by the frame's delta, `0x1403D5310`
+/// takes no hit while it is above 0): KH1's untouchable flag (`intangible`) for that long. Its
+/// frames left, as f32 bits.
+static STAR: AtomicU32 = AtomicU32::new(0);
+
+fn star(frames: f32) {
+    let now = f32::from_bits(STAR.load(Ordering::Relaxed));
+    if frames.is_finite() && frames > now {
+        STAR.store(frames.min(600.0).to_bits(), Ordering::Relaxed);
+    }
+}
+
+/// A frame of the star: whether it still holds (counted down by KH1's frame scale).
+unsafe fn star_tick() -> bool {
+    let left = f32::from_bits(STAR.load(Ordering::Relaxed));
+    if left <= 0.0 {
+        return false;
+    }
+    STAR.store((left - super::formmagic::frame_scale()).max(0.0).to_bits(), Ordering::Relaxed);
+    true
+}
+
+/// A frame with base Sora on KH1's own states and no Reflect of his (`takeover::native_spells`):
+/// the star alone.
+pub unsafe fn star_step(actor: usize) {
+    let on = star_tick();
+    if on || OURS.load(Ordering::Relaxed) {
+        intangible(actor, on);
+    }
+}
+
 /// After KH2's step (Sora moved and posed, his swings struck): the spell's frame.
-pub unsafe fn after_step(actor: usize, out: &Output, airborne: bool, strikes: &mut combat::Strikes, battle: &Battle, lock: Option<u32>) {
+pub unsafe fn after_step(actor: usize, out: &Output, airborne: bool, strikes: &mut combat::Strikes, battle: &Arc<Battle>, lock: Option<u32>) {
     step(actor, out, airborne, strikes, battle, lock);
     // Out of reach of every hit while KH2 has him invulnerable (a dodge, Quick Run, Aerial
     // Dodge, Aerial Recovery, the Drive) or behind Reflect (its cast and barrier), as KH1's
     // dodge roll is (`intangible`).
     // (Behind the barrier only, as `native_step`.)
     let reflecting = BARRIER.load(Ordering::Relaxed);
-    intangible(actor, out.invulnerable || reflecting);
+    // (Also KH2's star a script gave him, `star`.)
+    let star = star_tick();
+    intangible(actor, out.invulnerable || reflecting || star);
 }
 
 /// The actor flag KH1's hit pass skips an actor by (`0x14028FEE0`: hittable only while its flags
@@ -1219,7 +1557,7 @@ pub unsafe fn intangible(actor: usize, on: bool) {
     }
 }
 
-unsafe fn step(actor: usize, out: &Output, airborne: bool, strikes: &mut combat::Strikes, battle: &Battle, lock: Option<u32>) {
+unsafe fn step(actor: usize, out: &Output, airborne: bool, strikes: &mut combat::Strikes, battle: &Arc<Battle>, lock: Option<u32>) {
     let Ok(mut g) = RT.lock() else { return };
     let Some(rt) = g.as_mut() else {
         BARRIER.store(false, Ordering::Relaxed);
@@ -1236,9 +1574,13 @@ unsafe fn step(actor: usize, out: &Output, airborne: bool, strikes: &mut combat:
         return;
     }
     let mut world = world_now(actor, out, airborne, strikes, lock, 0x1234_5678 ^ (rt.counter_hits.wrapping_mul(2_654_435_761)));
+    // (Its counter attacks made and moved as KH1 attack objects by the scripts' calls, t819.)
+    world.sink = Some(Sink { battle: battle.clone(), kind: SinkKind::Reflect(rt.levels.clone(), rt.hold.combo) });
     // (KH1's script machine steps the casts on its processes: the effects age once a game frame,
     // before the frame's first script, whichever of the two runs first, `kh2_magic::Magic::frame`.)
     rt.magic.frame = rt.magic.native.is_some().then(|| super::takeover::GAME_FRAME.load(Ordering::Relaxed));
+    // (KH1's frame time, as KH2's scripts run on their game's, t817.)
+    rt.magic.frametime = super::formmagic::frame_scale();
     // A cast that started this frame (trigger 20), then the release (trigger 21) at the cast
     // motion's magic-cast event (Reflect's: frame 0).
     if let Some((motion, finisher, level)) = rt.fresh.take() {
@@ -1315,6 +1657,9 @@ unsafe fn step(actor: usize, out: &Output, airborne: bool, strikes: &mut combat:
     // soras reflect got hit, if it did get hit then if the reflect animation is at the end".)
     let held = hold(rt, blocks, false);
     let combo_wait = rt.hold.combo;
+    if let Some(Sink { kind: SinkKind::Reflect(_, hidden), .. }) = world.sink.as_mut() {
+        *hidden = combo_wait;
+    }
     for e in rt.magic.update(&mut world).into_iter().chain(rt.magic.take_events()) {
         match e {
             Event::Missing(n) => note(|| format!("Reflect's script used {n} (not modelled)")),
@@ -1331,6 +1676,10 @@ unsafe fn step(actor: usize, out: &Output, airborne: bool, strikes: &mut combat:
     for e in &rt.magic.effects {
         seen.push(e.id);
         match rt.fx.get(&e.id) {
+            // (Started by its script's call, t820: its instance, or 0 for none drawn.)
+            None if e.host.is_some() => {
+                rt.fx.insert(e.id, (e.host.filter(|h| *h != 0), false));
+            }
             None => {
                 let level = rt.levels.get(e.spell).copied().unwrap_or(1);
                 let h = if e.alive() { super::kh2fx::spell_start(level, e.element.id) } else { None };
@@ -1342,15 +1691,21 @@ unsafe fn step(actor: usize, out: &Output, airborne: bool, strikes: &mut combat:
             }
             Some((Some(h), ended)) => {
                 let (h, ended) = (*h, *ended);
+                // (The instance its script's calls act on, t826: not one the hold started again.)
+                let by_call = e.host == Some(h);
                 if e.killed {
                     super::kh2fx::spell_kill(h);
                 } else if e.fade.is_some() {
-                    super::kh2fx::spell_alpha(h, e.alpha());
+                    if !(by_call && e.host_fading) {
+                        super::kh2fx::spell_alpha(h, e.alpha());
+                    }
                     if !e.alive() {
                         super::kh2fx::spell_kill(h);
                     }
                 } else if e.ended_at.is_some() && !ended {
-                    super::kh2fx::spell_end(h);
+                    if !(by_call && e.host_ended) {
+                        super::kh2fx::spell_end(h);
+                    }
                     rt.fx.insert(e.id, (Some(h), true));
                 } else if combo_wait && e.alive() {
                     // Waiting for the combo: the barrier is gone from sight (its counter is
@@ -1375,6 +1730,7 @@ unsafe fn step(actor: usize, out: &Output, airborne: bool, strikes: &mut combat:
     let mut attacks = Vec::new();
     let mut barrier = false;
     let mut guards = Vec::new();
+    let native_attacks = super::bodyhits::spells_native();
     for a in rt.magic.attacks.iter().filter(|a| !a.freed && a.owner == SORA) {
         let shapes = a.shapes();
         let Some(first) = row(battle, a.atk, a.sub, 0) else { continue };
@@ -1390,7 +1746,10 @@ unsafe fn step(actor: usize, out: &Output, airborne: bool, strikes: &mut combat:
         // (574 / 576 / 578 by the hits counted, power 50, re-armed by its row's interval, 10 / 8 /
         // 6 frames by level) from frame 30 to 57, then the burst (667 / 668 / 669) 58 to 63.
         // (Main's s229 / s233 had only one pop strike, once per foe, with the burst's numbers.)
-        attacks.push(combat::SpellAttack { kh1_data: None, package: Some(rt.levels.get(a.spell).copied().unwrap_or(1)), key: a.id | SPELL_KEY, group: if first.combo_group != 0 { first.combo_group as i64 } else { a.group }, atk: a.atk, sub: a.sub, shapes });
+        // (KH1 attack objects: made and moved by the script's own calls, `KhWorld::attack_set`.)
+        if !native_attacks {
+            attacks.extend(counter_attack(a, battle, &rt.levels));
+        }
     }
     // The burst (the counter's last attack, ATKP 667 / 668 / 669 by tier): its shatter sound,
     // element 7's (173 at every level; the script starts no element for the burst, and element
@@ -1419,7 +1778,14 @@ unsafe fn step(actor: usize, out: &Output, airborne: bool, strikes: &mut combat:
         for (key, shapes, range, angle) in &guards {
             let met = if native_barrier {
                 standing.push(*key);
-                strikes.barrier_guard(actor, *key, shapes, *range, *angle)
+                // (Placed by the script's own call, t825, `KhWorld::attack_set`: KH1 runs the
+                // scripts after this step, so last frame's. Placed here only when no call did: a
+                // cast its script machine runs inside this step, its first frame.)
+                let now = super::takeover::GAME_FRAME.load(Ordering::Relaxed);
+                if combat::barrier_placed(*key).map_or(true, |f| f.saturating_add(1) < now) {
+                    strikes.barrier_place(actor, *key, shapes, *range, *angle);
+                }
+                strikes.barrier_met(*key)
             } else {
                 strikes.barrier_meet(actor, *key, shapes)
             };
@@ -1443,18 +1809,18 @@ unsafe fn step(actor: usize, out: &Output, airborne: bool, strikes: &mut combat:
     }
     // Barriers gone, or hidden while the combo goes on: their guard objects freed.
     strikes.barrier_guards_keep(&standing);
-    if !attacks.is_empty() {
-        // (KH1 attack objects of ours that KH1's own collision pass collides, `bodyhits`; else our
-        // own sweep, as before.)
-        let hits = if super::bodyhits::spells_native() {
-            super::bodyhits::spell_attacks(actor, &attacks, &|atk, sub, count| row(battle, atk, sub, count).cloned())
-        } else {
-            strikes.spell_strike(actor, &attacks, &|atk, sub, count| row(battle, atk, sub, count).cloned())
-        };
-        for (_, atk, foe, dealt) in hits {
-            rt.counter_hits += 1;
-            log!(Magic, "Reflect counter: ATKP {atk} hit {foe:#x} -> damage {dealt:?} ({} blocked)", rt.blocks);
-        }
+    // (KH1 attack objects of ours that KH1's own collision pass collides, `bodyhits`, made and moved
+    // by the scripts' calls, t819: the hits it made since; else our own sweep, as before.)
+    let hits = if native_attacks {
+        super::bodyhits::spell_results(SPELL_KEY)
+    } else if !attacks.is_empty() {
+        strikes.spell_strike(actor, &attacks, &|atk, sub, count| row(battle, atk, sub, count).cloned())
+    } else {
+        Vec::new()
+    };
+    for (_, atk, foe, dealt) in hits {
+        rt.counter_hits += 1;
+        log!(Magic, "Reflect counter: ATKP {atk} hit {foe:#x} -> damage {dealt:?} ({} blocked)", rt.blocks);
     }
     for a in rt.magic.freed().filter(|a| a.owns_id) {
         strikes.spell_forget(a.id | SPELL_KEY);
@@ -1476,33 +1842,18 @@ unsafe fn step(actor: usize, out: &Output, airborne: bool, strikes: &mut combat:
 }
 
 /// KH1's script machine steps one of Reflect's casts on its KH1 process, or one of its threads on a
-/// KH1 child process (`kh2script`, t798 / t799): its script (or that thread) runs once with the
-/// world of our last step, Sora's place read again. Returns whether its process goes on.
+/// KH1 child process (`kh2script`, t798 / t799): its script (or that thread) runs once on KH1's
+/// actors as they are now (`KhWorld`, t817). Returns whether its process goes on.
 pub unsafe fn kh1_step(id: u64, ctx: kh2_magic::kh2_bdx::CtxId) -> bool {
     // (Our own step has the runtime: the script waits a frame.)
     let Ok(mut g) = RT.try_lock() else { return true };
     let Some(rt) = g.as_mut() else { return false };
     let Some(mut world) = rt.world.take() else { return true };
-    refresh(&mut world, rt.actor);
+    rt.magic.frametime = super::formmagic::frame_scale();
     rt.magic.frame = Some(super::takeover::GAME_FRAME.load(Ordering::Relaxed));
     let goes = rt.magic.step_external(id, ctx, &mut world);
     rt.world = Some(world);
     goes
-}
-
-/// Sora's place in a kept world read again from KH1.
-pub(super) unsafe fn refresh(world: &mut KhWorld, actor: usize) {
-    if actor < 0x10000 || actor != super::takeover::sora_actor() {
-        return;
-    }
-    let p = rd::<[f32; 3]>(actor + 0x10);
-    if let Some(me) = world.objs.iter_mut().find(|o| o.id == SORA) {
-        let now = Vec3::new(p[0], -p[1], p[2]);
-        let moved = now - me.pos;
-        me.pos = now;
-        me.centre += moved;
-        me.target += moved;
-    }
 }
 
 /// Before the spell's frame: whether its cast is held this frame (the barrier stretched while

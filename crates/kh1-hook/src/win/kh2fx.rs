@@ -117,6 +117,12 @@ pub fn spell_alpha(h: u32, alpha: f32) {
     super::kh2dpx::spell_alpha(h, alpha);
 }
 
+/// The script fades its effect out over `frames` (60 Hz frames): run on KH1's instance by our
+/// effect tick (t826).
+pub fn spell_fade(h: u32, frames: f32) {
+    super::kh2dpx::spell_fade(h, frames);
+}
+
 pub fn spell_running(h: u32) -> bool {
     super::kh2dpx::spell_running(h)
 }

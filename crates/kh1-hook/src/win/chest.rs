@@ -1454,6 +1454,16 @@ unsafe fn call(ctx: usize, which: usize) -> u64 {
     if MODE.load(Ordering::Relaxed) == MODE_PICKUP && pickup_ctx(ctx) && ours_to_skip(ctx) {
         let pops = MESSAGE_FNS[which].2;
         let sp = rd::<i32>(ctx + CTX_SP);
+        // (t816, the owner: "when you pick up any world items the potion icon appears instead of the general item
+        // icon that was in vanilla") The line the part would show (message function 1: window one below the top,
+        // text on top) carries the icon vanilla shows (`{0C 04}` then the icon); it goes to the box's line.
+        if which == 1 && (1..64).contains(&sp) && rd::<i32>(ctx + 0x198 + (sp - 1) as usize * 4) == crate::kh1script::WINDOW_OBTAINED as i32 {
+            let text = rd::<i32>(ctx + 0x198 + sp as usize * 4);
+            match line_icon(base(), text) {
+                Some(icon) => super::ingameskip::set_pickup_icon(icon),
+                None => log!(Cutscenes, "Item Pickup: text {text}'s icon not found: the box keeps the item icon"),
+            }
+        }
         std::ptr::write_unaligned((ctx + CTX_SP) as *mut i32, (sp - pops).max(0));
         if SKIPPED.fetch_add(1, Ordering::Relaxed) < 8 {
             log!(Cutscenes, "Item Pickup: the pickup's window call (message function {}) skipped", MESSAGE_FNS[which].0);
@@ -1589,6 +1599,29 @@ const TIMED_MAX: usize = 1024;
 /// How many bytes a KH1 text code takes (the code byte included), as KH1's text parser
 /// (`0x1401767B0`) steps over it, Checked (decomp). `None`: the end of the text (code 0) or a code we
 /// don't copy past (4, which ends the parse there as 0 does).
+/// (t816) The icon in the room script's text `text` (the glyph after its `{0C 04}`, the colour code before an
+/// item's name), read with KH1's text parser's code lengths (`code_len`).
+unsafe fn line_icon(base: usize, text: i32) -> Option<u8> {
+    if !(0..0x400).contains(&text) {
+        return None;
+    }
+    let p = rd::<u64>(base + TEXTS_STEAM + text as usize * 8) as usize;
+    if p < 0x10000 || !super::crash::readable(p) || !super::crash::readable(p + 0x7F) {
+        return None;
+    }
+    let at = |i: usize| rd::<u8>(p + i);
+    let mut i = 0;
+    while i + 2 < 0x80 {
+        let c = at(i);
+        if c == 0x0C && at(i + 1) == 0x04 {
+            let icon = at(i + 2);
+            return (icon >= 0x20).then_some(icon);
+        }
+        i += code_len(c, || at(i + 1))?;
+    }
+    None
+}
+
 fn code_len(c: u8, arg: impl Fn() -> u8) -> Option<usize> {
     Some(match c {
         0 | 4 => return None,

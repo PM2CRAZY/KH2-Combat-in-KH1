@@ -1471,7 +1471,7 @@ unsafe fn meet_shot(sora: usize, shot: &Shot, at: &Shape, row: Row, unstoppable:
 /// Where the map's walls stop a blade moving `from` → `to` (KH1 world, y down): KH1's
 /// background ray (`0x140191520`, the one its attacks use), and the hit face's normal
 /// (`0x14018FC60`) to tell walls from floors and ceilings.
-unsafe fn wall_between(from: [f32; 3], to: [f32; 3]) -> Option<[f32; 3]> {
+pub(super) unsafe fn wall_between(from: [f32; 3], to: [f32; 3]) -> Option<[f32; 3]> {
     let d = [to[0] - from[0], to[1] - from[1], to[2] - from[2]];
     let len = (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt();
     if !(0.5..400.0).contains(&len) || !from.iter().chain(to.iter()).all(|v| v.is_finite()) {
@@ -2358,14 +2358,9 @@ pub struct SpellAttack {
 impl Strikes {
     /// This frame's enemies (from `look`): id (as KH2's targets have it), feet and aim point (KH2
     /// y-up), for the spell scripts.
-    pub unsafe fn targets(&self) -> Vec<(u32, [f32; 3], [f32; 3])> {
-        self.bodies
-            .iter()
-            .map(|b| {
-                let p = rd::<[f32; 3]>(b.actor + 0x10);
-                (b.target.id, [p[0], -p[1], p[2]], b.target.pos)
-            })
-            .collect()
+    /// The enemies' KH1 actors, in `targets`' order.
+    pub fn target_actors(&self) -> Vec<usize> {
+        self.bodies.iter().map(|b| b.actor).collect()
     }
 
     /// A spell's attacks against the enemies, through the same hit records as Sora's swings
@@ -2568,12 +2563,32 @@ impl Strikes {
 struct BarrierObj {
     key: u64,
     obj: usize,
+    /// The game frame it was last placed on (`Strikes::barrier_place`).
+    placed: u64,
     met: Vec<(usize, u32, u32)>,
     at: Vec<[f32; 3]>,
     stopped: Vec<(usize, u32, u32)>,
 }
 
 static BARRIERS: std::sync::Mutex<Vec<BarrierObj>> = std::sync::Mutex::new(Vec::new());
+
+/// The game frame barrier `key`'s guard object was last placed on, if it has one.
+pub fn barrier_placed(key: u64) -> Option<u64> {
+    BARRIERS.try_lock().ok()?.iter().find(|x| x.key == key).map(|x| x.placed)
+}
+
+/// Barrier `key` freed by its script (`trap_attack_free`, t825): its guard object goes now.
+pub unsafe fn barrier_free(key: u64) {
+    let Ok(mut g) = BARRIERS.try_lock() else { return };
+    let Some(i) = g.iter().position(|b| b.key == key) else { return };
+    let b = g.remove(i);
+    super::bodyhits::guard_forget(b.obj);
+    let f = rd::<u32>(b.obj);
+    if f & 0x800 != 0 && f & 0x0020_0000 == 0 && pose::ptr(rd::<u32>(b.obj + 0x34)) == super::takeover::sora_actor() {
+        let free: unsafe extern "system" fn(usize) = std::mem::transmute(BASE.load(Ordering::Relaxed) + FREE_ATTACK_RVA);
+        free(b.obj);
+    }
+}
 
 /// The barrier as a KH1 guard object KH1's pass meets (KH1's meeting hooked, KH2's shapes put in
 /// by KH1's builder).
@@ -2648,15 +2663,16 @@ pub unsafe fn barrier_meeting(a: usize, b: usize, sora: usize) -> bool {
 
 impl Strikes {
     /// A Reflect barrier (`key`, its `shapes` KH2 y-up, its ATKP's reflect range and angle) as a
-    /// KH1 guard object of Sora's this frame (made the first frame it stands). Returns where enemy
-    /// attacks met it since last frame (KH1 world), each once.
-    pub unsafe fn barrier_guard(&mut self, sora: usize, key: u64, shapes: &[Shape], range: u8, angle: i8) -> Vec<[f32; 3]> {
+    /// KH1 guard object of Sora's (made the first time it stands), moved to its shapes now: by its
+    /// script's own call (`reflect::KhWorld::attack_set`, t825), else by our step. Where enemy
+    /// attacks met it: `barrier_met`.
+    pub unsafe fn barrier_place(&mut self, sora: usize, key: u64, shapes: &[Shape], range: u8, angle: i8) -> bool {
         if !self.rows_tried {
             self.rows_tried = true;
             self.rows = sora_rows(sora);
         }
         if shapes.is_empty() {
-            return Vec::new();
+            return false;
         }
         let base = BASE.load(Ordering::Relaxed);
         let ours = |o: usize| {
@@ -2667,12 +2683,12 @@ impl Strikes {
         let obj = match have {
             Some(o) if ours(o) => o,
             _ => {
-                let Some(data) = self.guard_data(range, angle) else { return Vec::new() };
+                let Some(data) = self.guard_data(range, angle) else { return false };
                 let free_bit: unsafe extern "system" fn() -> u32 = std::mem::transmute(base + FREE_BIT_RVA);
                 let new_attack: unsafe extern "system" fn(usize, u32, usize) -> usize = std::mem::transmute(base + NEW_ATTACK_RVA);
                 let o = new_attack(sora, free_bit(), pose::ptr(data));
                 if o < 0x10000 {
-                    return Vec::new();
+                    return false;
                 }
                 // As `guard_step`'s: its own place (mode 0), always live (activity 3), not spent;
                 // priority 100; no power, no reaction; the arc of the barrier's ATKP. Clash type 3
@@ -2697,7 +2713,7 @@ impl Strikes {
                 wr(o + 0xC, s.radius.max(s.height));
                 if let Ok(mut g) = BARRIERS.lock() {
                     g.retain(|x| x.key != key);
-                    g.push(BarrierObj { key, obj: o, met: Vec::new(), at: Vec::new(), stopped: Vec::new() });
+                    g.push(BarrierObj { key, obj: o, placed: 0, met: Vec::new(), at: Vec::new(), stopped: Vec::new() });
                 }
                 log!(Combat, "Reflect barrier as KH1 guard object {o:#x} ({} shape(s), reflect range {range})", shapes.len());
                 o
@@ -2706,6 +2722,17 @@ impl Strikes {
         // Its shapes this frame, for KH1's builder; kept live.
         super::bodyhits::guard_shapes(obj, shapes);
         wr(obj, rd::<u32>(obj) | 0x1_0000);
+        if let Ok(mut g) = BARRIERS.lock() {
+            if let Some(b) = g.iter_mut().find(|x| x.key == key) {
+                b.placed = super::takeover::GAME_FRAME.load(Ordering::Relaxed);
+            }
+        }
+        true
+    }
+
+    /// Where enemy attacks met barrier `key` since last asked (KH1 world), each once; the shots it
+    /// stopped handed to the stopped-shot check.
+    pub unsafe fn barrier_met(&mut self, key: u64) -> Vec<[f32; 3]> {
         let Ok(mut g) = BARRIERS.lock() else { return Vec::new() };
         let Some(b) = g.iter_mut().find(|x| x.key == key) else { return Vec::new() };
         for (o, h_owner, h_data) in b.stopped.drain(..) {

@@ -1206,3 +1206,122 @@ Not checked: in game. **Assumption:** where KH1's spell task list runs in the fr
 frame step. If it runs after our step, a cast's attacks reach KH1's collision pass a frame later
 than before; the log says on which game frame KH1 first stepped each cast and on which our step
 handed it over ("KH1 first stepped cast ..."), which settles it.
+
+### 8a. The calls on KH1's own objects (the owner, chat: "all (a)", "go ahead"; t817..t821)
+
+With t797..t800 KH1's machine ran the scripts, but their calls still worked on our own copy of the
+world: a picture of Sora and the enemies taken at our step, attacks our step turned into KH1 attack
+objects each frame, effects our step started a frame after the script did. Each of these now goes
+to KH1's own objects when the script makes the call. KH1's spell task list runs after the actors'
+update and the collision pass in the frame (task priorities 80000, 80001, 0x21728, **Checked
+(decomp)**), so a call reads the frame's final state.
+
+- **t817, the world.** Every object of the scripts' world is a KH1 actor (`reflect::KhWorld`),
+  read when the script asks: position `+0x10` (y flipped), facing `+0x3C` (KH2's controller writes
+  its facing there each step, `takeover`, **Checked (code)**), air states 1 / 2 / 8 at `+0x70`
+  (Sora's as our step saw it while KH2's controller has him: `takeover` sets `+0x70` only around
+  its own moves then, **Checked (code)**),
+  alive as KH1's test `0x140291FF0` (`+0x374` bit 0 set, bit 1 clear, **Checked (decomp)**), the
+  target as KH1's lock now (`0x142DB3510` / `0x142DB3518`) and its lock point (`0x1402B04C0`),
+  Sora's target point his body centre (below), the party from KH1's party table
+  (`0x142D37280`, three actors, **Checked (decomp)**: KH1's ability pass walks it), the floor
+  Sora's `+0x324`, the frame time KH1's (`0x14233FBDC`). KH2's ability 114 is Leaf Bracer
+  (**Checked (files)**: `03system` item 0x192); the call asks KH1's ability count
+  `0x140284BE0 (62, member)` (**Checked (decomp)**: members 0..9 their own list, 10 and up the
+  shared one), the member read from the actor's `+0x130` record `+0x4C` as KH1's ability pass reads
+  it. Cure's script, with it equipped and cast on Sora himself, calls `trap_obj_star (Sora, 60)`
+  (**Checked (files)**): KH2 sets its no-hit timer `+0xD70`, counts it down by the frame's delta and
+  takes no hit while it is above 0 (`0x14042F9C0` -> `0x1403D7E40`, `0x1403D5310`, **Checked
+  (decomp)** KH2 Steam). Ours: KH1's untouchable flag (`+0` bit 0x40, the dodge roll's, as Reflect's
+  barrier uses it) for those 60 frames, counted down by KH1's frame scale. The motion the scripts
+  see stays our step's (KH2's controller's, or the KH2 motion KH1 plays in our slot).
+- **t818, bones.** The bone codes the spells use (**Checked (files)**: the PAX elements' bones and
+  Cure's `trap_obj_apply_bone_matrix`, the only call that takes one) on KH1's skeleton: 0x4000 the
+  actor's place and facing; 0x4001 its body centre, KH1's point 0x8003 (`0x14029EB20`: its
+  collision body's middle, else `+0x50`, **Checked (decomp)**); 0x4003 / 0x4004 the weapon, KH1's
+  Keyblade tip (KH1's point along bone 0x30 at 1: the blade's end for the Keyblade he holds); 0x4009
+  the target point; KH2's bone 0 KH1's bone 0, both models' hips (`Retarget::hip_ratio` measures
+  the two bind poses' bone 0, **Checked (code)**), its matrix as KH1 drew it (the instance `+0x15C`,
+  its world matrices `+0x1B4`, as `bodyhits` reads them). KH2's own pose is no longer read for them.
+- **t819, attacks.** An attack is a KH1 attack object made and moved by the script's own calls:
+  `trap_attack_set_radius` / `trap_attack_set_pos` make it (KH1's constructor) or move it at once
+  (`bodyhits::spell_place`), `trap_attack_free` frees it (KH1's free), `trap_attack_is_hit` reads
+  whether KH1's pass hit something with it. One the script doesn't move stays where it was put
+  with no sweep, as KH2's (one placed and never freed goes inert after 300 frames standing, in case
+  its runtime went away). Our step no longer builds the attack list each frame; it only takes the
+  hits KH1's pass made (`bodyhits::spell_results`, each runtime its own by its key bit). Reflect's
+  barrier stays the guard object our step places (t796).
+- **t820, effects.** An effect the script starts is started on KH1's effect system by the call
+  (with its sound; an unbound one placed where the script has it), and one it kills is stopped by
+  the call. Its ends, fades, moves and Reflect's holds are still followed by our step. **Reflect
+  into Reflect:** the second cast's release ends the first barrier's element through the teamwork
+  block the casts share; the handle there is the first cast's, and the call looked it up in the
+  second cast's own effects only, so the first barrier stayed. Now a handle no cast of its own has
+  is looked up in the other casts' (on KH1's memory only, where every handle is its own address).
+  Offline test `reflect_chain_on_the_host_ends_the_first_barrier`: fails before, passes after.
+- **t821, Blizzard's push.** Blizzard's script pushes its caster back (`trap_obj_hitback`, 50).
+  KH2's push (`0x1403D4960`, **Checked (decomp)**): distance × 0.1 a frame along the direction,
+  × 0.9 each frame, stopped below 1 (`0x1403D4570`). Ours: KH1's own push started on Sora
+  (`0x1402C7300`, first bytes **Checked (exe)**; it moves him through his collision in his physics
+  step, `0x1402C7070`, **Checked (decomp)**) with KH2's speed and decay on it, the same way KH2's hit
+  push runs on it (`hitreact`), whatever the Hit Reactions style. Only on KH1's states (KH1's
+  physics step runs his push); under KH2's controller (Wisdom's casts) it isn't applied (logged).
+  **Assumption:** KH2's player bonus to the distance (player record `+0x1C8`) is 0 for Sora.
+
+Not checked: in game. Still open: the ground and wall tests the scripts ask for (`ground` uses
+Sora's floor, `bg_hit` says no wall); Donald and Goofy aren't objects of the scripts' world (the
+party call gives only Sora), so a Cure that would reach them in KH2 heals Sora only.
+
+### 8b. The rest of the calls (the owner, chat: "convert the rest thats still open over ... if kh2 cure is on then it should behave like kh2's own cure"; t822..t827)
+
+- **t822, the party and KH2's Cure.** KH2's Cure doesn't take a list of who to heal: its script
+  walks the party itself (**Checked (files)**, CURE_1..3: `trap_sysobj_party` for slots 0..3, each
+  that exists and isn't a summon, its flat distance from the cure's centre (height dropped) against
+  the radius in the spell's magi record) and strikes each one inside with a heal (ATKP 708 on the
+  caster, 709 on the others, kind 6). Until t821 our world gave it only Sora. Now KH1's party slots
+  1 and 2 (Donald, Goofy: KH1's party table) are objects of the scripts' world, alive by KH1's
+  test, placed where KH1 has them; the script's own test decides who is in the circle, so nothing
+  of ours measures it. Each strike heals that actor through KH1's own HP add (`0x1402A4920
+  (actor, amount)`, **Checked (decomp)**: the stats block's HP up to its max, KH1's own heal
+  modifier for a status, the party HUD's copy; first bytes **Checked (exe)**). KH1's save point
+  heals all three through the same fields (**Checked (decomp)**). The amount stays ours (the row's
+  power over `CURE_SHARE` of the max HP): KH2's is power × the caster's Magic / 100 (kind 6), and
+  KH1 has no Magic stat. Offline test `cure_heals_the_party_in_its_circle`: Sora and the member
+  beside him are struck, the one far away isn't.
+- **t823, ground and walls.** `trap_bg_ground_pos` asks KH1's floor ray (`0x1401910E0`, the query
+  `feet` uses) down from the point; Blizzard's, Thunder's and Magnet's scripts put their shapes on
+  the floor with it. `trap_attack_is_hit_bg` (the same three scripts: a shard that meets a wall
+  ends) is the attack's last move against KH1's background ray, the map's walls only
+  (`combat::wall_between`, `0x140191520`, the ray KH1's attacks use). **Assumption:** KH2 counts
+  walls, not the floor its shards slide along (KH2's own background test on attacks not traced).
+- **t824, Blizzard's push under KH2's controller.** The push starts on KH1's push fields as on KH1's
+  states; while the controller has him (Wisdom Form) KH1's physics step doesn't run, so the
+  controller's move adds the push each 60 Hz step as that step would (`0x1402C7070`: direction
+  `+0x3F0` × speed `+0x3FC`, flat), on KH2's curve.
+- **t825, Reflect's barrier by its calls.** REFLECT's script places its barrier attack every frame
+  it stands (offline trace). The barrier's KH1 guard object is now made and moved by that call
+  (`Strikes::barrier_place`, KH2's hit state taken for it when nothing else holds it), not while the
+  combo hides the barrier, and freed by the script's free. Our step only takes where enemy attacks
+  met it (`Strikes::barrier_met`), and places it itself only when no call has since the last frame
+  (a cast whose script machine runs inside our step, its first frame).
+- **t826, effect ends, fades and moves.** The script's loop end ends the KH1 instance at the call,
+  its fade-out is run on the instance's alpha by our effect tick (the same fade every KH2 effect in
+  KH1 uses, `kh2dpx`), its set position and direction place an unbound one at the call. What no
+  call does stays with our step: an owner gone, a motion change, a cast's end, Reflect's hold and
+  combo wait.
+- **t827, Wisdom's shot script.** The form model's script, run by Wisdom's motions' frame trigger
+  1, is a KH1 script process like the casts (t798): its first run at once, as KH2 runs it, and a
+  thread it starts runs in that same step, as KH1's machine runs a child started during its
+  parent's step. Offline test `wisdom_shot_on_the_host_as_our_arena` (the tester's own Wisdom
+  files): the same shot and effects frame for frame as our own machine.
+
+Not checked: in game. Left: our own script machine (the fallback when KH1 has no free process)
+still can't end another cast's effect (its casts' handles aren't unique), so Reflect into Reflect
+is fixed only on KH1's processes (`reflect_chain_shares_the_teamwork_block` still fails there).
+
+- **t828, Cure's heal and max MP** (the owner, chat: "tie it to the amount of max mp you have, in
+  kh1 thats how magic is scaled (assumption)"). The heal (the row's power over `CURE_SHARE` of the
+  max HP) is times Sora's max MP factor (`combat::magic_factor`: +10% a max MP point, at most 30,
+  times the ini's `magic_scale`), the stand-in for KH2's Magic the mod's other Magic-based hits
+  already use. KH2's own is power × the caster's Magic / 100. **Assumption** (the owner's): KH1
+  scales its magic by max MP.

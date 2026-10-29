@@ -18,6 +18,9 @@
 - [12. Assistant: From the What is still missing(../what-is-still-missing-for-](#^m12)
 - [13. Assistant: t796 to t800. Both answers are done, one system per version.](#^m13)
 - [14. Assistant: t813 and t814. A correction to t796: the barrier was letting](#^m14)
+- [15. Assistant: t817 to t821. From your "all (a)" and go-ahead (in chat): th](#^m15)
+- [16. Assistant: t822 to t827. Everything left open after t821 is moved over ](#^m16)
+- [17. Assistant: t828. Cure's heal now scales with Sora's max MP (asked for i](#^m17)
 
 ---
 
@@ -422,4 +425,83 @@ go ahead
 > Notes: `docs/kh1-reflect-spell.md` "Every enemy attack type meets the barrier".
 
 ^m14
+
+
+> [!tip] Assistant
+> **t817 to t821.** From your "all (a)" and go-ahead (in chat): the spell scripts' calls now work on KH1's own objects at the moment the script makes them.
+>
+> - **t817, the world.** When a script asks where Sora or an enemy is, which way he faces, whether he's in the air, alive or locked on, KH1's actors are read right then. Before, it was a copy taken at our step. Leaf Bracer (KH2 ability 114) is KH1's Leaf Bracer from Sora's equipped abilities. With it on, a Cure on himself makes him untouchable for 60 frames, as KH2's Cure does.
+> - **t818, bones.** The spots the scripts attach to are on KH1's skeleton: his body centre, his Keyblade's tip, his hips and his target point. KH2's drawn pose isn't read for them any more.
+> - **t819, attacks.** A spell's hitbox is a KH1 attack object made, moved and freed by the script's own calls. When the script asks whether it hit something, KH1's pass answers. Our step no longer rebuilds the hitboxes every frame.
+> - **t820, effects, and Reflect into Reflect.** A spell's effect (with its sound) starts in KH1's effect system the moment the script starts it, and stops the moment the script kills it. This also fixes recasting Reflect: the second cast now ends the first barrier, as in KH2, instead of leaving two standing.
+> - **t821, Blizzard's push.** Blizzard's 50-unit push back on Sora runs through KH1's own push (through his collision), on KH2's speed and slowdown.
+>
+> **How I checked it:** KH1's alive test, lock point, body-centre point, ability count, push and frame order are from the Steam KH1 decomp. The push's first bytes are checked in the exe before it's called. Leaf Bracer's number and the bone codes the spells use are from the game files. KH2's no-hit timer (the call Cure makes) and KH2's push numbers are from the Steam KH2 decomp. Reflect into Reflect has a new offline test on a fake KH1 machine: it fails without the fix and passes with it. All the offline tests that passed before still pass. None of this is checked in game. One assumption: KH2 adds a per-player bonus to the push distance, and I take it as 0 for Sora.
+>
+> Please test:
+> 1. Reflect, then Reflect again while the first barrier is still up: one barrier on screen. Tell me how many counters fire at the end (KH2 fires one for the whole chain; the offline test only checks the barrier).
+> 2. Fire, Blizzard and Thunder against groups of enemies, locked on and not: they should hit where the effects are, as before.
+> 3. Blizzard: Sora slides back a little as he casts, and stops at walls.
+> 4. With Leaf Bracer equipped, Cure on yourself while enemies attack: the hits shouldn't land during the cast. Without it, they should.
+> 5. Cure's effect should sit on Sora's body, and a spell effect on the Keyblade should sit on its tip (try different Keyblades).
+> 6. Log lines (Magic and Combat categories): "by the script's calls" when a spell's hitbox is made, "a spell script's push on KH1's" for Blizzard, "Sora out of reach for 60 frames" for Leaf Bracer's Cure. A "not applied" on Blizzard's push is expected in Wisdom Form.
+>
+> Still open on my side (no answer needed):
+> - Under KH2's controller (Wisdom Form's casts) Blizzard's push isn't applied: KH1's physics step doesn't run on him then.
+> - The scripts' ground and wall tests still use Sora's floor and no walls.
+> - Donald and Goofy aren't in the scripts' world yet, so a Cure that would reach them in KH2 heals only Sora. Adding them would change Cure in play, so I'll ask before doing it.
+> - Reflect's barrier is still the guard object our step places each frame (t796). Effect ends, fades and moves are still followed by our step.
+>
+> Notes: `docs/kh1-magic-native.md` §8a.
+
+^m15
+
+
+> [!tip] Assistant
+> **t822 to t827.** Everything left open after t821 is moved over (asked for in chat). Cure now heals the party the way KH2's Cure does.
+>
+> - **t822, Cure and the party.** KH2's Cure script already checks who is in its circle: it walks the party slots, skips anyone not alive, measures each member's flat distance from the cure and heals everyone inside. Our side was only giving it Sora. Now Donald and Goofy are KH1's own party actors in the scripts' world, so the script's own check picks who gets healed, and each heal goes through KH1's own HP add (the one the save point uses).
+> - **t823, ground and walls.** When Blizzard, Thunder or Magnet put something on the ground, KH1's floor ray finds it (before, it used Sora's floor height). A Blizzard shard that runs into a wall now ends, tested with the same background ray KH1's own attacks use.
+> - **t824, Blizzard's push in Wisdom Form.** The push now also works while KH2's controller has Sora: his move takes KH1's push as KH1's physics step would.
+> - **t825, Reflect's barrier.** The barrier is now placed by the script's own call each frame, and freed by its free, instead of by our step.
+> - **t826, effect ends, fades and moves.** When a script ends, fades or moves an effect, that happens to the KH1 effect at the call.
+> - **t827, Wisdom's shots.** Wisdom Form's shot script now runs as a KH1 script process too, like the spells.
+>
+> **How I checked it:** Cure's circle test, its two heal rows (708 on Sora, 709 on the others) and which scripts ask for ground and walls are from the game files. KH1's HP add, floor ray, background ray and push step are from the Steam KH1 decomp, and the HP add's first bytes are checked in the exe before it's called. New offline tests: Cure heals Sora and a party member beside him but not one far away, and Wisdom's shot runs the same frame for frame as a KH1 process as it did on our machine. All the other offline tests that passed before still pass. None of this is checked in game.
+>
+> Two assumptions: KH2 counts walls (not the floor a shard slides along) as the background a shard meets, and Donald's and Goofy's stats blocks hold HP where Sora's does (KH1's save point heals all three through those fields).
+>
+> Please test:
+> 1. Cure with Donald and Goofy close to Sora, then with one of them far away: only the ones inside the circle should heal.
+> 2. Cure with a party member knocked out: they shouldn't be healed.
+> 3. Blizzard on slopes and stairs: the shards should follow the floor. Aimed at a nearby wall, they should stop there.
+> 4. Thunder and Magnet on uneven ground: they should land on the floor where the enemy is.
+> 5. Blizzard in Wisdom Form: Sora should slide back a little and stop at walls.
+> 6. Reflect, including recasting it and Reflect in a combo: the barrier should stop and count attacks as before.
+> 7. Wisdom Form's shots: same as before.
+> 8. Log lines (Magic category): "Cure on party slot 1" (or 2) when Donald or Goofy are healed.
+>
+> Still open on my side (no answer needed):
+> - The heal amount is still ours (a share of max HP from the row's power). KH2 scales it by the caster's Magic stat, and KH1 has none.
+> - On our own script machine (only used when KH1 has no free process), recasting Reflect still leaves the first barrier standing.
+>
+> Notes: `docs/kh1-magic-native.md` §8b.
+
+^m16
+
+
+> [!tip] Assistant
+> **t828.** Cure's heal now scales with Sora's max MP (asked for in chat).
+>
+> KH2's Cure heals by the caster's Magic stat, which KH1 doesn't have. The heal now takes the max MP stand-in the mod already uses for KH2's other Magic-based hits (Explosion, Magnet Burst): +10% per max MP point, up to 30 points, times the `magic_scale` setting in the ini. With no max MP it's the same as before, and with 10 points it heals twice as much. Donald and Goofy get half of Sora's amount, as in KH2 (their row has half the power), times the same factor.
+>
+> **How I checked it:** KH2's formula and Cure's two rows are from the decomp and the game files. That KH1 scales magic by max MP is an assumption (the owner's), not read in the decomp. Not checked in game.
+>
+> Please test:
+> 1. Cure at low HP early on, then later with more max MP: the heal should grow with your max MP.
+> 2. With Donald and Goofy in the circle, they should heal about half as much as Sora.
+>
+> Notes: `docs/kh1-magic-native.md` §8b.
+
+^m17
 

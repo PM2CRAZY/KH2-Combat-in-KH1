@@ -652,6 +652,12 @@ Checked (files): every `tz*.ard` (Deep Jungle) and `pc*.ard` (Hollow Bastion), e
 - t815: sub-scripts the part wakes count as its own whatever their context; holds and window calls from any of
   them are skipped, and the pickup is over when none of those contexts is still in the part.
 
+## Item Pickup, round 13 (t816): the vanilla icon
+
+- The box used the treasure texts' item icon (0x82) for every pickup. A pickup's own line (one of seven, by the
+  item's kind) has its icon after `{0C 04}`. t816 reads the icon from the line the part would have shown (message
+  function 1 on window 7) and gives it to the box's line. Checked (files); not checked in game.
+
 ## Not checked (Assumption)
 
 - (t724, now answered) KH2's own chest: see "KH2's own chest opening" above (checked in files and

@@ -597,6 +597,8 @@ use kh2_magic::NativeHost;
 
 /// The fake host's memory: addresses `0x8000_0000 + offset` (KH1's handles have that form).
 static HOST_MEM: std::sync::Mutex<Option<Box<[u8]>>> = std::sync::Mutex::new(None);
+/// The tests on the fake host's memory, one at a time.
+static HOST_TESTS: std::sync::Mutex<()> = std::sync::Mutex::new(());
 const HOST_SIZE: usize = 0x40_0000;
 const PROGS_AT: u32 = 0x8000_0000;
 const BLOCKS_AT: u32 = 0x8010_0000;
@@ -771,6 +773,7 @@ fn native_host_runs_every_spell_as_our_arena() {
         eprintln!("skipped: no extracted files in {}", d.display());
         return;
     };
+    let _one = HOST_TESTS.lock().unwrap_or_else(|e| e.into_inner());
     *HOST_MEM.lock().unwrap() = Some(vec![0u8; HOST_SIZE].into_boxed_slice());
     let pref = kh2_formats::pref::Pref::from_03system(&system).unwrap();
     let mut checked = 0;
@@ -849,4 +852,193 @@ fn native_host_runs_every_spell_as_our_arena() {
         }
     }
     assert!(checked > 0);
+}
+
+/// Reflect cast into Reflect on the host's machine (KH1's script processes): the second cast's
+/// release ends the first barrier's element through the teamwork block they share (its effect
+/// handle, one of the first cast's), so the first barrier's effect goes, as in KH2 (t820: it was
+/// looked up in the second cast's own effects only, and stayed).
+#[test]
+fn reflect_chain_on_the_host_ends_the_first_barrier() {
+    let d = dir();
+    let (Ok(system), Ok(bytes)) = (std::fs::read(d.join("03system.bin")), std::fs::read(d.join("REFLECT_1.mag"))) else {
+        eprintln!("skipped: no extracted files in {}", d.display());
+        return;
+    };
+    let _one = HOST_TESTS.lock().unwrap_or_else(|e| e.into_inner());
+    *HOST_MEM.lock().unwrap() = Some(vec![0u8; HOST_SIZE].into_boxed_slice());
+    let pref = kh2_formats::pref::Pref::from_03system(&system).unwrap();
+    let magi = pref.magi.get(0).unwrap();
+    let mut magic = Magic::new();
+    magic.native = Some(Box::new(FakeHost::new()));
+    let spell = magic.add_spell(SpellFile::parse("REFLECT_1.mag", &bytes).unwrap());
+    let mut w = Fake { frame: 0, release_at: 0, motion_end: 60, seed: 1 };
+    magic.frame = Some(0);
+    magic.cast(spell, SORA, 5, 0, magi, &mut w).unwrap();
+    assert!(magic.release(SORA, &mut w));
+    let mut first_effects = Vec::new();
+    for f in 1..40u32 {
+        w.frame = f;
+        magic.frame = Some(f as u64);
+        if f == 12 {
+            first_effects = magic.effects.iter().filter(|e| e.alive()).map(|e| e.id).collect();
+            assert!(!first_effects.is_empty(), "the first barrier has no effect");
+            magic.cast(spell, SORA, 5, 0, magi, &mut w).unwrap();
+            assert!(magic.release(SORA, &mut w));
+        }
+        let ids: Vec<u64> = magic.casts.iter().map(|c| c.id).collect();
+        for id in ids {
+            host_step(&mut magic, id, &mut w);
+        }
+        magic.update(&mut w);
+    }
+    let left: Vec<u64> = magic.effects.iter().filter(|e| e.alive() && first_effects.contains(&e.id)).map(|e| e.id).collect();
+    eprintln!("first barrier's effects {first_effects:?}, still alive at frame 40: {left:?}");
+    assert!(left.is_empty(), "the first barrier's effect stayed: {left:?}");
+}
+
+/// Wisdom Form's shot script (the form model's, run by an object's frame trigger 1,
+/// `Magic::object_effect`) on the host's machine (KH1's script processes, t827): the same shot,
+/// frame for frame, as on our own machine.
+#[test]
+fn wisdom_shot_on_the_host_as_our_arena() {
+    let d = dir();
+    let (Ok(mdlx), Ok(archive)) = (std::fs::read(d.join("P_EX100_MAGF.mdlx")), std::fs::read(d.join("P_EX100_MAGF.a.us"))) else {
+        eprintln!("skipped: no Wisdom files in {}", d.display());
+        return;
+    };
+    let _one = HOST_TESTS.lock().unwrap_or_else(|e| e.into_inner());
+    *HOST_MEM.lock().unwrap() = Some(vec![0u8; HOST_SIZE].into_boxed_slice());
+    let script = SpellFile::bar_entry(&mdlx, 3).expect("wisd script");
+    let pax = SpellFile::bar_entry(&archive, 18).expect("effects");
+    let run = |native: bool| {
+        let mut magic = Magic::new();
+        if native {
+            magic.native = Some(Box::new(FakeHost::new()));
+            magic.frame = Some(0);
+        }
+        let file = magic.add_spell(SpellFile::from_parts("wisdomform", &script, &pax).unwrap());
+        let mut w = Fake { frame: 0, release_at: 0, motion_end: 0, seed: 1 };
+        magic.object_effect(file, SORA, 25, &mut w).unwrap();
+        assert_eq!(magic.casts[0].external, native, "on the host's process");
+        let id = magic.casts[0].id;
+        let mut out = Vec::new();
+        // (As in game: the frame trigger's run, then the same frame's step of the script by its
+        // machine (the host's task list, or `update`).)
+        for f in 0..80u32 {
+            w.frame = f;
+            if native {
+                magic.frame = Some(f as u64);
+                host_step(&mut magic, id, &mut w);
+            }
+            for e in magic.update(&mut w) {
+                if let Event::Error(s) = e {
+                    panic!("{s}");
+                }
+            }
+            attack_trace(&magic, f, &mut out);
+            if magic.casts.is_empty() && magic.attacks.iter().all(|a| a.freed) {
+                break;
+            }
+        }
+        out
+    };
+    let (arena, host) = (run(false), run(true));
+    eprintln!("Wisdom shot: {} attack / effect frames on both", arena.len());
+    assert!(arena.len() > 10);
+    assert_eq!(arena, host, "the host's machine ran the shot differently");
+}
+
+/// Sora with two party members: one beside him, one far away (`PARTY_NEAR`, `PARTY_FAR`).
+struct PartyWorld(Fake);
+const PARTY_NEAR: ObjId = 51;
+const PARTY_FAR: ObjId = 52;
+
+impl World for PartyWorld {
+    fn exists(&self, o: ObjId) -> bool {
+        self.0.exists(o)
+    }
+    fn pos(&self, o: ObjId) -> Vec3 {
+        match o {
+            PARTY_NEAR => Vec3::new(100.0, 0.0, 0.0),
+            PARTY_FAR => Vec3::new(5000.0, 0.0, 0.0),
+            _ => self.0.pos(o),
+        }
+    }
+    fn facing(&self, o: ObjId) -> f32 {
+        self.0.facing(o)
+    }
+    fn motion(&self, o: ObjId) -> u16 {
+        self.0.motion(o)
+    }
+    fn airborne(&self, o: ObjId) -> bool {
+        self.0.airborne(o)
+    }
+    fn jumping(&self, o: ObjId) -> bool {
+        self.0.jumping(o)
+    }
+    fn bone(&self, o: ObjId, _code: u16) -> Option<Mat4> {
+        Some(Mat4::from_translation(self.pos(o)))
+    }
+    fn target_point(&self, o: ObjId) -> Vec3 {
+        self.pos(o) + Vec3::Y * 60.0
+    }
+    fn target_of(&self, o: ObjId) -> Option<ObjId> {
+        self.0.target_of(o)
+    }
+    fn party(&self, n: u32) -> Option<ObjId> {
+        [Some(SORA), Some(PARTY_NEAR), Some(PARTY_FAR)].get(n as usize).copied().flatten()
+    }
+    fn has_ability(&self, o: ObjId, n: u32) -> bool {
+        self.0.has_ability(o, n)
+    }
+    fn ground(&self, from: Vec3, depth: f32) -> Option<Vec3> {
+        self.0.ground(from, depth)
+    }
+    fn bg_hit(&self, a: Vec3, b: Vec3) -> bool {
+        self.0.bg_hit(a, b)
+    }
+    fn hitback(&mut self, o: ObjId, d: Vec3, n: f32) {
+        self.0.hitback(o, d, n)
+    }
+    fn random(&mut self) -> f32 {
+        self.0.random()
+    }
+}
+
+/// KH2's Cure heals the party members standing in its circle, by its own script's test (party
+/// slots, alive, flat distance under the magi record's radius): Sora (ATKP 708) and the one beside
+/// him (709), not the one far away (t822: the KH1 port gives the scripts Donald and Goofy).
+#[test]
+fn cure_heals_the_party_in_its_circle() {
+    let d = dir();
+    let (Ok(system), Ok(bytes)) = (std::fs::read(d.join("03system.bin")), std::fs::read(d.join("CURE_1.mag"))) else {
+        eprintln!("skipped: no extracted files in {}", d.display());
+        return;
+    };
+    let pref = kh2_formats::pref::Pref::from_03system(&system).unwrap();
+    let mut magic = Magic::new();
+    let spell = magic.add_spell(SpellFile::parse("CURE_1.mag", &bytes).unwrap());
+    let mut w = PartyWorld(Fake { frame: 0, release_at: 22, motion_end: 60, seed: 1 });
+    magic.cast(spell, SORA, 3, 0, pref.magi.get(0).unwrap(), &mut w).unwrap();
+    let mut struck = Vec::new();
+    for f in 1..300 {
+        w.0.frame = f;
+        if f == 22 {
+            assert!(magic.release(SORA, &mut w));
+        }
+        for e in magic.update(&mut w).into_iter().chain(magic.take_events()) {
+            if let Event::Strike { attack, target } = e {
+                let atk = magic.attacks.iter().find(|a| a.key == attack).map(|a| a.atk);
+                struck.push((target, atk));
+            }
+        }
+        if magic.casts.is_empty() {
+            break;
+        }
+    }
+    eprintln!("Cure struck {struck:?}");
+    assert!(struck.contains(&(SORA, Some(708))), "{struck:?}");
+    assert!(struck.contains(&(PARTY_NEAR, Some(709))), "{struck:?}");
+    assert!(!struck.iter().any(|s| s.0 == PARTY_FAR), "{struck:?}");
 }

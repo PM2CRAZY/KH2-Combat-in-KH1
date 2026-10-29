@@ -69,6 +69,43 @@ pub trait World {
     fn bg_hit(&self, from: Vec3, to: Vec3) -> bool;
     /// Push an object (the caster's recoil).
     fn hitback(&mut self, o: ObjId, dir: Vec3, dist: f32);
+    /// KH2's star (`trap_obj_star`): `o` takes no hit for `frames` (60 Hz frames).
+    fn star(&mut self, _o: ObjId, _frames: f32) {}
+    /// An attack the script made a shape for, sized or moved (`trap_attack_set_radius`,
+    /// `trap_attack_set_pos`): a host with attack objects of its own makes or moves its object for
+    /// it now.
+    fn attack_set(&mut self, _a: &MagicAttack) {}
+    /// An attack the script freed (`trap_attack_free`): the host's object for it goes.
+    fn attack_free(&mut self, _a: &MagicAttack) {}
+    /// An effect the script started (`trap_pax_start*`, `trap_obj_effect_start`): a host that plays
+    /// effects itself starts its own instance now and returns its handle (`Effect::host`).
+    fn effect_start(&mut self, _e: &Effect) -> Option<u32> {
+        None
+    }
+    /// An effect the script killed (`trap_effect_kill`): the host's instance stops now.
+    fn effect_kill(&mut self, _e: &Effect) {}
+    /// An effect whose loop the script ended (`trap_effect_loop_end`): true if the host ended its
+    /// instance now (`Effect::host_ended`).
+    fn effect_end(&mut self, _e: &Effect) -> bool {
+        false
+    }
+    /// An effect the script fades out over `frames` (`trap_effect_fadeout`): true if the host runs
+    /// that fade on its instance (`Effect::host_fading`).
+    fn effect_fade(&mut self, _e: &Effect, _frames: f32) -> bool {
+        false
+    }
+    /// An effect the script put somewhere or turned (`trap_effect_set_pos`, `trap_effect_set_dir`):
+    /// the host's instance goes there now.
+    fn effect_place(&mut self, _e: &Effect) {}
+    /// Whether `a`'s last move met the background (`trap_attack_is_hit_bg`; KH2 marks it as its
+    /// attack moves).
+    fn attack_hit_bg(&self, _a: &MagicAttack) -> bool {
+        false
+    }
+    /// Whether the host's object for `a` has hit something (`trap_attack_is_hit`).
+    fn attack_hit(&self, _a: &MagicAttack) -> bool {
+        false
+    }
     /// Uniform in [0, 1).
     fn random(&mut self) -> f32;
 }
@@ -382,7 +419,12 @@ impl Magic {
     /// Wisdom Form's shots come from here.
     pub fn object_effect(&mut self, file: usize, owner: ObjId, n: i16, world: &mut dyn World) -> Result<usize, BdxError> {
         let f = self.spells.get(file).ok_or_else(|| BdxError::Trap("no such object script".into()))?;
-        let mut vm = Vm::new(f.program.clone());
+        // On the host's own script machine when it has one, as a cast (t827).
+        let made = self.native.as_mut().and_then(|n| n.machine(f, file, 0x10));
+        let (mut vm, native_main) = match made {
+            Some((vm, main)) => (vm, Some(main)),
+            None => (Vm::new(f.program.clone()), None),
+        };
         vm.frametime = self.frametime;
         let statics = host::Statics::new(&mut vm);
         let mut t = Tables {
@@ -404,13 +446,27 @@ impl Magic {
         let obj = host::obj_record(&mut vm, &mut t, owner);
         t.pax_rec = vm.mem.alloc(16);
         let effect = host::start_object_effect(self, &mut vm, &mut t, n as u16, owner, world);
-        let main = vm.spawn(None);
+        let main = native_main.unwrap_or_else(|| vm.spawn(None));
         vm.trigger(main, 0x10, &[Cell::addr(obj), Cell::int(n as i32), Cell::addr(effect)])?;
         let id = self.fresh_id();
-        self.casts.push(Cast { vm, t, main, released: true, finished: false, fresh: false, object: true, held: false, id, external: false });
+        let external = native_main.is_some() && self.native.as_mut().is_some_and(|h| h.started(id, &vm, main));
+        if external {
+            t.native_id = Some(id);
+        }
+        self.casts.push(Cast { vm, t, main, released: true, finished: false, fresh: false, object: true, held: false, id, external });
         // The trigger runs at once (same frame), like the game's call.
         let i = self.casts.len() - 1;
         self.run_cast(i, world);
+        // (On the host's process: a thread it started there runs in this same step, as the host's
+        // machine runs a child started during its parent's step, `NativeHost::thread`.)
+        if external {
+            let mut k = 0;
+            while let Some(ctx) = self.casts.iter().find(|c| c.id == id).and_then(|c| c.t.ext_threads.get(k).copied()) {
+                if self.step_external(id, ctx, world) || self.casts.iter().find(|c| c.id == id).and_then(|c| c.t.ext_threads.get(k).copied()) == Some(ctx) {
+                    k += 1;
+                }
+            }
+        }
         Ok(i)
     }
 

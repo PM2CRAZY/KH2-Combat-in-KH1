@@ -36,6 +36,13 @@ pub struct Effect {
     pub placed: Option<Vec3>,
     pub dir: Vec3,
     pub scale: Vec3,
+    /// The host's own instance of it, started by the script's call (`World::effect_start`), if
+    /// the host made one.
+    pub host: Option<u32>,
+    /// The host ended its instance's loop at the script's call (`World::effect_end`).
+    pub host_ended: bool,
+    /// The host runs its instance's fade itself from the script's call (`World::effect_fade`).
+    pub host_fading: bool,
     start_motion: Option<u16>,
     start_pos: Option<Vec3>,
 }
@@ -61,6 +68,9 @@ impl Effect {
             placed: None,
             dir: Vec3::Z,
             scale: if scale == Vec3::ZERO { Vec3::ONE } else { scale },
+            host: None,
+            host_ended: false,
+            host_fading: false,
             start_motion: owner.map(|o| world.motion(o)),
             start_pos: None,
             element,

@@ -119,6 +119,48 @@ const KH1_AIR_CAP: f32 = 8.0;
 
 /// KH2's push running on KH1's: (KH2's speed this frame, what was written into KH1's field).
 static PUSH: Mutex<Option<(f32, f32)>> = Mutex::new(None);
+/// The push running is a spell script's (`script_push`, t821), not a hit's: it runs whatever the
+/// Hit Reactions style, while KH1's states have him.
+static SCRIPT: AtomicBool = AtomicBool::new(false);
+/// KH1's push start (Steam `0x1402C7300 (actor, {direction, distance})`, Checked (decomp)), and its
+/// first bytes (Checked (exe)).
+const PUSH_START_STEAM: usize = 0x2C7300;
+const PUSH_START_BYTES: [u8; 8] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x57, 0x48, 0x83];
+
+/// A spell script pushes Sora (KH2's `trap_obj_hitback`, Blizzard's push of its caster: KH2's
+/// `0x1403D4960`, Checked (decomp), a push of `dist` along `dir` at distance × 0.1 a frame, × 0.9
+/// each frame): KH1's own push started on him along `dir` (KH1 world, flattened), then KH2's speed
+/// and decay on it (`push_frame`), so he travels `dist` on KH2's curve through KH1's collision.
+/// While KH1's states have him KH1's physics step runs his push; while KH2's controller has him
+/// (Wisdom Form), the controller's move adds it as KH1's step would (`controller_push`, t824).
+/// Returns whether it started.
+/// (Assumption: KH2's player bonus to the distance, its player record `+0x1C8`, is 0 for Sora; not
+/// read in KH2.)
+pub unsafe fn script_push(actor: usize, dir: [f32; 3], dist: f32) -> bool {
+    if actor < 0x10000 || !(super::shared::active() || super::takeover::kh2_has()) || super::addr::Build::current() != super::addr::Build::Steam || !dist.is_finite() || dist <= 0.0 {
+        return false;
+    }
+    let flat = dir[0].hypot(dir[2]);
+    if !(flat > 1e-4) {
+        return false;
+    }
+    let at = super::takeover::game_base() + PUSH_START_STEAM;
+    if std::slice::from_raw_parts(at as *const u8, PUSH_START_BYTES.len()) != PUSH_START_BYTES {
+        note(|| "KH1's push start isn't where expected: a script's push not applied".to_string());
+        return false;
+    }
+    let start: unsafe extern "system" fn(usize, *const [f32; 4]) = std::mem::transmute(at);
+    let arg = [dir[0] / flat, 0.0, dir[2] / flat, dist];
+    start(actor, &arg);
+    let v = dist * KH2_START;
+    wr(actor + PUSH_SPEED, v);
+    if let Ok(mut p) = PUSH.lock() {
+        *p = Some((v, v));
+    }
+    SCRIPT.store(true, Ordering::Relaxed);
+    note(|| format!("a spell script's push on KH1's: {dist:.0}, {v:.1} a frame, x {KH2_DECAY} a frame"));
+    true
+}
 static LOGGED: AtomicU32 = AtomicU32::new(0);
 
 fn note(s: impl FnOnce() -> String) {
@@ -192,6 +234,7 @@ pub unsafe fn after_pass(actor: usize, was: (u32, u32)) {
             if let Ok(mut p) = PUSH.lock() {
                 *p = Some((v, v));
             }
+            SCRIPT.store(false, Ordering::Relaxed);
             note(|| format!("KH2's push on KH1's (request {request:#x}, {how:?}): {d:.0} (KH1's own {kh1:.0}), {v:.1} a frame, x {KH2_DECAY} a frame"));
         }
         // The air flinches: KH1's hop (state 2) and drift just set.
@@ -262,20 +305,50 @@ pub unsafe fn push_frame(actor: usize) {
     let dt = physics::dt();
     let kh1_left = written * KH1_DECAY.powf(dt);
     let ours = (field - written).abs() < 1e-3 || (field - kh1_left).abs() < 1e-3 * written.max(1.0);
-    if !on() || !ours {
+    let script = SCRIPT.load(Ordering::Relaxed);
+    if !(on() || script && super::shared::active()) || !ours {
         *g = None;
+        SCRIPT.store(false, Ordering::Relaxed);
         return;
     }
     if v < 1.0 {
         wr(actor + PUSH_SPEED, 0.0f32);
         wr(actor + PUSH_FLAG_FIELD, rd::<u32>(actor + PUSH_FLAG_FIELD) & !PUSH_FLAG);
         *g = None;
+        SCRIPT.store(false, Ordering::Relaxed);
         return;
     }
     // (KH1's push moves him by `v` × the step this frame; KH2's speed after it.)
     wr(actor + PUSH_SPEED, v);
     wr(actor + PUSH_FLAG_FIELD, rd::<u32>(actor + PUSH_FLAG_FIELD) | PUSH_FLAG);
     *g = Some((v * KH2_DECAY.powf(dt), v));
+}
+
+/// One of KH2's controller's 60 Hz steps with a spell script's push on him (`script_push`, t824):
+/// KH1's physics step, which moves him by his push (`0x1402C7070`: direction `+0x3F0` × speed
+/// `+0x3FC` × the step, flat; Checked (decomp)), doesn't run while the controller has him, so its
+/// move takes it as KH1's step would, on KH2's curve (× 0.9 a step, ended below 1). Returns the
+/// push's part of this step's move (KH1 world); nothing without one.
+pub unsafe fn controller_push(actor: usize) -> [f32; 3] {
+    if !SCRIPT.load(Ordering::Relaxed) || actor < 0x10000 {
+        return [0.0; 3];
+    }
+    let Ok(mut g) = PUSH.lock() else { return [0.0; 3] };
+    let flags = rd::<u32>(actor + PUSH_FLAG_FIELD);
+    let v: f32 = rd(actor + PUSH_SPEED);
+    if flags & PUSH_FLAG == 0 || !(v.is_finite() && v >= 1.0) {
+        wr(actor + PUSH_SPEED, 0.0f32);
+        wr(actor + PUSH_FLAG_FIELD, flags & !PUSH_FLAG);
+        *g = None;
+        SCRIPT.store(false, Ordering::Relaxed);
+        return [0.0; 3];
+    }
+    let dir: [f32; 3] = rd(actor + 0x3F0);
+    let next = v * KH2_DECAY;
+    wr(actor + PUSH_SPEED, next);
+    // (Left as `push_frame` expects to find it, should KH1's states take him meanwhile.)
+    *g = Some((next, next));
+    [dir[0] * v, 0.0, dir[2] * v]
 }
 
 /// KH1's middle kind of hit (kind 4: 20..29% of his max HP, btltbl `+0x10` / `+0x11`, mapped from

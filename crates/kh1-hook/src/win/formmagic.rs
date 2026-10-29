@@ -14,15 +14,16 @@
 //!   cost and level (Fire / Fira / Firaga ...), KH2's script (`magic/FIRE_<level>.mag` ...)
 //!   at Wisdom's magic sub (level × 2 − 2, + 1 for the combo finisher, + 10), its effects
 //!   (`kh2fx` packages from 5, `spell_package`) and sounds, its attacks through the spell hit
-//!   records. Cure's heal (a script's direct application to Sora): ours, a share of KH1's max
-//!   HP by the ATKP row's power (`CURE_SHARE`), as KH1 has no KH2 Magic stat to scale it by.
+//!   records. Cure's heal (a script's direct application to each party member in its circle): ours,
+//!   a share of KH1's max HP by the ATKP row's power (`CURE_SHARE`), scaled by Sora's max MP as
+//!   KH1 has no KH2 Magic stat (`combat::magic_factor`, t828).
 
 use super::reflect::{flip, world_now, KhWorld, SORA};
 use super::{combat, log, pose};
 use character_core::{CastMotions, Character, Output};
 use glam::{Mat4, Quat, Vec3};
 use kh2_formats::battle::{Atkp, Battle};
-use kh2_magic::{Event, Magic, SpellFile};
+use kh2_magic::{Event, Magic, SpellFile, World};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -105,7 +106,7 @@ pub const KH1_CAST_FRAME: [f32; 7] = [28.0, 28.0, 30.0, 36.0, 28.0, 28.0, 30.0];
 /// KH1's frame scale (Steam `0x14233FBDC`: 1.0 a frame at 60 fps, 2.0 at 30; `frameadv`).
 const FRAME_SCALE_STEAM: usize = 0x233FBDC;
 
-unsafe fn frame_scale() -> f32 {
+pub(super) unsafe fn frame_scale() -> f32 {
     let s: f32 = rd(super::sys::GetModuleHandleA(std::ptr::null()) as usize + FRAME_SCALE_STEAM);
     if s.is_finite() && s > 0.0 && s < 4.0 { s } else { 1.0 }
 }
@@ -163,7 +164,8 @@ const WAIT_S: f32 = 5.0;
 /// for it (ours).
 const SEEN: u8 = u8::MAX;
 const NOT_SEEN_FRAMES: u8 = 4;
-/// Cure's heal: the ATKP row's power / this, of KH1's max HP (ours).
+/// Cure's heal: the ATKP row's power / this, of KH1's max HP (ours), times Sora's max MP factor
+/// (`heal`, t828).
 const CURE_SHARE: f32 = 3000.0;
 
 pub fn spell_package(spell: u8, level: u8) -> u8 {
@@ -1230,12 +1232,13 @@ fn row(battle: &Battle, atk: u16, sub: u8, count: u8) -> Option<&Atkp> {
 /// An unlocked shot's target: the nearest enemy within `AUTO_RANGE` in front of him.
 fn auto_target(w: &KhWorld, facing: f32) -> Option<u32> {
     let me = w.objs.first()?;
+    let at = w.pos(me.id);
     let ahead = Vec3::new(facing.sin(), 0.0, facing.cos());
     w.objs
         .iter()
-        .skip(1)
+        .filter(|o| o.id >= super::reflect::FOE0)
         .filter_map(|o| {
-            let d = o.target - me.pos;
+            let d = w.target_point(o.id) - at;
             let flat = Vec3::new(d.x, 0.0, d.z);
             let dist = flat.length();
             (dist < AUTO_RANGE && flat.normalize_or_zero().dot(ahead) > AUTO_CONE).then_some((o.id, dist))
@@ -1246,12 +1249,20 @@ fn auto_target(w: &KhWorld, facing: f32) -> Option<u32> {
 
 /// An unbound effect's root where the script has it (y up, our axes) → KH2's world (y down),
 /// turned along its direction.
-fn place(pos: Vec3, dir: Vec3) -> Mat4 {
+pub(super) fn place(pos: Vec3, dir: Vec3) -> Mat4 {
     let r = Quat::from_rotation_arc(Vec3::Z, dir.try_normalize().unwrap_or(Vec3::Z));
     flip() * Mat4::from_rotation_translation(r, pos) * flip()
 }
 
-/// Sora healed by a script (Cure): KH1's HP.
+/// KH1's own HP add (Steam `0x1402A4920 (actor, amount)`, Checked (decomp): the stats block
+/// `+0x6C`'s HP `+0x3C` raised up to its max `+0x40`, KH1's own heal modifier for its status
+/// applied, the party's HUD copy updated), and its first bytes (Checked (exe)).
+const ADD_HP_STEAM: usize = 0x2A4920;
+const ADD_HP_BYTES: [u8; 8] = [0x48, 0x89, 0x74, 0x24, 0x10, 0x48, 0x89, 0x7C];
+
+/// A party member (Sora, Donald, Goofy: their stats blocks are laid out alike, Checked (decomp):
+/// KH1's save point heals all three through `+0x6C` `+0x3C` / `+0x40`) healed by a script
+/// (Cure): KH1's own HP add (t822; before, written by us, Sora only).
 unsafe fn heal(actor: usize, power: u16) -> Option<(i32, i32)> {
     let stats = pose::ptr(std::ptr::read_unaligned((actor + 0x6C) as *const u32));
     if stats < 0x10000 {
@@ -1262,21 +1273,54 @@ unsafe fn heal(actor: usize, power: u16) -> Option<(i32, i32)> {
     if hp <= 0 || max < hp || max <= 0 {
         return None;
     }
-    let add = ((max as f32 * power as f32 / CURE_SHARE).ceil() as i32).max(1);
-    let now = (hp + add).min(max);
-    std::ptr::write_unaligned((stats + 0x3C) as *mut i32, now);
-    Some((hp, now))
+    // (Scaled by Sora's max MP, t828: the owner, "tie it to the amount of max mp you have, in kh1
+    // thats how magic is scaled (assumption)". KH2's heal is power × the caster's Magic / 100
+    // (kind 6); KH1 has no Magic stat, so the stand-in the mod's other Magic-based hits use:
+    // +10% a max MP point, at most 30, times the ini's `magic_scale`, `combat::magic_factor`.)
+    let add = ((max as f32 * power as f32 / CURE_SHARE * combat::magic_factor()).ceil() as i32).max(1);
+    let at = super::takeover::game_base() + ADD_HP_STEAM;
+    if super::addr::Build::current() == super::addr::Build::Steam && std::slice::from_raw_parts(at as *const u8, 8) == ADD_HP_BYTES {
+        let f: unsafe extern "system" fn(usize, i32) -> u32 = std::mem::transmute(at);
+        f(actor, add);
+    } else {
+        std::ptr::write_unaligned((stats + 0x3C) as *mut i32, (hp + add).min(max));
+    }
+    Some((hp, std::ptr::read_unaligned((stats + 0x3C) as *const i32)))
+}
+
+/// A spell attack of Sora's that deals damage, as KH1 strikes with it: Fire, Blizzard and Thunder
+/// with KH1's own data for the spell at its level (its element), Fire at KH1 Sora's size (the
+/// tester's m20 answer 3, "(a)", as its effects since t561 and Reflect's barrier since t518).
+pub(super) unsafe fn spell_attack(actor: usize, a: &kh2_magic::MagicAttack, battle: &Battle, package: &HashMap<usize, u8>) -> Option<combat::SpellAttack> {
+    if a.freed || a.owner != SORA {
+        return None;
+    }
+    let pkg = package.get(&a.spell).copied().unwrap_or(super::kh2fx::WISDOM);
+    let kh1_data = package.get(&a.spell).and_then(|&p| package_spell(p)).filter(|(spell, _)| *spell <= 2).and_then(|(spell, level)| combat::kh1_spell_data(spell, level));
+    let first = row(battle, a.atk, a.sub, 0)?;
+    if !combat_core::AttackKind::from_id(first.kind).deals_damage() {
+        return None;
+    }
+    let shapes = a.shapes();
+    let fire = package.get(&a.spell).and_then(|&p| package_spell(p)).is_some_and(|(spell, _)| spell == 0);
+    let shapes = if fire { super::reflect::kh1_sized_shapes(actor, shapes) } else { shapes };
+    (!shapes.is_empty()).then(|| combat::SpellAttack { kh1_data, package: Some(pkg), key: attack_key(a), group: if first.combo_group != 0 { first.combo_group as i64 } else { a.group }, atk: a.atk, sub: a.sub, shapes })
+}
+
+/// A spell attack's key for KH1's objects and our hit records.
+pub(super) fn attack_key(a: &kh2_magic::MagicAttack) -> u64 {
+    a.id | KEY
 }
 
 /// KH1's script machine steps one of these casts on its KH1 process, or one of its threads on a KH1
-/// child process (`kh2script`, t798 / t799): its script (or that thread) runs once with the world
-/// of our last step, Sora's place read again. Returns whether its process goes on.
+/// child process (`kh2script`, t798 / t799): its script (or that thread) runs once on KH1's actors
+/// as they are now (`reflect::KhWorld`, t817). Returns whether its process goes on.
 pub unsafe fn kh1_step(id: u64, ctx: kh2_magic::kh2_bdx::CtxId) -> bool {
     // (Our own step has the runtime: the script waits a frame.)
     let Ok(mut g) = RT.try_lock() else { return true };
     let Some(rt) = g.as_mut() else { return false };
     let Some(mut world) = rt.world.take() else { return true };
-    super::reflect::refresh(&mut world, rt.actor);
+    rt.magic.frametime = frame_scale();
     rt.magic.frame = Some(super::takeover::GAME_FRAME.load(Ordering::Relaxed));
     let goes = rt.magic.step_external(id, ctx, &mut world);
     rt.world = Some(world);
@@ -1284,7 +1328,7 @@ pub unsafe fn kh1_step(id: u64, ctx: kh2_magic::kh2_bdx::CtxId) -> bool {
 }
 
 /// After KH2's step and the swings: the form's scripts' frame (casts, shots, effects, hits).
-pub unsafe fn shots_step(actor: usize, out: &Output, airborne: bool, strikes: &mut combat::Strikes, battle: &Battle, lock: Option<u32>) {
+pub unsafe fn shots_step(actor: usize, out: &Output, airborne: bool, strikes: &mut combat::Strikes, battle: &Arc<Battle>, lock: Option<u32>) {
     let Ok(mut g) = RT.try_lock() else { return };
     let Some(rt) = g.as_mut() else { return };
     if rt.queued.is_empty() && rt.fresh.is_none() && rt.casting.is_none() && rt.kh1_clock.is_none() && rt.magic.casts.is_empty() && rt.magic.effects.is_empty() && rt.fx.is_empty() {
@@ -1294,8 +1338,12 @@ pub unsafe fn shots_step(actor: usize, out: &Output, airborne: bool, strikes: &m
     // (KH1's script machine steps the casts on its processes: the effects age once a game frame,
     // before the frame's first script, whichever of the two runs first, `kh2_magic::Magic::frame`.)
     rt.magic.frame = rt.magic.native.is_some().then(|| super::takeover::GAME_FRAME.load(Ordering::Relaxed));
-    if world.target.is_none() {
-        world.target = auto_target(&world, out.facing);
+    // (KH1's frame time, as KH2's scripts run on their game's, t817.)
+    rt.magic.frametime = frame_scale();
+    // (Its attacks made and moved as KH1 attack objects by the scripts' calls, t819.)
+    world.sink = Some(super::reflect::Sink { battle: battle.clone(), kind: super::reflect::SinkKind::Form(rt.package.clone()) });
+    if world.locked().is_none() {
+        world.auto = auto_target(&world, out.facing);
     }
     // (A cast in KH1's cast state: KH1 queues its motion and plays it from its next animation
     // step, so for a frame or two KH1's slot is still the one before, or at a time below 0. KH2's
@@ -1369,7 +1417,7 @@ pub unsafe fn shots_step(actor: usize, out: &Output, airborne: bool, strikes: &m
                     } else {
                         rt.fired += 1;
                         if rt.fired <= 30 {
-                            log!(Magic, "Wisdom shot (trigger {n}, motion {}), target {:?}", out.motion, world.target);
+                            log!(Magic, "Wisdom shot (trigger {n}, motion {}), target {:?}", out.motion, world.target_of(SORA));
                         }
                     }
                 }
@@ -1397,13 +1445,18 @@ pub unsafe fn shots_step(actor: usize, out: &Output, airborne: bool, strikes: &m
                 }
             }
             Event::Error(e) => log!(Magic, "Wisdom's script error: {e}"),
-            Event::Strike { attack, target } if target == SORA => {
+            // KH2's Cure: its script strikes each party member standing in its circle (KH2's own
+            // test: party slots 0..3, alive, not a summon, flat distance under the magi record's
+            // radius; ATKP 708 on the caster, 709 on the others), each healed (t822: Donald and
+            // Goofy are KH1's party actors in the scripts' world).
+            Event::Strike { attack, target } if target == SORA || (super::reflect::PARTY0..super::reflect::FOE0).contains(&target) => {
                 let Some(a) = rt.magic.attack_mut(attack) else { continue };
                 let (atk, sub) = (a.atk, a.sub);
                 let Some(r) = row(battle, atk, sub, 0) else { continue };
+                let Some(who_actor) = world.actor_of(target) else { continue };
                 if matches!(combat_core::AttackKind::from_id(r.kind), combat_core::AttackKind::Cure | combat_core::AttackKind::CureStrong) {
-                    if let Some((from, to)) = heal(actor, r.power) {
-                        log!(Magic, "{} Cure: ATKP {atk} sub {sub} (power {}): HP {from} -> {to}", who(), r.power);
+                    if let Some((from, to)) = heal(who_actor, r.power) {
+                        log!(Magic, "{} Cure on {}: ATKP {atk} sub {sub} (power {}): HP {from} -> {to}", who(), if target == SORA { "Sora".to_string() } else { format!("party slot {}", target - super::reflect::PARTY0) }, r.power);
                     }
                 }
             }
@@ -1420,6 +1473,11 @@ pub unsafe fn shots_step(actor: usize, out: &Output, airborne: bool, strikes: &m
         let package = rt.package.get(&e.spell).copied().unwrap_or(super::kh2fx::WISDOM);
         let placed = e.owner.is_none().then(|| place(e.pos, e.dir));
         match rt.fx.get(&e.id) {
+            // (Started by its script's call, t820, `reflect::Sink::effect_start`: its instance, or
+            // 0 for none drawn.)
+            None if e.host.is_some() => {
+                rt.fx.insert(e.id, (e.host.filter(|h| *h != 0), false));
+            }
             None => {
                 let h = if e.alive() { super::kh2fx::spell_start(package, e.element.id) } else { None };
                 if let (Some(h), Some(at)) = (h, placed) {
@@ -1432,18 +1490,24 @@ pub unsafe fn shots_step(actor: usize, out: &Output, airborne: bool, strikes: &m
             }
             Some((Some(h), ended)) => {
                 let (h, ended) = (*h, *ended);
-                if let Some(at) = placed {
+                // (Its script's calls place, end and fade it, t826; the rest still from here.)
+                let by_call = e.host == Some(h);
+                if let (Some(at), false) = (placed, by_call) {
                     super::kh2fx::spell_place(h, at);
                 }
                 if e.killed {
                     super::kh2fx::spell_kill(h);
                 } else if e.fade.is_some() {
-                    super::kh2fx::spell_alpha(h, e.alpha());
+                    if !(by_call && e.host_fading) {
+                        super::kh2fx::spell_alpha(h, e.alpha());
+                    }
                     if !e.alive() {
                         super::kh2fx::spell_kill(h);
                     }
                 } else if (e.ended_at.is_some() || !e.alive()) && !ended {
-                    super::kh2fx::spell_end(h);
+                    if !(by_call && e.host_ended) {
+                        super::kh2fx::spell_end(h);
+                    }
                     rt.fx.insert(e.id, (Some(h), true));
                 }
             }
@@ -1454,43 +1518,26 @@ pub unsafe fn shots_step(actor: usize, out: &Output, airborne: bool, strikes: &m
     // The attacks against KH1's enemies; one that hits is told so.
     // (Fire, Blizzard and Thunder land with KH1's own data for the spell at its level: its
     // element; the shots stay the swings'.)
-    let package = &rt.package;
-    let attacks: Vec<combat::SpellAttack> = rt
-        .magic
-        .attacks
-        .iter()
-        .filter(|a| !a.freed && a.owner == SORA)
-        .filter_map(|a| {
-            let pkg = package.get(&a.spell).copied().unwrap_or(super::kh2fx::WISDOM);
-            let kh1_data = package.get(&a.spell).and_then(|&p| package_spell(p)).filter(|(spell, _)| *spell <= 2).and_then(|(spell, level)| combat::kh1_spell_data(spell, level));
-            let first = row(battle, a.atk, a.sub, 0)?;
-            if !combat_core::AttackKind::from_id(first.kind).deals_damage() {
-                return None;
-            }
-            let shapes = a.shapes();
-            // (Fire's at KH1 Sora's size, as its effects since t561 and Reflect's barrier since t518:
-            // the tester's m20 answer 3, "(a)".)
-            let fire = package.get(&a.spell).and_then(|&p| package_spell(p)).is_some_and(|(spell, _)| spell == 0);
-            let shapes = if fire { unsafe { super::reflect::kh1_sized_shapes(actor, shapes) } } else { shapes };
-            (!shapes.is_empty()).then(|| combat::SpellAttack { kh1_data, package: Some(pkg), key: a.id | KEY, group: if first.combo_group != 0 { first.combo_group as i64 } else { a.group }, atk: a.atk, sub: a.sub, shapes })
-        })
-        .collect();
-    if !attacks.is_empty() {
-        // (KH1 attack objects of ours that KH1's own collision pass collides, `bodyhits`; else our
-        // own sweep, as before.)
-        let hits = if super::bodyhits::spells_native() {
-            super::bodyhits::spell_attacks(actor, &attacks, &|atk, sub, count| row(battle, atk, sub, count).cloned())
+    // (KH1 attack objects of ours that KH1's own collision pass collides, `bodyhits`, made and moved
+    // by the scripts' own calls, t819, `reflect::KhWorld::attack_set`: the hits it made since; else
+    // our own sweep, as before.)
+    let hits = if super::bodyhits::spells_native() {
+        super::bodyhits::spell_results(KEY)
+    } else {
+        let attacks: Vec<combat::SpellAttack> = rt.magic.attacks.iter().filter_map(|a| spell_attack(actor, a, battle, &rt.package)).collect();
+        if attacks.is_empty() {
+            Vec::new()
         } else {
             strikes.spell_strike(actor, &attacks, &|atk, sub, count| row(battle, atk, sub, count).cloned())
-        };
-        for (key, atk, foe, dealt) in hits {
-            rt.hits += 1;
-            if let Some(a) = rt.magic.attacks.iter_mut().find(|a| a.id | KEY == key) {
-                a.hit = true;
-            }
-            if rt.hits <= 60 {
-                log!(Magic, "{}: ATKP {atk} hit {foe:#x} -> damage {dealt:?}", who());
-            }
+        }
+    };
+    for (key, atk, foe, dealt) in hits {
+        rt.hits += 1;
+        if let Some(a) = rt.magic.attacks.iter_mut().find(|a| a.id | KEY == key) {
+            a.hit = true;
+        }
+        if rt.hits <= 60 {
+            log!(Magic, "{}: ATKP {atk} hit {foe:#x} -> damage {dealt:?}", who());
         }
     }
     for a in rt.magic.freed().filter(|a| a.owns_id) {

@@ -916,6 +916,8 @@ fn note_kh2(pose: &[Mat4], to_world: &Mat4) {
 }
 
 /// KH2 Sora's pose (model space) and model → world, if one was drawn in the last half second.
+/// (Unused since t817: the spell scripts read KH1's own skeleton, `reflect::KhWorld`.)
+#[allow(dead_code)]
 pub fn kh2_pose<R>(f: impl FnOnce(&[Mat4], &Mat4) -> R) -> Option<R> {
     let g = KH2_POSE.lock().ok()?;
     let (pose, w, at) = g.as_ref()?;

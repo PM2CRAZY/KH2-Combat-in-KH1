@@ -1887,6 +1887,10 @@ pub unsafe fn native_spells(actor: usize) {
     static LAST: Mutex<Option<(u16, f32)>> = Mutex::new(None);
     // (Reflect's on KH1's cast state too, `reflect::native_step`.)
     let reflect = super::reflect::busy();
+    // (KH2's star a spell script gave him, on KH1's own states, t817; Reflect's step has it then.)
+    if super::shared::active() && !reflect {
+        super::reflect::star_step(actor);
+    }
     // (Wisdom Form on KH1's own states too: its shots' script, `formmagic`, from its motions' frame
     // trigger 1 that KH1's motion pass fires, `kh2slots::sound_event`. Forms still on KH2's
     // controller run theirs from its step.)
@@ -3293,6 +3297,11 @@ unsafe fn takeover(actor: usize) -> bool {
             }
         }
         let mut carry = if settings.carry && !fresh_frame && step == 0 { carried(actor, &mut d.logged) } else { [0.0; 3] };
+        // A spell script's push on him (Blizzard's, `hitreact::controller_push`, t824): KH1's push,
+        // as KH1's physics step would move him by it.
+        let pushed = super::hitreact::controller_push(actor);
+        carry[0] += pushed[0];
+        carry[2] += pushed[2];
         // (In the air just after one of KH1's moves, KH1's push doesn't lift him: a push KH1's move or
         // landing left is no platform's, and a jump then went far too high, the user.)
         if JUMP_WATCH.load(Ordering::Relaxed) > 0 && d.character.airborne() && rd::<u32>(actor + 0x160) & 4 == 0 {
@@ -4103,6 +4112,63 @@ pub fn sora_actor() -> usize {
         return 0;
     }
     unsafe { rd::<u64>(base + PARTY_RVA) as usize }
+}
+
+/// KH2's hit state (`combat::Strikes`) when nothing else holds it (a spell script's call, made
+/// from KH1's script machine after the frame's actor update, t825).
+pub fn with_strikes<R>(f: impl FnOnce(&mut combat::Strikes) -> R) -> Option<R> {
+    let mut g = DRIVER.try_lock().ok()?;
+    g.as_mut().map(|d| f(&mut d.strikes))
+}
+
+/// KH1's lock-on target now (`0x142DB3F10` set, `0x142DB3F18` its actor) and the lock point it is
+/// on (`+4`), or `None` (Checked (code): as `kh1_lock` reads them). For the spell scripts' world
+/// (`reflect::KhWorld`), read when a script asks.
+pub unsafe fn kh1_locked() -> Option<(usize, i32)> {
+    let base = BASE.load(Ordering::Relaxed);
+    if base == 0 || rd::<u32>(base + LOCK_STATE_RVA) == 0 {
+        return None;
+    }
+    let a = pose::ptr(rd::<u32>(base + LOCK_TARGET_RVA));
+    (a > 0x10000).then(|| (a, rd::<i32>(base + LOCK_TARGET_RVA + 4).max(0)))
+}
+
+/// KH1's lock point `point` of `actor` (`0x1402AE330`, KH1 world, y down), if KH1 gives one.
+pub unsafe fn kh1_lock_point(actor: usize, point: i32) -> Option<[f32; 3]> {
+    let base = BASE.load(Ordering::Relaxed);
+    if base == 0 || actor < 0x10000 {
+        return None;
+    }
+    let f: unsafe extern "system" fn(usize, i32, *mut [f32; 4]) -> f32 = std::mem::transmute(base + LOCK_POINT_RVA);
+    let mut v = [0.0f32; 4];
+    let r = f(actor, point, &mut v);
+    (r.is_finite() && r >= 0.0 && v[..3].iter().all(|x| x.is_finite())).then(|| [v[0], v[1], v[2]])
+}
+
+/// KH1's point on an actor's body (`0x14029C990 (actor, code, t, out)`, Checked (decomp)): `0x8003`
+/// its body's centre (its collision body's middle, else `+0x50`), `0x30` along its Keyblade (`t`
+/// 0 its start, 1 its tip), `0x4000 | b` bone `b`. KH1 world, y down.
+pub unsafe fn kh1_bone_point(actor: usize, code: u32, t: f32) -> Option<[f32; 3]> {
+    let base = BASE.load(Ordering::Relaxed);
+    if base == 0 || actor < 0x10000 {
+        return None;
+    }
+    let f: unsafe extern "system" fn(usize, u32, f32, *mut [f32; 4]) = std::mem::transmute(base + BONE_POINT_RVA);
+    let mut v = [0.0f32; 4];
+    f(actor, code, t, &mut v);
+    v[..3].iter().all(|x| x.is_finite()).then(|| [v[0], v[1], v[2]])
+}
+const BONE_POINT_RVA: Rva = Rva(0x29C990);
+
+/// KH1's count of ability `id` equipped by party member `member` (`0x140282A70 (id, member)`,
+/// Checked (decomp): member 0..9 its own list, 10 and up the shared list).
+pub unsafe fn kh1_ability(id: i32, member: i32) -> i32 {
+    let base = BASE.load(Ordering::Relaxed);
+    if base == 0 {
+        return 0;
+    }
+    let has: unsafe extern "system" fn(i32, i32) -> i32 = std::mem::transmute(base + HAS_ABILITY_RVA);
+    has(id, member)
 }
 
 pub fn kh2_has() -> bool {

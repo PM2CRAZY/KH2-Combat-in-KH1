@@ -175,12 +175,12 @@ struct Live {
 
 struct State {
     live: [Option<Live>; POOL_COUNT],
-    /// A KH2 spell's attack on one of our objects (`spell_attacks`), by pool index.
+    /// A KH2 spell's attack on one of our objects (`spell_place`), by pool index.
     spells: Vec<(usize, SpellObj)>,
     /// Each enemy's last hit group of a KH2 spell and the hits in a row from it (KH2's hit record:
     /// the ATKP row by that count, `HitRecord::admit`).
     counts: Vec<(usize, i64, u32)>,
-    /// Hits KH1's pass made with spell objects since `spell_attacks` last asked: (key, ATKP,
+    /// Hits KH1's pass made with spell objects since `spell_results` last asked: (key, ATKP,
     /// actor, damage).
     results: Vec<(u64, u16, usize, Option<u32>)>,
     /// The row a spell hit is being made with now (`before_hit` → `atkp`): (attack, row).
@@ -356,8 +356,15 @@ struct SpellObj {
     n: usize,
     seen: u64,
     kh1_spell: bool,
+    /// Made and moved by its script's own calls (`spell_place`): kept until freed, its sweep only
+    /// on the frame after a move.
+    by_calls: bool,
+    /// It has hit something (`spell_hit`).
+    hit: bool,
 }
 
+/// Frames a spell attack placed by its script's calls stays live without being moved (5 s at 60).
+const BY_CALLS_MAX: u64 = 300;
 /// Shapes a spell attack tests at most (`combat_core::MAX_SWEPT_SHAPES` plus its own).
 const SPELL_SHAPES: usize = 33;
 /// ATKP rows kept per spell attack (hits in a row; the last one repeats).
@@ -608,11 +615,11 @@ unsafe fn data_slot(g: &mut State, base: usize, key: u64) -> Option<usize> {
     Some(d)
 }
 
-/// A KH2 spell's attacks this frame (`formmagic`, `reflect`, in place of `combat::Strikes::
-/// spell_strike`): each a free-standing KH1 attack object of ours (made the first time its key is
-/// seen, with KH1's attack constructor, as KH1's spell scripts make theirs), its shapes this frame for KH1's pass (`entries`), which collides it with
-/// every body itself. Returns the hits KH1's pass made with them since the last call: (key, ATKP,
-/// actor, damage). The objects: free-standing (data bone < 0: KH1's attribute `0x400`, as KH1's own
+/// A KH2 spell's attacks (`formmagic`, `reflect`, in place of `combat::Strikes::spell_strike`):
+/// each a free-standing KH1 attack object of ours (made the first time its key is seen, with KH1's
+/// attack constructor, as KH1's spell scripts make theirs; since t819 by the script's own calls,
+/// `spell_place`), its shapes for KH1's pass (`entries`), which collides it with every body
+/// itself; the hits it made: `spell_results`. The objects: free-standing (data bone < 0: KH1's attribute `0x400`, as KH1's own
 /// spell shots), active always (activity 3), no KH1 re-arm; the data a copy of the KH1 spell's own
 /// entry (`kh1_data`: its element and stat source) or of Sora's ground swing row's (his finisher's
 /// for a hit that knocks away, as `spell_strike` took them), the clash type that meets nothing (the
@@ -622,10 +629,36 @@ pub fn spells_native() -> bool {
     native() && MAKE_OK.load(Ordering::Relaxed)
 }
 
-pub unsafe fn spell_attacks(sora: usize, attacks: &[super::combat::SpellAttack], row: &dyn Fn(u16, u8, u8) -> Option<kh2_formats::battle::Atkp>) -> Vec<(u64, u16, usize, Option<u32>)> {
+/// The hits KH1's pass made since the last call with the spell attack objects whose keys carry
+/// `mark` (a runtime's own key bit): (key, ATKP, actor, damage).
+pub fn spell_results(mark: u64) -> Vec<(u64, u16, usize, Option<u32>)> {
+    let Ok(mut g) = STATE.try_lock() else { return Vec::new() };
+    let (mine, mut rest): (Vec<_>, Vec<_>) = std::mem::take(&mut g.results).into_iter().partition(|r| r.0 & mark == mark);
+    // (Another runtime's, kept for it; not without end, if it no longer takes them.)
+    let over = rest.len().saturating_sub(64);
+    rest.drain(..over);
+    g.results = rest;
+    mine
+}
+
+/// A spell attack its script made, sized or moved just now (`reflect::KhWorld::attack_set`, t819):
+/// its KH1 attack object made or moved at once, as KH1's own spell scripts make and move theirs.
+/// It stays where the script last put it until the script moves or frees it (`spell_forget`).
+pub unsafe fn spell_place(sora: usize, attack: &super::combat::SpellAttack, row: &dyn Fn(u16, u8, u8) -> Option<kh2_formats::battle::Atkp>) {
+    place(sora, std::slice::from_ref(attack), row, true);
+}
+
+/// Whether the spell attack `key`'s object has hit something (KH2's `trap_attack_is_hit`, t819).
+pub fn spell_hit(key: u64) -> bool {
+    STATE.try_lock().is_ok_and(|g| g.spells.iter().any(|(_, sp)| sp.key == key && sp.hit))
+}
+
+/// The spell attacks' objects made or moved; `by_calls`: by the script's own calls (kept until freed)
+/// rather than by our step each frame (gone a frame after it stops coming).
+unsafe fn place(sora: usize, attacks: &[super::combat::SpellAttack], row: &dyn Fn(u16, u8, u8) -> Option<kh2_formats::battle::Atkp>, by_calls: bool) {
     use combat_core::ShapeKind;
     let base = BASE.load(Ordering::Relaxed);
-    let Ok(mut g) = STATE.try_lock() else { return Vec::new() };
+    let Ok(mut g) = STATE.try_lock() else { return };
     let frame = super::takeover::GAME_FRAME.load(Ordering::Relaxed);
     let make: unsafe extern "system" fn(usize, u32, usize) -> usize = std::mem::transmute(base + MAKE_STEAM);
     let free_bit: unsafe extern "system" fn() -> u32 = std::mem::transmute(base + FREE_BIT_RVA);
@@ -647,6 +680,7 @@ pub unsafe fn spell_attacks(sora: usize, attacks: &[super::combat::SpellAttack],
             }
             sp.n = n;
             sp.seen = frame;
+            sp.by_calls = by_calls;
             continue;
         }
         g.spells.retain(|(_, sp)| sp.key != a.key);
@@ -703,7 +737,7 @@ pub unsafe fn spell_attacks(sora: usize, attacks: &[super::combat::SpellAttack],
         }
         let dummy = BodyShape { kh1_type: 1, radius: 0.0, height: 0.0, bone: None, offset: [0.0; 3], lift: 0.0 };
         g.live[i] = Some(Live { obj, data: d, motion: 0, atkp: a.atk, shape: dummy, magnet: None, prev: None, caught: [(0, 0.0, 0.0); 8] });
-        let mut sp = SpellObj { key: a.key, atk: a.atk, rows, group: a.group, shapes: [([0.0; 3], 1, 0.0, 0.0); SPELL_SHAPES], n: 0, seen: frame, kh1_spell: a.kh1_data.is_some() };
+        let mut sp = SpellObj { key: a.key, atk: a.atk, rows, group: a.group, shapes: [([0.0; 3], 1, 0.0, 0.0); SPELL_SHAPES], n: 0, seen: frame, kh1_spell: a.kh1_data.is_some(), by_calls, hit: false };
         for s in a.shapes.iter() {
             let t = match s.kind {
                 ShapeKind::Ellipsoid | ShapeKind::Sphere => 1u32,
@@ -716,9 +750,8 @@ pub unsafe fn spell_attacks(sora: usize, attacks: &[super::combat::SpellAttack],
             }
         }
         g.spells.push((i, sp));
-        note(|| format!("KH2 spell hits: ATKP {} sub {} on KH1 attack object {obj:#x} (data {d:#x}{}, {} shape(s), spark {:?})", a.atk, a.sub, if a.kh1_data.is_some() { ", KH1 spell's" } else { "" }, a.shapes.len(), spark.map(|s| s.1)));
+        note(|| format!("KH2 spell hits: ATKP {} sub {} on KH1 attack object {obj:#x} (data {d:#x}{}, {} shape(s), spark {:?}{})", a.atk, a.sub, if a.kh1_data.is_some() { ", KH1 spell's" } else { "" }, a.shapes.len(), spark.map(|s| s.1), if by_calls { ", by the script's calls" } else { "" }));
     }
-    std::mem::take(&mut g.results)
 }
 
 /// A spell attack ended (`formmagic`, `reflect`): its object freed.
@@ -809,7 +842,10 @@ pub unsafe fn hit(attack: usize, target: usize, rec: usize) {
     let Some(i) = pool_index(attack) else { return };
     let Ok(mut g) = STATE.try_lock() else { return };
     g.current = None;
-    let spell = g.spells.iter().find(|(k, _)| *k == i).map(|(_, sp)| (sp.key, sp.atk));
+    let spell = g.spells.iter_mut().find(|(k, _)| *k == i).map(|(_, sp)| {
+        sp.hit = true;
+        (sp.key, sp.atk)
+    });
     if let Some((key, atk)) = spell {
         let dealt = (rec > 0x10000).then(|| rd::<i32>(rec + 8).max(0) as u32);
         if g.results.len() < 256 {
@@ -925,10 +961,15 @@ unsafe extern "system" fn entries(obj: usize, list: usize, count: i32) -> i32 {
     // (KH2's re-hit interval: `rehit`, for every KH2 attack of Sora's.)
     // A spell's attack: the shapes its script gave this frame (KH2's own sweep already in them).
     if let Some((_, sp)) = g.spells.iter().find(|(k, _)| *k == i) {
-        if sp.n == 0 || frame.saturating_sub(sp.seen) > 1 {
+        let stale = frame.saturating_sub(sp.seen) > 1;
+        // (One its script placed and never freed, its runtime gone meanwhile (a room change, a
+        // reset): inert after `BY_CALLS_MAX` frames standing still.)
+        if sp.n == 0 || (stale && !sp.by_calls) || frame.saturating_sub(sp.seen) > BY_CALLS_MAX {
             return count;
         }
-        let (shapes, n) = (sp.shapes, sp.n);
+        // (Not moved since the frame before last: where it stands, no sweep, as KH2's attack that
+        // wasn't moved.)
+        let (shapes, n) = (sp.shapes, if stale { 1 } else { sp.n });
         drop(g);
         let c = shapes[0].0;
         let c4 = [c[0], c[1], c[2], 1.0f32];

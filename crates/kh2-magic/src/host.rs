@@ -48,7 +48,7 @@ pub(crate) fn obj_record(vm: &mut Vm, t: &mut Tables, o: ObjId) -> u32 {
 
 /// Starts PAX element `id` of the file's effects (the record `pax` must be
 /// the file's). Returns the effect record, or 0.
-fn start_effect_in(magic: &mut Magic, vm: &mut Vm, t: &mut Tables, world: &dyn World, pax: u32, id: u16, owner: Option<ObjId>) -> u32 {
+fn start_effect_in(magic: &mut Magic, vm: &mut Vm, t: &mut Tables, world: &mut dyn World, pax: u32, id: u16, owner: Option<ObjId>) -> u32 {
     if pax != t.pax_rec {
         return 0;
     }
@@ -57,7 +57,9 @@ fn start_effect_in(magic: &mut Magic, vm: &mut Vm, t: &mut Tables, world: &dyn W
     let Some(element) = file.pax.element(id).cloned() else { return 0 };
     let timing = file.pax.effect(element.effect).cloned().unwrap_or(kh2_formats::pax::PaxEffect { number: element.effect as u32, emitters: Vec::new() });
     let eid = magic.fresh_id();
-    let e = Effect::new(eid, spell, element, timing, owner, world);
+    let mut e = Effect::new(eid, spell, element, timing, owner, &*world);
+    // (The host's own instance for it, started by this call, t820.)
+    e.host = world.effect_start(&e);
     magic.effects.push(e);
     let rec = vm.mem.alloc(16);
     t.effects.insert(rec, eid);
@@ -65,7 +67,7 @@ fn start_effect_in(magic: &mut Magic, vm: &mut Vm, t: &mut Tables, world: &dyn W
 }
 
 /// The muzzle effect of an object's frame trigger 1 (its own effect list).
-pub(crate) fn start_object_effect(magic: &mut Magic, vm: &mut Vm, t: &mut Tables, id: u16, owner: ObjId, world: &dyn World) -> u32 {
+pub(crate) fn start_object_effect(magic: &mut Magic, vm: &mut Vm, t: &mut Tables, id: u16, owner: ObjId, world: &mut dyn World) -> u32 {
     let pax = t.pax_rec;
     start_effect_in(magic, vm, t, world, pax, id, Some(owner))
 }
@@ -187,12 +189,20 @@ impl Bridge<'_> {
     }
 
     fn effect(&mut self, h: u32) -> Option<&mut Effect> {
-        let id = *self.t.effects.get(&h)?;
+        let id = match self.t.effects.get(&h) {
+            Some(id) => *id,
+            // Another cast's effect, by its handle (Reflect's chain: the new cast's release ends
+            // the last one's barrier element through the teamwork block they share, as KH2 does;
+            // until t820 it was looked up in the new cast's own effects only and stayed). Only on
+            // the host's memory, where every cast's handles are its own addresses.
+            None if self.t.native_id.is_some() => self.magic.casts.iter().filter(|c| c.t.native_id.is_some()).find_map(|c| c.t.effects.get(&h).copied())?,
+            None => return None,
+        };
         self.magic.effects.iter_mut().find(|e| e.id == id)
     }
 
     fn start_effect(&mut self, vm: &mut Vm, pax: u32, id: u16, owner: Option<ObjId>) -> u32 {
-        start_effect_in(self.magic, vm, self.t, &*self.world, pax, id, owner)
+        start_effect_in(self.magic, vm, self.t, &mut *self.world, pax, id, owner)
     }
 
     fn new_attack(&mut self, vm: &mut Vm, owner: ObjId, atk: u16, sub: u8, swing: Option<(u64, i64)>) -> u32 {
@@ -308,9 +318,13 @@ impl Host for Bridge<'_> {
             }
             (0, 38) => {
                 let v = vec_in(vm, a(1).v)?;
-                if let Some(e) = self.effect(a(0).v) {
+                let now = self.effect(a(0).v).map(|e| {
                     e.placed = Some(host(v));
                     e.pos = host(v);
+                    e.clone()
+                });
+                if let Some(e) = now {
+                    self.world.effect_place(&e);
                 }
                 None
             }
@@ -323,14 +337,26 @@ impl Host for Bridge<'_> {
             }
             (0, 41) => {
                 let v = vec_in(vm, a(1).v)?;
-                if let Some(e) = self.effect(a(0).v) {
+                let now = self.effect(a(0).v).map(|e| {
                     e.dir = flip(v.truncate());
+                    e.clone()
+                });
+                if let Some(e) = now {
+                    self.world.effect_place(&e);
                 }
                 None
             }
             (0, 44) => {
-                if let Some(e) = self.effect(a(0).v) {
+                let now = self.effect(a(0).v).map(|e| {
                     e.loop_end();
+                    e.clone()
+                });
+                if let Some(e) = now {
+                    if self.world.effect_end(&e) {
+                        if let Some(e) = self.effect(a(0).v) {
+                            e.host_ended = true;
+                        }
+                    }
                 }
                 None
             }
@@ -363,15 +389,27 @@ impl Host for Bridge<'_> {
                 Some(b(alive))
             }
             (0, 51) => {
-                if let Some(e) = self.effect(a(0).v) {
+                let now = self.effect(a(0).v).map(|e| {
                     e.kill();
+                    e.clone()
+                });
+                if let Some(e) = now {
+                    self.world.effect_kill(&e);
                 }
                 None
             }
             (0, 52) => {
                 let frames = a(1).f();
-                if let Some(e) = self.effect(a(0).v) {
+                let now = self.effect(a(0).v).map(|e| {
                     e.fadeout(frames);
+                    e.clone()
+                });
+                if let Some(e) = now {
+                    if self.world.effect_fade(&e, frames) {
+                        if let Some(e) = self.effect(a(0).v) {
+                            e.host_fading = true;
+                        }
+                    }
                 }
                 None
             }
@@ -399,8 +437,13 @@ impl Host for Bridge<'_> {
                 put(vm, s.shared, game(p))?;
                 Some(Cell::addr(s.shared))
             }
-            // MP orbs ("stars") for the caster: not modelled.
-            (1, 91) => None,
+            // obj_star(obj, frames): the object takes no hit for that long (KH2's `+0xD70`).
+            (1, 91) => {
+                if let Some(o) = self.obj_of_ref(vm, a(0).v) {
+                    self.world.star(o, a(1).f());
+                }
+                None
+            }
             (1, 93) => {
                 let h = match self.world.party(a(0).v) {
                     Some(o) => obj_record(vm, self.t, o),
@@ -504,26 +547,41 @@ impl Host for Bridge<'_> {
             }
             (2, 11) => {
                 let (r, h) = (a(1).f(), a(2).f());
-                if let Some(x) = self.attack(a(0).v) {
+                let now = self.attack(a(0).v).map(|x| {
                     x.radius = r;
                     x.height = if h > 0.0 { h } else { r };
+                    x.clone()
+                });
+                if let Some(x) = now {
+                    self.world.attack_set(&x);
                 }
                 None
             }
             (2, 12) => {
                 let p = host(vec_in(vm, a(1).v)?);
-                if let Some(x) = self.attack(a(0).v) {
+                let now = self.attack(a(0).v).map(|x| {
                     x.set_pos(p, ft);
+                    x.clone()
+                });
+                if let Some(x) = now {
+                    self.world.attack_set(&x);
                 }
                 None
             }
             (2, 13) => {
-                if let Some(x) = self.attack(a(0).v) {
+                let now = self.attack(a(0).v).map(|x| {
                     x.freed = true;
+                    x.clone()
+                });
+                if let Some(x) = now {
+                    self.world.attack_free(&x);
                 }
                 None
             }
-            (2, 14) => Some(b(self.attack(a(0).v).is_some_and(|x| x.hit || x.hit_bg || x.reflected))),
+            (2, 14) => {
+                let x = self.attack(a(0).v).map(|x| x.clone());
+                Some(b(x.is_some_and(|x| x.hit || x.hit_bg || x.reflected || self.world.attack_hit(&x) || self.world.attack_hit_bg(&x))))
+            }
             (2, 17) => {
                 let target = self.obj_of_ref(vm, a(1).v);
                 let id = self.attack(a(0).v).map(|x| x.key);
@@ -583,7 +641,10 @@ impl Host for Bridge<'_> {
                 let o = self.obj_of_ref(vm, a(0).v).unwrap_or(self.t.caster);
                 Some(Cell::addr(self.target_record(vm, o)?))
             }
-            (2, 29) => Some(b(self.attack(a(0).v).is_some_and(|x| x.hit_bg))),
+            (2, 29) => {
+                let x = self.attack(a(0).v).map(|x| x.clone());
+                Some(b(x.is_some_and(|x| x.hit_bg || self.world.attack_hit_bg(&x))))
+            }
             // Hit effects come from the spell's own effects; not drawn.
             (2, 30) | (2, 94) => None,
             (2, 31) => {

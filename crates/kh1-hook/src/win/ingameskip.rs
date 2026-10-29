@@ -567,6 +567,16 @@ pub fn queue_obtained(line: String) {
     SHOW.store(true, Ordering::Relaxed);
 }
 
+/// t816: the icon of the last pickup line still waiting to show: the one the pickup's own line had (read from
+/// its text by `chest`), in place of the potion-like item icon (0x82) `queue_obtained` starts it with.
+pub fn set_pickup_icon(icon: u8) {
+    let (Ok(mut g), Ok(q)) = (GIVEN.lock(), QUIET.lock()) else { return };
+    if let Some(k) = (0..g.len()).rev().find(|&k| q.get(k).copied().unwrap_or(false)) {
+        g[k].1 = Some(icon);
+        log!(Cutscenes, "Item Pickup: \"{}\" shows the pickup's own icon {icon:#x}", g[k].0);
+    }
+}
+
 fn note(line: String, icon: Option<u8>) {
     log!(Cutscenes, "in-game skip: KH1 gave \"{line}\" during the skip (shown when it ends)");
     if let Ok(mut g) = GIVEN.lock() {

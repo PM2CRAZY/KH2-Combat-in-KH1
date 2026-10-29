@@ -2647,6 +2647,30 @@ pub fn spell_end(h: u32) {
     }
 }
 
+/// The script fades its effect out over `frames` (`kh2fx::spell_fade`, t826): the fade our effect
+/// tick steps on KH1's instance alpha, as an element's own fade-out (`end`), from its alpha now.
+pub fn spell_fade(h: u32, frames: f32) {
+    let Some((element, serial, layer)) = with_spell(h, |sp, _| (sp.element, sp.serial, sp.layer)) else { return };
+    let Ok(mut g) = RUNNING.lock() else { return };
+    let i = match g.iter().position(|r| r.element == element && r.serial == serial) {
+        Some(i) => i,
+        None => {
+            g.push(Run::new(element, serial, super::kh2fx::NO_MOTION, layer));
+            g.len() - 1
+        }
+    };
+    let Some(inst) = (unsafe { instance(element, serial) }) else {
+        g.remove(i);
+        return;
+    };
+    if frames > 0.0 && frames.is_finite() {
+        g[i].fade = Some(unsafe { fade_from(&g[i], inst) } / frames);
+    } else {
+        unsafe { stop(element, inst) };
+        g.remove(i);
+    }
+}
+
 /// The script kills its effect (`kh2fx::spell_kill`): KH1's stop.
 pub fn spell_kill(h: u32) {
     with_spell(h, |sp, inst| unsafe { stop(sp.element, inst) });
