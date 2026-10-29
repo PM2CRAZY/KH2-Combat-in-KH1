@@ -65,8 +65,8 @@
 use super::addr::Build;
 use super::{hook, log};
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicU8, AtomicUsize, Ordering};
-use crate::kh1script::{read_box, read_pickup, BoxOpen, FN_ADD_ITEM, FN_GIVE_REWARD, FN_RELEASE};
-use std::sync::OnceLock;
+use crate::kh1script::{own_subs, read_box, read_pickup, releases_after_give, BoxOpen, FN_ADD_ITEM, FN_GIVE_REWARD, FN_RELEASE};
+use std::sync::{Mutex, OnceLock};
 use std::time::Instant;
 
 /// The row's value (`chest_style = vanilla | quick | skip`, t770): 0 KH1's, 1 Quick (Sora plays a chest
@@ -132,6 +132,28 @@ static PICKUP: AtomicBool = AtomicBool::new(false);
 static PICKUP_INSTALLED: AtomicBool = AtomicBool::new(false);
 /// The pickup's own context (its holds and its 512 are the ones skipped).
 static PICKUP_CTX: AtomicUsize = AtomicUsize::new(0);
+/// (t809) The pickup's sub-script (its first instruction and its end) and when its context left it (ms + 1,
+/// 0: still in it). The pickup is over a short while after it has left (`PICKUP_AFTER_MS`), so what the
+/// part woke on the way (Sora's getting up) is still done at once.
+static PICKUP_LEFT: AtomicU64 = AtomicU64::new(0);
+const PICKUP_AFTER_MS: u64 = 500;
+/// (t810) The instruction ranges of the pickup's own context (`kh1script::own_subs`: the part and the
+/// sub-scripts of its context it wakes).
+static PICKUP_RANGES: Mutex<Vec<(usize, usize)>> = Mutex::new(Vec::new());
+/// (t810) A polled pickup: the touch only sets a flag, and the context's running sub-script (its main loop)
+/// does the pickup when it sees it (the rope in `di01`: its touch part, sub-script 6, sets local 0 and calls
+/// 26; sub-script 1, a loop, holds, gives and shows the window when local 0 is 1; Checked (files + the t809
+/// log: "event 1's part (context 44, sub-script 6) isn't a pickup")). It is over at its last give-back
+/// after the give (`PICKUP_RELEASES` of `PICKUP_RELEASE_FN`), or when nothing is given within
+/// `PICKUP_POLL_MS` (the flag wasn't for a pickup this time).
+static PICKUP_POLLED: AtomicBool = AtomicBool::new(false);
+static PICKUP_GIVEN: AtomicBool = AtomicBool::new(false);
+static PICKUP_RELEASES: AtomicUsize = AtomicUsize::new(0);
+static PICKUP_RELEASE_FN: AtomicU32 = AtomicU32::new(0);
+const PICKUP_POLL_MS: u64 = 1500;
+/// (t811) KH1's window functions a pickup's part calls on window 7, and how many values each pops (Checked
+/// (exe)): 2 close, 3 / 4 / 5 / 6 / 80 / 83 its settings, 107 its wait, 365 its line's placement.
+const PICKUP_WINDOW_FNS: [(i32, i32); 9] = [(2, 1), (3, 3), (4, 3), (5, 2), (6, 2), (80, 2), (83, 2), (107, 1), (365, 4)];
 static ORIG_EVENT: AtomicUsize = AtomicUsize::new(0);
 /// KH1's event dispatch `0x1401A1A10 (object id, event, argument)` (Steam; Checked (decomp)): run for the
 /// events queued by `0x14028DD80` and flushed by `0x14028E550`. Events 0 and 4 come only from the
@@ -160,6 +182,10 @@ const ARG_FULL_STEAM: usize = 0x2DB7B38;
 /// Checked (exe)). t768: that call goes to `open_request`, which on a fast open asks for nothing.
 const REQUEST_STEAM: usize = 0x29F980;
 const OPEN_REQUEST_CALL_STEAM: usize = 0x2B59CC;
+/// (t807) KH1's action step's motion request (`0x14028E6E0`, action 0x11 `push request, push blend`: its call
+/// of `0x14029F980` at `0x14028E8AC`, Checked (exe + decomp)). A room script's box asks Sora's open motion
+/// this way (not through the Open handler).
+const ACTION_REQUEST_CALL_STEAM: usize = 0x28E8AC;
 /// The Open handler's stop (`0x1402B59D7`: `0x140297F30 (sora, 0.0)` clears flag 0x100000, sets 0x80 and
 /// zeroes his speed `+0xC`), Checked (exe).
 const OPEN_STOP_CALL_STEAM: usize = 0x2B59D7;
@@ -257,6 +283,24 @@ const HOLD_FNS: [i32; 6] = [511, 512, 112, 113, 114, 115];
 /// Event function 103 (`0x1401A96F0`): waits (returns 4) until the context's actor's motion is over,
 /// then goes on (2) (Checked (decomp)).
 const FN_WAIT_MOTION: usize = 103;
+/// Event function 58: a motion request on the context's actor (`push request, push blend`: action 0x11),
+/// Checked (exe). The treasure script asks for Sora's idle with it (context 1, sub-script 12: request 0,
+/// blend 4), Checked (files).
+const FN_MOTION_REQUEST: i32 = 58;
+/// KH2's chest contact (t802): Sora's capture motion (`F_EX030.mset` 252) and the box's lid motion 0x99 start
+/// together (`0x1404025C0`: lid 0x99 and the capture 0xFC on the same frame, Checked (decomp)); the
+/// Keyblade's frame trigger 8 (sound 500034) and the lid's (sound 22) are both at frame 28 of 60, Checked
+/// (files).
+const KH2_CONTACT_FRAME: f32 = 28.0;
+/// KH1's trail request (`0x1402C2310 (actor, trail id)`, Steam) and the actor's weapon object handle
+/// (`+0x14C`), Checked (exe).
+const TRAIL_REQUEST_STEAM: usize = 0x2C2310;
+const ACTOR_WEAPON: usize = 0x14C;
+/// (t803) The item window after the lid opens: vanilla's comes 20 frames after its open motion ends, which is
+/// when KH1 opens the lid (the owner: "full chest animation + 20 frames of idle", 100 in all; Checked (trace
+/// `..._f2177`): the open motion ended at f2107, the script's window call came at f2129).
+const LID_TO_WINDOW: u64 = 20;
+static CONTACT_LOGGED: AtomicBool = AtomicBool::new(false);
 
 /// KH1's Triangle-box command pick `0x1401A4D00 (object, _, command)` (Steam; Checked (decomp)): for a
 /// command a room script offered (event function 454), it finds the object's context (the room
@@ -393,9 +437,42 @@ unsafe fn pickup_hook_in() {
         log!(Cutscenes, "Item Pickup: KH1's script call handler ({entry:#x}) or done queue isn't as expected: pickups stay KH1's");
         return;
     }
+    // (t806) The pickup's own window is skipped for the in-game skip's "Obtained" one: KH1's message
+    // functions go through ours.
+    if !wrap_messages(base) {
+        log!(Menus, "Item Pickup: KH1's message functions not wrapped: pickups stay KH1's");
+        return;
+    }
     if hook::install(base + EVENT_STEAM, &EVENT_PROLOGUE, event as *const () as usize, &ORIG_EVENT, "KH1's event dispatch (item pickup)").is_none() {
         log!(Menus, "Item Pickup: KH1's event dispatch not hooked: pickups stay KH1's");
     }
+}
+
+/// KH1's four message functions in the event table point at ours (once; t806: shared by Chest Opening and
+/// Item Pickup). False when not all four could be wrapped.
+static MESSAGES_WRAPPED: AtomicU8 = AtomicU8::new(0);
+unsafe fn wrap_messages(base: usize) -> bool {
+    match MESSAGES_WRAPPED.load(Ordering::Relaxed) {
+        1 => return true,
+        2 => return false,
+        _ => {}
+    }
+    let mut wrapped = 0;
+    let ours: [usize; 4] = [msg0 as *const () as usize, msg1 as *const () as usize, msg177 as *const () as usize, msg605 as *const () as usize];
+    for (i, &(n, rva, _)) in MESSAGE_FNS.iter().enumerate() {
+        let at = base + TABLE_STEAM + n * 8;
+        let was = (base + rva) as u64;
+        ORIG_FN[i].store(base + rva, Ordering::Release);
+        if hook::patch(at, &was.to_le_bytes(), &(ours[i] as u64).to_le_bytes(), "event function (chest)") {
+            wrapped += 1;
+        }
+    }
+    let ok = wrapped == MESSAGE_FNS.len();
+    if !ok {
+        log!(Menus, "Chest Opening / Item Pickup: only {wrapped} of KH1's message functions wrapped");
+    }
+    MESSAGES_WRAPPED.store(if ok { 1 } else { 2 }, Ordering::Relaxed);
+    ok
 }
 
 /// KH1's event dispatch, then, for a Triangle command's event (0 or 4), a touch (1) or event 3 on Skip (t801), the woken part read as a
@@ -414,7 +491,9 @@ unsafe extern "system" fn event(id: i32, ev: i32, arg: usize) {
         _ => return orig(id, ev, arg),
     };
     let at = FAST_AT.load(Ordering::Relaxed);
-    if !pickup() || (at != 0 && ms() + 1 - at <= FAST_MS) {
+    // (t809) Another pickup while one is still on takes over (two things grabbed in a row).
+    let other = MODE.load(Ordering::Relaxed) != MODE_PICKUP;
+    if !pickup() || (other && at != 0 && ms() + 1 - at <= FAST_MS) {
         if pickup() && ev != 1 {
             log!(Cutscenes, "Item Pickup: event {ev} on object {id:#x} during an open: KH1's");
         }
@@ -447,7 +526,9 @@ unsafe extern "system" fn event(id: i32, ev: i32, arg: usize) {
     let pc = rd::<i32>(ctx + CTX_PC);
     let pending = rd::<i32>(ctx + CTX_WAKE_SLOTS + prio * 4);
     if start < 0 || (pc != start && pending != start) {
-        if !quiet {
+        // (t806) Logged for touches too (a touch is queued once per new contact, `0x140297E80`): the t805 log's
+        // rope pickup left no line.
+        if !quiet || start >= 0 {
             log!(Cutscenes, "Item Pickup: event {ev}: context {c}'s sub-script {sub_n} (start {start}) wasn't woken (next {pc}, pending {pending}): KH1's");
         }
         return;
@@ -466,28 +547,57 @@ unsafe extern "system" fn event(id: i32, ev: i32, arg: usize) {
         }
         usize::try_from(rd::<i32>(list + c * CTX_SIZE + CTX_SUB_STARTS + s * 4)).ok()
     };
-    match read_pickup(c, start as usize, word, sub, &BOX_PLAYS) {
-        BoxOpen::Give(n) => {
-            let sora = rd::<u64>(base + SORA_PTR_STEAM) as usize;
-            if sora < 0x10000 {
-                return;
+    let subs = rd::<i32>(ctx + CTX_SUBS).clamp(0, 64) as usize;
+    let found = match read_pickup(c, start as usize, word, sub, &BOX_PLAYS) {
+        BoxOpen::Give(n) => Some((start as usize, n, sub_n, false)),
+        r => {
+            match r {
+                BoxOpen::Not(f) => log!(Cutscenes, "Item Pickup: event {ev}'s part (context {c}, sub-script {sub_n}) isn't a pickup itself (event function {f})"),
+                _ => log!(Cutscenes, "Item Pickup: event {ev}'s part (context {c}, sub-script {sub_n}) couldn't be read"),
             }
-            SORA.store(sora, Ordering::Relaxed);
-            BOX_CTXS.store(list, Ordering::Relaxed);
-            BOX_COUNT.store(count_at, Ordering::Relaxed);
-            PICKUP_CTX.store(ctx, Ordering::Relaxed);
-            MODE.store(MODE_PICKUP, Ordering::Relaxed);
-            WINDOW_DUE.store(0, Ordering::Relaxed);
-            FAST_AT.store(ms() + 1, Ordering::Relaxed);
-            SKIPPED.store(0, Ordering::Relaxed);
-            RELEASED.store(0, Ordering::Relaxed);
-            HOLDS.store(0, Ordering::Relaxed);
-            call_handler_in(base);
-            log!(Cutscenes, "Item Pickup: event {ev} woke context {c}'s sub-script {sub_n} ({n} instructions read): a pickup: its holds skipped, Sora free, KH1's own window");
+            // (t810) A polled pickup: another sub-script of the same context that reads as one.
+            (0..subs).filter(|&s| s != sub_n).find_map(|s| {
+                let first = sub(c, s)?;
+                match read_pickup(c, first, word, sub, &BOX_PLAYS) {
+                    BoxOpen::Give(n) => Some((first, n, s, true)),
+                    _ => None,
+                }
+            })
         }
-        BoxOpen::Not(f) if !quiet => log!(Cutscenes, "Item Pickup: event {ev}'s part (context {c}, sub-script {sub_n}) isn't a pickup (event function {f}): KH1's"),
-        BoxOpen::Unread if !quiet => log!(Cutscenes, "Item Pickup: event {ev}'s part (context {c}, sub-script {sub_n}) couldn't be read: KH1's"),
-        _ => {}
+    };
+    let Some((first, n, s, polled)) = found else {
+        log!(Cutscenes, "Item Pickup: no sub-script of context {c} reads as a pickup: KH1's");
+        return;
+    };
+    let sora = rd::<u64>(base + SORA_PTR_STEAM) as usize;
+    if sora < 0x10000 {
+        return;
+    }
+    SORA.store(sora, Ordering::Relaxed);
+    BOX_CTXS.store(list, Ordering::Relaxed);
+    BOX_COUNT.store(count_at, Ordering::Relaxed);
+    PICKUP_CTX.store(ctx, Ordering::Relaxed);
+    let ranges = own_subs(c, if polled { first } else { start as usize }, word, sub);
+    if let Ok(mut r) = PICKUP_RANGES.lock() {
+        *r = ranges.clone();
+    }
+    let (releases, release_fn) = releases_after_give(c, first, word);
+    PICKUP_POLLED.store(polled, Ordering::Relaxed);
+    PICKUP_GIVEN.store(false, Ordering::Relaxed);
+    PICKUP_RELEASES.store(releases.max(1), Ordering::Relaxed);
+    PICKUP_RELEASE_FN.store(release_fn, Ordering::Relaxed);
+    PICKUP_LEFT.store(0, Ordering::Relaxed);
+    MODE.store(MODE_PICKUP, Ordering::Relaxed);
+    WINDOW_DUE.store(0, Ordering::Relaxed);
+    FAST_AT.store(ms() + 1, Ordering::Relaxed);
+    SKIPPED.store(0, Ordering::Relaxed);
+    RELEASED.store(0, Ordering::Relaxed);
+    HOLDS.store(0, Ordering::Relaxed);
+    call_handler_in(base);
+    if polled {
+        log!(Cutscenes, "Item Pickup: event {ev} on context {c}: its sub-script {s} ({n} instructions read) is a pickup that polls the touch: its holds skipped, Sora free; over at its {releases} give-back(s) (event function {release_fn}) after the give, or {PICKUP_POLL_MS} ms with no give");
+    } else {
+        log!(Cutscenes, "Item Pickup: event {ev} woke context {c}'s sub-script {s} ({n} instructions read, own ranges {ranges:?}): a pickup: its holds skipped, Sora free");
     }
 }
 
@@ -524,6 +634,7 @@ fn quick_start(sora: usize, flags: u32, from: u32) {
     QUICK_FROM.store(from & 0xFFFF, Ordering::Relaxed);
     QUICK_PLAYED.store(false, Ordering::Relaxed);
     QUICK_FREE.store(false, Ordering::Relaxed);
+    CONTACT_LOGGED.store(false, Ordering::Relaxed);
 }
 
 /// Quick, still holding: the open's actions on Sora and the waits on his motion are KH1's.
@@ -604,18 +715,8 @@ unsafe fn hook_in() {
         return;
     }
     // The table entries first: without them the open would free Sora with KH1's window up.
-    let mut wrapped = 0;
-    let ours: [usize; 4] = [msg0 as *const () as usize, msg1 as *const () as usize, msg177 as *const () as usize, msg605 as *const () as usize];
-    for (i, &(n, rva, _)) in MESSAGE_FNS.iter().enumerate() {
-        let at = base + TABLE_STEAM + n * 8;
-        let was = (base + rva) as u64;
-        ORIG_FN[i].store(base + rva, Ordering::Release);
-        if hook::patch(at, &was.to_le_bytes(), &(ours[i] as u64).to_le_bytes(), "event function (chest)") {
-            wrapped += 1;
-        }
-    }
-    if wrapped != MESSAGE_FNS.len() {
-        log!(Menus, "Chest Opening: only {wrapped} of KH1's message functions wrapped: the Open stays KH1's");
+    if !wrap_messages(base) {
+        log!(Menus, "Chest Opening: KH1's message functions not all wrapped: the Open stays KH1's");
         return;
     }
     // The open motion's request (t768): its call in the handler goes to `open_request`.
@@ -623,6 +724,9 @@ unsafe fn hook_in() {
         REQUEST_REDIRECTED.store(true, Ordering::Relaxed);
     } else {
         log!(Cutscenes, "Chest Opening: the Open handler's motion request call isn't as expected: Sora plays KH1's open motion");
+    }
+    if !hook::redirect_call(base + ACTION_REQUEST_CALL_STEAM, base + REQUEST_STEAM, action_request as *const () as usize, "action step's motion request (chest)") {
+        log!(Cutscenes, "Chest Opening: KH1's action step's motion request call isn't as expected: no Keyblade trail on a box's KH2 chest motion");
     }
     if hook::install(base + TOUCH_STEAM, &TOUCH_PROLOGUE, chest_touch as *const () as usize, &ORIG_TOUCH, "chest's touch callback (chest)").is_none() {
         log!(Cutscenes, "Chest Opening: the chest's touch callback isn't as expected: no KH2 facing rule");
@@ -736,7 +840,51 @@ unsafe extern "system" fn open_request(actor: usize, request: u32, blend: f32) -
         );
     }
     let f: unsafe extern "system" fn(usize, u32, f32) -> usize = std::mem::transmute(base + REQUEST_STEAM);
-    f(actor, request, blend)
+    let r = f(actor, request, blend);
+    if style() == QUICK && request == OPEN_REQUEST && fast_kind(base) && kh2_animation() && super::kh2slots::has(super::kh2slots::CHEST_REQUEST, super::pose::CHEST_MOTION) {
+        chest_trail(base, actor);
+    }
+    r
+}
+
+/// (t807) A motion request from KH1's action step (a script's action 0x11), KH1's own; then, for a room
+/// script's box on Quick (the owner: "the keyblade trail doesn't play on alice's evidence boxes"), when the
+/// request is the open (`kh2slots::CHEST_REQUEST`, which plays KH2's chest motion on the Chest Animation row
+/// at KH2), KH1's trail request as for a chest (`chest_trail`).
+unsafe extern "system" fn action_request(actor: usize, request: u32, blend: f32) -> usize {
+    let base = base();
+    let f: unsafe extern "system" fn(usize, u32, f32) -> usize = std::mem::transmute(base + REQUEST_STEAM);
+    let r = f(actor, request, blend);
+    if MODE.load(Ordering::Relaxed) == MODE_BOX && actor != 0 && actor == SORA.load(Ordering::Relaxed) {
+        let chest = request as usize & 0xFFF == super::kh2slots::CHEST_REQUEST;
+        let kh2 = kh2_animation() && super::kh2slots::has(super::kh2slots::CHEST_REQUEST, super::pose::CHEST_MOTION);
+        log!(Cutscenes, "Chest Opening: the box's script asks Sora's motion {request:#x}{}", if chest && kh2 { ": KH2's chest motion, its Keyblade trail asked for" } else { "" });
+        if chest && kh2 {
+            chest_trail(base, actor);
+        }
+    }
+    r
+}
+
+/// (t803) The Keyblade's trail on KH2's chest motion: KH2's Keyblade motion (`0011`) has a weapon trail over
+/// frames 0..23 (range id 12), Checked (files); our slot carries it as KH1's trail level 7.0 over 0..23
+/// (`kh2slots::kh1_tracks`). KH1 makes a trail only from a request in the weapon object, which only an attack
+/// row's start writes (`0x1402A3980` -> `0x1402C2310 (actor, trail id)`), Checked (decomp,
+/// `docs/kh1-cosmetics.md`); the chest open has no attack row, so the window drew nothing. KH1's own request is
+/// asked here with the trail id of KH1's plain ground swing row (13, `combat::swing_trail_id`, the weapon's own
+/// look), and KH1's trail step makes and ends the trail over the window as for a swing.
+unsafe fn chest_trail(base: usize, sora: usize) {
+    let weapon = super::pose::ptr(rd::<u32>(sora + ACTOR_WEAPON));
+    if weapon < 0x10000 || !super::crash::readable(weapon + 0x40) {
+        return;
+    }
+    let Some(id) = super::combat::swing_trail_id(sora) else {
+        log!(Cutscenes, "Chest Opening: KH2's chest motion: no trail id (row 13), no trail");
+        return;
+    };
+    let f: unsafe extern "system" fn(usize, u32) = std::mem::transmute(base + TRAIL_REQUEST_STEAM);
+    f(sora, id);
+    log!(Cutscenes, "Chest Opening: KH2's chest motion: Keyblade trail {id:#x} asked for (frames 0..23)");
 }
 
 /// The Open handler's stop (t778, the owner: open a chest from the run on Quick and Skip, like KH2). KH1
@@ -801,7 +949,12 @@ unsafe extern "system" fn chest_touch(chest: usize, sora: usize, code: i32) -> u
     let facing = sf.map_or(1.0, |(x, z)| dx * x + dz * z);
     let front = cf.map_or(1.0, |(x, z)| -(dx * x + dz * z));
     let (sy, cy) = (rd::<f32>(sora + 0x3C), rd::<f32>(chest + 0x3C));
-    let grey = len > 1.0 && (facing < KH2_OPEN_FACING || front < KH2_OPEN_FRONT);
+    // (t808) A room script's box still running its part (its window up, its 512 not reached): KH1 couldn't
+    // start the treasure script for a chest opened then (the owner's t805 log: the chest's Open at f3849
+    // during the evidence box's window, f3748..f3893, gave no lid, no item, and the chest was never offered
+    // again). In KH1 the box holds Sora until its 512, so the two never met; the Open is greyed until then.
+    let busy = box_running();
+    let grey = busy || len > 1.0 && (facing < KH2_OPEN_FACING || front < KH2_OPEN_FRONT);
     let r = orig(chest, sora, code);
     let offered = rd::<u8>(base + MENU_SLOTS_STEAM + 3) == OPEN_COMMAND;
     if grey && offered {
@@ -819,10 +972,16 @@ unsafe extern "system" fn chest_touch(chest: usize, sora: usize, code: i32) -> u
         log!(
             Cutscenes,
             "Chest Opening: asked chest {chest:#x} at ({:.0},{:.0},{:.0}) yaw {cy:.2} facing dir {:?}: Sora at ({:.0},{:.0},{:.0}) yaw {sy:.2} facing dir {:?}, {len:.0} away, facing {facing:.2}, front {front:.2}, state {}; KH1 offered Open: {offered}{}",
-            c[0], c[1], c[2], cf, p[0], p[1], p[2], sf, rd::<i32>(sora + 0x70), if grey && offered { " (greyed: KH2's facing rule)" } else { "" }
+            c[0], c[1], c[2], cf, p[0], p[1], p[2], sf, rd::<i32>(sora + 0x70), if busy && offered { " (greyed: a box's part still runs)" } else if grey && offered { " (greyed: KH2's facing rule)" } else { "" }
         );
     }
     r
+}
+
+/// (t808) A room script's box opened the KH2 way is still running its part (until its 512, or the open's time).
+fn box_running() -> bool {
+    let at = FAST_AT.load(Ordering::Relaxed);
+    MODE.load(Ordering::Relaxed) == MODE_BOX && at != 0 && ms() + 1 - at <= FAST_MS
 }
 
 /// The open in progress goes the KH2 way: kinds 0..3 (an item, a gummi block, Dalmatians, munny) with
@@ -904,10 +1063,10 @@ unsafe extern "system" fn pick(object: usize, b: usize, command: i32) -> u32 {
 /// The notice for a box's give (event function 258 `push item, push count`, or 583 `push record`),
 /// read from the context's stack before KH1's function runs (Checked (exe): 258 takes the item one below
 /// the top, the count on top; 583 the record on top).
-unsafe fn box_notice(base: usize, ctx: usize, n: u32) {
+unsafe fn box_notice(base: usize, ctx: usize, n: u32) -> Option<String> {
     let sp = rd::<i32>(ctx + CTX_SP);
     if !(1..64).contains(&sp) {
-        return;
+        return None;
     }
     let top = rd::<u32>(ctx + CTX_SP + 4 + sp as usize * 4);
     let below = rd::<u32>(ctx + CTX_SP + sp as usize * 4);
@@ -930,6 +1089,7 @@ unsafe fn box_notice(base: usize, ctx: usize, n: u32) {
         _ => "Reward".to_string(),
     };
     log!(Cutscenes, "Chest Opening: the box gives (event function {n}): \"{line}\" (KH1's own window from the box's script)");
+    Some(line)
 }
 
 /// The item name without the codes `item_name` writes as `{xx}`.
@@ -967,6 +1127,34 @@ unsafe fn ours_to_skip(ctx: usize) -> bool {
         return false;
     }
     open_ctx(base(), ctx)
+}
+
+/// (t809) The pickup's context has left its sub-script (its next instruction outside it) for
+/// `PICKUP_AFTER_MS`.
+unsafe fn pickup_over() -> bool {
+    let ctx = PICKUP_CTX.load(Ordering::Relaxed);
+    if ctx < 0x10000 {
+        return true;
+    }
+    let left = PICKUP_LEFT.load(Ordering::Relaxed);
+    if PICKUP_POLLED.load(Ordering::Relaxed) {
+        // (t810) Over a short while after its last give-back, or when nothing was given in time.
+        if !PICKUP_GIVEN.load(Ordering::Relaxed) && ms() + 1 - FAST_AT.load(Ordering::Relaxed) > PICKUP_POLL_MS {
+            return true;
+        }
+        return left != 0 && ms() + 1 - left > PICKUP_AFTER_MS;
+    }
+    let pc = rd::<i32>(ctx + CTX_PC);
+    let inside = pc >= 0 && PICKUP_RANGES.lock().map(|r| r.iter().any(|&(f, e)| (f..=e).contains(&(pc as usize)))).unwrap_or(false);
+    if inside {
+        PICKUP_LEFT.store(0, Ordering::Relaxed);
+        return false;
+    }
+    if left == 0 {
+        PICKUP_LEFT.store(ms() + 1, Ordering::Relaxed);
+        return false;
+    }
+    ms() + 1 - left > PICKUP_AFTER_MS
 }
 
 /// The open in progress is still wanted: a chest's or a box's on Quick / Skip, a pickup's on Item
@@ -1042,26 +1230,98 @@ unsafe extern "system" fn script_call(ctx: usize, n: i32) -> u64 {
             );
         }
         puppy_restore(base);
+        timed_restore(base);
         call_handler_out(base);
         return orig(ctx, n);
     }
     quick_check();
+    if MODE.load(Ordering::Relaxed) == MODE_PICKUP && pickup_over() {
+        FAST_AT.store(0, Ordering::Relaxed);
+        MODE.store(MODE_NONE, Ordering::Relaxed);
+        log!(
+            Cutscenes,
+            "Item Pickup: the pickup's part has ended ({} window call(s) skipped, {} action(s) on Sora done at once / motion waits passed)",
+            SKIPPED.load(Ordering::Relaxed),
+            RELEASED.load(Ordering::Relaxed)
+        );
+        return orig(ctx, n);
+    }
     let sora = SORA.load(Ordering::Relaxed);
     if sora == 0 || !open_ctx(base, ctx) {
         return orig(ctx, n);
     }
     let picked = MODE.load(Ordering::Relaxed) == MODE_PICKUP;
     let boxed = MODE.load(Ordering::Relaxed) == MODE_BOX || picked;
+    // (t811, the owner: the Seagull Egg and the Coconut "doesn't disappear when being picked up, only after you
+    // hit a button does it"; t810 log: the Egg's part waited on window 7 (107 x 280 from f4028) until the jump at
+    // f4174, because window 7 is the in-game skip's "Obtained" box, whose line waits for Confirm, and the item
+    // goes away after that wait.) From the pickup's own context, KH1's window functions on window 7 are taken the
+    // skip-mode way too: their arguments popped, 2 returned (Checked (exe): 2 and 107 pop 1, 3 and 4 pop 3, 5, 6,
+    // 80 and 83 pop 2, 365 pops 4; each returns 2, 107 returns 4 while it waits). So the part neither waits on
+    // nor closes nor moves the in-game skip's box.
+    if picked && ctx == PICKUP_CTX.load(Ordering::Relaxed) {
+        if let Some(&(_, pops)) = PICKUP_WINDOW_FNS.iter().find(|&&(f, _)| f == n) {
+            let sp = rd::<i32>(ctx + CTX_SP);
+            // The window is the call's first argument (the deepest of its values).
+            // (Its top is at `+0x198 + sp * 4`: the deepest of `pops` values is at index `sp - pops + 1`.)
+            let window = if sp - pops + 1 >= 0 && sp < 64 { rd::<i32>(ctx + 0x198 + (sp - pops + 1) as usize * 4) } else { -1 };
+            if window == crate::kh1script::WINDOW_OBTAINED as i32 {
+                std::ptr::write_unaligned((ctx + CTX_SP) as *mut i32, sp - pops);
+                if SKIPPED.fetch_add(1, Ordering::Relaxed) < 12 {
+                    log!(Cutscenes, "Item Pickup: the pickup's window call (event function {n}) skipped");
+                }
+                return 2;
+            }
+        }
+    }
     if !boxed && n == FN_PLACE_TEXT {
         puppy_text(base, ctx);
     }
-    if !boxed && n == FN_CLOSE_WINDOW {
+    if !picked && n == FN_CLOSE_WINDOW {
         let r = orig(ctx, n);
         puppy_restore(base);
+        timed_restore(base);
         return r;
     }
     if boxed && (n as u32 == FN_ADD_ITEM || n as u32 == FN_GIVE_REWARD) {
-        box_notice(base, ctx, n as u32);
+        let line = box_notice(base, ctx, n as u32);
+        // (t806) A pickup's give shows in the in-game skip's "Obtained" window (its own window is skipped).
+        if picked && ctx == PICKUP_CTX.load(Ordering::Relaxed) {
+            PICKUP_GIVEN.store(true, Ordering::Relaxed);
+            if let Some(line) = line {
+                super::ingameskip::queue_obtained(line);
+            }
+        }
+    }
+    // (t802) KH2's chest motion: the lid opens at its contact frame, and Sora finishes the motion first.
+    let kh2_motion = !boxed && quick_holding() && kh2_animation() && rd::<u64>(ctx + CTX_ACTOR) as usize == sora && super::kh2slots::playing_motion(sora) == Some(super::pose::CHEST_MOTION);
+    if kh2_motion && n as usize == FN_WAIT_MOTION {
+        // KH1 opens the lid when this wait on Sora's motion ends (the script's context 0 then starts the
+        // lid's part, context 2's sub-script 11, and his idle, context 1's 12). KH2 starts its lid with the
+        // capture and its contact is frame 28: the Keyblade's 500034 and the box's own sound 22 both play
+        // there. So the wait ends at frame 28 of KH2's motion.
+        let t = super::kh2slots::kh1_time_now(sora).unwrap_or(0.0);
+        if t >= KH2_CONTACT_FRAME {
+            if !CONTACT_LOGGED.swap(true, Ordering::Relaxed) {
+                // (t803) The item window comes as long after the lid as vanilla's does: `LID_TO_WINDOW`.
+                let due = super::takeover::TICKS.load(Ordering::Relaxed) + LID_TO_WINDOW;
+                if WINDOW_DUE.load(Ordering::Relaxed) != 0 {
+                    WINDOW_DUE.store(due, Ordering::Relaxed);
+                }
+                log!(Cutscenes, "Chest Opening: KH2's chest motion at frame {t:.0}: the lid opens (KH2's contact frame {KH2_CONTACT_FRAME:.0}); the item window {LID_TO_WINDOW} frames after it");
+            }
+            return 2;
+        }
+        return orig(ctx, n);
+    }
+    if kh2_motion && n == FN_MOTION_REQUEST {
+        // ...and the script's idle request after it (event function 58) waits, as KH1's own waits do (4: run
+        // again next frame), until KH2's motion has played out.
+        let frames = super::kh2slots::frames_for_motion(super::pose::CHEST_MOTION).unwrap_or(0) as f32;
+        if super::kh2slots::kh1_time_now(sora).unwrap_or(f32::MAX) < frames - 1.0 {
+            return 4;
+        }
+        return orig(ctx, n);
     }
     if n as usize == FN_WAIT_MOTION && rd::<u64>(ctx + CTX_ACTOR) as usize == sora {
         // Quick, until he is let go: KH1's own wait, so the script goes on with the motion's end (t770).
@@ -1076,11 +1336,19 @@ unsafe extern "system" fn script_call(ctx: usize, n: i32) -> u64 {
         if picked && ctx != PICKUP_CTX.load(Ordering::Relaxed) {
             return orig(ctx, n);
         }
+        // (t810) A polled pickup's give-backs after its give count down to its end.
+        if picked && PICKUP_POLLED.load(Ordering::Relaxed) && PICKUP_GIVEN.load(Ordering::Relaxed) && n as u32 == PICKUP_RELEASE_FN.load(Ordering::Relaxed) {
+            if PICKUP_RELEASES.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |v| Some(v.saturating_sub(1))).unwrap_or(0) <= 1 && PICKUP_LEFT.load(Ordering::Relaxed) == 0 {
+                PICKUP_LEFT.store(ms() + 1, Ordering::Relaxed);
+            }
+        }
         if HOLDS.fetch_add(1, Ordering::Relaxed) < 8 {
             log!(Cutscenes, "Chest Opening: {}'s player hold (event function {n}) skipped", if picked { "the pickup's script" } else if boxed { "the box's script" } else { "treasure script" });
         }
-        // A box's part ends at its 512 (the player given back): the open is over (t769).
-        if boxed && n as u32 == FN_RELEASE {
+        // A box's part ends at its 512 (the player given back): the open is over (t769). (t809) A pickup's
+        // ends when its sub-script does (`pickup_over`): some hold and give back twice (the rope), some
+        // only with 113 / 114.
+        if boxed && !picked && n as u32 == FN_RELEASE {
             quick_release("the box's part has ended");
             FAST_AT.store(0, Ordering::Relaxed);
             MODE.store(MODE_NONE, Ordering::Relaxed);
@@ -1162,6 +1430,21 @@ fn note_release(what: &str) {
 /// window's open (functions 0 / 177) waits, with KH1's own "wait" return (4: the instruction runs again
 /// next frame, as 107 does, Checked (exe)), until vanilla's frame (`WINDOW_DUE`).
 unsafe fn call(ctx: usize, which: usize) -> u64 {
+    // (t806, the owner: the pickup's box "needs to be the same size as our in game cutscene skip text boxes so
+    // it doesn't obstruct gameplay") A pickup's own window (KH1's centred window 7) isn't opened: from the
+    // pickup's context, KH1's message functions take their skip-mode way (their arguments popped, nothing
+    // shown: Checked (decomp), 0 and 177 pop 1, 1 and 605 pop 2, and return 2), its waits on the window (107)
+    // pass and its close (2) closes nothing, as in KH1's skip mode. What it gave shows in the in-game skip's
+    // "Obtained" window instead (`script_call`).
+    if MODE.load(Ordering::Relaxed) == MODE_PICKUP && ctx == PICKUP_CTX.load(Ordering::Relaxed) && ours_to_skip(ctx) {
+        let pops = MESSAGE_FNS[which].2;
+        let sp = rd::<i32>(ctx + CTX_SP);
+        std::ptr::write_unaligned((ctx + CTX_SP) as *mut i32, (sp - pops).max(0));
+        if SKIPPED.fetch_add(1, Ordering::Relaxed) < 8 {
+            log!(Cutscenes, "Item Pickup: the pickup's window call (message function {}) skipped", MESSAGE_FNS[which].0);
+        }
+        return 2;
+    }
     if matches!(which, 0 | 2) && ours_to_skip(ctx) {
         let due = WINDOW_DUE.load(Ordering::Relaxed);
         if due != 0 {
@@ -1172,6 +1455,9 @@ unsafe fn call(ctx: usize, which: usize) -> u64 {
             SKIPPED.fetch_add(1, Ordering::Relaxed);
             log!(Cutscenes, "Chest Opening: Quick: KH1's window (message function {}) opens 100 frames into the open", MESSAGE_FNS[which].0);
         }
+    }
+    if which == 1 && MODE.load(Ordering::Relaxed) != MODE_PICKUP && ours_to_skip(ctx) {
+        timed_text(base(), ctx);
     }
     let f: unsafe extern "system" fn(usize) -> u64 = std::mem::transmute(ORIG_FN[which].load(Ordering::Acquire));
     f(ctx)
@@ -1209,7 +1495,7 @@ static PUPPY_WAS: AtomicUsize = AtomicUsize::new(0);
 static PUPPY_LINE: OnceLock<usize> = OnceLock::new();
 
 /// Our one line for the Dalmatians, in the "Obtained" texts' own form (the same codes before the words,
-/// the same 60-frame close, `{06} 0x3C`): "Found dalmatians no. A, B, C." with KH1's own number codes
+/// the same 60-frame close, `{05} 0x3C` since t804): "Found dalmatians no. A, B, C." with KH1's own number codes
 /// (`{0E} 0x10..0x12`, the values the script sets with event function 475). Never freed.
 fn puppy_line() -> usize {
     *PUPPY_LINE.get_or_init(|| {
@@ -1232,7 +1518,8 @@ fn puppy_line() -> usize {
         text(&mut b, ", ");
         b.extend_from_slice(&[0x0E, 0x12]);
         text(&mut b, ".");
-        b.extend_from_slice(&[0x06, 0x3C, 0x00, 0x00]);
+        // (t804) KH1's own wait that no button ends (`{05}`, see `timed_copy`), the same 60 frames.
+        b.extend_from_slice(&[0x05, 0x3C, 0x00, 0x00]);
         Box::leak(b.into_boxed_slice()).as_ptr() as usize
     })
 }
@@ -1273,9 +1560,145 @@ unsafe fn puppy_restore(base: usize) {
     }
 }
 
+// ---- The window closes on its own (t804) ----
+
+/// The texts we stand in for while an open's window shows: (table slot, KH1's pointer, ours).
+static TIMED_HELD: Mutex<Vec<(usize, usize, usize)>> = Mutex::new(Vec::new());
+static TIMED_ANY: AtomicBool = AtomicBool::new(false);
+/// Our copies by KH1's text (its pointer and bytes): made once, never freed (KH1's window keeps the
+/// pointer it was given).
+static TIMED_COPIES: Mutex<Vec<(usize, Vec<u8>, usize)>> = Mutex::new(Vec::new());
+/// The longest text we copy.
+const TIMED_MAX: usize = 1024;
+
+/// How many bytes a KH1 text code takes (the code byte included), as KH1's text parser
+/// (`0x1401767B0`) steps over it, Checked (decomp). `None`: the end of the text (code 0) or a code we
+/// don't copy past (4, which ends the parse there as 0 does).
+fn code_len(c: u8, arg: impl Fn() -> u8) -> Option<usize> {
+    Some(match c {
+        0 | 4 => return None,
+        0x20.. => 1,
+        1 | 2 | 3 | 8 | 0x10 | 0x11 | 0x13..=0x17 => 1,
+        5 | 6 | 7 | 0x12 => 3,
+        9 | 0x0C | 0x0E | 0x0F | 0x18..=0x1F => 2,
+        0x0A => if arg() == 0 { 4 } else { 2 },
+        0x0B => if matches!(arg(), 0 | 1 | 0x10) { 4 } else { 2 },
+        0x0D => if matches!(arg(), 0 | 1) { 4 } else { 2 },
+    })
+}
+
+/// A copy of a KH1 text whose button-skippable waits (`{06} lo hi`) are KH1's own unskippable form
+/// (`{05} lo hi`, the same frames). Checked (decomp): the parser stores `{06}`'s frames as the wait's
+/// value and `{05}`'s as frames + 1,000,000; the window step (`0x1401744D0`) ends a wait under 1,000,000
+/// at once on Confirm (`0x14298CA98` bit 0 or bit 26) and counts one at or over it down the same way
+/// (to 1,000,000) whatever is pressed. `None`: no `{06}` in it, or it ends with code 4 / not within
+/// `TIMED_MAX` bytes (KH1's text is left as it is). `at(i)` reads the text's byte `i`; only the bytes the
+/// parser itself would read are read.
+fn timed_copy(at: impl Fn(usize) -> u8) -> Option<Vec<u8>> {
+    let mut out = Vec::new();
+    let mut changed = false;
+    loop {
+        let i = out.len();
+        if i >= TIMED_MAX {
+            return None;
+        }
+        let c = at(i);
+        match code_len(c, || at(i + 1)) {
+            None if c == 0 => {
+                out.push(0);
+                break;
+            }
+            None => return None,
+            Some(n) => {
+                out.push(if c == 6 { 5 } else { c });
+                changed |= c == 6;
+                for k in 1..n {
+                    out.push(at(i + k));
+                }
+            }
+        }
+    }
+    changed.then_some(out)
+}
+
+/// Quick / Skip (the owner: "on skip and quick settings your able to close the text box by pressing a
+/// button but we just want it to go away on its own"): when an open's script shows its line (message
+/// function 1: window, text), the text KH1 reads for it is our copy with KH1's unskippable wait, until
+/// the window is closed (function 2) or the open is over. KH1 shows, times and closes it as its own.
+unsafe fn timed_text(base: usize, ctx: usize) {
+    // (t805) Function 1's two values are the stack's top two: window at `+0x194 + sp * 4`, text at
+    // `+0x198 + sp * 4`, so `sp` is 1 when they're all the stack holds (t804 wanted 2 or more and never ran).
+    let sp = rd::<i32>(ctx + CTX_SP);
+    if !(1..0x40).contains(&sp) {
+        log!(Cutscenes, "Chest Opening: the window's line: script stack {sp} unreadable: KH1's (Confirm can close it)");
+        return;
+    }
+    let text = rd::<i32>(ctx + 0x198 + sp as usize * 4);
+    if !(0..0x400).contains(&text) {
+        log!(Cutscenes, "Chest Opening: the window's line: text {text} out of range: KH1's (Confirm can close it)");
+        return;
+    }
+    let slot = base + TEXTS_STEAM + text as usize * 8;
+    let was = rd::<u64>(slot) as usize;
+    if was < 0x10000 || was == puppy_line() {
+        return;
+    }
+    let mut held = TIMED_HELD.lock().unwrap_or_else(|e| e.into_inner());
+    if held.iter().any(|&(s, _, ours)| s == slot && ours == was) {
+        return;
+    }
+    let byte = |i: usize| rd::<u8>(was + i);
+    let mut copies = TIMED_COPIES.lock().unwrap_or_else(|e| e.into_inner());
+    let ours = match copies.iter().find(|(p, b, _)| *p == was && b.iter().enumerate().all(|(i, &v)| byte(i) == v)) {
+        Some(&(_, _, ours)) => ours,
+        None => {
+            let Some(copy) = timed_copy(byte) else {
+                log!(Cutscenes, "Chest Opening: text {text}'s window has no button-closable wait we can read: KH1's");
+                return;
+            };
+            let orig: Vec<u8> = (0..copy.len()).map(byte).collect();
+            let ours = Box::leak(copy.into_boxed_slice()).as_ptr() as usize;
+            copies.push((was, orig, ours));
+            ours
+        }
+    };
+    std::ptr::write_unaligned(slot as *mut u64, ours as u64);
+    held.push((slot, was, ours));
+    TIMED_ANY.store(true, Ordering::Relaxed);
+    log!(Cutscenes, "Chest Opening: text {text}'s window closes on its own (KH1's unskippable wait, {{05}})");
+}
+
+/// KH1's texts back (the window closed, or the open is over).
+unsafe fn timed_restore(_base: usize) {
+    if !TIMED_ANY.swap(false, Ordering::Relaxed) {
+        return;
+    }
+    let mut held = TIMED_HELD.lock().unwrap_or_else(|e| e.into_inner());
+    for (slot, was, ours) in held.drain(..) {
+        if rd::<u64>(slot) as usize == ours {
+            std::ptr::write_unaligned(slot as *mut u64, was as u64);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::strip_codes;
+    use super::timed_copy;
+
+    #[test]
+    fn timed_copy_makes_the_wait_unskippable() {
+        // An "Obtained" line's form: {08} {0A 00 00 00} {07 0C 00} "Ab" {06 3C 00} end.
+        let t = [0x08, 0x0A, 0x00, 0x00, 0x00, 0x07, 0x0C, 0x00, 0x2B, 0x46, 0x06, 0x3C, 0x00, 0x00, 0x99];
+        let c = timed_copy(|i| t[i]).unwrap();
+        assert_eq!(c, [0x08, 0x0A, 0x00, 0x00, 0x00, 0x07, 0x0C, 0x00, 0x2B, 0x46, 0x05, 0x3C, 0x00, 0x00]);
+        // An argument byte 6 isn't a code.
+        let t = [0x0E, 0x06, 0x2B, 0x00];
+        assert_eq!(timed_copy(|i| t[i]), None);
+        // Code 4 ends the copy: KH1's text stays.
+        let t = [0x06, 0x3C, 0x00, 0x04, 0x2B, 0x00];
+        assert_eq!(timed_copy(|i| t[i]), None);
+    }
 
     #[test]
     fn strips_unknown_codes() {

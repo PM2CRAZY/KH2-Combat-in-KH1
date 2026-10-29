@@ -483,6 +483,151 @@ contexts.
   step; 1 (6, priority 2) from contact (`0x140297E80`); 3 (7, priority 4) from `0x1402B0610`. Event 2 (hits) is not.
 - **Log:** every way out for events 0, 3 and 4 says why (Cutscenes). Not checked: which event the island's items use.
 
+### Round 18 (t802; first written as t784): the lid at KH2's contact, KH2's Keyblade sound
+
+- The owner: with KH2's animation the chest must open when Sora touches it (when the sound plays), as KH2; and the
+  Keyblade's sound must be KH2's (Assumption on their side, "check c decomp").
+- **KH2** Checked (decomp): when the Open runs, `0x1404025C0 (box, player)` plays the box's lid motion 0x99 (8-frame
+  blend) and captures the player into the box's motion 0xFC (252) on the same frame. Checked (files): the lid motion
+  0x99 is 37 frames at 30 fps (74), with its sound 22 at frame 28 and an effect element at 34; Sora's Keyblade
+  (`0011`) has sound 500047 at frame 1 and 500034 at frame 28, and a trail over 0..23. So the contact is frame 28
+  of Sora's 60: the Keyblade's hit and the lid's sound together. (Body ranges: 22 = turn to target 0..12 [15].)
+- **KH1** Checked (files, `UK_treasure.ev`): context 0 wakes Sora's part (context 1, sub 11: hold, open motion,
+  wait 103 on his motion) and waits for it; only then does it wake the lid (context 2, sub 11: sound 353, chest
+  motion 108) and his idle (context 1, sub 12: 58 request 0, blend 4). So KH1's lid waits for the whole motion.
+- **Quick with KH2's animation now**: Sora's wait (103) ends at frame 28 of KH2's motion, so KH1 opens the lid
+  there; the idle request after it (58) waits (KH1's own "run again next frame") until KH2's motion has played
+  out, then Sora goes idle and is let go (t773). KH2's chest slot keeps only KH2's sounds (KH1's open motion's
+  sounds left out), and its motion's sounds are always loaded, whatever `kh2_sounds` lists.
+- Not checked in game. KH1's lid motion and sound are KH1's own (KH2's box sound 22 isn't played).
+- **t784 was lost**: it was written over by a later t785 built on t783, so the owner's t801 build had neither part
+  (their trace and log: the lid still opened after the motion; Sound(500034) fired at frame 28 but wasn't heard,
+  since the chest motion's sounds weren't cut without `kh2_sounds` listing it). t802 redoes both on t801.
+
+
+### Round 19 (t803): the Keyblade's trail, and the item window after the lid
+
+- The owner: on KH2's chest animation the Keyblade needs its trail, as KH2 (Assumption on their side); and the item
+  window after the open should come relative to the lid opening.
+- **Trail.** Checked (files): KH2's Keyblade chest motion (`F_EX030.mset` 252 `0011`) has a weapon trail (range id
+  12) over frames 0..23. Checked (log): our slot already carried it as KH1's trail level 7.0 over 0..23 ("7.0
+  [(0.0, 1), (23.0, 0)]"). Checked (decomp, `docs/kh1-cosmetics.md`): KH1 makes a trail only from a request in the
+  weapon object, which only an attack row's start writes (`0x1402A3980` -> `0x1402C2310 (actor, trail id)`); the
+  chest open has no attack row, so nothing was drawn. **t803** asks KH1's own request (`0x1402C2310`) when KH1's
+  open request plays KH2's chest motion, with the trail id of KH1's plain ground swing row (13, the weapon's own
+  look, as the Keyblade Trail "Always" row uses); KH1's trail step makes it over the window and ends it.
+- **Item window.** Vanilla's comes 20 frames after its open motion ends, which is when KH1 opens the lid (the owner's
+  "full animation + 20 frames of idle", 100; Checked (trace `..._f2177`): motion end f2107, the script's window
+  call f2129). With KH2's motion the lid opens at frame 28, so the window's wait (t775's 100 frames) is moved to
+  20 frames after that.
+- Assumption: row 13's trail id gives the right look for the chest swing (KH2's trail range has no parameter).
+  Not checked in game.
+
+### Round 20 (t804): the item window goes away on its own
+
+- The owner (trace + log): on Quick and Skip the item window can be closed with a button; it should only go away on
+  its own.
+- Checked (decomp): the window's text keeps its waits as values. KH1's text parser (`0x1401767B0`) stores code
+  `{06} lo hi` as that many frames and `{05} lo hi` as the frames + 1,000,000. The window step (`0x1401744D0`) ends
+  a wait under 1,000,000 at once while Confirm is pressed (`0x14298CA98` bit 0 or bit 26) and counts one at or
+  over 1,000,000 down the same way to 1,000,000 whatever is pressed. So `{05}` is KH1's own unskippable wait, the
+  same length. The "Obtained" texts (and the box texts) close with `{06} 0x3C` (60 frames), so Confirm ended them.
+- **t804**: when an open's script on Quick / Skip shows its line (message function 1, `0x1401B8DD0`: window,
+  text; it reads the text from the script's text table, and so does its next-line callback `0x1401B8FD0`), the
+  table holds our copy of that text with each `{06}` made `{05}` until the window is closed (function 2) or the
+  open is over; then KH1's pointer goes back. The copy is read code by code with the parser's own code lengths
+  (Checked (decomp)), made once per text and kept. The Dalmatians' one line uses `{05}` itself. Vanilla and Item
+  Pickup are untouched.
+- Not checked in game: that no other button path closes window 7 (the decomp shows only this one in the window
+  step; Assumption until the test).
+
+### Round 21 (t805): t804 never ran
+
+- The owner (t804 trace + log): Confirm still closes the window. Checked (log): function 1 ran once per open
+  ("event ops ... 1x1"), the window's wait (107) ended after 7 frames, and t804's line ("closes on its own") never
+  showed. Cause: function 1 takes two values (window, text) and t804 refused a script stack index under 2; with
+  only those two values on the stack the index is 1 (Checked (decomp): `0x1401B8DD0` reads `+0x194 + sp * 4` and
+  `+0x198 + sp * 4`). **t805** takes 1 and up, and logs when it can't read the line.
+- Checked (files, `UK_treasure.ev`): the "Obtained" lines end `{06} 0x3C` (some `{06} 0x5A` / `0x2D` / `0x1E`), a
+  few with a `{05} 0x1E` before it; those `{06}` are what Confirm ended.
+
+## Item Pickup, round 7 (t806): the small "Obtained" box; the rope
+
+- The owner (t805 log): still held at the rope; the box must be the in-game skip's size.
+- **Box** (Checked (files)): a Destiny Islands pickup opens window 7 centred with a long line (event functions 4 with
+  0xF and 3 with (0, 1)); the in-game skip's box is window 7 at (-220, -150) with one "Obtained" line. t806 skips the
+  pickup's own window calls from its context (KH1's skip-mode way, Checked (decomp)) and sends what it gave to the
+  in-game skip's box (`ingameskip::queue_obtained`), shown when KH1's treasure machine is free, with In-game Scene
+  Skip on or off.
+- **Rope** (Checked (log + files)): Logs and Cloth came as touches (event 1) and were freed; the rope's part
+  (item 0xC2) holds twice and wakes context 20's sub-script 44, and left no line. Assumption: turned down as a touch,
+  quietly; a touch's reasons are logged now.
+
+### Round 22 (t807): the trail on the evidence boxes
+
+- The owner (t805 log): the Keyblade trail doesn't play on Alice's evidence boxes. Checked (log): the box at f3669
+  (command 0x55, "Antenna") ran as a room script's box; t803's trail request is made only where KH1's Open handler
+  asks the open motion (`0x1402B59CC`), which a box never reaches: its script asks Sora's motion as an action
+  (0x11), run by KH1's action step (`0x14028E6E0`, its call of the motion request at `0x14028E8AC`, Checked
+  (exe + decomp)).
+- **t807** redirects that one call (its target checked first) to KH1's own request and, while a box opens on Quick
+  with the KH2 chest animation, asks KH1's trail for the open request as the chest does. Every request the box's
+  script makes on Sora is logged ("the box's script asks Sora's motion ...").
+- Assumption: the box asks the open request (0xA6, the one the KH2 chest motion is baked on). The log line shows it.
+
+### Round 23 (t808): a chest opened while a box's window is up
+
+- The owner (t805 log): the last chest couldn't be opened. Checked (log): the evidence box opened at f3669 and its
+  window showed from f3748; its script waited on it (107) until about f3893 and hadn't reached its 512 (the player
+  given back; no "the box's part has ended" line). Sora was free (Quick), reached the chest and its Open ran at f3849:
+  KH2's chest motion played, but the treasure script never ran its part (no holds, no lid 353 / 108, no window), and
+  KH1 never offered the Open on that chest again.
+- Assumption (not read in the decomp yet): KH1 doesn't start the treasure script while a room script's part runs
+  with the engine's event bit (`engine 0x1000` in the log through those frames); the chest's handler had already
+  marked it. In KH1 the box holds Sora until its 512, so this never happens there.
+- **t808**: while a box's part runs (until its 512, or the open's 8 s), KH1's Open on a chest is shown greyed (KH1's
+  own grey, as the facing rule's) and can't be used. Logged as "(greyed: a box's part still runs)".
+- Differs from KH2 (Assumption: KH2 lets you open the next chest while a notice shows). Not fixed here: the
+  chest that was broken in that save stays as KH1 left it.
+
+## Item Pickup, round 8 (t809): every pickup on Destiny Islands
+
+Checked (files): all 12 `di*.ard` and 28 `di*.evm`, every script version; identical parts counted once.
+
+| Part | Rooms | Read as a pickup | Why |
+|---|---|---|---|
+| 0xC0 Log (x2), 0xC1 Cloth | `di01` | yes | 511, give, window 7, 512 (Checked (log, t805)) |
+| 0xC2 Rope (x4 versions) | `di01` | yes (t809) | holds and gives back twice; t806 ended it at the first 512 |
+| 0xC3, 0xC4 (x3), 0xC6 (x8), 0xC7 (x2, with item 0x1) | `di01`, `di03` | yes | the same form |
+| 0xC5 (x2) | `di03` | yes | the same form |
+| 0xC5 (x2, another version) | `di03` | yes (t809) | only 113 / 115 ... 112 / 114, no 511 / 512 |
+| raft building (258 x6, takes the materials) | `di01` | no (t809) | no window opened; t806 would have read it as one |
+| 0xC5 | `di11` | no | a scene starts after the window (126) |
+| 0xBA | `di03` | no | given in a talk (window 0) |
+| 0x1 / 0x2 (potions) | `di01`, `di03` | no | given in talks, no hold of their own |
+| 0xE7, others | `di03`, `di01` | no | inside scenes (514) |
+
+- Names other than Log, Cloth and Rope aren't in the files read here (KH1 keeps them in its item table): Assumption
+  which of 0xC3..0xC7 is which.
+- The pickup's line in the "Obtained" box plays no sound now: the pickup's own script plays 0x1F.
+
+## Item Pickup, round 9 (t810): the rope
+
+- t809 log: the rope's touch part (context 44, sub-script 6) wasn't a pickup. Checked (files, `di01`): it only sets
+  the context's local 0 and calls 26. The context's running loop (sub-script 1) sees local 0 and does the pickup:
+  511, 113, 115, 26, 63, 511, the give (0xC2), window 7, 512, Sora's getting up (context 20's 42), 114, 112, 512.
+- t810: when the woken part isn't a pickup, the context's other sub-scripts are read; one that is gets the pickup's
+  treatment (a "polled" pickup). Over half a second after its last give-back after the give, or 1.5 s with no give.
+- Sub-scripts of the pickup's own context that it wakes count as its own (`kh1script::own_subs`).
+
+## Item Pickup, round 10 (t811): the item stayed until a button
+
+- t810 log: the Seagull Egg's and the Coconut's parts waited on window 7 (107) after their give: window 7 is the
+  in-game skip's box, whose line waits for Confirm (`{06}`), and the item is removed after that wait.
+- t811: from the pickup's context, every window function on window 7 (2, 3, 4, 5, 6, 80, 83, 107, 365) is taken the
+  skip-mode way (Checked (exe): the values each pops), and the box's pickup line uses `{05}`, so it closes after its
+  0x52 frames with no button.
+
 ## Not checked (Assumption)
 
 - (t724, now answered) KH2's own chest: see "KH2's own chest opening" above (checked in files and

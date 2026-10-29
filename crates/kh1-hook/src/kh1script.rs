@@ -212,51 +212,132 @@ pub const FN_OPEN_WINDOW: u32 = 0;
 pub const FN_OPEN_WINDOW_AT: u32 = 177;
 pub const WINDOW_OBTAINED: u32 = 7;
 
-/// t795: a room script's part that a Triangle command woke through KH1's event dispatch (`0x1401A1A10`:
-/// event 0 wakes the object's context's sub-script 5, event 4 its sub-script 3), read as an item pickup:
-/// the whole sub-script from `start` to its first 512 (or 514), with every sub-script it wakes. A pickup
-/// takes the player (511), gives (258 / 583 / 458 / 444 / 570) and gives him back (512) with no scene,
-/// choice, shop or menu (`plays`), and every window its own sub-script opens is window 7 (the "Obtained"
-/// one: a talk opens its own windows). Destiny Islands' gathered items read `511, 113, 115, wake (Sora's
-/// motion), 2, 644, 258, 364, window 7 (4 / 5 / 6 / 83 / 80 / 3, 0, 1), 353 0x1F, 107, 2, wake, 112, 114,
-/// 512` (Checked (files): `di01`).
+/// t795: a room script's part that KH1's event dispatch (`0x1401A1A10`) woke for an object (a Triangle command,
+/// event 0 / 4; a touch, event 1; event 3), read as an item pickup: its whole sub-script from `start` to its
+/// end, and every sub-script it wakes (`21/c 22/s`), in full. A pickup gives (258 / 583 / 458 / 444 / 570),
+/// holds the player and gives him back (511 and 512, or (t809) only the engine's command lock, 113 and 114, as
+/// one form of Destiny Islands' 0xC5 in `di03` does), opens at least one window and only window 7 (the
+/// "Obtained" one: a talk opens its own windows; t809: the raft's building in `di01` holds, takes items with
+/// 258 and opens none), and has no scene, choice, shop or menu (`plays`, or 514) anywhere. Destiny Islands'
+/// gathered items read `511, 113, 115, wake (Sora's motion), 2, 644, 258, 364, window 7 (4 / 5 / 6 / 83 / 80 /
+/// 3, 0, 1), 353 0x1F, 107, 2, wake, 112, 114, 512` (Checked (files): `di01`, `di03`).
 pub fn read_pickup(ctx: usize, start: usize, word: impl Fn(usize, usize) -> Option<u32>, sub: impl Fn(usize, usize) -> Option<usize>, plays: &[u32]) -> BoxOpen {
     let op = |w: u32| (w >> 24) as u8;
     let arg = |w: u32| w & 0xFF_FFFF;
-    // The windows its own sub-script opens, up to its 512 / 514 or its end.
-    let mut last: Option<u32> = None;
-    let mut i = start;
-    loop {
-        if i - start >= FOLLOW_MAX {
-            return BoxOpen::Unread;
-        }
-        let Some(w) = word(ctx, i) else { return BoxOpen::Unread };
-        i += 1;
-        match op(w) {
-            CLASS_END => break,
-            CLASS_CALL => {
-                let f = arg(w);
-                if f == FN_OPEN_WINDOW || f == FN_OPEN_WINDOW_AT {
-                    match last {
-                        Some(w) if op(w) == CLASS_PUSH && arg(w) == WINDOW_OBTAINED => {}
-                        _ => return BoxOpen::Not(f),
+    let mut seen: Vec<u32> = Vec::new();
+    let mut opened = 0usize;
+    let mut total = 0usize;
+    // (context, first instruction, the pickup's own context: t810, a sub-script of its own context it wakes
+    // counts as its own, as the rope's touch part in `di01` (context 44's sub-script 6) wakes the part that
+    // holds, gives and shows the window)
+    let mut todo = vec![(ctx, start, true)];
+    let mut woken: Vec<(usize, usize)> = Vec::new();
+    while let Some((c, first, own)) = todo.pop() {
+        let mut last: Option<u32> = None;
+        let mut last_ctx = None;
+        let mut i = first;
+        loop {
+            if i - first >= FOLLOW_MAX {
+                return BoxOpen::Unread;
+            }
+            let Some(w) = word(c, i) else { return BoxOpen::Unread };
+            total += 1;
+            i += 1;
+            match op(w) {
+                CLASS_END => break,
+                CLASS_CALL => {
+                    let f = arg(w);
+                    if plays.contains(&f) || f == FN_EVENT_OFF {
+                        return BoxOpen::Not(f);
+                    }
+                    if own && (f == FN_OPEN_WINDOW || f == FN_OPEN_WINDOW_AT) {
+                        match last {
+                            Some(p) if op(p) == CLASS_PUSH && arg(p) == WINDOW_OBTAINED => opened += 1,
+                            _ => return BoxOpen::Not(f),
+                        }
+                    }
+                    if own && !seen.contains(&f) {
+                        seen.push(f);
                     }
                 }
-                if f == FN_RELEASE || f == FN_EVENT_OFF {
-                    break;
+                CLASS_CTX => last_ctx = Some(arg(w) as usize),
+                CLASS_WAKE => {
+                    if let Some(to) = last_ctx {
+                        let s = arg(w) as usize;
+                        if !woken.contains(&(to, s)) {
+                            if woken.len() >= FOLLOW_SUBS {
+                                return BoxOpen::Unread;
+                            }
+                            woken.push((to, s));
+                            let Some(at) = sub(to, s) else { return BoxOpen::Unread };
+                            todo.push((to, at, to == ctx));
+                        }
+                    }
                 }
+                _ => {}
             }
-            _ => {}
+            last = Some(w);
         }
-        last = Some(w);
     }
-    let mut seen = Vec::new();
-    match walk_follow_up(ctx, start, &word, &sub, plays, &mut seen) {
-        Follow::Skip(n) if seen.contains(&FN_HOLD) && seen.contains(&FN_RELEASE) && seen.iter().any(|f| TAIL_GIVES.contains(f)) => BoxOpen::Give(n),
-        Follow::Skip(_) | Follow::NoEnd => BoxOpen::Not(0),
-        Follow::Plays(f) => BoxOpen::Not(f),
-        Follow::Unread => BoxOpen::Unread,
+    let gives = seen.iter().any(|f| TAIL_GIVES.contains(f));
+    let held = (seen.contains(&FN_HOLD) && seen.contains(&FN_RELEASE)) || (seen.contains(&FN_LOCK) && seen.contains(&FN_UNLOCK));
+    if gives && held && opened > 0 {
+        BoxOpen::Give(total)
+    } else {
+        BoxOpen::Not(0)
     }
+}
+
+/// Event functions 113 and 114: the engine's command lock and its clear (bit 4 of `0x142867364`, which stops
+/// KH1's command input; `0x1401A9A80`, `0x1401A9AA0`), Checked (exe).
+pub const FN_LOCK: u32 = 113;
+pub const FN_UNLOCK: u32 = 114;
+
+/// t810: the instruction ranges (first, end) the pickup's own context runs: the sub-script starting at
+/// `start` and every sub-script of context `ctx` it (or one of those) wakes.
+pub fn own_subs(ctx: usize, start: usize, word: impl Fn(usize, usize) -> Option<u32>, sub: impl Fn(usize, usize) -> Option<usize>) -> Vec<(usize, usize)> {
+    let mut out: Vec<(usize, usize)> = Vec::new();
+    let mut todo = vec![start];
+    while let Some(first) = todo.pop() {
+        if out.iter().any(|&(f, _)| f == first) || out.len() >= FOLLOW_SUBS {
+            continue;
+        }
+        let Some(end) = sub_end(ctx, first, &word) else { continue };
+        out.push((first, end));
+        let mut last_ctx = None;
+        for i in first..end {
+            let Some(w) = word(ctx, i) else { break };
+            match (w >> 24) as u8 {
+                CLASS_CTX => last_ctx = Some((w & 0xFF_FFFF) as usize),
+                CLASS_WAKE if last_ctx == Some(ctx) => {
+                    if let Some(at) = sub(ctx, (w & 0xFF_FFFF) as usize) {
+                        todo.push(at);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    out
+}
+
+/// t810: how many times the sub-script starting at `start` gives the player back after its first give (512;
+/// when it has none, 114, the command lock's clear): the pickup is over at the last of them. The rope in
+/// `di01` gives him back twice (512 after its window, then again after his getting up).
+pub fn releases_after_give(ctx: usize, start: usize, word: impl Fn(usize, usize) -> Option<u32>) -> (usize, u32) {
+    let Some(end) = sub_end(ctx, start, &word) else { return (0, FN_RELEASE) };
+    let calls: Vec<u32> = (start..end).filter_map(|i| word(ctx, i)).filter(|w| (w >> 24) as u8 == CLASS_CALL).map(|w| w & 0xFF_FFFF).collect();
+    let Some(g) = calls.iter().position(|f| TAIL_GIVES.contains(f)) else { return (0, FN_RELEASE) };
+    let after = &calls[g..];
+    match after.iter().filter(|&&f| f == FN_RELEASE).count() {
+        0 => (after.iter().filter(|&&f| f == FN_UNLOCK).count(), FN_UNLOCK),
+        n => (n, FN_RELEASE),
+    }
+}
+
+/// t809: the instruction index of the end (class 5) of the sub-script starting at `start` in context `ctx`.
+pub fn sub_end(ctx: usize, start: usize, word: impl Fn(usize, usize) -> Option<u32>) -> Option<usize> {
+    (start..start + FOLLOW_MAX).find(|&i| word(ctx, i).map_or(true, |w| (w >> 24) as u8 == CLASS_END)).filter(|&i| word(ctx, i).is_some())
 }
 
 /// t793: what's left of a scene after its event mode ends (514) while the player is still held: from
@@ -329,6 +410,12 @@ pub fn obtained_text(name: &[u8], icon: Option<u8>) -> Vec<u8> {
 /// ends: entry 0, one context, sub-script 0 sets the window up (run at once by the start), sub-script 1
 /// shows the lines. No hold on the player (no 511 / 512, 113..115).
 pub fn obtained_script(texts: &[Vec<u8>]) -> Vec<u8> {
+    obtained_script_sounds(texts, &[])
+}
+
+/// `obtained_script`, with line `k`'s sound 0x1F left out when `quiet[k]` (t809: an item picked up off the
+/// ground already plays it from its own script).
+pub fn obtained_script_sounds(texts: &[Vec<u8>], quiet: &[bool]) -> Vec<u8> {
     let push = |a: u32| (CLASS_PUSH as u32) << 24 | (a & 0xFF_FFFF);
     let call = |f: u32| (CLASS_CALL as u32) << 24 | f;
     let neg = (CLASS_OP as u32) << 24 | OP_NEGATE;
@@ -344,7 +431,9 @@ pub fn obtained_script(texts: &[Vec<u8>]) -> Vec<u8> {
     for k in 0..texts.len() as u32 {
         settings(&mut s1);
         s1.extend([push(WINDOW), push(k), push(0xDC), neg, push(0x96), neg, call(365)]);
-        s1.extend([push(SOUND_GET), push(0), call(FN_SOUND)]);
+        if !quiet.get(k as usize).copied().unwrap_or(false) {
+            s1.extend([push(SOUND_GET), push(0), call(FN_SOUND)]);
+        }
         s1.extend([push(WINDOW), call(0), push(WINDOW), push(k), call(1), push(WINDOW), call(107), push(WINDOW), call(2)]);
     }
     s1.push(end);
@@ -445,7 +534,33 @@ mod tests {
         let ctxs = [c0.clone(), c1.clone()];
         let word = |c: usize, i: usize| ctxs.get(c).and_then(|v| v.get(i)).copied();
         let sub = |c: usize, s: usize| match (c, s) { (0, 3) => Some(0), (1, 0) => Some(0), (1, 1) => Some(2), _ => None };
-        assert_eq!(read_pickup(0, 0, word, sub, &plays), BoxOpen::Give(25));
+        assert_eq!(read_pickup(0, 0, word, sub, &plays), BoxOpen::Give(26));
+        assert_eq!(sub_end(0, 0, word), Some(21));
+        // (t809) The command-lock form (113 / 114, no 511 / 512) is a pickup; with no window opened it isn't.
+        let lock = vec![
+            ins(CLASS_CALL, 113), ins(CLASS_CALL, 115), ins(CLASS_PUSH, 0xC5), ins(CLASS_PUSH, 1), ins(CLASS_CALL, 258),
+            ins(CLASS_PUSH, 7), ins(CLASS_CALL, 0), ins(CLASS_PUSH, 7), ins(CLASS_CALL, 107), ins(CLASS_CALL, 112), ins(CLASS_CALL, 114), ins(CLASS_END, 0x10),
+        ];
+        let mut raft = lock.clone();
+        raft[6] = ins(CLASS_CALL, 8);
+        let ctxs2 = [lock, raft];
+        let word2 = |c: usize, i: usize| ctxs2.get(c).and_then(|v| v.get(i)).copied();
+        let none = |_: usize, _: usize| None;
+        assert_eq!(read_pickup(0, 0, word2, none, &plays), BoxOpen::Give(12));
+        assert_eq!(read_pickup(1, 0, word2, none, &plays), BoxOpen::Not(0));
+        // (t810) A touch part that only wakes a sub-script of its own context, which does the pickup.
+        let touch = vec![
+            ins(CLASS_PUSH, 0), ins(CLASS_PUSH, 6), ins(CLASS_CTX, 0), ins(CLASS_WAKE, 7), ins(CLASS_END, 0x10),
+            ins(CLASS_CALL, 511), ins(CLASS_PUSH, 0xC2), ins(CLASS_PUSH, 1), ins(CLASS_CALL, 258),
+            ins(CLASS_PUSH, 7), ins(CLASS_CALL, 0), ins(CLASS_CALL, 512), ins(CLASS_END, 0x10),
+        ];
+        let ctxs3 = [touch];
+        let word3 = |c: usize, i: usize| ctxs3.get(c).and_then(|v| v.get(i)).copied();
+        let sub3 = |c: usize, s: usize| match (c, s) { (0, 6) => Some(0), (0, 7) => Some(5), _ => None };
+        assert_eq!(read_pickup(0, 0, word3, sub3, &plays), BoxOpen::Give(13));
+        assert_eq!(own_subs(0, 0, word3, sub3), vec![(0, 4), (5, 12)]);
+        assert_eq!(releases_after_give(0, 5, word3), (1, FN_RELEASE));
+        assert_eq!(releases_after_give(0, 0, word2), (1, FN_UNLOCK));
         // A talk's window (window 0) isn't a pickup's.
         let mut c0b = c0.clone();
         c0b[12] = ins(CLASS_PUSH, 0);

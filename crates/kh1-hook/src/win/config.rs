@@ -557,7 +557,7 @@ const STRINGS: [(u32, &str); 133] = [
     (0x7F00_0232, "Quick"),
     (0x7F00_0233, "Skip"),
     (0x7F00_0236, "Item Pickup"),
-    (0x7F00_0237, "Vanilla: KH1's. Skip: picking an item up off the ground doesn't stop\nSora; KH1's item window shows while he keeps moving."),
+    (0x7F00_0237, "Vanilla: KH1's. Skip: picking an item up off the ground doesn't stop\nSora; the small \"Obtained\" box shows while he keeps moving."),
     (0x7F00_0234, "Chest Animation"),
     (0x7F00_0235, "The animation Sora plays when he opens a chest on Quick."),
     (0x7F00_0197, "Cast from Glide"),

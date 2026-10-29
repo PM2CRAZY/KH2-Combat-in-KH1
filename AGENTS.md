@@ -1,3 +1,64 @@
+### 2026-10-28: Stage 811 (testing branch: Item Pickup: the item goes away at once, the box closes on its own)
+- **The Seagull Egg and the Coconut stayed until a button.** The owner (chat, t810 log): "the seagull egg and the coconut doesn't disappear when being picked up, only after you hit a button does it". Checked (log): the Egg's pickup (f4026) skipped its window, but its part then waited on window 7 (107 x 92 / 122 / 66 from f4028) until the jump at f4174, and only then went on (54, 112, 114, 512); the Coconut's the same (f3027..f3200). Window 7 is the in-game skip's "Obtained" box too, and its line ends with `{06}` (0x52 frames, but a wait Confirm ends; Checked (decomp, t804's reading)), so the part waited on our box, and the item goes away after that wait.
+- **Now**, from the pickup's own context, KH1's window functions on window 7 take the skip-mode way as 0 / 1 / 177 / 605 do (`chest::PICKUP_WINDOW_FNS`: their values popped, 2 returned; Checked (exe): 2 and 107 pop 1, 3 and 4 pop 3, 5, 6, 80 and 83 pop 2, 365 pops 4), so the part neither waits on, closes nor moves the box; and a pickup's line in the box uses `{05}` (`ingameskip::show_now`: the same 0x52 frames, a wait no button ends), so the box closes on its own.
+- Not checked: in game.
+
+### 2026-10-28: Stage 810 (testing branch: Item Pickup: the rope, a pickup its context's main loop does after a touch)
+- **The rope still held Sora.** The owner (chat, t809 log): "rope is still not working, its the first item I pick up in the log". Checked (log): f552 "event 1's part (context 44, sub-script 6) isn't a pickup (event function 0)", then f571 the hold (511 x2, 26 x2, 63, 258). Checked (files, `di01`): the rope's context binds object 0x40024 in sub-script 0; its touch part (sub-script 6) only sets local 0 and calls 26; sub-script 1, the context's running loop, sees local 0, holds (511, 113, 115, 26, 63, 511), gives 0xC2, shows window 7, gives back (512), lets Sora get up (wake of context 20's 42) and gives back again (114, 112, 512). The Logs' and the Cloth's touch parts do the pickup themselves.
+- **Now** (`chest::event`): when the woken part isn't a pickup, the context's other sub-scripts are read (`kh1script::read_pickup`); one that reads as a pickup is taken as a polled pickup: its holds and windows from that context are skipped and its actions on Sora done at once, as for the others. It's over half a second after its last give-back after the give (`kh1script::releases_after_give`: the rope's two 512s), or after 1.5 s with no give (the touch didn't start it). `read_pickup` now counts sub-scripts of the pickup's own context that it wakes as its own (`kh1script::own_subs` gives their ranges for a pickup's end), unit-tested.
+- Assumption: context 20's sub-scripts 42 and 44 (Sora's motions) have no scene, choice or menu (not readable from the files here); if they had, the rope stays KH1's and the log says "no sub-script of context ... reads as a pickup".
+
+### 2026-10-28: Stage 809 (testing branch: Item Pickup: every Destiny Islands pickup form read, the part's end, no second sound)
+- **The sound.** The owner: "we don't need to play the item get sfx because the script still plays it". A pickup's line in the in-game skip's "Obtained" window plays no 0x1F now (`kh1script::obtained_script_sounds`, `ingameskip::QUIET`); the pickup's own 353 still runs.
+- **Destiny Islands read in full** (the owner: "investigate all the scripts in destiny island and see if we're missing any items"). Checked (files: the 12 `di*.ard` and the 28 `di*.evm`, every script version, identical parts counted once): 36 parts give something. 25 read as pickups (items 0xC0..0xC7 in `di01` / `di03`; 0xC0 Log, 0xC1 Cloth, Checked (log, t805); 0xC2 the rope, Checked (log + files: its part holds twice, as the t805 log's f6472)). Missed by t806: two forms of 0xC5 in `di03` that hold only with the engine's command lock (113 / 115 ... 112 / 114, no 511 / 512) and end at their sub-script's end. Read as pickups by mistake: the raft's building in `di01` (511, 258 x6 taking the materials, Sora's motions, 512, no window opened) would have had its motions done at once. Left KH1's on purpose: `di11`'s 0xC5 (a scene starts after its window, 126), `di03`'s 0xBA (a talk gives it), the potions given in talks (0x1 / 0x2), 0xE7 in a scene.
+- **`kh1script::read_pickup` (unit-tested)** now reads the whole sub-script and everything it wakes: a give, 511 + 512 or 113 + 114, at least one window opened and only window 7, nothing in `BOX_PLAYS` and no 514.
+- **The part's end.** t806 ended a pickup at its first 512; the rope holds and gives back twice and its getting up comes after. Now a pickup is over half a second after its context has left its sub-script (`kh1script::sub_end`, `chest::pickup_over`), so what it woke is still done at once; a second pickup during that time takes over.
+- Not checked: in game; the rope's own touch reason (t806's log line will say if it's still turned down: what its woken context 20 sub-script 44 does wasn't readable from the files).
+
+### 2026-10-28: Stage 808 (testing branch: chest: no chest Open while a box's part runs)
+- `win/chest.rs`: a chest's Open is greyed (KH1's own grey and block) while a room script's box opened the KH2 way
+  still runs its part (`box_running`: until its 512 or the open's time); a chest opened then never got its
+  treasure script (the owner's t805 log).
+- `docs/kh1-chest.md` Round 23.
+
+### 2026-10-28: Stage 807 (testing branch: chest: Keyblade trail on room scripts' boxes)
+- `win/chest.rs`: KH1's action step's motion request call (`0x14028E8AC`) goes to `action_request` (KH1's request,
+  then for a room script's box on Quick with KH2's chest motion, KH1's Keyblade trail request as a chest's);
+  the box's requests on Sora logged.
+- `docs/kh1-chest.md` Round 22.
+
+### 2026-10-28: Stage 806 (testing branch: Item Pickup: the in-game skip's small "Obtained" box, touches logged)
+- **The box.** The owner (chat, t805 log): "the text box needs to be the same size as our in game cutscene skip text boxes so it doesn't obstruct gameplay". Checked (files, `di01`): a pickup opens KH1's window 7 set up centred (event function 4 with 0xF, 3 with (0, 1)) with a long line; the in-game skip's box is window 7 placed at (-220, -150) by 365 with one "Obtained" line (`kh1script::obtained_script`). Now, from the pickup's own context only, KH1's message functions 0 / 1 / 177 / 605 take their skip-mode way (`chest::call`: their arguments popped, nothing opened, 2 returned; Checked (decomp): 0 and 177 pop 1, 1 and 605 pop 2), so its 107 waits pass and its close (2) closes nothing; the give (258 / 583) goes to `ingameskip::queue_obtained`, which shows it in the in-game skip's "Obtained" box at the next pad read with KH1's treasure machine free (`show_now`, also run with In-game Scene Skip off now). KH1's message functions are wrapped once for Chest Opening and Item Pickup together (`wrap_messages`).
+- **The rope.** Checked (log, t805): the Logs and the Cloth were read as pickups through event 1 (touch, f5867 / f6057 / f7070) and Sora was free; at f6472 a pickup (511 x2, 26 x2, 63, 258) held him with no Item Pickup line. Checked (files, `di01`): the rope's part (item 0xC2) holds twice (511, a wake of context 20's sub-script 44, 26, 113, 115, 63, 511) and gives the player back twice. Assumption: it comes as a touch too, and was turned down quietly (t801 kept a touch's ways out out of the log). A touch's "not woken", "not a pickup" and "unreadable" are logged now; the next log names the reason.
+
+### 2026-10-28: Stage 805 (testing branch: chest: t804's window wait now runs)
+- `win/chest.rs`: the item window's unskippable wait (t804) now runs: message function 1's script stack index is 1
+  when the window and text are all it holds (t804 required 2). Logs added for an unreadable line.
+- `docs/kh1-chest.md` Round 21.
+
+### 2026-10-28: Stage 804 (testing branch: chest: the item window closes on its own)
+- `win/chest.rs`: Quick / Skip: the open's message line (function 1) reads our copy of its text with KH1's unskippable
+  wait (`{05}`, frames + 1,000,000) in place of `{06}`, so Confirm no longer closes the item window; KH1's text back
+  at the close (2) or the open's end. The Dalmatians' line uses `{05}`. `timed_copy` steps the text with the
+  parser's code lengths (`0x1401767B0`), test added.
+- `docs/kh1-chest.md` Round 20.
+
+### 2026-10-28: Stage 803 (testing branch: chest: KH2 animation's trail and item window timing)
+- `win/chest.rs`: Quick with KH2's chest animation: KH1's trail request (`0x1402C2310`, row 13's trail id) is asked
+  when the open request plays KH2's chest motion, so KH1's trail step draws the motion's trail window 7.0 (0..23);
+  the item window's wait moves to 20 frames after the lid opens (`LID_TO_WINDOW`, vanilla's gap).
+- `docs/kh1-chest.md` Round 19.
+
+### 2026-10-28: Stage 802 (testing branch: chest: lid at KH2's contact, KH2 Keyblade sound (t784 redone))
+- Redoes t784 (written over by a later t785 built on t783) on top of t801.
+- `win/chest.rs`: Quick with KH2's chest animation: Sora's motion wait (103, treasure context 1) ends at frame 28
+  of KH2's motion (`KH2_CONTACT_FRAME`: KH2's lid and capture start together, `0x1404025C0`; Keyblade sound
+  500034 and the lid's sound at 28), so KH1 opens the lid at contact; the idle request (58) waits until the motion
+  has played out.
+- `win/kh2slots.rs`: the chest slot keeps only KH2's sounds; `frames_for_motion`.
+- `win/kh2sound.rs`: the chest motion's sounds always cut and allowed.
+- `docs/kh1-chest.md` Round 18.
+
 ### 2026-10-28: Stage 801 (testing branch: Item Pickup: woken pickups waiting at a priority, touches and event 3 read, every way out logged)
 - **Destiny Islands' pickups still held Sora.** The owner (chat, t800 log): "recorded in the log in destiny island I still get stopped for picking up an item". Checked (log): `item_pickup = skip`, the dispatch hooked at f57, Cutscenes logging on (Chest Opening lines show), yet no "Item Pickup" line at the pickups (f1909, f2151, f2454, f2575: 511, 113 / 115, 258 and Sora held). t795's `chest::event` left without a word when the part wasn't seen as woken. Checked (decomp): KH1's wake (`0x1401A0AF0`) sets the context's next instruction only when the wake's priority is at least its current one (`+0x32C`); otherwise the start waits in `+0x30C + priority * 4` until that level ends. t795 took only the first. Now a start waiting in the slot of the wake's priority counts too (event 0 and 4 at 3). Also read now: event 1 (a touch, `0x140297E80`, sub-script 6 at priority 2) and event 3 (`0x1402B0610`, sub-script 7 at 4), in case Destiny Islands' items come that way; `read_pickup` still decides. Every way out for events 0, 3 and 4 is logged (no context, no sub-script, not woken with its next and waiting instruction, not a pickup, during an open). Assumption, not yet checked: which of these the island's items take; the next log says.
 

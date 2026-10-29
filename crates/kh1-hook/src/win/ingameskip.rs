@@ -108,6 +108,9 @@ static REARMED: AtomicU32 = AtomicU32::new(0);
 static ORIG_GIVE: [AtomicUsize; 5] = [const { AtomicUsize::new(0) }; 5];
 /// What KH1 gave during the mod's skip, shown in the notice box when the skip ends (t785).
 static GIVEN: std::sync::Mutex<Vec<(String, Option<u8>)>> = std::sync::Mutex::new(Vec::new());
+/// t809: how many of the lines at the front of `GIVEN` came from an item picked up off the ground (their
+/// sound is the pickup script's own, so the window plays none for them): by line, true = quiet.
+static QUIET: std::sync::Mutex<Vec<bool>> = std::sync::Mutex::new(Vec::new());
 /// t786: the gives are ready to show (the skip has ended); the script file KH1's treasure machine is
 /// showing them from (kept until the machine is free again), and whether KH1's script start checked out.
 static SHOW: AtomicBool = AtomicBool::new(false);
@@ -350,6 +353,12 @@ unsafe fn verify() {
 /// Each pad read (`probe::pad`).
 pub fn pad() {
     if !ON.load(Ordering::Relaxed) || !VERIFIED.load(Ordering::Relaxed) {
+        // (t806) An item picked up off the ground (QoL > Item Pickup) shows its "Obtained" window here too,
+        // with this row off.
+        let base = BASE.load(Ordering::Relaxed);
+        if base != 0 && SHOW.load(Ordering::Relaxed) {
+            unsafe { show_now(base) };
+        }
         return;
     }
     unsafe { step() }
@@ -535,6 +544,29 @@ unsafe fn noting() -> bool {
     ON.load(Ordering::Relaxed) && FORCED.load(Ordering::Relaxed) && base != 0 && rd::<u32>(base + RUNNER_STEAM) & 1 != 0
 }
 
+/// t806: QoL > Item Pickup: what an item picked up off the ground gave, shown in this skip's "Obtained"
+/// window (the owner: "the text box needs to be the same size as our in game cutscene skip text boxes so it
+/// doesn't obstruct gameplay"), at the next pad read with KH1's treasure machine free (`show_now`).
+pub fn queue_obtained(line: String) {
+    if BASE.load(Ordering::Relaxed) == 0 {
+        let base = unsafe { super::sys::GetModuleHandleA(std::ptr::null()) as usize };
+        let at = |rva: usize, n: usize| unsafe { std::slice::from_raw_parts((base + rva) as *const u8, n) };
+        START_OK.store(Build::current() == Build::Steam && at(MACHINE_START_STEAM, MACHINE_START_BYTES.len()) == MACHINE_START_BYTES, Ordering::Relaxed);
+        BASE.store(base, Ordering::Relaxed);
+    }
+    log!(Cutscenes, "Item Pickup: \"{line}\" goes to the in-game skip's \"Obtained\" window");
+    if let Ok(mut g) = GIVEN.lock() {
+        if g.len() < 8 {
+            g.push((line, Some(ICON_ITEM)));
+            if let Ok(mut q) = QUIET.lock() {
+                q.resize(g.len() - 1, false);
+                q.push(true);
+            }
+        }
+    }
+    SHOW.store(true, Ordering::Relaxed);
+}
+
 fn note(line: String, icon: Option<u8>) {
     log!(Cutscenes, "in-game skip: KH1 gave \"{line}\" during the skip (shown when it ends)");
     if let Ok(mut g) = GIVEN.lock() {
@@ -595,6 +627,7 @@ unsafe fn show_now(base: usize) {
     }
     SHOW.store(false, Ordering::Relaxed);
     let lines = GIVEN.lock().map(|mut g| std::mem::take(&mut *g)).unwrap_or_default();
+    let quiet = QUIET.lock().map(|mut q| std::mem::take(&mut *q)).unwrap_or_default();
     if lines.is_empty() {
         return;
     }
@@ -606,14 +639,24 @@ unsafe fn show_now(base: usize) {
     }
     let texts: Vec<Vec<u8>> = lines
         .iter()
-        .map(|(line, icon)| {
+        .enumerate()
+        .map(|(k, (line, icon))| {
             let mut name = super::menu::encode(line);
             name.pop();
-            crate::kh1script::obtained_text(&name, *icon)
+            let mut t = crate::kh1script::obtained_text(&name, *icon);
+            // (t811) A pickup's line closes on its own: KH1's wait no button ends (`{05}`, the same 0x52
+            // frames; `chest::timed_copy`), not `{06}`, which waits for Confirm (the t810 log: the Seagull Egg's
+            // box stayed up until the jump at f4174).
+            if quiet.get(k).copied().unwrap_or(false) {
+                if let Some(at) = t.windows(3).rposition(|w| w == [0x06, 0x52, 0x00]) {
+                    t[at] = 0x05;
+                }
+            }
+            t
         })
         .collect();
     let Ok(mut file) = SCRIPT.lock() else { return };
-    *file = crate::kh1script::obtained_script(&texts);
+    *file = crate::kh1script::obtained_script_sounds(&texts, &quiet);
     let start: unsafe extern "system" fn(usize, i32) = std::mem::transmute(base + MACHINE_START_STEAM);
     start(file.as_ptr() as usize, 0);
     log!(Cutscenes, "in-game skip: {} \"Obtained\" window(s) started in KH1's treasure machine ({})", lines.len(), lines.iter().map(|(l, _)| l.as_str()).collect::<Vec<_>>().join(", "));

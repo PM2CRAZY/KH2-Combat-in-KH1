@@ -827,7 +827,9 @@ fn make(mset: &[u8], src: &pose::Src, bake: Option<&pose::Baker>, cache: Option<
     let r = if kind == Kind::Jump { 1.0 } else { frames as f32 / old.max(1) as f32 };
     let mut tracks = kh1_tracks(&ks::events(&template).map_err(|e| e.to_string())?, clip, r, leave);
     // (Only KH2's own sounds for it: the template's left out, `kh1rows::Ours::own_sounds`.)
-    if ours.is_some_and(|o| o.own_sounds) || item {
+    // (KH2's chest motion, t802: only KH2's own sounds, its Keyblade's 500047 at frame 1 and 500034 at 28; the
+    // owner: "the sound effect from the keyblade needs to be the one from kh2".)
+    if ours.is_some_and(|o| o.own_sounds) || item || motion == pose::CHEST_MOTION {
         tracks.retain(|t| t.kind != ks::SOUND);
     }
     // (The Aerial Dodge: KH1's "may be left" one frame before KH2's free frame, `INPUT_LEAD`.)
@@ -2080,6 +2082,11 @@ pub fn playing() -> Option<usize> {
 }
 
 /// The length of what plays for KH1's `slot` now, if ours stands in for it.
+/// The length (frames) of our slot of KH2 `motion` (its first), if it was built.
+pub fn frames_for_motion(motion: u16) -> Option<u32> {
+    built()?.moves.iter().find(|m| m.motion == motion).map(|m| m.frames)
+}
+
 pub fn frames_for(slot: usize) -> Option<u32> {
     let m = moved(playing()?)?;
     (m.stands_for == slot || m.slot == slot).then_some(m.frames)

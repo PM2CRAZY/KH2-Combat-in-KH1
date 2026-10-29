@@ -134,6 +134,10 @@ fn allowed(motion: u16) -> bool {
     if motion == super::kh2slots::KH2_ITEM_USE {
         return true;
     }
+    // (KH2's chest motion, the same: KH1's open sounds are left out of its slot, t802.)
+    if motion == super::pose::CHEST_MOTION {
+        return true;
+    }
     match &super::settings::get().kh2_sounds {
         None => false,
         Some(None) => true,
@@ -173,7 +177,7 @@ pub fn start() {
             .moveset
             .clips
             .iter()
-            .filter(|(m, _)| moves && allowed(**m) || **m == super::kh2slots::KH2_ITEM_USE || super::form::own_motion(**m))
+            .filter(|(m, _)| moves && allowed(**m) || **m == super::kh2slots::KH2_ITEM_USE || **m == super::pose::CHEST_MOTION || super::form::own_motion(**m))
             .flat_map(|(_, c)| c.events.iter().map(|e| e.kind))
             .collect();
         // Every move's battle voice (the Battle Quotes row switches them in game, on every move:
