@@ -1267,6 +1267,100 @@ pub struct Baker {
     base_grip: Option<Mat4>,
 }
 
+/// Valor Form's Keyblades held as KH2 holds them (t829; the owner, what-is-still-missing: "look at
+/// which bones attach the keyblade to soras model because currently valor is really off model on
+/// both keyblades"). Checked (files):
+/// - KH2 hangs a weapon on a palm bone of the model, from `sklt` row 1 (the objentry's weapon joint
+///   of P_EX100 and every form): 178 right, 86 left, each the parent of its hand's five fingers.
+///   KH1 Sora's Keyblade (`.wpn`) is skinned to his bones 280..292, 280 a child of his right palm
+///   101 (the left palm is 206). The two palms' binds face within 3 degrees of each other.
+/// - KH2's Keyblade skeleton (`W_EX010.mdlx`, 12 bones) is KH1's 280..291 bone for bone: the same
+///   bind turns (within 0.3 degrees) and the same keychain lengths (21.11, 6.72, 2.95, ...).
+/// - KH2's Keyblade mesh is skinned to its bone 2 (834 corners, the blade along its -x to -77.9,
+///   the guard and pommel to +20.2); bones 3..11 carry the keychain. KH2's weapon motions put a half
+///   turn (about the x = y diagonal) in bone 1 and leave bone 2's own turn at none, where KH1's
+///   bind has none in 281 and a half turn about y in 282.
+/// So the Keyblade sits where weapon bone 2 sits, and only bone 2 means the same in both rigs. The
+/// old bake (KH1's rest grip on 280, the teeth-up half turn, `form_grip`'s change of KH2's root)
+/// left KH1's 282 some 21 degrees along the blade and 24 round it off KH2's bone 2 in every Valor
+/// move, both hands (an offline run of this bake on the user's files, in each palm's own frame);
+/// here it is within 1.7 / 2.8 (the two binds' palms).
+///
+/// `weapon`: KH2's weapon bones in KH2's model space (`kh2_weapon_n`); `hands`: (KH1 palm, KH2
+/// palm); `k`: KH1's hip height over KH2's (KH2's offsets into KH1's units, as `leftblade` scales).
+/// KH2's bone 2 is carried from KH2's palm onto KH1's (the turn of `kh1_bind[h1]⁻¹ × kh2_bind[h2]`
+/// takes one palm's frame to the other's, the binds agreeing; its place from the middle knuckle, t851), KH1's 280 and 281 go under it as KH1's own bind
+/// holds them (so KH1's mesh stays as KH1 skins it), and the keychain (283..) is carried with it.
+/// `false` (nothing changed) without three weapon bones or with a pose that isn't finite.
+#[allow(clippy::too_many_arguments)]
+pub fn kh2_hold(kh1: &mut [Mat4], parents: &[i16], kh1_bind: &[Mat4], kh2_bind: &[Mat4], body: &[Mat4], weapon: &[Mat4], (h1, h2): (usize, usize), k: f32) -> bool {
+    let grip = kh1_data::retarget::GRIP_BONE;
+    if weapon.len() < 3 || kh1.len() < grip + 3 || kh1_bind.len() < grip + 3 || h1 >= kh1.len() || h2 >= body.len() || h2 >= kh2_bind.len() {
+        return false;
+    }
+    let k = if k.is_finite() && k > 0.1 { k } else { 1.0 };
+    let units = |m: Mat4| {
+        let mut m = m;
+        m.w_axis = (m.w_axis.truncate() * k).extend(1.0);
+        m
+    };
+    // (t851: the hold placed from the hand's middle knuckle, where the fingers close, and turned
+    // by the palms' bind turn only. `kh1_bind[h1]⁻¹ × kh2_bind[h2]` whole also carried the two
+    // models' palms' places apart (KH1's palm bone sits on the middle knuckle, 11 from the wrist;
+    // KH2's mid-hand, 5.7 from it), which put the Keyblade's handle some 5.8 units off KH2's,
+    // behind the palm: offline at Valor's idle, (0.4, -0.4, -1.2) in KH1's right palm where KH2's
+    // is (3.5, -1.9, 3.2) x the hip ratio, the fingers closing to +z.)
+    let (n1, n2) = match middle_knuckles(h1, h2) {
+        Some((k1, k2)) if k1 < kh1_bind.len() && k2 < kh2_bind.len() => ((kh1_bind[h1].inverse() * kh1_bind[k1]).w_axis.truncate(), (kh2_bind[h2].inverse() * kh2_bind[k2]).w_axis.truncate()),
+        _ => (Vec3::ZERO, Vec3::ZERO),
+    };
+    let turn = Mat4::from_quat((kh1_bind[h1].inverse() * kh2_bind[h2]).to_scale_rotation_translation().1.normalize());
+    let target = kh1[h1] * Mat4::from_translation(n1) * turn * units(Mat4::from_translation(-n2) * body[h2].inverse() * weapon[2]);
+    let to1 = kh1_bind[grip].inverse() * kh1_bind[grip + 1];
+    let to2 = kh1_bind[grip].inverse() * kh1_bind[grip + 2];
+    let held = target * to2.inverse();
+    let carry = target * kh1[grip + 2].inverse();
+    if !held.is_finite() || !carry.is_finite() {
+        return false;
+    }
+    for i in grip + 3..kh1.len().min(SORA_BONES as usize) {
+        let mut p = Some(i);
+        for _ in 0..24 {
+            match p {
+                Some(q) if q == grip + 2 => {
+                    kh1[i] = carry * kh1[i];
+                    break;
+                }
+                Some(q) if q < grip + 2 => break,
+                Some(q) => p = parents.get(q).copied().filter(|x| *x >= 0).map(|x| x as usize),
+                None => break,
+            }
+        }
+    }
+    kh1[grip] = held;
+    kh1[grip + 1] = held * to1;
+    kh1[grip + 2] = target;
+    true
+}
+
+/// The middle finger's first bone under each palm `kh2_hold` takes: KH1's right palm 101 and left
+/// 206 (113 and 217 under them), KH2's right palm 178 and left 86 (189 and 97). Checked (files:
+/// `xa_ex_0010.mdls`, `P_EX100.mdlx` and Valor's: the parents). KH1's sits on its palm bone; KH2's
+/// 6.1 past it toward the fingers.
+fn middle_knuckles(h1: usize, h2: usize) -> Option<(usize, usize)> {
+    let k1 = match h1 {
+        101 => 113,
+        206 => 217,
+        _ => return None,
+    };
+    let k2 = match h2 {
+        178 => 189,
+        86 => 97,
+        _ => return None,
+    };
+    Some((k1, k2))
+}
+
 /// A Drive Form's own hold of its right Keyblade on KH1's grip bone (the tester, drive-forms:
 /// "sora doesn't spin his keyblade on the idle animation" in Wisdom). KH2 poses the Keyblade by
 /// the form's weapon motion (`W_EX010_MAGF` for Wisdom, `W_EX010_BTLF_R` for Valor) on the hand
@@ -1357,6 +1451,10 @@ impl Baker {
         // (A slot longer than the clip, `kh1rows::Ours::frames`: the clip loops over it from its
         // own loop point, as KH2 plays it; the Aerial Dodge's 202.)
         let looping = frames as f32 > kh2_anim::length_frames(clip) + 1.0;
+        // (Valor's Keyblades held as KH2 holds them, `kh2_hold`: KH1's and KH2's binds.)
+        let valor = matches!(src.form, Some(super::form::Kind::Valor));
+        let binds = valor.then(|| (kh2_anim::Pose::bind(&self.skeleton).bones, kh2_anim::Pose::bind(&rig.skeleton).bones));
+        let right_palm = rig.weapons.first().and_then(|w| w.bone);
         for f in 0..=frames {
             let at = f as f32;
             let mut body = kh2_anim::evaluate(&rig.skeleton, clip, kh2_anim::key_time(clip, at, looping), kh2_anim::Options::default()).bones;
@@ -1368,15 +1466,21 @@ impl Baker {
                 }
             }
             let mut kh1 = self.retarget.pose(&body);
+            // Valor: its right Keyblade where KH2's weapon motion puts it (`kh2_hold`), in place of
+            // the teeth-up turn and `form_grip` below.
+            let held = match (&binds, right_palm) {
+                (Some((b1, b2)), Some(palm)) => kh2_hold(&mut kh1, &parents, b1, b2, &body, &weapon, (HANDS[0].0, palm), self.retarget.hip_ratio()),
+                _ => false,
+            };
             // The Keyblade's teeth up (`keyblade_turn`; the user's t353 test: held the wrong way
             // round, as KH1's grip rolls the blade otherwise). Every weapon gets it in the bake:
             // the dream weapons and the wooden sword too (the user: they show the same). Before
             // the keychain, as `check` does: the chain hangs from the turned pommel.
-            if set.keyblade_turn {
+            if set.keyblade_turn && !held {
                 turn_grip(&mut kh1, &parents);
             }
             // (A Drive Form's own hold of its Keyblade, `form_grip`.)
-            if let (Some(_), Some(base_grip), Some(root), Some(hand)) = (src.form, self.base_grip, weapon.first(), rig.weapons.first().and_then(|w| w.bone).and_then(|b| body.get(b))) {
+            if let (false, Some(_), Some(base_grip), Some(root), Some(hand)) = (held, src.form, self.base_grip, weapon.first(), rig.weapons.first().and_then(|w| w.bone).and_then(|b| body.get(b))) {
                 form_grip(&mut kh1, &parents, *hand, hand.inverse() * *root, base_grip);
             }
             {
@@ -1405,10 +1509,11 @@ impl Baker {
     /// (Valor's; `kh2slots`, plan step 4 of `docs/kh1-weapon-second.md` §7.3): KH1 Sora's bind for
     /// every body bone, and the left hand's 13 weapon bones (`leftblade::left_bones`, from KH2's
     /// left Keyblade weapon motion, the form rig's second weapon, on KH1's pose `poses[f]` as the
-    /// main bake gives it) where they sit from the left hand, put on the bind's left hand. KH1's
-    /// pass poses it on an instance of ours (`leftblade::pose_holder`), and the bones are carried
-    /// from that hand onto Sora's drawn one. `Err` names why it can't be made (no second weapon, a
-    /// mirrored grip, which KH1's channels can't hold).
+    /// main bake gives it) where they sit from the left hand (t831: in the palm's own space, the
+    /// holder actor's root being Sora's left palm, `holder`). KH1's own pose task poses it on the
+    /// holder actor at Sora's motion's time. `Err` names why it can't be made (no second weapon, a
+    /// mirrored grip, which KH1's channels can't hold). Valor's (t829) are KH2's left weapon bone 2
+    /// carried from KH2's left palm (86) onto KH1's (206) by `kh2_hold`, not `left_bones`.
     pub fn holder_poses(&self, src: &Src, motion: u16, field: bool, poses: &[Vec<Mat4>]) -> Result<(Vec<Vec<Mat4>>, f32), String> {
         let rig = src.rig;
         let clip = field.then(|| rig.field_motions.get(&motion)).flatten().or_else(|| rig.motions.get(&motion)).ok_or("KH2 has no animation for it")?;
@@ -1421,6 +1526,7 @@ impl Baker {
         let b2 = kh2_anim::Pose::bind(&rig.skeleton).bones;
         let (hand, grip, n) = (super::leftblade::LEFT_HAND_BONE, super::leftblade::GRIP_BONE, super::leftblade::WEAPON_BONE_COUNT);
         let ratio = self.retarget.hip_ratio();
+        let parents: Vec<i16> = self.skeleton.iter().map(|b| b.parent).collect();
         let mut out = Vec::with_capacity(poses.len());
         let mut reach = 0f32;
         for (f, kh1) in poses.iter().enumerate() {
@@ -1431,13 +1537,40 @@ impl Baker {
             let (Some(&r0), Some(&l0)) = (right.first(), left.first()) else {
                 return Err("no Keyblade pose".into());
             };
-            let (bones, from_hand) = super::leftblade::left_bones(kh1, &kh1_bind, &b2, (sr, sl), &body, r0, l0, ratio).ok_or("the left grip isn't finite")?;
+            // (Valor, t829: KH2's left weapon bone 2 carried from its left palm onto KH1's, as the
+            // right one is in the main bake, `kh2_hold`; no correction taken from the right hand.)
+            let (bones, from_hand) = if matches!(src.form, Some(super::form::Kind::Valor)) {
+                let mut l = kh1.clone();
+                if !kh2_hold(&mut l, &parents, &kh1_bind, &b2, &body, &left, (hand, sl), ratio) {
+                    return Err(format!("the left hold isn't finite at frame {f}"));
+                }
+                // (t852: the left keychain hung as KH2's left weapon motion hangs it, as `secondary`
+                // hangs the right one from KH2's right weapon motion. `kh2_hold` carries the bones
+                // under 282 with it, and these were the right Keyblade's chain, so the left one kept
+                // the right one's shape about its own blade: offline 126 degrees off KH2's left chain
+                // in Valor's idle, 84 in motion 1, pointing up where KH2's hangs; now within 1.)
+                self.secondary.apply(&mut l, &body, Some(&left), kh1_data::secondary::Parts { hair: false, hood: false, chain: true, sleeves: false });
+                let mut bones = [Mat4::IDENTITY; 13];
+                bones.copy_from_slice(&l[grip..grip + n]);
+                (bones, (l[grip].w_axis - l[hand].w_axis).truncate().length())
+            } else {
+                super::leftblade::left_bones(kh1, &kh1_bind, &b2, (sr, sl), &body, r0, l0, ratio).ok_or("the left grip isn't finite")?
+            };
             if glam::Mat3::from_mat4(bones[0]).determinant() < 0.0 {
                 return Err(format!("the left grip is mirrored at frame {f}"));
             }
             reach = reach.max(from_hand);
+            // (t831: the weapon bones where they sit from the hand, as the holder actor's root is
+            // on Sora's left hand, `holder`; t849: from the wrist, a bone KH1 keeps through its
+            // blends, the palm being one it doesn't.)
             let mut p = kh1_bind.clone();
-            let from = kh1_bind[hand] * kh1[hand].inverse();
+            // (t850: and through the skeleton pass's flip of its world matrix's second and third
+            // rows, `from_param`: the holder's world matrix is the wrist's, so its model space is
+            // the wrist's frame turned 180 degrees about its x. Without this the left Keyblade
+            // came out turned so about the hand: the owner's t840 trace measured bone 282's x in
+            // the palm's frame at (-0.48, -0.88, 0.00) where this bake meant (-0.48, 0.88, 0.00),
+            // Checked (trace; offline: `valor_grip`).)
+            let from = Mat4::from_scale(Vec3::new(1.0, -1.0, -1.0)) * kh1[super::leftblade::LEFT_WRIST_BONE].inverse();
             for i in 0..n {
                 p[grip + i] = from * bones[i];
             }
@@ -1487,9 +1620,9 @@ fn follow_baked(s: &mut Sora, slot: Option<usize>, to_world: &Mat4, motion: u16)
         if let Some(clip) = field.or_else(|| src.rig.motions.get(&motion)) {
             let mut pose = kh2_anim::evaluate(&src.rig.skeleton, clip, kh2_anim::key_time(clip, at, false), kh2_anim::Options::default()).bones;
             let mut weapon = kh2_weapon(src.rig, motion, at, false, &pose);
-            // (Valor's second Keyblade: the rig's second weapon on its hand bone; not on a slot with
-            // a holder motion, whose left weapon bones KH1's own pass poses, `leftblade::pose_holder`.)
-            let two = src.form.is_some_and(|k| k.two_blades()) && !slot.is_some_and(super::kh2slots::has_holder);
+            // (Valor's second Keyblade: the rig's second weapon on its hand bone; not while the
+            // holder actor is out, which KH1 poses on every slot, `holder`, t831.)
+            let two = src.form.is_some_and(|k| k.two_blades()) && super::holder::actor().is_none();
             let mut left = if two { kh2_weapon_n(src.rig, 1, motion, at, false, &pose) } else { Vec::new() };
             if let Some(root) = src.roots.get(&motion).and_then(|r| r.get((at as usize).min(r.len().saturating_sub(1)))) {
                 let un = Mat4::from_translation(-Vec3::from(*root));
@@ -2319,25 +2452,9 @@ unsafe extern "system" fn pose(world: usize, instance: usize, t: f32, motion: us
     }
     if is_sora(instance) {
         super::kh2dpx::posed(true);
-        // Valor's left Keyblade: its holder motion posed by this same pass (`leftblade`); inside
-        // KH1's blend start the holder gets KH1's blend start instead.
-        if !super::leftblade::in_blend_start() {
-            super::leftblade::pose_holder(plain_pass, used, Some((motion, t)));
-        }
+        // (The left Keyblade's holder actor made or ended, `holder`, t830; KH1 poses it itself.)
+        super::holder::frame();
     }
-}
-
-/// KH1's own plain pose pass (the original, past our hook): `leftblade` poses its holder motion
-/// with it.
-pub unsafe fn plain_pass(world: usize, instance: usize, t: f32, motion: usize) {
-    let f: Pose = std::mem::transmute(ORIG_POSE.load(Ordering::Acquire));
-    f(world, instance, t, motion);
-}
-
-/// KH1's own blend pass (the original, past our hook): `leftblade` blends its holder with it.
-unsafe fn blend_pass(world: usize, instance: usize, weight: f32) {
-    let f: PoseIk = std::mem::transmute(ORIG_POSE_IK.load(Ordering::Acquire));
-    f(world, instance, weight);
 }
 
 unsafe extern "system" fn pose_ik(world: usize, instance: usize, flags: f32) {
@@ -2364,11 +2481,7 @@ unsafe extern "system" fn pose_ik(world: usize, instance: usize, flags: f32) {
     }
     if is_sora(instance) {
         super::kh2dpx::posed(true);
-        // (KH1's blend pass: the same pass on the holder while it is in KH1's blend, else the
-        // holder motion plain at his actor's motion and time.)
-        if !super::leftblade::blend_holder(blend_pass, used, flags) {
-            super::leftblade::pose_holder(plain_pass, used, None);
-        }
+        super::holder::frame();
     }
 }
 

@@ -10,16 +10,22 @@
 //!    for KH1's own Keyblade. It stays loaded for the session; a different Keyblade chosen
 //!    later is loaded in a new buffer and the old one released (KH1's own order: the model,
 //!    then the file record with its textures, with the `.wpn` release handler kept out of it).
-//! 2. **Pose**: on Valor's baked slots, KH1's own pose pass poses the move's holder motion (the
-//!    left hand's weapon bones baked from KH2's left Keyblade, `kh2slots::holder_one`) on an
-//!    instance of ours right after Sora's pass (`pose_holder`), and the bones are carried onto his
-//!    drawn left hand (`posed_left`). Elsewhere (Final Form, a move without one) `pose` hands over
-//!    the left hand's 13 weapon matrices each frame (`note_pose`), from KH2's own left Keyblade (the
-//!    rig's second weapon, `kh2_left` from `takeover`).
-//! 3. **Draw**: KH1's own actor draw (`0x1402A1630`, Steam) run, after Sora's, on the left
-//!    Keyblade's holder (our copy of his actor, whose weapon object is the left Keyblade's KH1
-//!    object from KH1's own pool) with every body mesh hidden: KH1 queues its weapon as it does
-//!    his, on the holder's weapon bones, which hold the left hand's for the call.
+//! 2. **Pose**: on Valor's KH1 states, KH1's own pose task poses the holder actor (`holder`, one
+//!    of KH1's actors attached to Sora's left palm) with the holder motion of Sora's move (the left
+//!    hand's weapon bones baked from KH2's left Keyblade in the palm's space, `kh2slots::holder_one`;
+//!    KH1's own slots get Valor's idle hold), through KH1's own blends (t831); `posed_left` reads its
+//!    weapon bones. Elsewhere (Final Form) `pose` hands over the left hand's 13 weapon matrices each
+//!    frame (`note_pose`), from KH2's own left Keyblade (the rig's second weapon, `kh2_left` from
+//!    `takeover`).
+//! 3. **Draw**: on Valor's KH1 states (t832) KH1's own draw task draws the holder actor (`holder`),
+//!    whose weapon object is the left Keyblade's KH1 object from KH1's own pool, every body mesh
+//!    hidden. Under KH2's controller (Final Form) KH1's own actor draw (`0x1402A1630`, Steam) is run,
+//!    after Sora's, on our copy of his actor with the left hand's bones written in for the call.
+//!
+//! On Valor's KH1 states the holder actor is also the trail's owner (KH1's own step runs its trail
+//! step, t832) and the bone source of the left hits and KH2's second-weapon effects (`left_owner`,
+//! t833); the copy below (`fill_owner`) serves Final Form only, and with no holder actor (KH1's pool
+//! full) nothing of the left Keyblade shows.
 //!
 //! 4. **Trail**: KH1's own trail system on the holder: each request KH1 gets for Sora
 //!    (`0x1402C2310`) is asked for the holder too (its weapon object, so the left Keyblade's own
@@ -347,7 +353,6 @@ pub unsafe fn install() {
         TRAIL_HOOKED.store(true, Ordering::Relaxed);
         std::thread::spawn(load_trail_windows);
     }
-    install_blend(base);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -454,10 +459,6 @@ pub unsafe fn show(item: Option<u8>) {
 /// Back from Valor (`valor::ended`): not drawn; the model stays loaded.
 pub fn hide() {
     SHOWN.store(false, Ordering::Relaxed);
-    // (The next form starts from its own first pose, `LAST_HELD`.)
-    if let Ok(mut g) = LAST_HELD.lock() {
-        *g = None;
-    }
 }
 
 /// The left Keyblade's owner for KH1's own bindings (`kh2dpx`: KH2's second-weapon points 0x4004 /
@@ -465,17 +466,32 @@ pub fn hide() {
 /// now (`fill_owner`: his matrices as last posed, each moved onto the left Keyblade, and the left
 /// Keyblade's weapon row, so KH1's blade code 0x30 reads the left blade's range). None while the
 /// left Keyblade isn't drawn (out of Valor and Final, or its model not in yet).
+///
+/// t833: on Valor's KH1 states, the holder actor (`holder`: KH1's own actor on Sora's left palm,
+/// posed by KH1 with the left Keyblade's bones, its weapon object the left Keyblade's) while it
+/// carries the left Keyblade's object; the copy only under KH2's controller (Final Form).
 pub fn left_owner() -> Option<usize> {
     if !INSTALLED.load(Ordering::Relaxed) || !(super::form::two_blades() && SHOWN.load(Ordering::Relaxed) && MESH.load(Ordering::Relaxed) != 0) {
         return None;
     }
+    // (On Valor's KH1 states the holder actor or nothing: no copy while KH1's pool is full.)
+    if super::form::native_now() {
+        let a = super::holder::actor()?;
+        let obj = LEFT_OBJ.load(Ordering::Relaxed);
+        let carried = obj != 0 && unsafe { rd::<u32>(a + ACTOR_WEAPON) } == super::pose::handle(obj) && super::holder::posed_instance().is_some();
+        return carried.then_some(a);
+    }
     unsafe { fill_owner() }.then(|| FAKE.load(Ordering::Relaxed)).filter(|&f| f != 0)
 }
 
-/// `left_owner`'s handle (KH1's 32-bit handle of our owner copy, filled now), for KH1's own code
-/// that takes the bone-source actor by handle (`lefthits`: an attack object's `+0x90`).
+/// `left_owner`'s handle (KH1's 32-bit handle of the holder actor, or of our owner copy filled
+/// now), for KH1's own code that takes the bone-source actor by handle (`lefthits`: an attack
+/// object's `+0x90`).
 pub fn left_owner_handle() -> Option<u32> {
-    left_owner()?;
+    let a = left_owner()?;
+    if super::holder::actor() == Some(a) {
+        return Some(super::pose::handle(a)).filter(|&h| h != 0);
+    }
     Some(FAKE_ACTOR_H.load(Ordering::Relaxed)).filter(|&h| h != 0)
 }
 
@@ -685,6 +701,19 @@ unsafe fn left_object() -> Option<usize> {
     Some(obj)
 }
 
+/// The left Keyblade's KH1 weapon object for the holder actor (`holder`, t832), made or still ours.
+pub fn left_object_now() -> Option<usize> {
+    if !INSTALLED.load(Ordering::Relaxed) || !left_shown() {
+        return None;
+    }
+    unsafe { left_object() }
+}
+
+/// The left Keyblade's trail ended at once (`holder`, before its actor ends: the trail follows it).
+pub fn end_left_trail() {
+    unsafe { end_trails() }
+}
+
 /// Our weapon object back to KH1's pool (KH1's own release order, `0x1402868E0`: its pool bit
 /// cleared; the model's `0x1401D5E40` does nothing for an `MENV`), if it is still ours.
 unsafe fn free_object() {
@@ -861,407 +890,50 @@ pub fn left_bones(kh1: &[Mat4], kh1_bind: &[Mat4], b2: &[Mat4], (sr, sl): (usize
 
 /// KH1 Sora's left hand bone and the first weapon bone (the bake's holder motions).
 pub const LEFT_HAND_BONE: usize = LEFT_HAND;
+/// KH1 Sora's left wrist (205), the left palm's parent and a drawn bone: the holder hangs on it
+/// (`holder`, t849).
+pub const LEFT_WRIST_BONE: usize = 205;
 pub const GRIP_BONE: usize = GRIP;
 pub const WEAPON_BONE_COUNT: usize = WEAPON_BONES;
 
 // ---------------------------------------------------------------------------------------------
-// The holder motion (plan step 4): the left hand's weapon bones posed by KH1's own pose pass
+// The holder (t831): KH1's own actor (`holder`), posed by KH1's own pose task
 
-/// Our model instance the holder motions are posed on (KH1's instance layout, Steam `0x140391C70`
-/// and its bone pass `0x1403900B0`, Checked (decomp)): `+0` Sora's model slot (bone count, bone
-/// table), `+8` the motion it last posed (a new one resets its channels to the bind, `0x14038F550`),
-/// `+0x10` time, `+0x14` flags (0: no ground lift `& 3`, no look-at `& 0xC`), `+0x1B0` the sampled
-/// channels, `+0x1B4` the world matrices, `+0x1B8` the local ones (0x40 bytes a bone, handles).
-/// The pass also writes `+0x130` and `+0xF0..+0x108`, read by nothing for this instance.
-const HOLD_SIZE: usize = 0x10000;
-const HOLD_CHANNELS: usize = 0x1000;
-const HOLD_WORLD: usize = 0x6000;
-const HOLD_LOCAL: usize = 0xB000;
-const INST_CHANNELS: usize = 0x1B0;
-const INST_LOCAL: usize = 0x1B8;
-const INST_MOTION: usize = 0x08;
-const INST_FLAGS: usize = 0x14;
-/// Our pose instance (0: not made) and the game frame it was last posed on (`u64::MAX`: never).
-static HOLD: AtomicUsize = AtomicUsize::new(0);
-static HOLD_FRAME: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(u64::MAX);
-
-/// Our pose instance, made the first time (its three arrays registered as KH1 handles).
-unsafe fn hold_instance() -> Option<usize> {
-    let h = HOLD.load(Ordering::Relaxed);
-    if h != 0 {
-        return Some(h);
-    }
-    static N: AtomicU32 = AtomicU32::new(0);
-    let p = super::sys::VirtualAlloc(std::ptr::null_mut(), HOLD_SIZE, 0x3000, 0x04) as usize;
-    if p == 0 {
-        log_n(&N, 3, || "holder motion: no memory for its instance".into());
-        return None;
-    }
-    let to_handle: unsafe extern "system" fn(usize) -> u32 = std::mem::transmute(BASE.load(Ordering::Relaxed) + TO_HANDLE_RVA);
-    for (field, at) in [(INST_CHANNELS, HOLD_CHANNELS), (INST_WORLD, HOLD_WORLD), (INST_LOCAL, HOLD_LOCAL)] {
-        let handle = to_handle(p + at);
-        if super::pose::ptr(handle) != p + at {
-            log_n(&N, 3, || format!("holder motion: its arrays' handles don't resolve ({handle:#x}): not posed"));
-            return None;
-        }
-        std::ptr::write_unaligned((p + field) as *mut u32, handle);
-    }
-    HOLD.store(p, Ordering::Relaxed);
-    log_n(&N, 3, || format!("holder motion: its instance made at {p:#x}"));
-    Some(p)
-}
-
-/// `pose`, right after KH1 posed Sora (its plain pass `0x140391C70` with `motion` at `time`, or
-/// its blend pass, `None`: then his actor's motion `ptr(+0x1D4)[+0x168]` at `+0x16C`): on Valor's
-/// baked slots, the holder motion KH1's slot plays (`kh2slots::holder_motion`, the left hand's
-/// weapon bones baked from KH2's left Keyblade) posed by KH1's own pass on our instance with
-/// Sora's own world matrix `world`. Nothing else of ours: `posed_left` reads the result.
-pub unsafe fn pose_holder(call: unsafe fn(usize, usize, f32, usize), world: usize, motion_time: Option<(usize, f32)>) {
-    if !INSTALLED.load(Ordering::Relaxed) || !left_shown() || !super::form::native_now() || world < 0x10000 {
-        return;
-    }
-    static N: AtomicU32 = AtomicU32::new(0);
-    let sora = super::takeover::sora_actor();
-    let inst = super::pose::SORA_INSTANCE.load(Ordering::Relaxed);
-    if !readable(sora, ACTOR_SIZE) || !readable(inst, INSTANCE_SIZE) {
-        return;
-    }
-    let (motion, time) = match motion_time {
-        Some(v) => v,
-        None => {
-            let table = super::pose::ptr(rd::<u32>(sora + ACTOR_MOTIONS));
-            let slot = rd::<u16>(sora + ACTOR_SLOT) as usize;
-            if !readable(table + slot * 4, 4) {
-                return;
-            }
-            (super::pose::ptr(rd::<u32>(table + slot * 4)), rd::<f32>(sora + ACTOR_TIME))
-        }
-    };
-    if !time.is_finite() {
-        return;
-    }
-    let Some(holder) = super::kh2slots::holder_motion(motion) else {
-        // (A slot with none: the left Keyblade from KH2's pose there, `LEFT`.)
-        HOLD_FRAME.store(u64::MAX, Ordering::Relaxed);
-        return;
-    };
-    let Some(h) = hold_instance() else { return };
-    // (A blend the holder was in ends as KH1 ends Sora's before a plain pass, `0x1402A0350`:
-    // KH1's own blend end on it first.)
-    if BLEND_ON.load(Ordering::Relaxed) && !heap_ok(h) {
-        return;
-    }
-    end_blend(h);
-    // Sora's model slot (his bone count and bone table); the flags clear (no ground lift, no
-    // look-at: only the weapon bones matter here).
-    std::ptr::write_unaligned(h as *mut u64, rd::<u64>(inst));
-    std::ptr::write_unaligned((h + INST_FLAGS) as *mut u32, 0);
-    call(world, h, time, holder);
-    HOLD_FRAME.store(super::takeover::GAME_FRAME.load(Ordering::Relaxed), Ordering::Relaxed);
-    log_n(&N, 3, || format!("holder motion {holder:#x} (for Sora's {motion:#x}) posed by KH1's pass at {time:.1} (its instance's motion {:#x})", rd::<u64>(h + INST_MOTION)));
-}
-
-// ---------------------------------------------------------------------------------------------
-// The holder motion through KH1's own motion blend (t713, the tester's (b))
-
-/// KH1's motion blend on a model instance (Steam, Checked (decomp)). The actor's pose step
-/// `0x1402A0350 (actor, world, slot, time, blend length)` starts a blend when a motion is set
-/// while one plays (actor `+0x160` bit 2) and the length is above one step: `0x140394080` when
-/// none runs (actor `+0x170` <= 0), else `0x140393B30` (a blend from the running blend). Both
-/// `(world, instance, time f32, new motion)`, each called only from there: they keep the pose so
-/// far as the blend's old side (local matrices `+0x1BC`, channels `+0x1C4`), pose the new motion
-/// with the plain pass (its local matrices `+0x1C0`, channels `+0x1C8`), list the IK chains of
-/// both (`+0x1CC`), every buffer a block of KH1's compacting heap (`0x14028DA20`, the instance's
-/// field as its owner). Each frame of the blend `0x1402A0620` runs the blend pass `0x140392560
-/// (world, instance, weight f32)` (elapsed / length), which mixes the two sides into the
-/// instance's pose. When the blend is over the step runs `0x140393F60 (instance)` (frees the five
-/// buffers, resets the channels) and the plain pass.
-const BLEND_START_STEAM: usize = 0x394080;
-const BLEND_AGAIN_STEAM: usize = 0x393B30;
-/// Both start `mov [rsp+18h], rbx; push rbp; push rsi; push rdi; push r12..r15` (Steam exe).
-const BLEND_PROLOGUE: [u8; 16] = [0x48, 0x89, 0x5C, 0x24, 0x18, 0x55, 0x56, 0x57, 0x41, 0x54, 0x41, 0x55, 0x41, 0x56, 0x41, 0x57];
-const BLEND_END_STEAM: usize = 0x393F60;
-const BLEND_END_PROLOGUE: [u8; 6] = [0x40, 0x53, 0x48, 0x83, 0xEC, 0x20];
-/// KH1's heap (Steam, Checked (decomp)): `0x14028DA20 (size, owner slot) -> block` (the owner
-/// gets the block's handle; the compactor `0x14028DC30` moves blocks and rewrites their owners'
-/// handles, and drops blocks whose owner is cleared by the free `0x14028DB70`); its block list
-/// `0x142B9C280` (record: `+8` block, `+0x10` size, `+0x18` owner slot, `+0x20` next). The heap is
-/// set up anew by `0x14028D9B0` from the game's mode starts (`0x1402845B0`), which forgets every
-/// block without telling the owners.
-const HEAP_ALLOC_STEAM: usize = 0x28DA20;
-const HEAP_ALLOC_PROLOGUE: [u8; 5] = [0x48, 0x89, 0x5C, 0x24, 0x08];
-const HEAP_LIST_STEAM: usize = 0x2B9C280;
-const HEAP_RECORDS_STEAM: (usize, usize) = (0x2B9C288, 0x2BA1260);
-/// The instance's blend fields (handles to heap blocks): old local matrices, new local matrices,
-/// old channels, new channels, the IK chain list.
-const INST_BLEND: [usize; 5] = [0x1BC, 0x1C0, 0x1C4, 0x1C8, 0x1CC];
-const INST_IK: usize = 0x1CC;
-
-type BlendStart = unsafe extern "system" fn(usize, usize, f32, usize);
-static ORIG_BLEND_START: AtomicUsize = AtomicUsize::new(0);
-static ORIG_BLEND_AGAIN: AtomicUsize = AtomicUsize::new(0);
-/// The holder goes through KH1's blend (`left_blade_blend = on` and every piece found).
-static BLEND_ON: AtomicBool = AtomicBool::new(false);
-/// Sora's blend start is running: its own plain pass inside it leaves the holder alone.
-static IN_BLEND: AtomicBool = AtomicBool::new(false);
-/// The holder is in a KH1 blend (its blend fields KH1's).
-static HOLD_BLENDING: AtomicBool = AtomicBool::new(false);
-/// Sora's motion his blend (and the holder's) went into.
-static BLEND_INTO: AtomicUsize = AtomicUsize::new(0);
-
-unsafe fn install_blend(base: usize) {
-    if !super::settings::get().left_blade_blend {
-        log!(Animation, "left Keyblade: its holder motion not blended (left_blade_blend = off: the hand's hold switches at once)");
-        return;
-    }
-    let bytes = |at: usize, want: &[u8]| std::slice::from_raw_parts((base + at) as *const u8, want.len()) == want;
-    if !bytes(BLEND_END_STEAM, &BLEND_END_PROLOGUE) || !bytes(HEAP_ALLOC_STEAM, &HEAP_ALLOC_PROLOGUE) {
-        log!(Animation, "left Keyblade: holder blend off (KH1's blend end or heap not where expected)");
-        return;
-    }
-    if super::hook::install(base + BLEND_START_STEAM, &BLEND_PROLOGUE, blend_start as *const () as usize, &ORIG_BLEND_START, "motion blend start (left Keyblade's holder)").is_none() {
-        log!(Animation, "left Keyblade: holder blend off (KH1's blend start not where expected)");
-        return;
-    }
-    if super::hook::install(base + BLEND_AGAIN_STEAM, &BLEND_PROLOGUE, blend_again as *const () as usize, &ORIG_BLEND_AGAIN, "motion blend restart (left Keyblade's holder)").is_none() {
-        // (The start's hook stays in and passes through: nothing of ours runs with BLEND_ON off.)
-        log!(Animation, "left Keyblade: holder blend off (KH1's blend restart not where expected)");
-        return;
-    }
-    BLEND_ON.store(true, Ordering::Relaxed);
-    log!(Animation, "left Keyblade: its holder motion blended by KH1's own motion blend");
-}
-
-/// Our holder instance (KH1's passes on it go straight to KH1's: `pose`'s hooks).
+/// The holder actor's model instance, or any model KH1's maker poses while making the holder
+/// (t838) (KH1's passes on it go straight to KH1's: `pose`'s hooks).
 pub fn is_holder(instance: usize) -> bool {
-    instance != 0 && instance == HOLD.load(Ordering::Relaxed)
+    instance != 0 && (super::holder::making() || super::holder::instance() == Some(instance))
 }
 
-/// Sora's blend start is running (`pose`: its inner plain pass doesn't pose the holder).
-pub fn in_blend_start() -> bool {
-    IN_BLEND.load(Ordering::Relaxed)
+/// The left Keyblade is out (Valor's or Final's, its model in): `holder` makes its actor then.
+pub fn left_out() -> bool {
+    left_shown()
 }
 
-unsafe extern "system" fn blend_start(world: usize, instance: usize, time: f32, motion: usize) {
-    blend_hook(false, world, instance, time, motion);
-}
+/// The instance's world matrices (handle).
+const INST_WORLD_H: usize = 0x1B4;
 
-unsafe extern "system" fn blend_again(world: usize, instance: usize, time: f32, motion: usize) {
-    blend_hook(true, world, instance, time, motion);
-}
-
-unsafe fn blend_hook(again: bool, world: usize, instance: usize, time: f32, motion: usize) {
-    let f: BlendStart = std::mem::transmute(if again { &ORIG_BLEND_AGAIN } else { &ORIG_BLEND_START }.load(Ordering::Acquire));
-    let sora = BLEND_ON.load(Ordering::Relaxed) && instance != 0 && instance == super::pose::SORA_INSTANCE.load(Ordering::Relaxed);
-    if !sora {
-        f(world, instance, time, motion);
-        return;
-    }
-    IN_BLEND.store(true, Ordering::Relaxed);
-    f(world, instance, time, motion);
-    IN_BLEND.store(false, Ordering::Relaxed);
-    holder_blend_start(again, world, time, motion);
-}
-
-/// After KH1 started a blend on Sora into `motion`: the same KH1 function on the holder with
-/// the holder motion of `motion`, so its old side is the holder's pose so far. A holder that
-/// wasn't posed lately (or no holder motion, or no heap room) is posed plain instead, as before.
-unsafe fn holder_blend_start(again: bool, world: usize, time: f32, motion: usize) {
-    static N: AtomicU32 = AtomicU32::new(0);
-    if !INSTALLED.load(Ordering::Relaxed) || !left_shown() || !super::form::native_now() || world < 0x10000 || !time.is_finite() {
-        return;
-    }
-    let plain = || pose_holder(super::pose::plain_pass, world, Some((motion, time)));
-    let Some(holder) = super::kh2slots::holder_motion(motion) else {
-        plain();
-        return;
-    };
-    let Some(h) = hold_instance() else { return };
-    let frame = super::takeover::GAME_FRAME.load(Ordering::Relaxed);
-    let at = HOLD_FRAME.load(Ordering::Relaxed);
-    let recent = at != u64::MAX && frame.saturating_sub(at) <= 2 && rd::<u64>(h + INST_MOTION) != 0;
-    if !recent || !heap_ok(h) {
-        plain();
-        return;
-    }
-    let inst = super::pose::SORA_INSTANCE.load(Ordering::Relaxed);
-    std::ptr::write_unaligned(h as *mut u64, rd::<u64>(inst));
-    std::ptr::write_unaligned((h + INST_FLAGS) as *mut u32, 0);
-    // KH1's own choice by the holder's own state: a blend from the running blend only while one
-    // runs on it (its IK list is there), else a fresh one.
-    let running = HOLD_BLENDING.load(Ordering::Relaxed) && rd::<u32>(h + INST_IK) != 0;
-    let restart = again && running;
-    let f: BlendStart = std::mem::transmute(if restart { &ORIG_BLEND_AGAIN } else { &ORIG_BLEND_START }.load(Ordering::Acquire));
-    f(world, h, time, holder);
-    HOLD_BLENDING.store(true, Ordering::Relaxed);
-    BLEND_INTO.store(motion, Ordering::Relaxed);
-    HOLD_FRAME.store(frame, Ordering::Relaxed);
-    log_n(&N, 6, || format!("holder blend: KH1's {} on the holder into {holder:#x} (for Sora's {motion:#x}) at {time:.1}", if restart { "blend restart 0x140393B30" } else { "blend start 0x140394080" }));
-}
-
-/// `pose`'s blend-pass hook, right after KH1's blend pass `0x140392560` ran on Sora with `weight`:
-/// the same pass on the holder while it is in its blend. False: not blending (the caller poses it
-/// plain at his actor's motion, as before).
-pub unsafe fn blend_holder(call: unsafe fn(usize, usize, f32), world: usize, weight: f32) -> bool {
-    static N: AtomicU32 = AtomicU32::new(0);
-    if !BLEND_ON.load(Ordering::Relaxed) || !HOLD_BLENDING.load(Ordering::Relaxed) {
-        return false;
-    }
-    if !INSTALLED.load(Ordering::Relaxed) || !left_shown() || !super::form::native_now() || world < 0x10000 || !weight.is_finite() {
-        return false;
-    }
-    let h = HOLD.load(Ordering::Relaxed);
-    if h == 0 || !heap_ok(h) || rd::<u32>(h + INST_IK) == 0 || !HOLD_BLENDING.load(Ordering::Relaxed) {
-        return false;
-    }
-    // (Sora's blend must be the one the holder's went into: the motion his instance last posed,
-    // `+8`, set by the plain pass inside KH1's blend start; his actor's slot `+0x168` is only
-    // written after the blend's first pass, `0x1402A0350`. Else KH1 changed his motion without a
-    // blend start, and the plain pose stands.)
-    let inst = super::pose::SORA_INSTANCE.load(Ordering::Relaxed);
-    if !readable(inst, INSTANCE_SIZE) || rd::<usize>(inst + INST_MOTION) != BLEND_INTO.load(Ordering::Relaxed) {
-        return false;
-    }
-    std::ptr::write_unaligned(h as *mut u64, rd::<u64>(inst));
-    std::ptr::write_unaligned((h + INST_FLAGS) as *mut u32, 0);
-    call(world, h, weight);
-    HOLD_FRAME.store(super::takeover::GAME_FRAME.load(Ordering::Relaxed), Ordering::Relaxed);
-    log_n(&N, 6, || format!("holder blend: KH1's blend pass on the holder at weight {weight:.2}"));
-    true
-}
-
-/// KH1's blend end `0x140393F60` on the holder, if it is in a blend (before a plain pass).
-unsafe fn end_blend(h: usize) {
-    if !HOLD_BLENDING.swap(false, Ordering::Relaxed) || !BLEND_ON.load(Ordering::Relaxed) {
-        return;
-    }
-    let f: unsafe extern "system" fn(usize) = std::mem::transmute(BASE.load(Ordering::Relaxed) + BLEND_END_STEAM);
-    f(h);
-}
-
-/// The holder's heap fields still name live blocks of KH1's heap it owns (the heap is set up anew
-/// at the game's mode starts, forgetting them). Stale blend fields are cleared; its local matrices
-/// (`+0x1B8`, which KH1's blend start hands to the blend's old side and frees later, so a block of
-/// KH1's heap as Sora's is after his first blend) are made a heap block when they aren't one.
-/// False: no block could be had (the holder isn't posed).
-unsafe fn heap_ok(h: usize) -> bool {
-    static N: AtomicU32 = AtomicU32::new(0);
-    let base = BASE.load(Ordering::Relaxed);
-    let slots: [usize; 6] = [INST_LOCAL, INST_BLEND[0], INST_BLEND[1], INST_BLEND[2], INST_BLEND[3], INST_BLEND[4]];
-    let want: [usize; 6] = slots.map(|s| match rd::<u32>(h + s) {
-        0 => 0,
-        hd => super::pose::ptr(hd),
-    });
-    let mut found = want.map(|p| p == 0);
-    let mut r = rd::<usize>(base + HEAP_LIST_STEAM);
-    let mut n = 0;
-    while r != 0 && n < 0x400 && !found.iter().all(|f| *f) {
-        // (Every record is in the exe's own table, `0x142B9C288..0x142BA1260`, 0x28 apart.)
-        if r < base + HEAP_RECORDS_STEAM.0 || r + 0x28 > base + HEAP_RECORDS_STEAM.1 {
-            break;
-        }
-        let p = rd::<usize>(r + 8);
-        let owner = rd::<usize>(r + 0x18);
-        for i in 0..6 {
-            if !found[i] && want[i] == p && owner == h + slots[i] {
-                found[i] = true;
-            }
-        }
-        r = rd::<usize>(r + 0x20);
-        n += 1;
-    }
-    if !found[1..].iter().all(|f| *f) {
-        for s in INST_BLEND {
-            std::ptr::write_unaligned((h + s) as *mut u32, 0);
-        }
-        HOLD_BLENDING.store(false, Ordering::Relaxed);
-        log_n(&N, 6, || "holder blend: its blend buffers aren't KH1's heap's any more (the heap was set up anew): cleared".into());
-    }
-    if found[0] && want[0] != 0 {
-        return true;
-    }
-    // Its local matrices as a block of KH1's heap, sized by the model's bone count.
-    let inst = super::pose::SORA_INSTANCE.load(Ordering::Relaxed);
-    let model = if readable(inst, 8) { rd::<usize>(inst) } else { 0 };
-    let bones = if readable(model, 8) && readable(rd::<usize>(model), 2) { rd::<i16>(rd::<usize>(model)) as i32 } else { SORA_BONES as i32 };
-    let bones = if bones > 0 { bones } else { SORA_BONES as i32 };
-    let alloc: unsafe extern "system" fn(i32, usize) -> usize = std::mem::transmute(base + HEAP_ALLOC_STEAM);
-    let p = alloc(bones << 6, h + INST_LOCAL);
-    let ok = p != 0 && rd::<u32>(h + INST_LOCAL) != 0;
-    log_n(&N, 6, || format!("holder blend: its local matrices made a block of KH1's heap ({p:#x}, {bones} bones){}", if ok { "" } else { ": failed" }));
-    ok
-}
-
-/// The left Keyblade's bones in KH1's world from KH1's pose of the holder motion, if it was posed
-/// within 2 game frames: the holder motion keeps the body at the bind and the weapon bones where
-/// they sit from the left hand, so each is put on Sora's left hand as drawn (his `+0x1B4`): his
-/// hand × the holder's hand⁻¹ × the holder's bone. (Through KH1's motion blends Sora's hand blends;
-/// the grip's hold on it is the new motion's from the blend's first frame.)
-///
-/// When there is no fresh holder pose (none posed in the last 2 frames, or one that isn't finite)
-/// while Valor's form is on KH1's states, the last good one (`LAST_HELD`) is kept on his left hand
-/// as drawn, so the blade never leaves it (t761). The tester (drive-forms, after m2): "the 2nd
-/// keyblade is still disappearing when you move from one animation to the next". Every frame
-/// without a fresh holder pose drew no left Keyblade (`left_draw` had nothing to draw): a frame
-/// KH1 posed no motion of ours with a holder (a slot of KH1's own between two moves), a holder
-/// blend refused by its heap check (`pose_holder` returns before posing), or a pose KH1's blend
-/// made of a stale side. In KH2 the left weapon is always on its hand bone (Steam KH2: the
-/// weapon objects follow their joint every frame, `sklt`, Checked (files)); KH1 has no second
-/// weapon, so its hand carries the last hold until a holder pose comes again.
+/// The left Keyblade's bones in KH1's world as KH1 last posed its holder actor (`holder`, t831):
+/// the actor is attached to Sora's left palm and plays the holder motion of Sora's motion (its
+/// weapon bones where they sit from the palm), so KH1's own pose task leaves them on the palm as
+/// drawn, through KH1's own blends. None without a holder (out of Valor on KH1's states: Final
+/// Form, KH2's controller) or before it was first posed.
 unsafe fn posed_left() -> Option<[Mat4; WEAPON_BONES]> {
-    let h = HOLD.load(Ordering::Relaxed);
-    if h == 0 || !super::form::native_now() {
+    if !super::form::native_now() {
         return None;
     }
-    let inst = super::pose::SORA_INSTANCE.load(Ordering::Relaxed);
-    if !readable(inst + INST_WORLD, 4) {
+    let inst = super::holder::posed_instance()?;
+    let world = super::pose::ptr(rd::<u32>(inst + INST_WORLD_H));
+    if !readable(world + GRIP * 0x40, WEAPON_BONES * 0x40) {
         return None;
     }
-    let world = super::pose::ptr(rd::<u32>(inst + INST_WORLD));
-    if !readable(world, SORA_BONES * 0x40) {
-        return None;
+    let mut out = [Mat4::IDENTITY; WEAPON_BONES];
+    for (i, m) in out.iter_mut().enumerate() {
+        *m = Mat4::from_cols_array(&rd::<[f32; 16]>(world + (GRIP + i) * 0x40));
     }
-    let mat = |base: usize, i: usize| Mat4::from_cols_array(&rd::<[f32; 16]>(base + i * 0x40));
-    let hand = mat(world, LEFT_HAND);
-    let frame = super::takeover::GAME_FRAME.load(Ordering::Relaxed);
-    let at = HOLD_FRAME.load(Ordering::Relaxed);
-    let fresh = at != u64::MAX && frame.saturating_sub(at) <= 2;
-    if fresh {
-        let held = h + HOLD_WORLD;
-        let from_hand = mat(held, LEFT_HAND).inverse();
-        let mut rel = [Mat4::IDENTITY; WEAPON_BONES];
-        for (i, m) in rel.iter_mut().enumerate() {
-            *m = from_hand * mat(held, GRIP + i);
-        }
-        if rel.iter().all(|m| m.is_finite()) {
-            if let Ok(mut g) = LAST_HELD.try_lock() {
-                *g = Some(rel);
-            }
-            let out = rel.map(|r| hand * r);
-            if out.iter().all(|m| m.is_finite()) {
-                return Some(out);
-            }
-        }
-    }
-    // (No fresh holder pose: the last hold on his hand as drawn.)
-    let rel = LAST_HELD.try_lock().ok().and_then(|g| *g)?;
-    let out = rel.map(|r| hand * r);
-    if !out.iter().all(|m| m.is_finite()) {
-        return None;
-    }
-    static N: AtomicU32 = AtomicU32::new(0);
-    log_n(&N, 20, || {
-        let sora = super::takeover::sora_actor();
-        let slot = if readable(sora, ACTOR_SIZE) { rd::<u16>(sora + ACTOR_SLOT) as i32 } else { -1 };
-        format!("no fresh holder pose ({}; KH1's slot {slot}): the last hold kept on his left hand", if fresh { "the posed one isn't finite" } else if at == u64::MAX { "the slot playing has no holder motion" } else { "not posed in the last 2 frames" })
-    });
-    Some(out)
+    out.iter().all(|m| m.is_finite()).then_some(out)
 }
 
-/// The left Keyblade's weapon bones from the left hand (the holder's hand⁻¹ × its bone) as last
-/// posed by KH1's pass, for the frames with no fresh holder pose (`posed_left`); cleared when
-/// Valor's form ends (`hide`).
-static LAST_HELD: Mutex<Option<[Mat4; WEAPON_BONES]>> = Mutex::new(None);
 
 // ---------------------------------------------------------------------------------------------
 // Drawing
@@ -1325,6 +997,8 @@ type ActorDraw = unsafe extern "system" fn(usize, u32, u32, usize, f32);
 unsafe extern "system" fn actor_draw(actor: usize, mask: u32, p3: u32, colour: usize, p5: f32) {
     let f: ActorDraw = std::mem::transmute(ORIG_DRAW.load(Ordering::Acquire));
     f(actor, mask, p3, colour, p5);
+    // (t839: a measure of where KH1 drew the holder, for the trace.)
+    super::holder::note_drawn(actor);
     if !IN_SECOND.load(Ordering::Relaxed) && INSTALLED.load(Ordering::Relaxed) {
         left_draw(f, actor, p3, colour, p5);
     }
@@ -1339,6 +1013,11 @@ unsafe extern "system" fn actor_draw(actor: usize, mask: u32, p3: u32, colour: u
 unsafe fn left_draw(f: ActorDraw, actor: usize, p3: u32, colour: usize, p5: f32) {
     static N: AtomicU32 = AtomicU32::new(0);
     if MESH.load(Ordering::Relaxed) == 0 || !SHOWN.load(Ordering::Relaxed) || !super::form::two_blades() || actor == 0 || actor != super::takeover::sora_actor() {
+        return;
+    }
+    // (t832: on Valor's KH1 states KH1 draws it on the holder actor, `holder`, by its own draw task;
+    // t833: with no holder actor there, none is drawn.)
+    if super::form::native_now() {
         return;
     }
     // (KH2's model of the same Keyblade is drawn in its place.)
@@ -1411,6 +1090,11 @@ unsafe extern "system" fn trail_step(actor: usize) {
     if actor == 0 || actor != super::takeover::sora_actor() || IN_TRAIL.load(Ordering::Relaxed) {
         return;
     }
+    // (t832: the holder actor's trail is KH1's own step's, its bit from its holder motion's 7.0;
+    // t833: on Valor's KH1 states nothing of the copy's.)
+    if super::form::native_now() {
+        return;
+    }
     let Some(holder) = trail_holder() else { return };
     let obj = LEFT_OBJ.load(Ordering::Relaxed);
     let shown = left_shown();
@@ -1454,6 +1138,14 @@ fn left_shown() -> bool {
 /// The left Keyblade's holder for KH1's trail code: filled (`fill_owner`) and holding the left
 /// Keyblade's KH1 weapon object, still ours (`object_ours`).
 unsafe fn trail_holder() -> Option<usize> {
+    // (t832: the holder actor while it carries the left Keyblade's object; KH1's own step runs its
+    // trail step. t833: on Valor's KH1 states only it.)
+    if super::form::native_now() {
+        let Some(a) = super::holder::actor() else { return None };
+        let obj = LEFT_OBJ.load(Ordering::Relaxed);
+        let ok = obj != 0 && TRAIL_HOOKED.load(Ordering::Relaxed) && object_ours(obj, OBJ_FROM.load(Ordering::Relaxed), OBJ_ROW_NOW.load(Ordering::Relaxed)) && rd::<u32>(a + ACTOR_WEAPON) == super::pose::handle(obj);
+        return ok.then_some(a);
+    }
     let fake = FAKE.load(Ordering::Relaxed);
     let obj = LEFT_OBJ.load(Ordering::Relaxed);
     if fake == 0 || obj == 0 || !FAKE_FILLED.load(Ordering::Relaxed) || !TRAIL_HOOKED.load(Ordering::Relaxed) {

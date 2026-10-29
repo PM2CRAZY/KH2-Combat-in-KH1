@@ -45,6 +45,7 @@ mod knockback;
 mod kh2sound;
 mod leftblade;
 mod lefthits;
+mod holder;
 mod loadprof;
 mod loadscreen;
 mod menu;
@@ -449,6 +450,7 @@ pub unsafe extern "system" fn DllMain(_inst: *mut c_void, reason: u32, _reserved
         cmdmenu::install();
         tint::install();
         leftblade::install();
+        holder::install();
         cosmetics::install();
         softreset::install();
         cutsceneskip::install();

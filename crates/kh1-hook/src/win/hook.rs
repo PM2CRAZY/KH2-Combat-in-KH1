@@ -69,7 +69,26 @@ pub unsafe fn install(target: usize, expect: &[u8], ours: usize, original: &std:
     VirtualProtect(target as *mut c_void, expect.len(), old, &mut tmp);
     FlushInstructionCache(GetCurrentProcess(), target as *const c_void, expect.len());
     log!(General, "hooked {what} at {target:#x}");
+    if let Ok(mut list) = HOOKED.lock() {
+        list.push((target, expect.to_vec()));
+    }
     Some(tramp)
+}
+
+/// Functions we hooked and the bytes their first instructions had before our jump went in.
+static HOOKED: std::sync::Mutex<Vec<(usize, Vec<u8>)>> = std::sync::Mutex::new(Vec::new());
+
+/// Whether the function at `target` starts with `expect`: in memory now, or (when one of our
+/// own hooks already sits there) in the bytes that hook moved, then the live bytes after them. For code we only call, so a check
+/// isn't fooled by our own jump (t834).
+pub unsafe fn prologue_is(target: usize, expect: &[u8]) -> bool {
+    if std::slice::from_raw_parts(target as *const u8, expect.len()) == expect {
+        return true;
+    }
+    let Ok(list) = HOOKED.lock() else { return false };
+    // A hook moves only its own few bytes; past them the function is still KH1's (t835).
+    let live = std::slice::from_raw_parts(target as *const u8, expect.len());
+    list.iter().any(|(at, moved)| *at == target && expect.iter().enumerate().all(|(i, b)| moved.get(i).unwrap_or(&live[i]) == b))
 }
 
 /// Writes `new` over `at` (code or data) if the bytes there are `expect`.

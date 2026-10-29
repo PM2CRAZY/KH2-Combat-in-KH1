@@ -908,14 +908,17 @@ fn make(mset: &[u8], src: &pose::Src, bake: Option<&pose::Baker>, cache: Option<
     // (Valor's moves: the left Keyblade's holder motion too, from the slot cache when it has this
     // exact bake, `holder_key`; plan step 4 of `docs/kh1-weapon-second.md` §7.3.)
     let two = src.form.is_some_and(|k| k.two_blades() && k.native_capable());
+    // (t832: the left Keyblade's trail windows, our 7.1 on the move, as KH1's own trail level 7.0
+    // on the holder motion: KH1's pass then sets the holder actor's own trail bit.)
+    let left_trail: Vec<EventTrack> = tracks.iter().filter(|t| t.kind == LEFT_TRAIL_KIND && t.id == LEFT_TRAIL_ID).map(|t| EventTrack { id: 0, ..t.clone() }).collect();
     let holder_block = match (bake, baked && two) {
         (Some(b), true) => {
             let r = match cache {
-                Some(c) => c.get_or_bake(holder_key(&template, (motion, field), frames, src.form), || {
+                Some(c) => c.get_or_bake(holder_key(&template, (motion, field), frames, src.form, &left_trail), || {
                     super::loadscreen::baking();
-                    holder_one(b, src, &template, (motion, field), frames)
+                    holder_one(b, src, &template, (motion, field), frames, &left_trail)
                 }),
-                None => holder_one(b, src, &template, (motion, field), frames).map(crate::slotcache::Block::new),
+                None => holder_one(b, src, &template, (motion, field), frames, &left_trail).map(crate::slotcache::Block::new),
             };
             match r {
                 Ok(block) => Some(block),
@@ -933,11 +936,27 @@ fn make(mset: &[u8], src: &pose::Src, bake: Option<&pose::Baker>, cache: Option<
 
 /// One holder motion's key in the motion slot cache: the main bake's inputs it reads (the template,
 /// the motion, its variant and length, the moveset) and that it is a holder motion.
-fn holder_key(template: &[u8], (motion, field): (u16, bool), frames: u32, form: Option<super::form::Kind>) -> u128 {
+fn holder_key(template: &[u8], (motion, field): (u16, bool), frames: u32, form: Option<super::form::Kind>, events: &[EventTrack]) -> u128 {
     let mut h = crate::slotcache::Hasher::default();
-    h.str("left Keyblade holder motion").bytes(template).u32(motion as u32).u32(field as u32).u32(frames);
+    h.str("left Keyblade holder motion").bytes(template).u32(motion as u32).u32(field as u32).u32(frames).str(&format!("{events:?}"));
     if let Some(k) = form {
         h.str(k.model());
+        // (t829: Valor's left Keyblade from KH2's weapon bone 2, `pose::kh2_hold`; t831: in the
+        // left palm's own space, for the holder actor.)
+        if k == super::form::Kind::Valor {
+            h.str("kh2 hold");
+            h.str("palm space");
+            // (t841: no root travel, the template's travel helper's channels dropped.)
+            h.str("no travel");
+            // (t849: the weapon bones from the left wrist, the holder's bone.)
+            h.str("wrist space");
+            // (t850: through the skeleton pass's row flip of the holder's world matrix.)
+            h.str("pass row flip");
+            // (t851: the hold placed from the middle knuckle, `pose::kh2_hold`.)
+            h.str("knuckle anchor");
+            // (t852: the left keychain from KH2's left weapon motion.)
+            h.str("left chain");
+        }
     }
     h.finish()
 }
@@ -946,12 +965,25 @@ fn holder_key(template: &[u8], (motion, field): (u16, bool), frames: u32, form: 
 /// `docs/kh1-weapon-second.md` §7.3): a KH1 motion on the same template and length as the move's
 /// own bake, its body at KH1 Sora's bind and its weapon bones (280..292) the left hand's Keyblade
 /// from KH2's left weapon motion, as they sit from the left hand (`pose::Baker::holder_poses`),
-/// with no events. KH1's own pose pass poses it on an instance of ours each frame Sora's slot is
-/// the move (`leftblade::pose_holder`), at his motion's time.
-fn holder_one(b: &pose::Baker, src: &pose::Src, template: &[u8], (motion, field): (u16, bool), frames: u32) -> Result<Vec<u8>, String> {
+/// with `events` only (t832: the left Keyblade's trail windows as KH1's own trail level 7.0) and no
+/// root travel (t841). KH1 poses it on the holder actor (`holder`) at Sora's motion's time.
+fn holder_one(b: &pose::Baker, src: &pose::Src, template: &[u8], (motion, field): (u16, bool), frames: u32, events: &[EventTrack]) -> Result<Vec<u8>, String> {
     let (poses, _) = b.poses_of(src, motion, field, frames, false).ok_or("KH2 has no animation for it")?;
     let (held, reach) = b.holder_poses(src, motion, field, &poses)?;
-    let (block, r) = kh1_data::bake::baked(template, frames, &[], &b.skeleton, &held, &[], false).map_err(|e| e.to_string())?;
+    // (t841) No root travel: the template's travel helper (H10) translation channels are replaced
+    // by zeros, so none is written (`kh1_data::bake`). With them, KH1's pose pass wrote the KH1
+    // slot's own travel (walk, run) into the holder instance's root travel (`+0xF0`), which the
+    // pose step copies into the actor's place `+0x50` (`0x1403948D0`, from `0x14029F0A0`), where
+    // KH1's draw puts the model and its shadow: the left Keyblade flew off from Sora's palm at
+    // every walk / run (the owner's t840 trace: `+0x50` thousands of units out while `+0x100`,
+    // the palm, held). The holder hangs on the palm and travels with Sora's palm only.
+    let still = vec![glam::Vec3::ZERO; held.len()];
+    let (block, r) = match kh1_data::bake::baked(template, frames, events, &b.skeleton, &held, &still, false) {
+        Ok(v) => v,
+        // (A template with no helpers has no travel to drop.)
+        Err(e) if e.to_string().contains("no helpers") => kh1_data::bake::baked(template, frames, events, &b.skeleton, &held, &[], false).map_err(|e| e.to_string())?,
+        Err(e) => return Err(e.to_string()),
+    };
     log!(Animation,
         "KH2 slots: KH2 motion {motion}'s left Keyblade holder motion baked ({frames} frames, {} bytes): {} keyed channels, {} keys, {} constants; the left grip at most {reach:.1} units from the left hand; KH1's pass from it within {:.3} units (worst bone {})",
         block.len(),
@@ -1492,6 +1524,12 @@ fn slot_key(template: &[u8], (motion, field): (u16, bool), frames: u32, tracks: 
         h.str(k.model());
         // (The form's own Keyblade hold on KH1's grip, `pose::form_grip`: the forms' bakes once.)
         h.str("form grip");
+        // (t829: Valor's Keyblade from KH2's weapon bone 2, `pose::kh2_hold`.)
+        if k == super::form::Kind::Valor {
+            h.str("kh2 hold");
+            // (t851: the hold placed from the middle knuckle.)
+            h.str("knuckle anchor");
+        }
     }
     h.finish()
 }
@@ -1963,10 +2001,22 @@ pub fn holder_motion(motion: usize) -> Option<usize> {
     HOLDER_AT.try_lock().ok()?.iter().find(|h| h.0 == motion).map(|h| h.1)
 }
 
-/// Our slot `slot` has a holder motion (its left Keyblade posed by KH1's pass, not from KH2's pose).
-pub fn has_holder(slot: usize) -> bool {
-    moved(slot).is_some_and(|m| m.holder)
+/// The holder motion of Valor's idle (KH2 motion 0), for a slot of KH1's own with none (`holder`,
+/// t831: the left Keyblade held at KH2's Valor idle grip, KH2's left weapon staying on its palm),
+/// else any Valor holder motion.
+pub fn rest_holder() -> Option<usize> {
+    let b = built()?;
+    let at = MOTION_AT.try_lock().ok()?;
+    let main = |m: &Move| at.iter().find(|x| x.1 == m.slot).map(|x| x.0);
+    let valor = |m: &&Move| m.form == Some(super::form::Kind::Valor) && m.holder;
+    let idle = b.moves.iter().filter(valor).find(|m| m.motion == character_core::motion::IDLE).and_then(main);
+    drop(at);
+    if let Some(h) = idle.and_then(holder_motion) {
+        return Some(h);
+    }
+    HOLDER_AT.try_lock().ok()?.first().map(|h| h.1)
 }
+
 /// Our slot playing on Sora (`usize::MAX` none), and its KH2 motion (for `kh2fx::tick`).
 static PLAYING: AtomicUsize = AtomicUsize::new(usize::MAX);
 static PLAYING_MOTION: AtomicU32 = AtomicU32::new(u32::MAX);

@@ -787,3 +787,105 @@ between two Valor moves as Sora's hand does, instead of switching to the new mov
   local matrices made a block of KH1's heap ...", "... aren't KH1's heap's any more ...", and at
   start "its holder motion blended by KH1's own motion blend" (or why it's off).
 
+
+## 11. Where KH2 holds the Keyblades, and Valor's hold (t829)
+
+The owner: "look at which bones attach the keyblade to soras model because currently valor is
+really off model on both keyblades" (Valor only for now; base Sora later).
+
+- **The attach bones** (Checked (files)): KH2 hangs a weapon on a palm bone, from `03system.bin`'s
+  `sklt` row named by the objentry's weapon joint (row 1 for P_EX100 and every form): **178**
+  right, **86** left, each the parent of its hand's five fingers. KH1's `.wpn` is skinned to Sora's
+  bones 280..292, 280 a child of his right palm **101** (left palm **206**). The two skeletons'
+  palms face within 3 degrees of each other in their binds.
+- **The Keyblade rigs are one rig** (Checked (files)): `W_EX010.mdlx`'s 12 bones are KH1's 280..291
+  bone for bone (bind turns within 0.3 degrees, keychain lengths 21.11, 6.72, 2.95, ...). KH2's
+  mesh is skinned to **bone 2** (834 corners: the blade along its -x to -77.9, guard and pommel to
+  +20.2), bones 3..11 the keychain. KH2's weapon motions put a half turn about the x = y diagonal
+  in bone 1 and none in bone 2, where KH1's bind has none in 281 and a half turn about y in 282:
+  only bone 2 means the same in both.
+- **What was off**: the bake held KH1's rest grip on 280 (from KH1's battle idle), turned it teeth
+  up, and for a form added the change of KH2's root from base Sora's idle hold (`form_grip`); the
+  left one took the right one's correction (`left_bones`). Offline, on the owner's files, KH1's 282
+  sat about 21 degrees along the blade and 24 round it off KH2's bone 2 in every Valor move, both
+  hands (base Sora 16..38).
+- **Now** (`pose::kh2_hold`, Valor's bakes and holder motions): KH2's bone 2 carried from KH2's palm
+  onto KH1's (`kh1_bind[palm]⁻¹ × kh2_bind[palm]`, offsets × the hip ratio), 280 and 281 under it as
+  KH1's bind holds them, the keychain carried with it. Offline: within 1.7 / 2.8 degrees in every
+  Valor move, both hands. **Assumption**: KH1's Kingdom Key `.wpn` sits on its bind as KH2's
+  `W_EX010` does (the binds are the same; the `.wpn` mesh wasn't read).
+
+## 12. The holder as one of KH1's own actors (t830 to t833)
+
+The owner (the native thread's "second Keyblade's actor copy"): native, no copy kept; no left
+Keyblade while KH1's actor pool has no place; KH1's own slots between Valor moves get a hold too.
+`win/holder.rs`. Steam, Checked (decomp + exe) unless marked.
+
+- **Its row** (t830): KH1's actor maker `0x140290D60 (id)` reads a 0x78-byte object row
+  (`0x140287B40`; an id whose byte 2 isn't 1, 7, 8 or 0xC is matched whole in the area's general
+  table `DAT_14296B630` / count `DAT_14296B628`, inside the loaded area file). Ours: a copy of Sora's
+  row (his loaded model shared) with id `0x00064B48` (type 6), flags +0x1 +0x2 (no asset load, no
+  automatic spawn), member 0xFF, class 0xFFFF, kind 6, cost / placement / sizes / mass 0. The table
+  points at a copy with it for the maker's call only.
+- **Attached** to Sora's left palm by KH1's attach `0x1402A06E0 (actor, Sora, 0x2000 | 206)`; with
+  Euler turns (`+0x374` 0x1000), no offset, turn or scale its world is the palm's drawn matrix
+  (`0x1402A0A40`); an actor with a parent skips gravity and the map (`0x140292010`).
+- **Stepped at 6000**: KH1's step list runs by priority (Sora 2000, kind 6 4000, pose tasks -1000,
+  5000, 8000); its task is made again by KH1's task maker `0x14028A900` at 6000 with KH1's actor step
+  and our think, the maker's own one given a function returning 4 (unlinked by `0x14028A710`).
+  Posed at 8000, after Sora at 5000.
+- **Not a target**: hit set `+0x134` and team bits (`+0x374` 0x60) cleared.
+- **Its motions** (t831): our two-entry table on `+0x1D4`; the holder motion of Sora's motion (KH1's
+  own slots: Valor's idle one at frame 0) asked with KH1's request `0x14029F980` (raw slot, Sora's
+  blend length, his time), its time Sora's each frame, its speed 0. The holder motions hold the
+  weapon bones in the palm's space. Gone: our pose instance, the blend-start hooks, the hand carry.
+- **Drawn and trailed by KH1** (t832): its weapon object is the left Keyblade's KH1 object (actor
+  flag 0x4000), its look Sora's (drawn bit, colours, alpha), no frustum cull; KH1's own draw task
+  draws it, KH1's step runs its trail step, its trail bit is its own 7.0 (the left windows baked
+  into the holder motions), and KH1's trail request for Sora is asked for it too.
+- **Hits and effect points** (t833): `left_owner` is the holder actor: the left hits' bone source and
+  KH2's second-weapon effect points. On Valor's KH1 states nothing of the copy runs; it serves Final
+  Form (KH2's controller) only.
+- **Ends** with KH1's actor end `0x140292390` when the left Keyblade is put away (its trail ended
+  first, its weapon object taken off); an area change drops it and it is made again.
+- **Assumptions**: no shadow or other per-actor list takes a type-6 actor; Sora's `+0x170` is his
+  running blend's length; KH1's attack pass for the left object runs after the 8000 pose.
+
+**t834.** The holder refused to install in t833 because our own debug probe hooks KH1's motion request (`0x14029F980`) first, so the first-bytes check saw our jump. `hook::prologue_is` now accepts bytes one of our hooks moved. Checked (log, exe).
+
+**t835.** t834 still refused: the probe's hook moved 5 bytes and the holder checks 10. `prologue_is` now checks the moved bytes, then the live ones after them. Checked (log).
+
+**t836.** No KH1 blend on the holder's motion requests. KH1's blend start (`0x1402A0350`) and step (`0x1402A0620`) move the actor by the model root's offset from it for the blend's frames, which is root motion for an actor standing on its own. Checked (decomp). That this threw the left Keyblade off the palm between states is an Assumption (no holder trace). KH2's left weapon has no blend of its own on its palm, and Sora's blend still moves the palm.
+
+**t837.** KH1's "actors freed" task (`0x140292E40`) gives back a dying actor's weapon by its row's member slot. The holder's member is 0xFF, so on a room change KH1 read through null (the t835 crash). The holder hooks that task and takes the left Keyblade's object off itself first. Checked (decomp, log).
+
+**t838.** KH1's maker poses the new model inside the call, and `pose` took it for Sora's for a frame. Any model posed during the make now counts as the holder's. Checked (log).
+
+**t839 / t840.** Trace lines from KH1's draw of the holder (distances from Sora's drawn left palm, the blade's turn, the weapon-draw tests). They showed the bones on the palm but the actor's `+0x50` far out after walk / run changes. Checked (trace).
+
+**t841.** Holder motions are baked with zero root travel. KH1's pose pass writes the motion's travel into the instance's `+0xF0`, the pose step copies it to the actor's `+0x50` (`0x1403948D0`), and KH1's draw places the model and its shadow from `+0x50`. The walk / run templates' travel (H10) threw the left Keyblade off. Checked (decomp, trace).
+
+**t842.** No shadow from the holder (actor `+0` bit 0x2 cleared): it drew a T-posed Sora shadow. Checked (decomp, screenshot).
+
+**t843.** The holder's `+0x50` still grew by one palm place a frame while Sora's blend held his time (trace). KH1 draws the model from `+0x50`. Right before KH1 draws the holder, `+0x50` and the instance's root `+0xF0` are set to its place `+0x100` (the palm). Checked (trace, decomp); where the growth comes from inside the pose pass is still open.
+
+**t844.** The palm entry of Sora's own bone array (`+0x1B4[206]`) drifts while KH1's blend pose holds his time (it adds the world translation to every bone each pass), and KH1 draws his model from his actor's `+0xD0` and `+0x50` instead. The holder's think sets its local offset so KH1's attach lands on the palm as drawn: the palm brought through the frame his bones carry (bone 0 × its local⁻¹) into his drawn frame. 0 when they agree. Checked (trace, decomp); one drift for all bones is an Assumption.
+
+**t845.** KH1's own Keyblade is drawn in Sora's queue entry from the same copy of his bone array as his body (`0x1402A1630` puts the weapon model in, `0x1401D4070` copies `+0x1B4` at that moment; the weapon on bones 280..292), so it can't leave his hand. The holder now gets the same guarantee: when KH1 queues Sora, his left palm is kept as copied; when it queues the holder afterwards, the holder's 13 weapon bones are moved rigidly from the palm it was attached to in its step onto that kept palm. t843's and t844's corrections are removed. Checked (decomp).
+
+**t846.** The left Keyblade is drawn in Sora's own queue entry. Right after KH1 queues Sora, KH1's same actor draw runs on him again with every body mesh hidden, the left Keyblade's object as his weapon and the left blade's 13 matrices in his weapon bones (the holder's posed bones moved from the palm it was attached to onto his palm in his array then); his own are put back after. KH1's queue copies them with his array at that moment, as it does his own Keyblade. The holder isn't drawn itself; it still poses the grip, runs the trail and the hits. Checked (decomp; t845 trace: the holder was always queued before Sora).
+
+**t847.** The t846 trace: the left blade was drawn in Sora's own entry, yet his palm entry `+0x1B4[206]` ran off while his body, drawn from the same copy, was right, so only some bones drift. The palm is a "built once" bone in KH1's motions (`0x02000000`); its wrist 205 is animated. The left blade now goes on the palm as KH1 builds a bone: wrist world × palm local (`+0x1B8[206]`). Code audit: nothing of ours writes 206 alone. Checked (trace, files); which bones drift is measured in the trace.
+
+**t848.** Why the palm drifted: KH1 Sora's model draws with 142 of 293 bones (bone table `+0x2C` bit 30). The draw queue copies only those, and the blend pose keeps only those, so through a blend the other 151 bones (the left palm 206 among them; its wrist 205 is drawn) keep stale matrices with the world translation added each pass. The t847 traces: exactly 151 bones off on every bad frame. The left Keyblade now goes on the wrist times the palm's last offset from it when the palm is off the wrist. Checked (files, decomp, trace).
+
+**t849.** The holder is attached by KH1 to Sora's left wrist (205, a drawn bone KH1 keeps through blends) instead of his palm (206, a non-drawn one it doesn't), and the holder motions are baked from the wrist (the grip computed on the palm as before, so the hold is the same). t846..t848's second draw and re-anchoring are removed: KH1 places, poses, blends and draws the holder with no per-frame placement of ours, and its trail and left hits read its own bones. Checked (files, decomp, t847 traces).
+
+
+**t850.** The left Keyblade pointed the wrong way: KH1's skeleton pass flips the second and third rows of an actor's world matrix, and the holder's world is Sora's left wrist, so its bones came out turned 180 degrees about the wrist's x (the trace measured (-0.48, -0.88, 0) where the bake meant (-0.48, 0.88, 0)). The holder motions are now baked with that flip undone. Checked (trace, offline bake, decomp).
+
+
+**t851.** Valor's Keyblades sat behind the palm: `kh2_hold` carried the palms' bind places along with their turn, and KH1's palm bone sits on the middle knuckle where KH2's sits mid-hand, so the handle landed about 5.8 units off KH2's, on the back of the hand (offline, Valor's idle, right palm: (0.4, -0.4, -1.2) against KH2's (3.5, -1.9, 3.2)). The hold's place is now measured from the middle knuckle in both games (KH2 189 / 97, KH1 113 / 217) and scaled by the hip ratio; the turn is unchanged. Offline it lands on the fingers' side, within about 2 units of vanilla KH1's own grip point. Checked (files, offline). Assumption: KH1's `.wpn` mesh sits on 282 as KH2's sits on bone 2.
+
+
+**t852.** The left Keyblade's keychain kept the right one's shape: the holder motions start from the main bake's pose, whose chain bones are the right Keyblade's, and the left hold carried them along. In Valor's idle it pointed up, 126 degrees off KH2's left chain. Now the left chain is hung from KH2's left weapon motion the way the right one is from the right (`kh1_data::secondary`, chain only). Offline it's within 1 degree of KH2's in every motion checked. Checked (files, offline).
