@@ -368,6 +368,12 @@ pub unsafe fn choose(sora: usize, kind: Kind) -> Result<&'static str, String> {
     own_needs(kind)?;
     // (Valor on KH1's own states, `native_frame`: KH1 has him, KH1's rule for the change.)
     let native = native_ok(kind) && super::shared::active();
+    // (t873) On Steam only KH1's own states run a form: one that can't (Final, or Valor / Wisdom
+    // whose slots didn't build) is refused, not handed to the old controller.
+    if !native && super::shared::controller_cut_off() {
+        super::shared::note_cut_off(&format!("the Drive to {}", kind.name()));
+        return Err(format!("{} can't run on KH1's own states here (not ported yet, or its slots didn't build), and the old KH2 controller is cut off on Steam", kind.name()));
+    }
     if native && !native_can_change(sora) {
         return Err("KH1's move has him and he can't change now (no queue)".into());
     }
@@ -780,7 +786,7 @@ const QUEUED: u32 = 0x4000_0000;
 /// slots built): its change, its moves and its revert native.
 pub fn native_enabled() -> bool {
     let s = super::settings::get();
-    s.drive && s.shared && s.kh1_slots.is_some() && super::addr::Build::current() == super::addr::Build::Steam
+    s.drive && super::shared::setting_on() && s.kh1_slots.is_some() && super::addr::Build::current() == super::addr::Build::Steam
 }
 
 /// Form `kind` runs on KH1's own states (`Kind::native_capable`, its slots built:

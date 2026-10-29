@@ -41,7 +41,40 @@ use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU8, Ordering};
 /// Base Sora is KH1's own states' (the ini's `shared`, not in a Drive Form on KH2's controller; Valor Form runs on
 /// them too, `form::native_now`).
 pub fn on() -> bool {
-    super::settings::get().shared && !super::form::driver_form()
+    setting_on() && !super::form::driver_form()
+}
+
+/// (t873) The old KH2 controller is cut off: on Steam nothing hands Sora to it (the owner, chat:
+/// "deprecate the old controller", answer "2": delete it outright, Final Form moved over to KH1's
+/// states when ready; the cut-off first, the deletion in the versions after). Every way in
+/// refuses there instead: a borrow from KH1's states (`takeover::shared_frame`), a command waiting
+/// for it (`combat::command_step`), a Drive Form that can't run on KH1's states (`form::choose`),
+/// and the ini's `shared = off` (`setting_on`). Since t874 on every build: the controller's
+/// driving is deleted (`takeover::takeover`), so nothing could run it off Steam either.
+pub fn controller_cut_off() -> bool {
+    true
+}
+
+/// The ini's `shared`, on whatever it says on Steam (t873, `controller_cut_off`: `off` handed base
+/// Sora to the old controller), logged once there when it says off.
+pub fn setting_on() -> bool {
+    let set = super::settings::get().shared;
+    if !set && controller_cut_off() {
+        static N: AtomicBool = AtomicBool::new(false);
+        if !N.swap(true, Ordering::Relaxed) {
+            super::log!(Takeover, "the ini's shared = off is ignored: the old KH2 controller is cut off on Steam (t873), KH1's own states run base Sora");
+        }
+        return true;
+    }
+    set
+}
+
+/// (t873) A way into the old controller refused (`controller_cut_off`), logged (the first 40).
+pub fn note_cut_off(what: &str) {
+    static N: AtomicU32 = AtomicU32::new(0);
+    if super::log_on(super::LogCat::Takeover) && N.fetch_add(1, Ordering::Relaxed) < 40 {
+        super::log!(Takeover, "{what}: not handed to the old KH2 controller (cut off on Steam, t873)");
+    }
 }
 
 /// The move style a KH1 motion slot of Sora's shows (`pose`'s slot numbers: the user's play

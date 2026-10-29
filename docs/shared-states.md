@@ -309,3 +309,25 @@ Still borrowing base Sora (plan in the what-is-still-missing thread, m6):
   KH1's own states). At the Aerial Base Combo KH2 KH2's air pick now plays on KH1's flight rows
   (`docs/kh1-anim-slots.md` §7.z.10);
 - the Drive (a form's entry) and everything in a form (the Drive Forms thread).
+
+## The old KH2 controller: cut off on Steam (t873), to be deleted
+
+The owner (chat): delete the old controller outright; Final Form is moved over to KH1's states when
+ready. First the cut-off, then the dead code, one area per version, each tested before the next.
+
+- **t873, the cut-off** (`shared::controller_cut_off`, Steam only): nothing hands Sora to KH2's
+  controller any more. The ini's `shared = off` is read as on; a Drive Form that can't run on KH1's
+  states (Final; Valor / Wisdom whose slots didn't build) is refused with KH1's "can't"; a command
+  only the controller could run is refused the same way; the Attack hand-offs into it are skipped
+  (KH1's own row takes the press); any borrow still asked for leaves him with KH1. Each refusal is
+  logged ("not handed to the old KH2 controller").
+- **Next, the deletion:** the controller's driving path in `takeover.rs` (its helpers the native
+  paths use stay, moved to a module of their own), the borrow and resume paths in `combat.rs` and
+  `shared.rs`, `stylejump` / `styleroll`, the old intangible flag in `reflect.rs`, the KH2 pose
+  player where only the controller uses it, and the controller checks left in the other modules.
+- **t874, its driving deleted:** `takeover::takeover` now always leaves base Sora to KH1's own
+  states (after its ride / event / body / script checks) and runs `shared_frame`; KH2's controller
+  frame, the old hand-off and take-back around KH1's moves and its give-back are gone. The cut-off
+  applies to every build (off Steam there is nothing left to run it). KH2's controller data
+  (`DRIVER`) stays: the native paths read its rows, abilities and form data.
+- **Final Form** is refused on Steam until it is ported to KH1's states.

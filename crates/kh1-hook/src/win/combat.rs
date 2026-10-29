@@ -179,7 +179,8 @@ unsafe extern "system" fn exec(actor: usize, row: i32, dir: usize) {
         return f(actor, row, dir);
     }
     // Flying (KH1 has him, state 8): KH2's aerial combo instead of KH1's flying attack.
-    if actor == sora && command == 1 && takeover::ON.load(Ordering::Relaxed) && rd::<i32>(actor + 0x70) == 8 {
+    // (t873: not on Steam, `shared::controller_cut_off`: KH1's flight attack row runs instead.)
+    if actor == sora && command == 1 && !super::shared::controller_cut_off() && takeover::ON.load(Ordering::Relaxed) && rd::<i32>(actor + 0x70) == 8 {
         takeover::FLY_ATTACK.store(true, Ordering::Relaxed);
         note(|| format!("Attack command while flying (KH1 row {row}): KH2's aerial combo"));
         return;
@@ -196,7 +197,10 @@ unsafe extern "system" fn exec(actor: usize, row: i32, dir: usize) {
     }
     // KH1's roll (`styleroll`) takes an Attack (KH1's own window for it): by the Base Combo
     // style, KH1's combo from there, or KH2 takes him with the press for its combo.
-    if actor == sora && command == 1 && takeover::ON.load(Ordering::Relaxed) && super::styleroll::active() {
+    // (t873: none of these four hand the press to the old controller on Steam, where it is cut off,
+    // `shared::controller_cut_off`: the Attack goes on to KH1's own row below.)
+    let cut_off = super::shared::controller_cut_off();
+    if actor == sora && command == 1 && !cut_off && takeover::ON.load(Ordering::Relaxed) && super::styleroll::active() {
         if super::stylecombo::kh1_here(false) {
             super::styleroll::clear();
             super::stylecombo::started();
@@ -213,12 +217,12 @@ unsafe extern "system" fn exec(actor: usize, row: i32, dir: usize) {
     // KH1 still has him for one of its own moves (a spell's cast, an item): the press is KH2's
     // once that ends, not KH1's own combo (the user: KH1's Ripple Drive came out after a spell,
     // twice, finishing Riku).
-    if actor == sora && command == 1 && takeover::ON.load(Ordering::Relaxed) && takeover::kh1_move() {
+    if actor == sora && command == 1 && !cut_off && takeover::ON.load(Ordering::Relaxed) && takeover::kh1_move() {
         takeover::ATTACK_AFTER.store(true, Ordering::Relaxed);
         note(|| format!("Attack command during KH1's own move (KH1 row {row}): KH2's once it ends"));
         return;
     }
-    if actor == sora && command == 1 && takeover::ON.load(Ordering::Relaxed) && takeover::kh2_has() {
+    if actor == sora && command == 1 && !cut_off && takeover::ON.load(Ordering::Relaxed) && takeover::kh2_has() {
         PRESSED.store(true, Ordering::Relaxed);
         if let Some(r) = row_info(actor, row) {
             attack_shown(r.motion as u16 as u32);
@@ -230,7 +234,7 @@ unsafe extern "system" fn exec(actor: usize, row: i32, dir: usize) {
     // him for a frame: the press is KH2's once KH1 lets go, never KH1's own attack row (the user:
     // Attack on the first free frame after a KH1 move gave KH1's attacks, and its combo carried
     // on from there out of order).
-    if actor == sora && command == 1 && takeover::kh1_borrows(actor) {
+    if actor == sora && command == 1 && !cut_off && takeover::kh1_borrows(actor) {
         takeover::set_air_cast(None);
         takeover::hand_to_kh1(&format!("Attack pressed during KH1's own motion (KH1 row {row})"));
         takeover::ATTACK_AFTER.store(true, Ordering::Relaxed);
@@ -540,6 +544,13 @@ unsafe fn command_step(actor: usize, dir: usize) {
             cmd_log(|| format!("command {kind:#x} ({full:08x}) refused: KH1's jump, glide or roll has him and he can't act now (no queue)"));
             return;
         }
+        // (t873) The old controller is cut off on Steam: refused, KH1's "can't".
+        if super::shared::controller_cut_off() {
+            let sound: unsafe extern "system" fn(i32) = std::mem::transmute(base + SOUND_RVA);
+            sound(4);
+            super::shared::note_cut_off(&format!("command {kind:#x} ({full:08x}) during KH1's jump, glide or roll"));
+            return;
+        }
         if let Ok(mut p) = PENDING_COMMAND.lock() {
             *p = Some((rd::<[u8; 16]>(base + COMMAND_RVA), std::time::Instant::now(), u32::MAX));
         }
@@ -679,6 +690,15 @@ unsafe fn command_step(actor: usize, dir: usize) {
                 let sound: unsafe extern "system" fn(i32) = std::mem::transmute(base + SOUND_RVA);
                 sound(4);
                 cmd_log(|| format!("command {kind:#x} ({full:08x}) refused: KH1's move has him and he can't act now (no queue)"));
+                return;
+            }
+            // (t873) The old controller is cut off on Steam: a command only it could run (a KH2
+            // spell whose cast slot didn't build, a Drive no KH1 state runs) is refused with KH1's
+            // "can't", not borrowed for.
+            if super::shared::controller_cut_off() {
+                let sound: unsafe extern "system" fn(i32) = std::mem::transmute(base + SOUND_RVA);
+                sound(4);
+                super::shared::note_cut_off(&format!("command {kind:#x} ({full:08x}) (spell / Drive {arg})"));
                 return;
             }
             if let Ok(mut p) = PENDING_COMMAND.lock() {
@@ -3758,14 +3778,18 @@ unsafe fn spell_not_yet(menu: usize, entry: i32) -> bool {
     // them into an attack ... make it so that kh1s magic animation states are able to be
     // interrupted by an attack and are part of a combo string"). Pressed too early it is dropped
     // (no buffer).
-    if kind == 1 && takeover::kh1_casting() && takeover::kh1_spell_now().is_some() {
+    // (t873: not on Steam, `shared::controller_cut_off`: KH2's cut of KH1's spell is the old
+    // controller's.)
+    if kind == 1 && !super::shared::controller_cut_off() && takeover::kh1_casting() && takeover::kh1_spell_now().is_some() {
         takeover::ATTACK_AFTER.store(true, Ordering::Relaxed);
         cmd_log(|| "Attack during KH1's spell: KH2's, to cut it once it may be".to_string());
         return true;
     }
     if takeover::kh1_cut_window() {
         // (Not in KH1's own combo, whose window is open for a Drive only: its Attack is KH1's.)
-        if kind == 1 && !super::stylecombo::active() {
+        // (t873: not on Steam, where the old controller is cut off; the Attack is KH1's command
+        // step's as unmodded, `shared::controller_cut_off`.)
+        if kind == 1 && !super::stylecombo::active() && !super::shared::controller_cut_off() {
             takeover::ATTACK_AFTER.store(true, Ordering::Relaxed);
             cmd_log(|| "Attack in KH1's move's cut window: KH2 takes him for the combo".to_string());
             return true;
