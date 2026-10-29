@@ -759,6 +759,14 @@ physics setting that has magic in it and put it in this new air setting."
   follow the main physics config"; t617 had put them on this row, undone). In KH2 they play inside
   its jump state as its casts do (their row's hop `0x1403D78D0`, then ACTION_JUMP's step
   `0x1403CB360`, **Checked (decomp)**); the grouping of the Config rows is ours.
+  **Changed (t856):** the owner, after Magnet Burst dipped 7 under its start before its hold at
+  Physics KH1 (KH1's gravity on its hop of 14; trace f2285): "(b) it should be move independent
+  from the physics setting". Every KH2 attack row with a hop (`combat::exec` ->
+  `shared::physics::kh2_move_hop`: KH2's plain air rows, Aerial Finish, Magnet Burst, Finishing
+  Plus's next finisher, a ground row's launch) now moves on KH2's physics through that move
+  whatever the Physics row; the Physics row is KH1's moves' and the jumps'.
+  **Undone (t857):** the owner: "I still want it to use the physics row actually", keeping the
+  dip at Physics KH1 (KH1's physics on the hop). The rule above (Physics row) holds again.
 - **Assumption**: KH1's halving of the sideways speed and its 30 hop come after the spell start
   (`0x14028F140`) in `0x1402A3600`, as §4g's `cast_stops` / `cast_after_command` already rely on.
 - With a KH1 cast animation (no slot of ours) at Air Physics KH2 (t-c; the tester, m20 answer 2:

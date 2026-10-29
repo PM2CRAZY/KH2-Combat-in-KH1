@@ -1169,6 +1169,24 @@ Not done this round:
   hover), which is why it wasn't Valor's. KH2 starts the row's motion and hop in the same think
   (`0x1403D78D0` -> `0x1403CBB00`, Checked (decomp)). Now, on the frame a hop starts, the cut move
   holds nothing (`shared::physics::HOP_FRAME`).
+- **A KH1 air row's hop isn't held by the move it cuts either (t853).** Trace f26703 (Checked (trace)),
+  Aerial Combo KH1: 184 out of 183's Finishing Plus window runs KH1's air swing row, whose start sets
+  its hop (14) in KH1's command step (`shared::physics::kh1_air_attack_started`), which t759 didn't
+  cover. At f26573 183 (frame 53) still held him and set the hold flag; at f26574 the hold's end
+  restarted his fall from rest and he dropped 52 (98.9 to 46.6) before 184's hold at 16. Now that
+  start marks `HOP_FRAME` and clears the hold flag, as `kh2_hop_as` does.
+- **Correction, and the real cause (t854).** t853's cause was wrong: that hop also goes through
+  `kh2_hop_as` (the log at f981 of trace f1084 has both lines), so `HOP_FRAME` was already set. The
+  next air step (f982) still found KH1's slot on 183 (KH1 plays 184 from f983), past `HOP_FRAME`'s
+  one frame, held him and set the hold flag; at f983 the hold's end restarted his fall from rest
+  (134.3 down to 82.0). Now the cut move (`shared::physics::HOP_CUT`: its motion, KH1's time in it)
+  holds nothing while it still plays without starting over, at most 4 frames. Checked (trace, log).
+- **A revert in a held air move (t855).** Trace f2082 (Checked (trace)): a revert during Valor's
+  183 (held from its frame 16) left KH1's arc fields as KH2's arc clock had run them through the
+  hold (time 53 at f1975), so KH1's air step dropped him at 16 to 19.6 a frame at once. Now a revert
+  in the air restarts his fall from rest where he is if a hold had him at his last air step
+  (`shared::physics::form_left_in_air`, KH2's restart `0x1403B4780`). Assumption: KH2's revert ends
+  the hold through that restart.
 - **Valor's ground slam effect (t760).** 155's element 15 (frame 42, effect 9 on the object root) runs
   program 65 (pppRandDownFV), which `kh2dpx::KH1_SAME` didn't list, so it never played. KH1's table
   entry 65 (`0x14054FF00` + 65 x 0x50, calc `0x14032D1C0`) and KH2's (`0x140779A00` + 65 x 0x50, calc

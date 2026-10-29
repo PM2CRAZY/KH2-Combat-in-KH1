@@ -665,6 +665,38 @@ pub mod physics {
         HELD_LAST.store(false, Ordering::Relaxed);
     }
 
+    /// A Drive Form ends in the air (`form::native_revert`): KH2's arc gives him back to whichever
+    /// physics base Sora has. Held at his last air step (a no-gravity range: Valor's air finisher
+    /// 183 from its frame 16, Aerial Finish, an air cast), his fall starts over from rest where he
+    /// is, as KH2's restart at a hold's end does (`0x1403B4780`: his actual vertical speed, 0 after a
+    /// hold, Checked (decomp), t653), with his sideways speed kept (KH2's revert keeps his
+    /// movement).
+    ///
+    /// The owner (chat, t854 trace `trace_1793253630_f2082`: "if you return in the air during a
+    /// finisher in valor form you fall extremely fast"). Through 183's hold KH2's arc clock ran on
+    /// (as KH2's ACTION_JUMP step does) and KH1's arc fields were written from it at his held
+    /// height: KH1 time 53, base 411.9 above (f1975). At the revert (f1976, Physics KH1 for base
+    /// Sora) KH1's own air step took those fields as they were, a fall 54 frames old: 16.2 down at
+    /// once, 19.6 a frame by the ground 8 frames later (Checked (trace)). Not held: KH1's fields are already his arc as it moves (`from_kh2`), so
+    /// left as they are. **Assumption**: KH2's revert in the air ends the hold through the same
+    /// restart (its revert's own think not traced).
+    pub unsafe fn form_left_in_air(actor: usize) {
+        if !is_sora(actor) || rd::<i32>(actor + 0x70) != 2 {
+            return;
+        }
+        let held = HELD_LAST.load(Ordering::Relaxed);
+        let y: f32 = rd(actor + 0x14);
+        if held && y.is_finite() {
+            let h = kh1_motion(actor).h;
+            set_kh1_motion(actor, &Motion { h, arc: kh1phys::Arc::rest(y) }, dt());
+        }
+        off_air();
+        static N: AtomicU32 = AtomicU32::new(0);
+        if super::super::log_on(super::super::LogCat::Takeover) && N.fetch_add(1, Ordering::Relaxed) < 20 {
+            super::super::log!(Takeover, "A form ended in the air: {}", if held { "held at his last step, his fall starts over from rest (KH2's 0x1403B4780)" } else { "his arc as it was" });
+        }
+    }
+
     unsafe fn rd<T: Copy>(p: usize) -> T {
         std::ptr::read_unaligned(p as *const T)
     }
@@ -940,7 +972,7 @@ pub mod physics {
         let vel = kh1phys::carried(vel);
         // (The air step this frame takes the new row's hop, not the hold of the move it cuts:
         // `HOP_FRAME`, t759.)
-        HOP_FRAME.store(game_frame().max(1), Ordering::Relaxed);
+        mark_hop(actor);
         let kh2_numbers = if kh2() { numbers() } else { None };
         let how = match kh2_numbers {
             Some(n) => {
@@ -998,6 +1030,48 @@ pub mod physics {
     /// cut holds nothing (its no-gravity range, KH1's cast hover); the rising rows' own hold
     /// (`kh2slots::rise_start`) and the Drive's arrival are left.
     static HOP_FRAME: AtomicU64 = AtomicU64::new(0);
+
+    /// The move a row's hop cut (`mark_hop`): KH2's motion of our slot playing then, KH1's time in
+    /// it and the game frame. KH1 applies the new row's motion a frame or two after its control
+    /// step set the hop (its request queued), so the cut move kept playing on the next frame too.
+    ///
+    /// The owner (chat, t853 trace `trace_1793253305_f1084`, Valor 183 into 184 out of the
+    /// Finishing Plus window, Aerial Combo KH1): "same issue is still happening". The log: the hop
+    /// (14) at f981 in the control step (`kh2_hop` and `kh1_air_attack_started` both), `HOP_FRAME`
+    /// kept that frame free; at f982 KH1's slot still played 183 (its frame 53+, inside its range
+    /// 16..end), so it held him again and set the hold flag; at f983 KH1 played 184 (frame 0, no
+    /// hold) and the hold's end restarted his fall from rest: 134.3 down to 82.0 by 184's own
+    /// hold at 16 (Checked (trace, log)). KH2 starts the row's motion with its hop in the same
+    /// think (`0x1403D78D0` -> `0x1403CBB00`, Checked (decomp), t759): the cut motion never holds
+    /// again. So until the new motion plays (another motion, or the same one started over), at
+    /// most `HOP_CUT_FRAMES` frames, the cut move holds nothing.
+    static HOP_CUT: Mutex<Option<(u16, f32, u64)>> = Mutex::new(None);
+    const HOP_CUT_FRAMES: u64 = 4;
+
+    /// A row's hop starts now (`kh2_hop_as`, `kh1_air_attack_started`): the move it cuts holds
+    /// nothing from here (`HOP_FRAME`, `HOP_CUT`).
+    unsafe fn mark_hop(actor: usize) {
+        let now = game_frame().max(1);
+        HOP_FRAME.store(now, Ordering::Relaxed);
+        let cut = super::super::kh2slots::playing_motion(actor).zip(super::super::kh2slots::kh1_time_now(actor));
+        if let Ok(mut g) = HOP_CUT.lock() {
+            *g = cut.map(|(m, t)| (m, t, now));
+        }
+    }
+
+    /// The move a row's hop cut still plays on KH1's slot (`HOP_CUT`): the same KH2 motion, not
+    /// started over, within `HOP_CUT_FRAMES` of the hop.
+    unsafe fn cut_still_playing(actor: usize) -> bool {
+        let Ok(mut g) = HOP_CUT.try_lock() else { return false };
+        let Some((motion, t, at)) = *g else { return false };
+        let same = game_frame().saturating_sub(at) <= HOP_CUT_FRAMES
+            && super::super::kh2slots::playing_motion(actor) == Some(motion)
+            && super::super::kh2slots::kh1_time_now(actor).is_some_and(|now| now >= t);
+        if !same {
+            *g = None;
+        }
+        same
+    }
 
     /// The game frame a held hop (`kh2_hop_held`) was started at physics KH1, 0 none.
     static HELD_JUMP_AT: AtomicU64 = AtomicU64::new(0);
@@ -1160,6 +1234,11 @@ pub mod physics {
         if kept != now {
             set_kh1_motion(actor, &kept, dt());
         }
+        // (The move it cuts holds nothing from here, and its hold's end isn't the fall's restart:
+        // as `kh2_hop_as` does for KH2's own rows, t759, t853; `mark_hop`. KH2 starts the row's
+        // motion and hop in the same think, `0x1403D78D0` -> `0x1403CBB00`, Checked (decomp).)
+        mark_hop(actor);
+        HELD_LAST.store(false, Ordering::Relaxed);
         static N: AtomicU32 = AtomicU32::new(0);
         if N.fetch_add(1, Ordering::Relaxed) < 40 {
             let s = |v: [f32; 2]| v[0].hypot(v[1]);
@@ -1782,8 +1861,9 @@ pub mod physics {
         // (A rising row's first frames, before its own no-gravity range: `kh2slots::rise_start`.)
         let rise = if air_ok { super::super::kh2slots::rise_start(actor, step_dt) } else { None };
         // (A Drive Form's arrival in the air: KH2's ACTION_FLY holds him, `form::arrival_held`.)
-        // (A row's hop started this frame: the move it cuts holds nothing, `HOP_FRAME`.)
-        let hop_now = sora && HOP_FRAME.load(Ordering::Relaxed) == game_frame().max(1);
+        // (A row's hop started this frame, or the move it cut still plays on KH1's slot: that move
+        // holds nothing, `HOP_FRAME`, `HOP_CUT`.)
+        let hop_now = sora && (HOP_FRAME.load(Ordering::Relaxed) == game_frame().max(1) || cut_still_playing(actor));
         let cut_hold = !hop_now && (kh1_hold || super::super::kh2slots::no_gravity(actor) && (!super::super::kh2slots::cast_playing(actor) || cast_kh2()));
         let held = air_ok && (rise.is_some() || super::super::form::arrival_held(actor) || cut_hold);
         // (Whether the hold was on at his last air step: KH2's fall restart when it ends, below.)

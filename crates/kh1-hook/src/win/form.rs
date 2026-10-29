@@ -1054,6 +1054,10 @@ unsafe fn native_revert(d: &mut Drive, ch: &mut Character, kh2: &pose::Kh2, acto
         set(actor, if air { 6 } else { 0 }, 8.0);
         wr(actor, rd::<u32>(actor) & !4);
     }
+    // (In the air: KH2's arc hands him back, his fall from rest if a hold had him, t855.)
+    if air {
+        super::shared::physics::form_left_in_air(actor);
+    }
     super::tint::refresh(actor, None);
     log!(Forms, "Revert ({why}) on KH1's own states{}", if air { ", falling" } else { "" });
 }
