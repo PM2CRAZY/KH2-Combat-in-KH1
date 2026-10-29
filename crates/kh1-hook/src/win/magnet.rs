@@ -537,3 +537,28 @@ unsafe fn debug_frame(actor: usize, h: &Held, ours: [f32; 4], dist: f32, frames:
     ));
     sum
 }
+
+/// (t866) `combat::knocked_back`, before KH1's knock-back (`0x1402B77D0`) runs on `actor`: KH2's
+/// blow ends the catch (`0x1403D2FE0` case 4 plays the blow motion and sets the enemy's blow action
+/// through `0x140409D30`, whatever its action was, 0xE / 0xF included; Checked (decomp) Steam KH2).
+/// A held flier goes back into its own state first, so KH1's knock-back plays on it as on any of
+/// its fliers, with its own travel (t865 dropped that travel while holding it, which slid its model
+/// away from its place). A held grounder is left to KH1's knock-back, which takes it out of the
+/// hold itself (its airborne branch into state 2, as since t862).
+pub unsafe fn knocked_back(actor: usize) {
+    let Some(h) = get(actor) else { return };
+    if rd::<i32>(actor + 0x70) != FLIER_STATE {
+        return;
+    }
+    let base = takeover::game_base();
+    if !ready(base) || !flier_state(base, h.before) {
+        return;
+    }
+    if let Ok(mut g) = HELD.try_lock() {
+        g.retain(|x| x.actor != actor);
+    }
+    let set_state: unsafe extern "system" fn(usize, i32) -> u32 = std::mem::transmute(base + SET_STATE_RVA);
+    set_state(actor, h.before);
+    dbg(|| format!("blown out of the hold {actor:#x} after {} frames: back in its state {:#x} for KH1's knock-back", h.frames, h.before));
+    note(|| format!("actor {actor:#x} blown out after {} frames: back in its state {:#x} (KH1's class 2) before KH1's knock-back, as KH2's blow ends the catch", h.frames, h.before));
+}

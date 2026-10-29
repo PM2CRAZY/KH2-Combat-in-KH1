@@ -552,4 +552,21 @@ three things to a state's step (Checked (decomp)): the push (`+0x88` bit 0x40, `
 vector `+0x200` (while `+0x160` bit 4) and the one-frame push `+0x120`. The debug menu's Logs page
 now has **Magnet Debug** (ini `log_magnet`): per held enemy and frame, our displacement, each of
 those three with its on bit, their sum, and how far it really moved since our last step, plus a
-line per catch and let-go. **Open**: which of them moves the fliers (waiting on that log).
+line per catch and let-go. **Found (t865, Checked (log))**: the `+0x200` vector, on only while a held flier plays KH1's
+knock-back in place (0x4C / 0x4D) and growing to about 80 a frame; KH1 moved every held enemy by
+exactly the expected sum, the push was never on.
+
+**t865: no knock-back travel while held.** `magnet`'s step sets `+0x200` to 0 for a held enemy
+each frame (after KH1's motion update, before KH1's physics step adds it), so the suction is its
+only movement, as in KH2's catch step. KH1's knock-back motion still plays. **Assumption**:
+`+0x200` is the motion's own travel (its writer not found in the decomp).
+
+**t866: a blow ends the hold (t865's drop undone).** With t865 the held fliers' bodies slid up to
+about 270 away from their places while KH1's knock-back in place played (Checked (log): their body
+point's distance to the Magnet jumped by 200 in a frame while the place moved 25), so the suction's
+direction flipped every frame. KH2's blow handler (`0x1403D2FE0` case 4 → `0x140409D30`) sets every
+enemy's blow action, which ends the catch (Checked (decomp)). Now KH1's knock-back (`0x1402B77D0`,
+`combat::knocked_back`) first puts a flier held in 0x2C back into its own state, so KH1 plays its
+flier knock-back in place with its own travel and the hold is over; held grounders are taken out
+by KH1's airborne knock-back as before.
+

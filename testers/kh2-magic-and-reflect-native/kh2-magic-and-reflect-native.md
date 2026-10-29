@@ -21,6 +21,7 @@
 - [15. Assistant: t817 to t821. From your "all (a)" and go-ahead (in chat): th](#^m15)
 - [16. Assistant: t822 to t827. Everything left open after t821 is moved over ](#^m16)
 - [17. Assistant: t828. Cure's heal now scales with Sora's max MP (asked for i](#^m17)
+- [18. Assistant: t867. Cure now heals by KH2's own formula, with Sora's max M](#^m18)
 
 ---
 
@@ -504,4 +505,22 @@ go ahead
 > Notes: `docs/kh1-magic-native.md` §8b.
 
 ^m17
+
+
+> [!tip] Assistant
+> **t867.** Cure now heals by KH2's own formula, with Sora's max MP standing in for KH2's Magic stat (asked for in chat). This replaces t828.
+>
+> **A correction to t828:** I'd called "KH1 scales magic by max MP" an assumption. It's now checked: KH1 gives its spells a stat term from max MP when the attack is made (×2 for Thunder, ×5 for Gravity) and adds it to the spell's power. KH1's own Cure heals 15 / 27 / 36 + max MP.
+>
+> **What t867 does:** KH2's Cure heals power × Magic / 100. Now that's power × Sora's max MP / 100. Cure 1 heals 4 HP per max MP point on Sora and 2 on Donald and Goofy, and Cure 2 and 3 heal more. With 5 max MP that's 20 HP, the same as KH1's Cure 1. Later it grows faster than KH1's, the way KH2's Cure grows with Magic.
+>
+> **How I checked it:** KH2's heal formula and Cure's rows (708 power 400 / 500 / 600, 709 power 200 / 250 / 300) are from the KH2 files and our KH2 combat core. KH1's stat terms are from the Steam KH1 decomp, and KH1's spell data is from your `btltbl.bin`. One assumption: the stats field I read is max MP (KH1 refills MP up to it). Not checked in game.
+>
+> Please test:
+> 1. Cure at each level with Sora's max MP low, then higher: the heal should be about 4 / 5 / 6 HP per max MP point.
+> 2. Donald and Goofy inside the circle should heal half as much.
+>
+> Notes: `docs/kh1-magic-native.md` §8b.
+
+^m18
 

@@ -14,9 +14,9 @@
 //!   cost and level (Fire / Fira / Firaga ...), KH2's script (`magic/FIRE_<level>.mag` ...)
 //!   at Wisdom's magic sub (level × 2 − 2, + 1 for the combo finisher, + 10), its effects
 //!   (`kh2fx` packages from 5, `spell_package`) and sounds, its attacks through the spell hit
-//!   records. Cure's heal (a script's direct application to each party member in its circle): ours,
-//!   a share of KH1's max HP by the ATKP row's power (`CURE_SHARE`), scaled by Sora's max MP as
-//!   KH1 has no KH2 Magic stat (`combat::magic_factor`, t828).
+//!   records. Cure's heal (a script's direct application to each party member in its circle):
+//!   KH2's own formula with Sora's max MP in place of KH2's Magic stat, which KH1 doesn't have
+//!   (t867; KH1's own magic adds max MP, Checked (decomp), `heal`).
 
 use super::reflect::{flip, world_now, KhWorld, SORA};
 use super::{combat, log, pose};
@@ -164,9 +164,6 @@ const WAIT_S: f32 = 5.0;
 /// for it (ours).
 const SEEN: u8 = u8::MAX;
 const NOT_SEEN_FRAMES: u8 = 4;
-/// Cure's heal: the ATKP row's power / this, of KH1's max HP (ours), times Sora's max MP factor
-/// (`heal`, t828).
-const CURE_SHARE: f32 = 3000.0;
 
 pub fn spell_package(spell: u8, level: u8) -> u8 {
     FIRST_SPELL_PACKAGE + spell * 3 + (level - 1)
@@ -1261,23 +1258,30 @@ const ADD_HP_STEAM: usize = 0x2A4920;
 const ADD_HP_BYTES: [u8; 8] = [0x48, 0x89, 0x74, 0x24, 0x10, 0x48, 0x89, 0x7C];
 
 /// A party member (Sora, Donald, Goofy: their stats blocks are laid out alike, Checked (decomp):
-/// KH1's save point heals all three through `+0x6C` `+0x3C` / `+0x40`) healed by a script
-/// (Cure): KH1's own HP add (t822; before, written by us, Sora only).
-unsafe fn heal(actor: usize, power: u16) -> Option<(i32, i32)> {
+/// KH1's party refill raises all three through `+0x6C` `+0x3C` / `+0x40`) healed by a script
+/// (Cure): KH1's own HP add (t822). The amount (t867, the owner's "(b)"): KH2's own formula
+/// (`combat_core::damage::compute_healing`) with the caster's max MP (stats `+0x48`, the stat
+/// KH1's attack constructor `0x1402B2DC0` gives its stat source 1, Checked (decomp)) as KH2's
+/// Magic: kind 6 (Cure's rows 708 / 709) power × max MP / 100, kind 5 the target's max HP ×
+/// power × max MP / 10000, rounded up.
+unsafe fn heal(actor: usize, caster: usize, kind: u8, power: u16) -> Option<(i32, i32)> {
     let stats = pose::ptr(std::ptr::read_unaligned((actor + 0x6C) as *const u32));
-    if stats < 0x10000 {
+    let caster_stats = pose::ptr(std::ptr::read_unaligned((caster + 0x6C) as *const u32));
+    if stats < 0x10000 || caster_stats < 0x10000 {
         return None;
     }
     let hp = std::ptr::read_unaligned((stats + 0x3C) as *const i32);
     let max = std::ptr::read_unaligned((stats + 0x40) as *const i32);
+    let mp = std::ptr::read_unaligned((caster_stats + 0x48) as *const i32).max(0) as i64;
     if hp <= 0 || max < hp || max <= 0 {
         return None;
     }
-    // (Scaled by Sora's max MP, t828: the owner, "tie it to the amount of max mp you have, in kh1
-    // thats how magic is scaled (assumption)". KH2's heal is power × the caster's Magic / 100
-    // (kind 6); KH1 has no Magic stat, so the stand-in the mod's other Magic-based hits use:
-    // +10% a max MP point, at most 30, times the ini's `magic_scale`, `combat::magic_factor`.)
-    let add = ((max as f32 * power as f32 / CURE_SHARE * combat::magic_factor()).ceil() as i32).max(1);
+    let add = match kind {
+        6 => (power as i64 * mp + 99) / 100,
+        5 => (max as i64 * power as i64 * mp + 9_999) / 10_000,
+        _ => return None,
+    };
+    let add = add.clamp(1, i32::MAX as i64) as i32;
     let at = super::takeover::game_base() + ADD_HP_STEAM;
     if super::addr::Build::current() == super::addr::Build::Steam && std::slice::from_raw_parts(at as *const u8, 8) == ADD_HP_BYTES {
         let f: unsafe extern "system" fn(usize, i32) -> u32 = std::mem::transmute(at);
@@ -1455,7 +1459,7 @@ pub unsafe fn shots_step(actor: usize, out: &Output, airborne: bool, strikes: &m
                 let Some(r) = row(battle, atk, sub, 0) else { continue };
                 let Some(who_actor) = world.actor_of(target) else { continue };
                 if matches!(combat_core::AttackKind::from_id(r.kind), combat_core::AttackKind::Cure | combat_core::AttackKind::CureStrong) {
-                    if let Some((from, to)) = heal(who_actor, r.power) {
+                    if let Some((from, to)) = heal(who_actor, actor, r.kind, r.power) {
                         log!(Magic, "{} Cure on {}: ATKP {atk} sub {sub} (power {}): HP {from} -> {to}", who(), if target == SORA { "Sora".to_string() } else { format!("party slot {}", target - super::reflect::PARTY0) }, r.power);
                     }
                 }

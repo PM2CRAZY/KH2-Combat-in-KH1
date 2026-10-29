@@ -216,6 +216,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [15. Assistant: t817 to t821. From your "all (a)" and go-ahead (in chat): th](../testers/kh2-magic-and-reflect-native/kh2-magic-and-reflect-native.md#^m15)
   - [16. Assistant: t822 to t827. Everything left open after t821 is moved over ](../testers/kh2-magic-and-reflect-native/kh2-magic-and-reflect-native.md#^m16)
   - [17. Assistant: t828. Cure's heal now scales with Sora's max MP (asked for i](../testers/kh2-magic-and-reflect-native/kh2-magic-and-reflect-native.md#^m17)
+  - [18. Assistant: t867. Cure now heals by KH2's own formula, with Sora's max M](../testers/kh2-magic-and-reflect-native/kh2-magic-and-reflect-native.md#^m18)
 - [KH2 MP and MP Charge](../testers/kh2-mp-and-mp-charge/kh2-mp-and-mp-charge.md)
   - [1. Assistant: Started from What is still missing(../what-is-still-missing-](../testers/kh2-mp-and-mp-charge/kh2-mp-and-mp-charge.md#^m1)
 - [KH2 player model through KH1's model system](../testers/kh2-player-model-through-kh1s-model-system/kh2-player-model-through-kh1s-model-system.md)
@@ -352,6 +353,14 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [19. Assistant: Thanks! I made the two new threads:](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m19)
   - [20. Assistant: I made two threads for that line:](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m20)
   - [21. Assistant: Here's the list brought up to date, from t676 to t793. Since](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m21)
+  - [22. Assistant: Here's where the native work stands since my last list (t793](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m22)
+  - [23. Assistant: Not directly. I can't open a new conversation in your Claude](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m23)
+  - [24. Assistant: The local folder is now at t856. Since t816, the spell scrip](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m24)
+  - [25. Assistant: I haven't changed any code. Your newest log (from t863) show](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m25)
+  - [26. Assistant: t864 adds a "Magnet Debug" row to the debug menu's Logs page](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m26)
+  - [27. Assistant: t865 should fix the fliers being thrown around inside Magnet](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m27)
+  - [28. Assistant: t866: Magnet Burst's knock-back hits now end the hold on a f](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m28)
+  - [29. Assistant: Your log backs that up. Before the change (t865), the flying](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m29)
 
 ---
 

@@ -3608,6 +3608,10 @@ unsafe fn lift_for_blow(actor: usize) -> bool {
 /// KH1's, then KH2's arc and sideways speed once KH1 took its airborne branch.
 unsafe extern "system" fn knocked_back(actor: usize, rec: usize) {
     let f: unsafe extern "system" fn(usize, usize) = std::mem::transmute(ORIG_KNOCK_BACK.load(Ordering::Acquire));
+    // (t866) KH2's blow ends the Magnet's catch: a held flier back in its own state first.
+    if actor > 0x10000 {
+        super::magnet::knocked_back(actor);
+    }
     let lifted = has_blow(rec) && actor > 0x10000 && lift_for_blow(actor);
     f(actor, rec);
     let Some(l) = take_blow(rec) else { return };

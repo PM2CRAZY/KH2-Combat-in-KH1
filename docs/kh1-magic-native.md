@@ -1350,3 +1350,11 @@ is fixed only on KH1's processes (`reflect_chain_shares_the_teamwork_block` stil
     15 / 27 / 36 + Sora's max MP**, added, not multiplied.
   - Not checked: that the save block's byte `+8` `combat::magic_factor` reads is the same max MP
     as stats `+0x48`.
+
+- **t867, Cure's heal: KH2's formula with max MP as Magic** (the owner, chat: "(b)", after the
+  check above). The heal is KH2's own (`combat_core::damage::compute_healing`): kind 6 (Cure's rows
+  708 / 709) power × Magic / 100, kind 5 the target's max HP × power × Magic / 10000, rounded up,
+  with the caster's max MP (stats `+0x48`, KH1's stat source 1) as KH2's Magic. Cure 1 (708 power
+  400 / 709 power 200): 4 HP a max MP point on Sora, 2 on Donald and Goofy; Cure 2 and 3 (500 /
+  600) more. t828's share of max HP × max MP factor is gone. KH1's own Cure (15 / 27 / 36 + max MP)
+  isn't used for KH2's Cure.
