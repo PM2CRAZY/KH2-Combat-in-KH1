@@ -228,6 +228,11 @@ unsafe extern "system" fn meet(a: usize, b: usize) {
         if sora > 0x10000 && super::combat::barrier_meeting(a, b, sora) {
             return;
         }
+        // (t861) The Keyblade's guard object meeting an enemy attack: noted for KH2's guard
+        // reaction; KH1's own halves below stop it as for any guard of his.
+        if sora > 0x10000 {
+            super::combat::keyblade_guard_meeting(a, b, sora);
+        }
     }
     orig(a, b);
     let counts = clash_count();

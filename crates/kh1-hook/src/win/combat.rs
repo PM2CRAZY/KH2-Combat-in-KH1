@@ -1075,8 +1075,6 @@ struct Body {
     actor: usize,
     parts: Vec<Part>,
     target: TargetInfo,
-    /// Its hit parts' top above its root.
-    tall: f32,
     /// Too big to move: many parts, or its root far beyond its near parts (the user: Aerial
     /// Finish on Oogie's Manor's blobs pulled the whole house into the floor). Our pulls
     /// (Magnet, the Aerial Finish hold) leave it be.
@@ -1189,9 +1187,18 @@ unsafe fn bodies(sora: usize) -> Vec<Body> {
             target.pos = [v[0], -v[1], v[2]];
             target.height = r.max(10.0);
         }
-        out.push(Body { actor: this, parts, target, tall, fixed });
+        out.push(Body { actor: this, parts, target, fixed });
     }
     out
+}
+
+/// `actor` is one of the big and immovable (`Body::fixed`), or no hittable body near Sora at all
+/// (`magnet::catch`: the Magnet holds neither, as before).
+pub unsafe fn immovable(sora: usize, actor: usize) -> bool {
+    if sora < 0x10000 || actor < 0x10000 {
+        return true;
+    }
+    bodies(sora).into_iter().find(|b| b.actor == actor).map_or(true, |b| b.fixed)
 }
 
 /// KH2's hit detection and hit records for Sora's swings.
@@ -1214,9 +1221,6 @@ pub struct Strikes {
     /// frame: asked again as the window opens if KH1 dropped it meanwhile (a long wind-up).
     trail_id: Option<u32>,
     was_swinging: bool,
-    /// Enemies a Magnet (ATKP reaction 5: Magnet Burst) caught: the swing, orbit radius and
-    /// swirl. Pulled every frame while the swing lasts.
-    pulled: HashMap<usize, (u64, f32, f32)>,
     /// (swing, shot) pairs already met (once a swing).
     met_shots: HashSet<(u64, usize)>,
     /// (Reflect barrier, enemy attack) pairs already met (`barrier_meet`), by barrier key.
@@ -1739,50 +1743,6 @@ impl Strikes {
         }
     }
 
-    /// KH2's Magnet: each caught enemy is drawn toward the pulling hitbox's centre, to its
-    /// orbit radius at up to 20 a frame and swirled sideways (the exe's suction step, as
-    /// `character_core::npc`), through KH1's own per-frame push (`+0x120`, which its physics
-    /// step adds to the actor's move and clears). Let go when the swing ends.
-    unsafe fn pull(&mut self, out: &Output, anim: &RigAnim, battle: &Battle) {
-        if self.pulled.is_empty() {
-            return;
-        }
-        let mut centres: HashMap<u64, [f32; 3]> = HashMap::new();
-        for h in &out.hitboxes {
-            let Some(a) = battle.attack_for_level(h.attack, 0, 0) else { continue };
-            if character_core::reaction::category(a.enemy_reaction) != 5 {
-                continue;
-            }
-            if let Some(c) = anim.attack_shapes(h.group, h.weapon).first() {
-                centres.entry(h.swing).or_insert(c.center);
-            }
-        }
-        let alive: HashMap<usize, f32> = self.bodies.iter().filter(|b| !b.fixed).map(|b| (b.actor, b.tall)).collect();
-        self.pulled.retain(|a, (swing, _, _)| centres.contains_key(swing) && alive.contains_key(a));
-        for (&actor, &(swing, radius, swirl)) in &self.pulled {
-            magnet_push(actor, alive[&actor], centres[&swing], radius, swirl);
-        }
-        static SEEN: AtomicU32 = AtomicU32::new(0);
-        if SEEN.fetch_add(1, Ordering::Relaxed) % 60 == 0 {
-            note(|| format!("Magnet: {} enemies held around {} centre(s)", self.pulled.len(), centres.len()));
-        }
-    }
-
-    /// The Magnet pull for enemies KH1's own collision pass caught with one of KH2's hit windows on
-    /// his body (`bodyhits`: a KH1 attack object of ours whose ATKP is a Magnet, reaction 5): each
-    /// `(actor, centre (KH2 y-up), orbit radius, swirl)`, while that window is live. As `pull`: not
-    /// the big and immovable (`Body::fixed`), from the bodies `look` found this frame.
-    pub unsafe fn native_pull(&mut self, catches: &[(usize, [f32; 3], f32, f32)]) {
-        for &(actor, c, radius, swirl) in catches {
-            let Some(b) = self.bodies.iter().find(|b| b.actor == actor && !b.fixed) else { continue };
-            magnet_push(actor, b.tall, c, radius, swirl);
-        }
-        static SEEN: AtomicU32 = AtomicU32::new(0);
-        if !catches.is_empty() && SEEN.fetch_add(1, Ordering::Relaxed) % 60 == 0 {
-            note(|| format!("Magnet (KH1's pass): {} enemies held", catches.len()));
-        }
-    }
-
     /// The trail's flag over KH2's swing (its hit windows); only ever cleared if we set it.
     /// A trail has been asked of KH1 for the current move.
     pub fn has_trail(&self) -> bool {
@@ -1945,6 +1905,7 @@ impl Strikes {
         let gone: Vec<(u64, usize)> = self.guard_objs.keys().filter(|k| !keys.contains(k)).copied().collect();
         for k in gone {
             if let Some((o, _)) = self.guard_objs.remove(&k) {
+                keyblade_guard_forget(o);
                 if ours(o) {
                     free(o);
                 }
@@ -1953,16 +1914,24 @@ impl Strikes {
         if live.is_empty() {
             return;
         }
+        // (t861) The Keyblade's guards on KH2's own shapes through KH1's entry builder, as Reflect's
+        // barrier (`keyblade_guard_native`); else one sphere a shape, as before.
+        let kb_native = keyblade_guard_native();
         for (key, sh, weapon, attack) in live {
+            let native = kb_native && weapon > 0;
             // (Its arc: the window's ATKP reflect range and angle, KH2's guard test, `guard_data`;
             // an ATKP not found: in front on the Keyblade, all round on his body, as before.)
             let (range, angle) = battle.attack_for_level(attack, 0, 0).map_or(if weapon == 0 { (0, 0) } else { (90, 0) }, |a| (a.reflect_range, a.reflect_angle));
             let Some(data) = self.guard_data(range, angle) else { continue };
             let c = [sh.center[0], -sh.center[1], sh.center[2], 1.0f32];
             let r = sh.radius.max(sh.height).clamp(10.0, 150.0);
-            let (o, last) = match self.guard_objs.get(&key) {
-                Some(&(o, m)) if ours(o) => (o, m),
-                _ => {
+            let (o, last) = match self.guard_objs.get(&key).copied() {
+                Some((o, m)) if ours(o) => (o, m),
+                stale => {
+                    // (One KH1 took back: no longer ours to build or meet with.)
+                    if let Some((old, _)) = stale {
+                        keyblade_guard_forget(old);
+                    }
                     let free_bit: unsafe extern "system" fn() -> u32 = std::mem::transmute(base + FREE_BIT_RVA);
                     let new_attack: unsafe extern "system" fn(usize, u32, usize) -> usize = std::mem::transmute(base + NEW_ATTACK_RVA);
                     let src = pose::ptr(data);
@@ -1972,7 +1941,16 @@ impl Strikes {
                     }
                     // Own position (mode 0), always live (activity 3), a pure guard (clash type 4),
                     // not spent; priority 100; no power, no reaction; its data ours (the arc).
-                    let f = (rd::<u32>(o) & !0x3 & !0xC & !0xE0000 & !0x0010_0000 & !0x200) | 0xC | (4 << 17);
+                    // (t861) On the Keyblade with `keyblade_guard_native`: clash type 3 and no
+                    // one-hit bit, as Reflect's barrier (t813): type 4 meets only enemy attacks of
+                    // types 0, 3 and 5 in KH1's pairing table (Steam `0x140528CB8`, Checked (exe)),
+                    // type 3 every type 0..5; its result word held at "clashed" each pass
+                    // (`bodyhits::guard_entries`) so it never meets a body.
+                    let f = if native {
+                        (rd::<u32>(o) & !0x3 & !0xC & !0xE0000 & !0x0010_0000 & !0x200 & !0x80) | 0xC | (3 << 17)
+                    } else {
+                        (rd::<u32>(o) & !0x3 & !0xC & !0xE0000 & !0x0010_0000 & !0x200) | 0xC | (4 << 17)
+                    };
                     wr(o, f);
                     wr(o + 0x68, GUARD_PRIORITY);
                     wr(o + 0x2C, 0i32);
@@ -1998,6 +1976,36 @@ impl Strikes {
             wr(o + 0xC, r);
             wr(o + 0x3C, r);
             wr(o, rd::<u32>(o) | 0x1_0000);
+            let refact = battle.attack_for_level(attack, 0, 0).map_or(2, |a| a.refact_self);
+            let me = rd::<[f32; 3]>(sora + 0x10);
+            if native {
+                // KH2's shape for KH1's builder this frame, and the object known to KH1's meeting
+                // (`keyblade_guard_meeting`).
+                super::bodyhits::guard_shapes(o, std::slice::from_ref(&sh));
+                keyblade_guard_keep(o);
+                // The enemy attacks it met since last frame (KH1's meeting, its two directional
+                // tests passed with the window's ATKP arc): KH2's guard reaction by its refact
+                // self, once a frame (`guard_repel`).
+                let met = keyblade_guard_met(o);
+                self.guard_objs.insert(key, (o, last));
+                let Some(&(at, priority)) = met.first() else { continue };
+                let toward = glam::Vec2::new(at[0] - me[0], at[2] - me[2]).normalize_or_zero();
+                let toward = if toward == glam::Vec2::ZERO {
+                    let f = rd::<[f32; 4]>(sora + 0x30);
+                    glam::Vec2::new(f[0], f[2])
+                } else {
+                    toward
+                };
+                if super::shared::active() {
+                    super::combomods::guard_repel(sora, toward.to_array(), refact, Some(priority));
+                } else if refact != 2 {
+                    character.clash(refact, 0, toward.to_array());
+                }
+                if super::log_on(super::LogCat::Combat) && N.fetch_add(1, Ordering::Relaxed) < 60 {
+                    log!(Combat, "guard: motion {}'s Keyblade guard (ATKP {attack}, KH2's shape through KH1's builder) met {} enemy attack(s) (refact self {refact})", out.motion, met.len());
+                }
+                continue;
+            }
             // An attack it stopped since last frame (its clashed-with mask gained a bit).
             let mask = rd::<u32>(o + 0x9C);
             let new = mask & !last;
@@ -2005,13 +2013,11 @@ impl Strikes {
             if new == 0 {
                 continue;
             }
-            let me = rd::<[f32; 3]>(sora + 0x10);
             let from = self.shots.iter().find(|s| rd::<u32>(s.obj + 0x54) & new != 0).map(|s| (s.owner, rd::<[f32; 3]>(s.obj + 0x10)));
             let toward = from.map(|(_, p)| glam::Vec2::new(p[0] - me[0], p[2] - me[2]).normalize_or_zero()).filter(|v| *v != glam::Vec2::ZERO).unwrap_or_else(|| {
                 let f = rd::<[f32; 4]>(sora + 0x30);
                 glam::Vec2::new(f[0], f[2])
             });
-            let refact = battle.attack_for_level(attack, 0, 0).map_or(2, |a| a.refact_self);
             if super::shared::active() {
                 // KH1's states have him (a KH2 motion of ours KH1 plays, `takeover::kh2_hits`):
                 // KH2's guard reaction on KH1's states.
@@ -2286,20 +2292,15 @@ impl Strikes {
                 if let Ok(mut p) = PENDING.lock() {
                     *p = None;
                 }
-                // A Magnet's catch (the user: Magnet Burst didn't pull them together): KH2 picks
-                // the orbit radius between the two knockback values, the swirl from the next.
-                if character_core::reaction::category(row.enemy_reaction) == 5 && !b.fixed {
-                    let (a, c) = (row.knockback_1 as f32, row.knockback_2 as f32);
-                    let t = ((b.actor >> 4) % 97) as f32 / 96.0;
-                    self.pulled.insert(b.actor, (h.swing, a + (c - a) * t, row.unknown_16 as f32));
-                }
+                // (A Magnet's catch is KH1's state of ours now, `magnet` (t862), from KH1's own
+                // pass with KH2's body windows (`bodyhits`); this sweep, the fallback when that
+                // pass isn't ours, pulls nothing.)
                 note(|| format!(
                     "KH2 attack {} (power {}, reaction {}) hit actor {:#x} part {ti} at {:?}: landed with KH1 row motion {} -> {dealt:?}",
                     h.attack, row.power, row.enemy_reaction, b.actor, swept[ai].center, kh1.motion
                 ));
             }
         }
-        self.pull(out, anim, battle);
         let now: HashSet<u64> = out.hitboxes.iter().map(|h| h.swing).collect();
         self.repelled.retain(|s| now.contains(s));
         for ended in self.live.difference(&now) {
@@ -2315,27 +2316,6 @@ impl Strikes {
         self.records.retain(|a, _| alive.contains(a));
         landed
     }
-}
-
-/// One frame of KH2's Magnet suction on `actor` (its hit parts' top `tall` above its root) toward
-/// `c` (KH2 y-up): toward the orbit radius at up to 20 a frame plus the swirl, through KH1's push
-/// `+0x120` (its physics step adds it to the move and clears it).
-unsafe fn magnet_push(actor: usize, tall: f32, c: [f32; 3], radius: f32, swirl: f32) {
-    let p = rd::<[f32; 3]>(actor + 0x10);
-    // KH2's frame (y up), from the body's middle.
-    let body = [p[0], -p[1] + tall * 0.5, p[2]];
-    let d = [c[0] - body[0], c[1] - body[1], c[2] - body[2]];
-    let len = (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt();
-    if len < 1e-3 {
-        return;
-    }
-    let n = [d[0] / len, d[1] / len, d[2] / len];
-    let radial = ((len - radius) * 0.1).clamp(-20.0, 20.0);
-    let tl = (n[2] * n[2] + n[0] * n[0]).sqrt();
-    let t = if tl > 1e-4 { [n[2] / tl, -n[0] / tl] } else { [0.0, 0.0] };
-    let m = [n[0] * radial + t[0] * swirl, n[1] * radial, n[2] * radial + t[1] * swirl];
-    let push = rd::<[f32; 3]>(actor + 0x120);
-    wr(actor + 0x120, [push[0] + m[0], push[1] - m[1], push[2] + m[2]]);
 }
 
 /// A spell's attack this frame (`reflect`): its hit-record key and group, ATKP id and sub, and
@@ -2556,6 +2536,94 @@ impl Strikes {
 // Our own overlap test (`barrier_meet`) stays only where the meeting hook or KH1's builder hook
 // isn't in (Epic, or unexpected bytes).
 // ---------------------------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------------------------
+// (t861) The Keyblade's guard (the guard press 173's ATKP 161, its repel 42's and Guard Break's
+// 162) as KH1 guard objects on KH2's own guard shapes, natively (the owner, chat: guard shape
+// "(a)", KH2's shapes through KH1's builder like the barrier; attacks that are an enemy's body
+// "(a)", KH1's attack-against-attack rule). Before t861 `hurt` also judged every hit that reached
+// his body against the guard (`kh2slots::keyblade_guard`, the hit record's push direction), and
+// the objects were spheres of clash type 4, which KH1's pairing table lets meet only enemy attacks
+// of types 0, 3 and 5.
+//
+// KH2 (Steam KH2, Checked (decomp)): the guard is an attack of its own that KH2's meeting meets
+// with the other attack; its angle test `0x1403D1F40` takes the ATKP's reflect range (`+0x22`, 0
+// every side) and angle (`+0x23` x 2 degrees) against the direction the other attack gives
+// (`YS::ATTACK` vtable `+0x10` = `0x1403D1430`: from the attacker's owner to the guard's owner,
+// height dropped; the owner's facing reversed for an attack with none).
+// KH1 (Steam, Checked (decomp)): its meeting `0x1402B4A20` runs `0x1402B4640` both ways: the
+// owner's facing turned by data `+0x60` against the line to the other attack's owner (`+0x50`
+// positions; a shot's own two points), passing at cosine `+0x64` or more. Same rule but for the
+// height: KH1's line keeps it (**known gap**: an attacker far above or below counts a little
+// nearer his front or back than KH2 counts it).
+// ---------------------------------------------------------------------------------------------
+
+/// The Keyblade's guard objects KH1's meeting is watched for, each with the enemy attacks it met
+/// (where their owner stood, their priority).
+static KEY_GUARDS: std::sync::Mutex<Vec<(usize, Vec<([f32; 3], i32)>)>> = std::sync::Mutex::new(Vec::new());
+
+/// The Keyblade's guards go through KH1's builder and meeting: both hooks in (Steam), as Reflect's
+/// barrier (`barrier_native`).
+pub fn keyblade_guard_native() -> bool {
+    barrier_native()
+}
+
+/// Our Keyblade guard object `o` stands this frame.
+fn keyblade_guard_keep(o: usize) {
+    if let Ok(mut g) = KEY_GUARDS.lock() {
+        if !g.iter().any(|x| x.0 == o) {
+            g.push((o, Vec::new()));
+        }
+    }
+}
+
+/// Our Keyblade guard object `o` is freed (or KH1 took it back).
+fn keyblade_guard_forget(o: usize) {
+    if let Ok(mut g) = KEY_GUARDS.lock() {
+        g.retain(|x| x.0 != o);
+    }
+    super::bodyhits::guard_forget(o);
+}
+
+/// The enemy attacks `o` met since last asked.
+fn keyblade_guard_met(o: usize) -> Vec<([f32; 3], i32)> {
+    KEY_GUARDS.lock().ok().and_then(|mut g| g.iter_mut().find(|x| x.0 == o).map(|x| std::mem::take(&mut x.1))).unwrap_or_default()
+}
+
+/// At KH1's meeting of two attack entries (`recoil`'s hook, before KH1's own): one side our
+/// Keyblade guard object, the other an enemy's attack, both of KH1's directional tests passed (the
+/// guard's arc is its ATKP's, `guard_data`): noted for `guard_step` (KH2's guard reaction). KH1's
+/// own halves then run as for any guard of his: the enemy's melee attack stopped with its owner's
+/// clash record, a free-flying shot turned back, the guard standing (its result word held at
+/// "clashed", `bodyhits::guard_entries`).
+pub unsafe fn keyblade_guard_meeting(a: usize, b: usize, sora: usize) {
+    let Ok(mut g) = KEY_GUARDS.try_lock() else { return };
+    if g.is_empty() {
+        return;
+    }
+    let (oa, ob) = (rd::<usize>(a + 0x18), rd::<usize>(b + 0x18));
+    let (i, other) = if let Some(i) = g.iter().position(|x| x.0 == oa) {
+        (i, ob)
+    } else if let Some(i) = g.iter().position(|x| x.0 == ob) {
+        (i, oa)
+    } else {
+        return;
+    };
+    if other < 0x10000 {
+        return;
+    }
+    let owner = pose::ptr(rd::<u32>(other + 0x34));
+    let team = |x: usize| (rd::<u32>(x + 0x374) >> 5) & 3;
+    if owner < 0x10000 || owner == sora || team(owner) == team(sora) {
+        return;
+    }
+    let Some(faces) = super::recoil::faces_test() else { return };
+    if faces(g[i].0, other) == 0 || faces(other, g[i].0) == 0 {
+        return;
+    }
+    let at = rd::<[f32; 3]>(owner + 0x10);
+    g[i].1.push((at, rd::<i32>(other + 0x68)));
+}
 
 /// One barrier's guard object: the barrier's key in the spell runtime, the object, the enemy
 /// attacks it met (object, owner and data handles), where (KH1 world), and the shots it stopped

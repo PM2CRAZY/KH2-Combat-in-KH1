@@ -1097,16 +1097,68 @@ pub unsafe fn now_playing(actor: usize) -> Option<(u16, f32)> {
     (t.is_finite() && t >= 0.0).then_some((m.motion, t))
 }
 
-/// KH2's invulnerability (range id 27, `WindowKind::Invulnerable`: its hurt shapes off) in our
-/// slot playing on `actor` now, at KH1's time in the slot (Explosion 32..64, Counterguard 0..20,
-/// Finishing Leap 24..38; Checked (files)). `hurt` lets no hit reach him there, as KH2's hit pass
-/// finds no hurt shape of his.
-pub unsafe fn invulnerable(actor: usize) -> bool {
+/// The invulnerable range of ours KH1's no-damage timer runs for (`invulnerable_step`): its KH2
+/// motion, the range's start frame and KH1's time last seen in it.
+static RANGE_TIMER: Mutex<Option<(u16, u32, f32)>> = Mutex::new(None);
+/// Our timer's mark: we write a range's whole frames less this, so its fraction tells ours from
+/// KH1's own (whole frames: 12, 30, 8). KH1 counts down by whole 60 Hz frames, so it still ends
+/// on the same frame.
+const RANGE_MARK: f32 = 0.25;
+
+/// (t860) KH2's invulnerable ranges (range id 27, `WindowKind::Invulnerable`) of our slot playing
+/// on `actor`, at KH1's time in it (Explosion 32..64, Aerial Recovery 0..16, Counterguard 0..20,
+/// Finishing Leap 24..38; Checked (files)), on KH1's own no-damage timer
+/// (`combomods::kh1_no_damage`), each frame he is posed (`frame`): when a range opens, the timer
+/// is set to the frames left in it and KH1 counts it down itself. KH2 (Checked (decomp)): range
+/// 27's start sets `+0x18C` bit 22 (`0x14040D810` case 0x1B on the motion's `+0x34`, the actor's
+/// `+0x158` motion block), which the actor's invulnerable test reads (vtable `+0xB8`), so a hit
+/// there lands as KH2's kind 4, as on KH2's timer. **Assumption**: KH2 drops the bit when the
+/// motion is left early (cut by another move), so the timer is ended here then, if it is still ours
+/// (`RANGE_MARK`). Replaces `hurt`'s throw-away of those hits (before t860).
+pub unsafe fn invulnerable_step(actor: usize) {
     use character_core::WindowKind as W;
-    let Some(m) = current(actor) else { return false };
-    let Some(clip) = clip_of(m) else { return false };
-    let t: f32 = rd(actor + TIME_NOW);
-    t >= 0.0 && clip.has(t as u32, |k| matches!(k, W::Invulnerable))
+    let open = (|| {
+        if !super::shared::active() {
+            return None;
+        }
+        let m = current(actor)?;
+        let clip = clip_of(m)?;
+        let t: f32 = rd(actor + TIME_NOW);
+        if !(t.is_finite() && t >= 0.0) {
+            return None;
+        }
+        let w = clip.windows.iter().find(|w| matches!(w.kind, W::Invulnerable) && w.contains(t as u32))?;
+        let end = w.end.unwrap_or(clip.length) as f32;
+        Some((m.motion, w.start, t, (end - t).ceil()))
+    })();
+    let Ok(mut g) = RANGE_TIMER.try_lock() else { return };
+    match (open, *g) {
+        // The same range still playing (not started over): KH1 counts our timer down.
+        (Some((m, s, t, _)), Some((om, os, ot))) if m == om && s == os && t >= ot => {
+            *g = Some((m, s, t));
+        }
+        (Some((m, s, t, left)), _) => {
+            *g = Some((m, s, t));
+            // (KH2 tests the range's bit and its timer apart, either one enough: a longer KH1
+            // timer already running, a reaction's 30, is kept as it is, and isn't ours to end.)
+            let running: f32 = rd(actor + 0xC);
+            if super::combomods::kh1_no_damage_on(actor) && running >= left {
+                return;
+            }
+            super::combomods::kh1_no_damage(actor, left - RANGE_MARK);
+            log!(Combat, "KH2's invulnerable range of motion {m} (from frame {s}) at frame {t:.0}: KH1's no-damage timer {:.0} frames", left);
+        }
+        (None, Some((m, _, _))) => {
+            *g = None;
+            let left: f32 = rd(actor + 0xC);
+            let ours = super::combomods::kh1_no_damage_on(actor) && left > 0.0 && ((left.fract() - (1.0 - RANGE_MARK)).abs() < 0.01);
+            if ours {
+                super::combomods::kh1_no_damage(actor, 0.0);
+                log!(Combat, "KH2's invulnerable range of motion {m} left early: KH1's no-damage timer ended ({left:.2} frames left)");
+            }
+        }
+        (None, None) => {}
+    }
 }
 
 /// KH2's guard on his body in our slot playing on `actor` now (`WindowKind::Guard` with weapon 0
@@ -2502,6 +2554,8 @@ pub unsafe fn frame(actor: usize) {
     super::formmagic::kh1_cast_window(actor);
     // KH2's Counterguard window in its guard's repel (`combomods::counter_window`).
     super::combomods::counter_window(actor);
+    // KH2's invulnerable ranges on KH1's no-damage timer (`invulnerable_step`, t860).
+    invulnerable_step(actor);
     // KH2's hits on his body in the KH2 motion KH1 plays (`body_strike`): KH1 attack objects of
     // ours (`bodyhits`), else KH2's own sweep (`kh2_hits`, which keeps the guards and the pull).
     super::bodyhits::frame(actor);

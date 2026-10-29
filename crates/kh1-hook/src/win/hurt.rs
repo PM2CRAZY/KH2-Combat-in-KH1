@@ -192,28 +192,20 @@ unsafe extern "system" fn hurt(actor: usize, out: usize) -> usize {
         // `refact_self` 2, no reaction, the move goes on; on his body, all round): each attack
         // with no effect and KH1's clash spark, the damage, the reaction and the rest of KH1's
         // pass for it not run.
-        // KH2's invulnerability in the KH2 move KH1 plays now (our slot, range id 27,
-        // `kh2slots::invulnerable`: Explosion's frames 32..64), as KH2's own hit pass finds no
-        // hurt shape of his there (`Fate::Evaded` above): every attack with no effect, no spark.
-        // Before the guard, as KH2's test order has it. Also KH2's Quick Run on its KH1 state
-        // (`quickrun::invulnerable`: its `fmab` frames from its start, 0 / 8 / 12 / 16 by level).
-        // And KH2's dodge roll on KH1's roll (`combomods::roll_invulnerable`: the level's
-        // `dodge_roll_star_time` frames, 10 / 16 / 24 / 32).
-        if super::shared::active() && (super::kh2slots::invulnerable(actor) || super::quickrun::invulnerable(actor) || super::combomods::roll_invulnerable(actor)) {
-            for &r in &ready {
-                if rd::<u8>(r) & NO_EFFECT != 0 || (rd::<u32>(r + 0xC) >> 6) & 0xF >= 9 {
-                    continue;
-                }
-                wr(r, rd::<u8>(r) | NO_EFFECT);
-                note(|| format!("Sora hit by {:#x} in KH1's states: KH2's invulnerability (the KH2 move KH1 plays), no effect (frame {frame})", pose::ptr(rd::<u32>(r + 4))));
-            }
-        }
+        // KH2's invulnerability in the KH1 states (the dodge roll t858, Quick Run t859, the KH2
+        // moves' range 27 t860: Explosion, Aerial Recovery, Counterguard, Finishing Leap) is KH1's
+        // own no-damage timer now (`combomods::kh1_no_damage`), which KH1's pass below honours
+        // itself (no damage, no reaction but a clash, the hit landing as KH1's kind 4, as KH2's
+        // lands as its kind 4, `0x1403D1730`). Before t858 the hits were thrown away here.
         // KH2's guard on the Keyblade in the KH2 move KH1 plays now (our guard slots,
         // `kh2slots::keyblade_guard`: the guard press's 161, its repel's 162), as KH2's own hit
         // pass takes it (KH2's controller's rule above: a hit from in front, or from anywhere with
         // Guard all round): no effect, KH1's clash spark, and the guard's reaction by its "refact
         // self" (1 the repel, `combomods::guard_repel`; 2 nothing).
-        if super::shared::active() {
+        // (t861) Only where the guard can't go through KH1's builder and meeting (not Steam, or
+        // their hooks not in): there KH1's own guard objects on KH2's shapes decide the block
+        // (`combat::keyblade_guard_native`), and a hit that reaches his body is taken.
+        if super::shared::active() && !super::combat::keyblade_guard_native() {
             if let Some((atk, refact)) = super::kh2slots::keyblade_guard(actor) {
                 let f = rd::<[f32; 4]>(actor + 0x30);
                 let fwd = glam::Vec2::new(f[0], f[2]).normalize_or(glam::Vec2::Y);
@@ -269,7 +261,8 @@ unsafe extern "system" fn hurt(actor: usize, out: usize) -> usize {
         // (KH1's middle hits as flinches, the Medium Hits row: `hitreact::medium_hits`; before the
         // knock-back note below, which then doesn't see them.)
         super::hitreact::medium_hits(actor, &ready, kind_of);
-        if super::shared::active() && ready.iter().any(|&r| rd::<u8>(r) & NO_EFFECT == 0 && (rd::<u32>(r + 0xC) >> 6) & 0xF < 9 && matches!(kind_of(actor, r), 4 | 5)) {
+        // (Not under KH1's no-damage timer: KH1's pass starts no knock-back then, t858.)
+        if super::shared::active() && !super::combomods::kh1_no_damage_on(actor) && ready.iter().any(|&r| rd::<u8>(r) & NO_EFFECT == 0 && (rd::<u32>(r + 0xC) >> 6) & 0xF < 9 && matches!(kind_of(actor, r), 4 | 5)) {
             super::combomods::kh1_blown();
         }
         // KH2's push and air flinch on the reaction KH1's pass starts (`hitreact`, Hit Reactions

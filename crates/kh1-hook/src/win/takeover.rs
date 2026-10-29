@@ -422,6 +422,8 @@ unsafe extern "system" fn physics(actor: usize) {
         super::quickrun::install(BASE.load(Ordering::Relaxed));
         // (KH2's glide in KH1's glide state, `glide`.)
         super::glide::install(BASE.load(Ordering::Relaxed));
+        // (KH2's Magnet catch as a KH1 state, `magnet`.)
+        super::magnet::install(BASE.load(Ordering::Relaxed));
     }
     // KH2's re-hit intervals on Sora's attacks run out (`rehit`), before KH1's collision pass.
     if sora {
@@ -1952,7 +1954,7 @@ pub unsafe fn native_spells(actor: usize) {
 /// (`RigAnim::pose_at`: his position, KH1's yaw as KH2's facing, the clip's root travel taken out
 /// as KH1 moved him by it), the window's group of KH2 shapes swept from last frame's against
 /// KH1's enemies' body parts, each hit through KH1's contact with Sora's KH1 row data and KH2's
-/// ATKP (power, launch, hold, Magnet's pull), once per window and target as KH2's hit records
+/// ATKP (power, launch, hold), once per window and target as KH2's hit records
 /// allow. KH2 updates once a game frame (delta 2 at 30 fps), so its windows are read at the
 /// frame's time and the records' clocks move on by the frame's 60 Hz steps. A hit landed counts as
 /// KH1's swing connecting (the combat info's `+0x50`, which KH1's Attack step reads for the next
@@ -1961,7 +1963,8 @@ pub unsafe fn native_spells(actor: usize) {
 ///
 /// (t-native body hits) On Steam the body windows are KH1 attack objects of ours that KH1's own
 /// collision pass collides (`bodyhits`); this sweep then takes no body window and only keeps the
-/// guard windows and the Magnet pull of enemies KH1's pass caught. Elsewhere it runs as before.
+/// guard windows (the Magnet's catch is KH1's state of ours, `magnet`, t862). Elsewhere it runs as
+/// before, without the Magnet's pull.
 pub unsafe fn kh2_hits(actor: usize) {
     let Some(kh2) = pose::kh2() else { return };
     let Ok(mut g) = NATIVE_HITS.try_lock() else { return };
@@ -1999,7 +2002,6 @@ pub unsafe fn kh2_hits(actor: usize) {
     // (KH2's hit windows on his body are KH1 attack objects of ours when `bodyhits` is in: KH1's
     // own collision pass hits with them, not this sweep.)
     let native_body = super::bodyhits::native();
-    let catches = if native_body { super::bodyhits::catches() } else { Vec::new() };
     let (open, motion, t) = match (playing, clip) {
         (Some((m, t)), Some((_, c))) => {
             if m != n.motion || t < n.last_t {
@@ -2025,7 +2027,7 @@ pub unsafe fn kh2_hits(actor: usize) {
             (Vec::new(), 0, 0.0)
         }
     };
-    if open.is_empty() && guards.is_empty() && !n.live && catches.is_empty() {
+    if open.is_empty() && guards.is_empty() && !n.live {
         return;
     }
     let Ok(mut dg) = DRIVER.try_lock() else { return };
@@ -2037,9 +2039,6 @@ pub unsafe fn kh2_hits(actor: usize) {
         return;
     }
     let _ = d.strikes.look(actor);
-    if !catches.is_empty() {
-        d.strikes.native_pull(&catches);
-    }
     // (Our swing ids: the play and the window, marked apart from KH2's controller's own.)
     let hitboxes = open.iter().map(|&(i, attack, group)| character_core::ActiveHitbox { swing: (1 << 63) | (n.play << 8) | i as u64, attack, group, weapon: 0 }).collect();
     let out = Output {

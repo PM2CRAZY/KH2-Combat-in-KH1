@@ -212,3 +212,23 @@ KH2 controller run during rolls and guards.
   1..4, cosine between the owner's facing turned by data `+0x60` and the line to the other attack's
   owner at or above data `+0x64`): `+0x64` = cos(range), -1 for range 0; `+0x60` = angle x 2 degrees.
   **Assumption**: KH1's `+0x60` turn goes the way his yaw does (unused: every angle is 0).
+
+## 8. Built: the Keyblade guard on KH2's own shapes, KH1 deciding the block (t861)
+
+- **Before**: the guard press 173 (ATKP 161), the repel 42 and Guard Break 165 (162) were KH1 guard
+  objects of clash type 4, one sphere per shape, and `hurt` also judged each hit that reached his
+  body (`hurt::guard_faces` with the hit record's push direction). Type 4 meets only enemy attacks of
+  types 0, 3 and 5 in KH1's pairing table (`0x140528CB8`, Checked (exe), t813).
+- **KH2's direction** (Checked (decomp)): `0x1403D1F40` dots the owner's facing with the other
+  attack's `YS::ATTACK` vtable `+0x10` (`0x1403D1430`, vtable `0x1405C5E78`, Checked (exe)): the line
+  from the attacker's owner to the guard's owner, height dropped (the owner's facing reversed for an
+  attack with no owner). KH1's `0x1402B4640` uses the line between the owners' `+0x50`, height kept:
+  the same rule, a small gap for attackers far above or below.
+- **Now** (Steam, with KH1's builder and meeting hooks in): the Keyblade's guard objects are clash
+  type 3 with no one-hit bit, on KH2's shapes through KH1's entry builder (as Reflect's barrier,
+  `bodyhits::guard_shapes`, its result word held at "clashed" so it never meets a body). KH1's meeting
+  notes each enemy attack one meets after both directional tests pass with the ATKP arc
+  (`combat::keyblade_guard_meeting`); `guard_step` runs KH2's guard reaction (`guard_repel`). KH1's own
+  halves stop the attack or turn a shot back. `hurt`'s check runs only where this can't. A hit that
+  reaches his body is taken (the owner: attacks that are an enemy's body follow the
+  attack-against-attack rule). Body guards (weapon 0) are unchanged.

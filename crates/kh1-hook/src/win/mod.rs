@@ -45,6 +45,7 @@ mod knockback;
 mod kh2sound;
 mod leftblade;
 mod lefthits;
+mod magnet;
 mod holder;
 mod loadprof;
 mod loadscreen;
@@ -142,10 +143,12 @@ pub enum LogCat {
     Crash,
     /// KH1's cutscenes: scene prepares, event scripts, movies (`cutscenelog`).
     Cutscenes,
+    /// Each frame of every enemy held by Magnet Burst's catch (`magnet`, t864): what moves it.
+    Magnet,
 }
 
 impl LogCat {
-    pub const ALL: [LogCat; 15] = [
+    pub const ALL: [LogCat; 16] = [
         LogCat::General,
         LogCat::Loading,
         LogCat::Takeover,
@@ -161,6 +164,7 @@ impl LogCat {
         LogCat::Debug,
         LogCat::Crash,
         LogCat::Cutscenes,
+        LogCat::Magnet,
     ];
 
     pub const fn bit(self) -> u32 {
@@ -185,6 +189,7 @@ impl LogCat {
             LogCat::Debug => "log_debug",
             LogCat::Crash => "log_crash",
             LogCat::Cutscenes => "log_cutscenes",
+            LogCat::Magnet => "log_magnet",
         }
     }
 
@@ -206,6 +211,7 @@ impl LogCat {
             LogCat::Debug => "Debug Tools",
             LogCat::Crash => "Crash & Version",
             LogCat::Cutscenes => "Cutscenes & Events",
+            LogCat::Magnet => "Magnet Debug",
         }
     }
 }

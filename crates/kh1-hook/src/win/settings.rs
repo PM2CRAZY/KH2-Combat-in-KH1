@@ -301,7 +301,7 @@ debug_menu = off\r\n\
 ; input), animation, combat, magic, forms, kh2_sounds, kh1_sounds (every KH1 sound call, the\r\n\
 ; old sound_log), effects, camera, menus, debug (debug menu, frame advance, trace), crash\r\n\
 ; (crash notes, the version and game build lines), cutscenes (KH1's scene prepares, event\r\n\
-; scripts and movies)\r\n\
+; scripts and movies), magnet (every frame of each enemy Magnet Burst holds: what moves it)\r\n\
 log_general = off\r\n\
 log_loading = off\r\n\
 log_takeover = off\r\n\
@@ -317,6 +317,7 @@ log_menus = off\r\n\
 log_debug = off\r\n\
 log_crash = off\r\n\
 log_cutscenes = off\r\n\
+log_magnet = off\r\n\
 ; debug_high_jump, debug_quick_run, debug_dodge_roll, debug_aerial_dodge, debug_glide: the debug\r\n\
 ; menu's Growth Abilities page (only with debug_menu = on): normal (what Sora's level and story\r\n\
 ; give), off, lv1, lv2, lv3 or max, given whether or not he learned or equipped it\r\n\

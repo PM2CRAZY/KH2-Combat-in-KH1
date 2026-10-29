@@ -485,3 +485,71 @@ Medium Hits row's kind 4 → 3 also applies in flight and swimming.
 already work (`kh2slots::redirect` points the requests at ours only with the row at KH2, from
 KH1's next request), so no change. Medium Hits applies only on the ground and in normal air
 (answer 3: "(b)", §12).
+
+## 17. KH2's Magnet catch as a KH1 movement state (t862, the owner: answers 1..4 "(a)")
+
+**What KH2 does (Checked (decomp), Steam KH2).** ATKP reaction 5 (Magnet Burst's 1900) is a
+catch, not a flinch: the reaction dispatch's case 5 (`0x1403A8DE0`, `0x1403D2FE0`,
+`0x1403D4510`) calls `0x14040FBF0 (enemy, attack, dot(forward, hit direction) < 0)` on every hit.
+It keeps the attack on the enemy (`+0xCF8`), rolls the orbit radius with KH2's random number
+between the ATKP's `+0xC` and `+0xE`, takes the swirl from `+0x10`, plays motion 20 (hit from the
+front) or 21 (from behind) with no blend, turns the enemy to the attack (`0x14040FA50`; 21 turns
+away) and sets action 0xE (0xF for enemies whose object has a flag: the ones that don't fall).
+Both actions' step is `0x14040F8E0`: along the 3D line from the enemy's centre to the attack at
+`(distance − radius) × 0.1`, at most 20 either way, plus that line turned a quarter about the
+vertical, flattened, × the swirl; no gravity; the result × 2 (**Assumption**: KH2's 30 Hz tick,
+so the same per 60 Hz frame). Every frame while the attack lasts the enemy is turned to it again
+(`0x14040FB10` / `0x14040FB60`); with the attack gone 0xE goes to action 5 and 0xF to its own
+recovery (motion 4, blend 8).
+
+**How KH1 takes it (Checked (decomp + exe), Steam KH1).** State 0x2B of KH1's movement state
+table (`0x142DB3840`, 59 entries), never registered nor switched on by number (as Quick Run's
+0x2A), written each Sora physics frame into an empty slot or ours: flags 1 (the air collision
+class, `0x1402B1B10`), our step and transition. KH1's physics step `0x14029A3C0` steps every actor
+under physics (`0x140292010`) by its state's step, moves it through KH1's mover, then asks the
+transition. KH1's enemy hit pass `0x1402B8E10` gives kind 3 on an air-class state its air flinch
+(`0x1402B8B90`: requests 0x4E / 0x4F with the action flag, a hop of 20 into state 2); kind 1 it
+gives no reaction, while `0x1402B7B90` still deals the damage and drops a physical hit's prizes.
+
+**What the mod does (`magnet`, Steam only).**
+- The catch (`bodyhits::hit` → `magnet::catch`, from KH1's contact), on every Magnet hit: not on
+  an actor KH1 takes no reaction on (`+0` & `0x1000088`), one outside KH1's physics, or the big
+  and immovable (`combat::immovable`); the hit record's kind becomes 1 (KH1 adds no reaction of
+  its own); radius by KH1's random number (`kh1picker::random`, answer 2); KH1's state change into
+  0x2B; the enemy's own KH1 air-hit motion, 0x4E from the front / 0x4F from behind by KH1's rule on
+  the record's direction, with the action flag and no blend (answer 1); turned by KH1's facing set
+  `0x140297E10`; its momentum, push and any KH2 flight dropped.
+- The step (KH1's physics step calls it): KH2's suction from KH1's body centre (`0x14029EB20`'s
+  0x8003) to the Magnet's KH1 attack object's own place (`+0x10`), × KH1's frame scale; turned
+  again; the motion asked again if another replaced it. KH1's mover and walls move it.
+- The let-go when KH1's pass stops building that object (its window shut, ≤ 2 frames late):
+  from a state of KH1's class 2 (`0x1402B1AE0`: the states KH1 never launches, its fliers) back
+  into it with KH1's idle queued (answer 4); else KH1's fall from rest (`0x1402AF8F0 (actor, 0)`)
+  with no momentum, with KH2's no-speed blow on it at Knock-back Numbers KH2 or Scaled
+  (`knockback::fly_blow`) and KH1's own at KH1 (answer 3), KH1's fall 6 queued (blend 8).
+
+Nothing of ours runs while no enemy is held. **Assumptions**: KH1's enemy think leaves the state
+alone and acts on nothing while the action-flag hurt motion plays; KH1's class-2 states are
+KH2's 0xF enemies; KH2's re-catch runs on every hit while held. **Gaps**: the KH2 Magnet spell's
+objects carry no catch (they never pulled); the fallback sweep (`takeover::kh2_hits` when
+`bodyhits` isn't in) no longer pulls.
+
+**t863: held fliers.** The owner's log (Combat on): KH1's flying enemies there were in KH1 state 4
+(flags 2, class 2), so t862's assumption holds (Checked (log)). Magnet Burst's 1901 (reaction 9,
+a blow 20 / −2) and 1903 land with KH1's kind 4; on a class-1 state KH1's knock-back
+`0x1402B77D0` takes its airborne branch (0x50 / 0x51, a hop of 20 into state 2, then gravity), on a
+class-2 state `0x1402B8CC0` (knock-back in place, no state change) (Checked (decomp)). Held in
+0x2B, the fliers fell. Now a flier is held in 0x2C (flags 2), so KH1 treats it as a flier, and it
+goes back into its own state at the let-go. The held motion is asked again only once no motion
+with KH1's action flag plays. Grounders are still launched out of the hold by 1901, as KH2's
+blow handler (`0x1403D2FE0` case 4) knocks them out of its suction.
+
+**t864: the Magnet Debug log (diagnostic).** The owner: held fliers go "super fast". The t863 log:
+every catch has orbit 0 and swirl 20, which is KH2's ATKP 1900 (`00battle.bin`: 0 / 0 at `+0xC` /
+`+0xE`, 20 at `+0x10`, Checked (files)), so the pull itself is KH2's. Ground enemies close in;
+fliers in 0x2C move away from the centre, which our step alone can't do. KH1's physics step adds
+three things to a state's step (Checked (decomp)): the push (`+0x88` bit 0x40, `0x1402C7070`), the
+vector `+0x200` (while `+0x160` bit 4) and the one-frame push `+0x120`. The debug menu's Logs page
+now has **Magnet Debug** (ini `log_magnet`): per held enemy and frame, our displacement, each of
+those three with its on bit, their sum, and how far it really moved since our last step, plus a
+line per catch and let-go. **Open**: which of them moves the fliers (waiting on that log).

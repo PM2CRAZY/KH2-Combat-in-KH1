@@ -1901,7 +1901,7 @@ fn recovery_built() -> bool {
 /// (`plyr.blow_recovery_h`), 10 a frame along the stick (`blow_recovery_v`) and facing it, or
 /// straight up with his facing kept; the launch's own velocity gone. No Aerial Dodge after it
 /// (the exe's jump action grants none out of an airborne one). Its windows are KH1's from our
-/// slot: invulnerable 0..16 (`kh2slots::invulnerable`), the guard 124 on his body 0..16
+/// slot: invulnerable 0..16 (KH1's no-damage timer, `kh2slots::invulnerable_step`), the guard 124 on his body 0..16
 /// (`body_guard`), and KH1's "may be left" from frame 24 (KH2's air free state, range id 1,
 /// `kh2slots::kh1_tracks`). False (KH1's own jump then) without our request built or out of KH1's
 /// air state.
@@ -2281,12 +2281,42 @@ pub fn guard_press() -> bool {
 const ROLL_START_RVA: Rva = Rva(0x2C7CB0);
 /// KH1's deep-water test (Steam `0x1402C16E0`), which keeps KH1's Square handler from rolling.
 const DEEP_WATER_RVA: Rva = Rva(0x2BF530);
-/// KH1's no-damage timer flags (`0x140297F30` sets both; `0x140297FE0` counts `+0xC` down and
-/// clears them).
+/// KH1's no-damage timer flags (`0x140297F30` sets 0x80 and clears 0x100000; KH1's roll start then
+/// sets 0x100000 too; Sora's think `0x140297FE0` arms a timer without 0x100000 by setting it, else
+/// counts `+0xC` down by the frame scale `0x14233FBDC` and clears both at 0 or below; Checked
+/// (decomp)).
 const KH1_TIMER_FLAGS: u32 = 0x80 | 0x10_0000;
-/// The native roll's KH2 invulnerable frames (`fmab` `dodge_roll_star_time` of its level, f32
-/// bits), from its start.
-static ROLL_STAR: AtomicU32 = AtomicU32::new(0);
+
+/// KH2's invulnerability (its timer `+0xD70`, `0x1403D7E40`) as KH1's own no-damage timer on
+/// `actor` for `frames` 60 Hz frames, counting from KH1's next think (both games step it by their
+/// frame scale, 1.0 a 60 Hz frame; KH1's `0x14233FBDC` counts 60 Hz vblanks, Checked (decomp),
+/// `docs/kh1-frame-advance.md`). 0 or less: none (KH2's store of 0 ends it too). (t858)
+///
+/// Why the timer and not KH1's untouchable flag `0x40`: KH2's hit on an invulnerable actor
+/// (`0x1403D1730`, Checked (decomp)) still lands, as result kind 4 instead of 1 (the actor's
+/// vtable `+0xB8`: `0x1403D5310` / `0x1403D65A0`, true while `+0xD70` > 0 or `+0x18C` bit 22, the
+/// motion range 27). KH1's timer does the same: the hit lands as KH1's hit kind 4 (the contact's
+/// kind for flags `0x1000080`, `docs/kh1-hit-effects.md`), no damage (`0x1402BEEE0`) and no reaction
+/// but a clash (`0x14029BBD0`). `0x40` keeps him out of KH1's hit pass (no hit at all): KH1's
+/// scripts use it (event op 0x2B / 0x2A, `0x14028E6E0`), its roll doesn't.
+pub unsafe fn kh1_no_damage(actor: usize, frames: f32) {
+    if actor < 0x10000 {
+        return;
+    }
+    if frames > 0.0 && frames.is_finite() {
+        wr(actor + 0xC, frames);
+        wr(actor, rd::<u32>(actor) | KH1_TIMER_FLAGS);
+    } else {
+        wr(actor + 0xC, 0.0f32);
+        wr(actor, rd::<u32>(actor) & !KH1_TIMER_FLAGS);
+    }
+}
+
+/// KH1's no-damage timer runs on `actor` (flag 0x80; with 0x1000000, KH1's other "no hit taken"
+/// bit, the same test KH1's hit pass makes).
+pub unsafe fn kh1_no_damage_on(actor: usize) -> bool {
+    actor > 0x10000 && rd::<u32>(actor) & 0x0100_0080 != 0
+}
 
 /// Square on the ground while moving with the Dodge Roll style KH2 (`shared::control`, after
 /// `guard_press`: KH2's order, `0x1403A81F0`, the guard only with the stick at rest, then the
@@ -2295,9 +2325,9 @@ static ROLL_STAR: AtomicU32 = AtomicU32::new(0);
 /// KH1's roll start runs (no borrow), its request `0xDC` playing our slot of KH2's motion 209
 /// (`kh2slots`'s roll spec, pointed there by the style), which KH1 moves by KH2's root travel and
 /// lets go from KH2's fall-check frame. KH2's start (the OG rewrite's `try_action_button`): facing
-/// along the stick at once, his speed 0. KH1's 12-frame no-damage timer the start sets is put back
-/// as it was (KH2's roll has none: its invulnerability is the level's `dodge_roll_star_time`
-/// frames, `roll_invulnerable`, in `hurt`). Only with KH2's Dodge Roll equipped (KH2's ability
+/// along the stick at once, his speed 0. KH1's 12-frame no-damage timer the start sets becomes the
+/// level's `dodge_roll_star_time` frames (KH2's own timer, `kh1_no_damage`, t858; before t858 the
+/// timer was undone and `hurt` threw the hits away). Only with KH2's Dodge Roll equipped (KH2's ability
 /// check, not KH1's), base Sora, KH1's ground state, not in deep water (KH1's own test), our slot
 /// built and the style KH2. False: the borrow, as before.
 pub fn roll_press() -> bool {
@@ -2327,37 +2357,16 @@ pub fn roll_press() -> bool {
         // (KH2: `vel_h = 0`, the clip's root moves him. **Assumption**, as `start_own`: KH1's
         // ground step moves him by `+0x2C` while its action flag is set.)
         wr(actor + 0x2C, 0.0f32);
-        let flags = rd::<u32>(actor) & KH1_TIMER_FLAGS;
-        let timer = rd::<f32>(actor + 0xC);
         let start: unsafe extern "system" fn(usize) = std::mem::transmute(base + ROLL_START_RVA);
         start(actor);
-        // (KH1's roll timer undone; a timer already running, a reaction's, kept. **Assumption**:
-        // nothing else reads `0x100000` as "rolling", `styleroll`'s note.)
-        wr(actor, (rd::<u32>(actor) & !KH1_TIMER_FLAGS) | flags);
-        wr(actor + 0xC, timer);
-        ROLL_STAR.store(star.to_bits(), Ordering::Relaxed);
-        note(|| format!("Square while moving: KH2's dodge roll LV{level} on KH1's roll (request 0xDC, KH2 motion {DODGE_ROLL}), invulnerable {star:.0} frames"));
+        // (t858) KH2's roll invulnerability on KH1's own no-damage timer: KH1's roll start just
+        // set it to 12; KH2's start (`0x1403A81F0`) sets its timer `+0xD70` to the level's
+        // `dodge_roll_star_time` (fmab `+0x40`) through `0x1403D7E40`, a plain store (Checked
+        // (decomp)), so KH1's 12 becomes KH2's frames, counting from now as KH1's roll does.
+        kh1_no_damage(actor, star);
+        note(|| format!("Square while moving: KH2's dodge roll LV{level} on KH1's roll (request 0xDC, KH2 motion {DODGE_ROLL}), KH1's no-damage timer {star:.0} frames"));
         true
     }
-}
-
-/// KH2's dodge roll on KH1's roll (`roll_press`) in its invulnerable frames now: our roll slot
-/// playing at KH1's time under the level's `dodge_roll_star_time`, or its request still pending
-/// (KH1 applies a request in its animation update, after the physics step: `+0x178` pending,
-/// `+0x17C` the request). `hurt` lets no hit reach him there, as KH2's roll (the OG rewrite's
-/// DodgeRoll action: invulnerable while its frame is under the star time).
-pub unsafe fn roll_invulnerable(actor: usize) -> bool {
-    use character_core::motion::DODGE_ROLL;
-    if actor < 0x10000 || !super::styles::kh2(super::styles::Kind::DodgeRoll) {
-        return false;
-    }
-    let star = f32::from_bits(ROLL_STAR.load(Ordering::Relaxed));
-    if let Some((m, t)) = super::kh2slots::now_playing(actor) {
-        if m == DODGE_ROLL {
-            return t < star;
-        }
-    }
-    rd::<u32>(actor + 0x178) != 0 && rd::<u32>(actor + 0x17C) & 0xFFFF == 0xDC && star > 0.0 && super::kh2slots::has(0xDC, DODGE_ROLL)
 }
 
 /// KH2's guard stopped a hit in our guard slot (`hurt`, or a KH1 guard object of its window,

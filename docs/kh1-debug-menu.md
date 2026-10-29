@@ -90,6 +90,7 @@ the game".
 | Debug Tools | `log_debug` | `debugmenu`, `frameadv`, `trace` |
 | Crash & Version | `log_crash` | `crash` (crash notes), panics, the version and game-build lines at start |
 | Cutscenes & Events | `log_cutscenes` | `cutscenelog` (KH1's scene prepares, event script runs, movie opens; t706) |
+| Magnet Debug | `log_magnet` | `magnet` (every frame of each enemy Magnet Burst holds: its state, motion, place, our displacement, KH1's push / `+0x200` / `+0x120`, and how far it really moved; t864) |
 
 Not changed: `kh1-kh2-other.log` (one line when another game in the folder loads the DLL; that
 process never reads the ini), the trace's own CSV files (debug tools), and

@@ -63,8 +63,9 @@
 //! knock-back come in as for KH2's other moves (`kh2damage`, `combat::scale_record`, `knockback`).
 //! KH1 frees them itself when the motion's request changes.
 //!
-//! The Magnet pull (ATKP reaction 5, Magnet Burst's 1900) stays ours, as before (KH1 has no such
-//! reaction; `combat::Strikes::native_pull` from `kh2_hits`), now for the enemies KH1's pass caught.
+//! The Magnet catch (ATKP reaction 5, Magnet Burst's 1900): an enemy KH1's pass hits with such an
+//! object goes into KH1's movement state of ours for it (`magnet`, t862), which KH1's physics step
+//! steps toward the object's place (`magnet_centre`) while its window is live.
 //!
 //! (t680) Valor's left Keyblade's hit windows (weapon 2) are its own KH1 attack object: module
 //! `lefthits` (`docs/kh1-drive-forms-native.md` §7.2).
@@ -169,8 +170,6 @@ struct Live {
     magnet: Option<(i16, i16, i16)>,
     /// Last game frame's centre (KH1 world) and that frame's number.
     prev: Option<([f32; 3], u64)>,
-    /// Enemies its Magnet caught (actor, orbit radius, swirl).
-    caught: [(usize, f32, f32); 8],
 }
 
 struct State {
@@ -523,7 +522,7 @@ pub unsafe fn frame(actor: usize) {
             // late for a window from frame 0).
             wr(obj + 0x58, req);
             let magnet = (character_core::reaction::category(a.enemy_reaction) == 5).then_some((a.knockback_1, a.knockback_2, a.unknown_16));
-            g.live[i] = Some(Live { obj, data, motion: m, atkp: w.attack, shape, magnet, prev: None, caught: [(0, 0.0, 0.0); 8] });
+            g.live[i] = Some(Live { obj, data, motion: m, atkp: w.attack, shape, magnet, prev: None });
             made.push(format!("ATKP {} group {} on KH1 group {} ({:?} r {} h {} lift {}, interval {})", w.attack, w.group, w.channel, bone, s.radius, s.height, s.lift, a.interval));
         }
     }
@@ -736,7 +735,7 @@ unsafe fn place(sora: usize, attacks: &[super::combat::SpellAttack], row: &dyn F
             wr(obj + 8, h);
         }
         let dummy = BodyShape { kh1_type: 1, radius: 0.0, height: 0.0, bone: None, offset: [0.0; 3], lift: 0.0 };
-        g.live[i] = Some(Live { obj, data: d, motion: 0, atkp: a.atk, shape: dummy, magnet: None, prev: None, caught: [(0, 0.0, 0.0); 8] });
+        g.live[i] = Some(Live { obj, data: d, motion: 0, atkp: a.atk, shape: dummy, magnet: None, prev: None });
         let mut sp = SpellObj { key: a.key, atk: a.atk, rows, group: a.group, shapes: [([0.0; 3], 1, 0.0, 0.0); SPELL_SHAPES], n: 0, seen: frame, kh1_spell: a.kh1_data.is_some(), by_calls, hit: false };
         for s in a.shapes.iter() {
             let t = match s.kind {
@@ -852,46 +851,40 @@ pub unsafe fn hit(attack: usize, target: usize, rec: usize) {
             g.results.push((key, atk, target, dealt));
         }
     }
-    let Some(l) = g.live[i].as_mut().filter(|l| l.obj == attack && still_ours(l)) else { return };
-    if let Some((k1, k2, swirl)) = l.magnet {
-        if !l.caught.iter().any(|c| c.0 == target) {
-            // KH2 picks the orbit radius between the two knock-back values (as `strike_as`).
-            let (a, c) = (k1 as f32, k2 as f32);
-            let t = ((target >> 4) % 97) as f32 / 96.0;
-            if let Some(slot) = l.caught.iter_mut().find(|c| c.0 == 0) {
-                *slot = (target, a + (c - a) * t, swirl as f32);
-            }
-        }
-    }
+    let Some(l) = g.live[i].filter(|l| l.obj == attack && still_ours(l)) else { return };
     let (kind, atk) = if spell.is_some() {
         ("spell", l.atkp)
     } else {
         ("body", l.atkp)
     };
     let motion = l.motion;
+    drop(g);
     note(|| format!("KH2 {kind} hit: ATKP {atk} (motion {motion}) from KH1's pass on actor {target:#x}"));
+    // KH2's Magnet catch, on every hit (`0x14040FBF0`): KH1's state of ours (`magnet`).
+    if let Some((k1, k2, swirl)) = l.magnet {
+        super::magnet::catch(attack, target, rec, k1, k2, swirl);
+    }
 }
 
-/// Enemies a live Magnet window of ours holds: (actor, its centre (KH2 y-up), orbit radius, swirl)
-/// (`takeover::kh2_hits` → `combat::Strikes::native_pull`).
-pub fn catches() -> Vec<(usize, [f32; 3], f32, f32)> {
-    let mut out = Vec::new();
+/// The place of a live Magnet object of ours (`magnet`'s step): KH1's attack object's own place
+/// (`+0x10`, KH1 world, which `entries` writes as KH1's pass builds it), while KH1's pass built it
+/// this frame or the last (its window open). `Err` when our table is busy.
+pub fn magnet_centre(obj: usize) -> Result<Option<[f32; 3]>, ()> {
     if !native() {
-        return out;
+        return Ok(None);
     }
-    let Ok(g) = STATE.try_lock() else { return out };
+    let Some(i) = pool_index(obj) else { return Ok(None) };
+    let Ok(g) = STATE.try_lock() else { return Err(()) };
+    let Some(l) = g.live[i].filter(|l| l.obj == obj && l.magnet.is_some()) else { return Ok(None) };
+    drop(g);
     let frame = super::takeover::GAME_FRAME.load(Ordering::Relaxed);
-    for l in g.live.iter().flatten() {
-        // (Live this frame or the last: the pass ran for it.)
-        let Some((c, f)) = l.prev else { continue };
-        if frame.saturating_sub(f) > 1 || unsafe { !still_ours(l) } {
-            continue;
-        }
-        for &(a, r, s) in l.caught.iter().filter(|c| c.0 != 0) {
-            out.push((a, [c[0], -c[1], c[2]], r, s));
-        }
+    let Some((_, f)) = l.prev else { return Ok(None) };
+    // (Freed or reused by KH1 meanwhile, or its window shut: no Magnet.)
+    if frame.saturating_sub(f) > 1 || unsafe { !still_ours(&l) } {
+        return Ok(None);
     }
-    out
+    let c = unsafe { rd::<[f32; 3]>(obj + 0x10) };
+    Ok(c.iter().all(|v| v.is_finite()).then_some(c))
 }
 
 /// The shape's centre now (KH1 world, y down).

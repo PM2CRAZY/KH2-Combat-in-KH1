@@ -75,8 +75,6 @@ const AFTER_BLEND: f32 = 8.0;
 pub const START_EFFECT_BASE: i16 = 0x6C;
 /// Those elements (LV2, LV3, MAX).
 pub const START_EFFECTS: [i16; 3] = [0x6E, 0x6F, 0x70];
-/// KH1's roll's timer flags (`0x1402C9E60` sets them with its 12.0 at `+0xC`).
-const KH1_ROLL_FLAGS: u32 = 0x10_0080;
 /// KH1's landing request (its ground jump's base 0, + 7) and its idle (`0x4000_0000` queued).
 const LANDING: u32 = 0x07;
 
@@ -185,10 +183,13 @@ pub unsafe fn start(actor: usize, dir: [f32; 2], why: &str) -> bool {
     let set_state: unsafe extern "system" fn(usize, i32) -> u32 = std::mem::transmute(base + SET_STATE_RVA);
     let set: unsafe extern "system" fn(usize, u32, f32) -> usize = std::mem::transmute(base + SET_MOTION_RVA);
     install(base);
-    // Out of KH1's own roll (Square held through it): its 12-frame timer's flags off, as KH1's
-    // think clears them when the timer runs out (`0x140297FE0`, flags `0x80 | 0x100000`, Checked
-    // (decomp)). Assumption: nothing else of KH1's roll needs ending (its motion is replaced).
-    wr(actor, rd::<u32>(actor) & !KH1_ROLL_FLAGS);
+    // (t859) KH2's start stores the level's invulnerable time (`fmab +0x1C`) in its timer `+0xD70`
+    // (`0x1403D7E40`, a plain store, Checked (decomp)), whatever ran before (a roll's): KH1's own
+    // no-damage timer gets those frames (`combomods::kh1_no_damage`; 0 at LV1 ends a roll's timer,
+    // as KH2's store of 0 does). Before t859 the roll's flags were only cleared and `hurt` threw
+    // hits away for the frames. Assumption: nothing else of KH1's roll needs ending (its motion is
+    // replaced).
+    super::combomods::kh1_no_damage(actor, g.quick_run_star_time);
     set_state(actor, STATE);
     if rd::<i32>(actor + 0x70) != STATE {
         return false;
@@ -224,11 +225,6 @@ pub unsafe fn start(actor: usize, dir: [f32; 2], why: &str) -> bool {
         super::kh2fx::event(RUN_MOTION, character_core::EventKind::Effect(level as i16 + START_EFFECT_BASE));
     }
     true
-}
-
-/// KH2's invulnerable time of the Quick Run playing (`fmab +0x1C`, its frames from the start).
-pub unsafe fn invulnerable(actor: usize) -> bool {
-    running(actor) && RUN.try_lock().ok().and_then(|r| r.as_ref().map(|r| r.age < r.star)).unwrap_or(false)
 }
 
 /// One of our motions plays on him, or one of their requests is pending (KH1 applies a request
