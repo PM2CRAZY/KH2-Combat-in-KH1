@@ -685,6 +685,8 @@ pub mod physics {
     /// Physics KH2: the request, the 60 Hz frames since it began playing and the game frame last
     /// counted (`kh1_cast_hold`).
     static KH1_CAST: Mutex<Option<(u32, f32, u64)>> = Mutex::new(None);
+    /// (t885) KH1's air cast hold was on last frame (for the log of its start).
+    static HOLD_WAS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
     /// Air Physics KH2 with KH1's own air cast animation (the tester, kh2-effects-in-kh1s-own-
     /// effect-system m20 answer 2: "(b) hold him like kh2, the player expects it to be like kh2"):
@@ -711,6 +713,18 @@ pub mod physics {
         };
         *g = Some((request, t, frame));
         let Some(&(motion, ..)) = super::super::kh2slots::CASTS.iter().find(|c| c.2 == request as usize && c.3) else { return false };
+        // (t885) From our copy of KH1's air cast motion: KH2's cast's hold at its own frames (our
+        // level event 8.(0x100 + the KH2 cast), `kh2slots::kh1_copies`), read by KH1's own reader
+        // at KH1's time in the cast (held at its start through a blend, as KH2 reads its own
+        // ranges). KH2's clip on our count of frames only where no copy plays.
+        if let Some(hold) = super::super::kh2slots::kh1_copy_level(actor, kh1_data::slot::RANGE_KH1_AIR_CAST_HOVER + motion) {
+            static C: AtomicU32 = AtomicU32::new(0);
+            let was = HOLD_WAS.swap(hold, Ordering::Relaxed);
+            if hold && !was && C.fetch_add(1, Ordering::Relaxed) < 20 {
+                super::super::log!(Takeover, "Air Physics KH2 on KH1's air cast animation (request {request:#x}): KH2's hover of motion {motion} from KH1's time {:.1} (our copy's level event)", rd::<f32>(actor + 0x16C));
+            }
+            return hold;
+        }
         let Some(clip) = super::super::pose::kh2().and_then(|k| k.character.moveset.clips.get(&motion)) else { return false };
         let moving = clip.windows.iter().any(|w| matches!(w.kind, W::AllowMovement) && w.start == 0 && w.end.is_none());
         let hold = !moving && clip.has(t as u32, |k| matches!(k, W::NoGravity));

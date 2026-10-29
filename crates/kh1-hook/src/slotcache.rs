@@ -29,8 +29,10 @@ use std::sync::Arc;
 /// allow-movement range as 8.4 (t872). 7: the turn toward the target as 8.5, its rate in `c` (t878).
 /// 8: the Finishing Plus window as 8.6 and a cast's combo window as 8.7 (t879). 9: KH2's next
 /// attacks on the Keyblade as edge keys of ours (`KH2_REARM`, t880). 10: KH2's combo window
-/// (range 11) as 8.8 and its free state as 8.9 (t881).
-pub const BAKE_FORMAT: u32 = 10;
+/// (range 11) as 8.8 and its free state as 8.9 (t881). 11: copies of KH1's own motions with
+/// KH2's windows (8.10 .. 8.15) and the finisher-spell window 8.13 on our casts (t882). 12: the
+/// hit windows' ATKPs as 8.16 (t883). 13: KH2's air casts' holds on copies of KH1's air casts (t885).
+pub const BAKE_FORMAT: u32 = 13;
 
 const MAGIC: &[u8; 8] = b"KH1KH2SC";
 /// The file's own layout (this module's), not the bake's.

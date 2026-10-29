@@ -531,6 +531,24 @@ struct Built {
     blocks: Mutex<Vec<crate::slotcache::Block>>,
     /// KH1's request table as in the file (to know KH1's own when the actor shows it).
     requests: Vec<u32>,
+    /// (t882) Copies of KH1's own motions with KH2's windows placed on them (`kh1_copies`), and
+    /// their motions (file layout) until `place` takes them, as `blocks`.
+    copies: Vec<Kh1Copy>,
+    copy_blocks: Mutex<Vec<crate::slotcache::Block>>,
+}
+
+/// (t882) One of KH1's own motions copied as a slot of ours (the owner, chat: "(a)", the part 7
+/// of what-is-still-missing item 5): the same motion, frame for frame (KH1's own channels and
+/// events, the length unchanged), with level events of ours (type 8, which KH1 never asks for)
+/// carrying the KH2 windows the mod places on that KH1 motion, so they are read with KH1's own
+/// reader instead of worked out from KH2's clips every frame. Pointed at on the requests that play
+/// that KH1 motion wherever KH1's own would play (`redirect`): KH1 sees its own motion. To KH1's
+/// slot-by-motion lookups it is KH1's slot (`MOTION_AT` gives `stands_for`).
+struct Kh1Copy {
+    /// KH1's slot it copies.
+    stands_for: usize,
+    /// The KH1 requests whose file entry plays that slot and that get the copy.
+    requests: Vec<usize>,
 }
 
 static BUILT: OnceLock<Option<Built>> = OnceLock::new();
@@ -762,7 +780,9 @@ pub fn prepare(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, mut cac
             "KH2 slots: KH2's row selection on KH1's ground and air combo: {}",
             [0xC8usize, 0xC9, 0xCA, 0xCB, 0xCC, 0xCD, 0xCE].iter().map(|r| format!("{r:#x} -> {:?}", moves.iter().filter(|m| m.request == *r).map(|m| m.motion).collect::<Vec<_>>())).collect::<Vec<_>>().join(", ")
         );
-        Ok(Built { moves, blocks: Mutex::new(blocks), requests })
+        // (t882) KH1's own motions with KH2's windows placed on them (`kh1_copies`).
+        let (copies, copy_blocks) = kh1_copies(mset, &requests, kh2, cache.as_deref_mut());
+        Ok(Built { moves, blocks: Mutex::new(blocks), requests, copies, copy_blocks: Mutex::new(copy_blocks) })
     })();
     match r {
         Ok(b) => {
@@ -855,6 +875,15 @@ fn make(mset: &[u8], src: &pose::Src, bake: Option<&pose::Baker>, cache: Option<
         let combo = cast_combo_spans(clip);
         if !combo.is_empty() {
             tracks.push(EventTrack::level(ks::KH2_RANGE, ks::RANGE_CAST_COMBO, &combo));
+        }
+        // (t882) Gravity, Stop and Aero as the combo's finisher (`formmagic::finisher_spell_window`,
+        // base Sora's ground casts only): KH2 Thunder's finisher cast 63's Finishing Plus window at
+        // the same share of this slot's length, as 8.13.
+        if src.form.is_none() && kind == Kind::Magic && super::formmagic::FINISHER_SPELL_REQUESTS.contains(&(request as u32)) {
+            if let Some((a, b)) = finisher_share_in(src.character, FINISHER_SPELL_FROM) {
+                let len = frames as f32;
+                tracks.push(EventTrack::level(ks::KH2_RANGE, ks::RANGE_FINISHER_SPELL, &[(a * len, b * len)]));
+            }
         }
     }
     // (t-evts) KH2's frame triggers (sounds, voices, effect elements) as sound events of the
@@ -1917,7 +1946,54 @@ fn kh1_tracks(template: &[EventTrack], clip: &character_core::Clip, r: f32, leav
     if !free_state.is_empty() {
         out.push(EventTrack::level(ks::KH2_RANGE, ks::RANGE_FREE, &free_state));
     }
+    // (t883) The ATKP of the hit window at each frame as 8.16 (`atkp_track`), read at a hit
+    // (`atkp_now`: `kh1rows::kh2_atkp`, `native_atkp`).
+    out.extend(atkp_track(clip));
     out
+}
+
+/// The KH2 ATKP of `clip`'s hit window at `frame` (the right Keyblade's first, weapon 1, else his
+/// body's, weapon 0; the second Keyblade's belong to its own attack object), or its first one at
+/// all with `frame` `None` (`kh1rows::window_atkp`'s rule).
+fn clip_atkp(clip: &character_core::Clip, frame: Option<u32>) -> Option<u16> {
+    let hits = |weapon_side: u8| {
+        clip.windows.iter().filter(|w| frame.map_or(true, |f| w.contains(f))).find_map(|w| match w.kind {
+            WindowKind::Hitbox { attack, weapon, .. } if weapon == weapon_side => Some(attack),
+            _ => None,
+        })
+    };
+    hits(1).or_else(|| hits(0))
+}
+
+/// (t883) `clip`'s ATKPs as our level event 8.16 (`ks::RANGE_ATKP`): a key where the frame's ATKP
+/// (`clip_atkp`) changes, `a` 1 and the ATKP in `c` inside a window, `a` 0 and `ks::NO_ATKP`
+/// outside; every key's `d` the clip's first ATKP; a first key at 0. Frame for frame what
+/// `clip_atkp` gives at `t as u32` (KH1's reader takes the last key at or before the time). None
+/// for a clip with no hit window.
+fn atkp_track(clip: &character_core::Clip) -> Option<EventTrack> {
+    let first = clip_atkp(clip, None)? as u32;
+    let mut keys: Vec<ks::EventKey> = Vec::new();
+    let mut last: Option<Option<u16>> = None;
+    for f in 0..clip.length.max(1) {
+        let now = clip_atkp(clip, Some(f));
+        if last != Some(now) {
+            keys.push(ks::EventKey { time: f as f32, a: now.is_some() as u16, b: 0, c: now.map_or(ks::NO_ATKP, |a| a as u32), d: first });
+            last = Some(now);
+        }
+    }
+    Some(EventTrack { id: ks::RANGE_ATKP, kind: ks::KH2_RANGE, keys })
+}
+
+/// (t883) At a hit: the KH2 ATKP of the hit window of our slot playing on `actor` at KH1's time in
+/// it, and the move's first ATKP, from our level event 8.16 by KH1's own reader. `None` where it
+/// can't be read (off Steam, no slot of ours, the reader not as expected): the caller reads KH2's
+/// clip as before.
+pub unsafe fn atkp_now(actor: usize) -> Option<(Option<u16>, Option<u16>)> {
+    let key = kh1_key(actor, ks::KH2_RANGE, ks::RANGE_ATKP)?;
+    let Some(key) = key else { return Some((None, None)) };
+    let val = |v: u32| (v != ks::NO_ATKP).then(|| v as u16);
+    let now = if rd::<u16>(key + 4) != 0 { val(rd::<u32>(key + 8)) } else { None };
+    Some((now, val(rd::<u32>(key + 12))))
 }
 
 /// (t881) KH2's windows at KH1's time in our slot playing on `actor`, for KH2's Square handler's
@@ -1972,6 +2048,23 @@ pub unsafe fn kh1_key(actor: usize, kind: u16, id: u16) -> Option<Option<usize>>
         return None;
     }
     current(actor)?;
+    reader_key(actor, kind, id, |_| true)
+}
+
+/// (t882) A level event of ours (8.x) on our copy of KH1's own motion that `actor` plays now
+/// (`Kh1Copy`), read by KH1's own reader at KH1's time in it: whether it is on. `None` off Steam,
+/// when the motion playing isn't one of our copies, or the reader isn't where expected.
+pub unsafe fn kh1_copy_level(actor: usize, id: u16) -> Option<bool> {
+    if super::addr::Build::current() != super::addr::Build::Steam || actor < 0x10000 {
+        return None;
+    }
+    let key = reader_key(actor, ks::KH2_RANGE, id, |motion| COPY_AT.try_lock().is_ok_and(|v| v.contains(&motion)))?;
+    Some(key.is_some_and(|key| rd::<u8>(key + 4) != 0))
+}
+
+/// KH1's level reader on the motion `actor` plays now (its slot `+0x168` in its table `+0x1D4`) at
+/// KH1's time in it, when `ours` accepts that motion's address.
+unsafe fn reader_key(actor: usize, kind: u16, id: u16, ours: impl Fn(usize) -> bool) -> Option<Option<usize>> {
     let base = super::takeover::game_base();
     match LEVEL_READER_OK.load(Ordering::Relaxed) {
         0 => {
@@ -1992,7 +2085,7 @@ pub unsafe fn kh1_key(actor: usize, kind: u16, id: u16) -> Option<Option<usize>>
     let slot = rd::<u16>(actor + SLOT_NOW) as usize;
     let motion = pose::ptr(rd::<u32>(table + slot * 4));
     let time: f32 = rd(actor + TIME_NOW);
-    if motion < 0x10000 || !time.is_finite() {
+    if motion < 0x10000 || !time.is_finite() || !ours(motion) {
         return None;
     }
     let reader: unsafe extern "system" fn(usize, u32, f32) -> usize = std::mem::transmute(base + LEVEL_READER_STEAM);
@@ -2174,19 +2267,163 @@ fn combo_kind(clip: &character_core::Clip, k: &WindowKind) -> bool {
 /// (Thunder's finisher cast 63 and Magnet's 68: 42..78, Checked (files)), for Gravity and Stop as
 /// the combo's finisher (`formmagic::finisher_spell_window`).
 pub fn finisher_share(motion: u16) -> Option<(f32, f32)> {
-    let clip = pose::kh2_moves()?.moveset.clips.get(&motion)?;
+    finisher_share_in(pose::kh2_moves()?, motion)
+}
+
+/// `finisher_share` in the moveset `c`.
+fn finisher_share_in(c: &character_core::Character, motion: u16) -> Option<(f32, f32)> {
+    let clip = c.moveset.clips.get(&motion)?;
     let w = clip.windows.iter().find(|w| matches!(w.kind, WindowKind::Finisher))?;
     let len = clip.length.max(1) as f32;
     Some((w.start as f32 / len, w.end.map_or(len, |e| e as f32) / len))
 }
 
+/// KH2 Thunder's finisher cast, whose Finishing Plus window Gravity, Stop and Aero take as the
+/// combo's finisher (`formmagic::finisher_spell_window`, t651).
+pub const FINISHER_SPELL_FROM: u16 = 63;
+
 /// Where KH2's combo window on its motion `motion` opens, as a share of the motion's length
 /// (`combo_kind`'s first frame; Fire 56: frame 60, Checked (files)), for KH1's own casts at the
 /// Magic Combo row (`formmagic::kh1_cast_window`).
 pub fn combo_share(motion: u16) -> Option<f32> {
-    let clip = pose::kh2_moves()?.moveset.clips.get(&motion)?;
+    combo_share_in(pose::kh2_moves()?, motion)
+}
+
+/// `combo_share` in the moveset `c`.
+fn combo_share_in(c: &character_core::Character, motion: u16) -> Option<f32> {
+    let clip = c.moveset.clips.get(&motion)?;
     let from = clip.first(|k| combo_kind(clip, k))?;
     (clip.length > 0).then(|| from as f32 / clip.length as f32)
+}
+
+/// (t882) The KH2 motions whose windows go on KH1's own motions by share (`kh1_copies`), and the
+/// KH1 requests they go on. KH2 Fire's combo window on KH1's grounded casts at Magic Combo KH2
+/// (`formmagic::kh1_cast_window`: Fire 0x36 / 0x3D, Blizzard 0x37, Thunder 0x38, Cure 0x39, and
+/// Gravity 0x3A / Aero 0x3C in their Thunder / Cure roles).
+const KH1_CAST_COMBO_FROM: u16 = 56;
+const KH1_CAST_COMBO_REQUESTS: [usize; 7] = [0x36, 0x3D, 0x37, 0x38, 0x39, 0x3A, 0x3C];
+/// KH2 Magnet's Finishing Plus window on KH1's Stop (0x3B) as Magnet (`formmagic::magnet_window`).
+const KH1_MAGNET_FROM: u16 = 68;
+const KH1_MAGNET_REQUEST: usize = 0x3B;
+/// KH2's ground finisher 155's and air finisher 183's Finishing Plus window on KH1's own finishers
+/// (`combomods::kh1_finisher_window`). Which of KH1's requests are finishers is KH1's row table's
+/// (its rows 3..8 ground, 15 / 16 air; the table is loaded at run time), so every request from
+/// KH1's combo's first swing 0xC8 up to its roll 0xDC (left out) gets both, and the reader picks
+/// by the finisher KH1's Attack step noted. **Assumption**: KH1's ability finishers' requests are
+/// in that run; a finisher outside it is logged by the reader and keeps the old share reading.
+const KH1_FINISHER_FROM: [u16; 2] = [155, 183];
+const KH1_FINISHER_REQUESTS: std::ops::Range<usize> = 0xC8..0xDC;
+
+/// (t882) Our copies of KH1's own motions (`Kh1Copy`), one per KH1 slot the requests above play
+/// (the file's request table), each with the windows of its requests as our level events (8.10 ..
+/// 8.15; t885: KH2's air casts' holds at their own frames, 8.(0x100 + cast)) at the same share of the KH1 motion's length as the KH2 window has of its clip (KH1's
+/// length `+0x280` is the motion's header length, `0x1403948C0`, Checked (decomp); so on at
+/// share x length <= t, as the reader `t / length >= share` was). Built once into the slot cache
+/// (`slotcache`) like our other slots. Nothing else in the motion changes.
+fn kh1_copies(mset: &[u8], requests: &[u32], kh2: &pose::Kh2, mut cache: Option<&mut crate::slotcache::Cache>) -> (Vec<Kh1Copy>, Vec<crate::slotcache::Block>) {
+    let base = &kh2.character;
+    let wisdom = super::form::Kind::Wisdom.data(kh2).map(|f| &f.character);
+    // (request, our level event id, its windows)
+    let mut want: Vec<(usize, u16, Vec<CopyWindow>)> = Vec::new();
+    if let Some(a) = combo_share_in(base, KH1_CAST_COMBO_FROM) {
+        want.extend(KH1_CAST_COMBO_REQUESTS.iter().map(|&r| (r, ks::RANGE_KH1_CAST_COMBO, vec![CopyWindow::Share(a, 1.0)])));
+    }
+    if let Some((a, b)) = finisher_share_in(base, KH1_MAGNET_FROM) {
+        want.push((KH1_MAGNET_REQUEST, ks::RANGE_KH1_MAGNET, vec![CopyWindow::Share(a, b)]));
+    }
+    if let Some((a, b)) = wisdom.and_then(|w| finisher_share_in(w, KH1_MAGNET_FROM)) {
+        want.push((KH1_MAGNET_REQUEST, ks::RANGE_KH1_MAGNET_WISDOM, vec![CopyWindow::Share(a, b)]));
+    }
+    for (id, from) in [(ks::RANGE_KH1_FINISHER_GROUND, KH1_FINISHER_FROM[0]), (ks::RANGE_KH1_FINISHER_AIR, KH1_FINISHER_FROM[1])] {
+        if let Some((a, b)) = finisher_share_in(base, from) {
+            want.extend(KH1_FINISHER_REQUESTS.map(|r| (r, id, vec![CopyWindow::Share(a, b)])));
+        }
+    }
+    // (t885) Air Physics KH2 on KH1's own air cast animation (`shared::physics::kh1_cast_hold`):
+    // the no-gravity hold of KH2's air cast for the request (`CASTS`), at its own frames, one track
+    // per KH2 cast (`ks::RANGE_KH1_AIR_CAST_HOVER` + its motion). None for a cast that allows
+    // movement all through (`no_gravity_spans`, as on our slots).
+    for &(motion, _, request, _) in CASTS.iter().filter(|c| c.3) {
+        if let Some(clip) = base.moveset.clips.get(&motion) {
+            let hold = no_gravity_spans(clip);
+            if !hold.is_empty() {
+                want.push((request, ks::RANGE_KH1_AIR_CAST_HOVER + motion, hold.into_iter().map(|(a, b)| CopyWindow::Frames(a, b)).collect()));
+            }
+        }
+    }
+    // By KH1's slot: its requests and windows.
+    let mut by_slot: Vec<(usize, Vec<usize>, Vec<(u16, Vec<CopyWindow>)>)> = Vec::new();
+    for (r, id, windows) in want {
+        let Some(&e) = requests.get(r) else { continue };
+        let slot = (e & 0xFFF) as usize;
+        // (Only a plain entry, one slot: kinds 3 / 4 play the slot after it too, `KIND_VARIANTS`.)
+        if slot >= KH1_SLOTS || (e >> 12) & 7 != 0 {
+            continue;
+        }
+        let i = match by_slot.iter().position(|x| x.0 == slot) {
+            Some(i) => i,
+            None => {
+                by_slot.push((slot, Vec::new(), Vec::new()));
+                by_slot.len() - 1
+            }
+        };
+        let x = &mut by_slot[i];
+        if !x.1.contains(&r) {
+            x.1.push(r);
+        }
+        if !x.2.iter().any(|w| w.0 == id) {
+            x.2.push((id, windows));
+        }
+    }
+    let mut copies = Vec::new();
+    let mut blocks = Vec::new();
+    for (slot, reqs, windows) in by_slot {
+        let made = (|| -> Result<crate::slotcache::Block, String> {
+            let template = ks::motion_bytes(mset, slot).map_err(|e| e.to_string())?;
+            let frames = u32::from_le_bytes(template.get(4..8).ok_or("no header")?.try_into().unwrap());
+            if frames == 0 {
+                return Err("no length".into());
+            }
+            let mut tracks = ks::events(&template).map_err(|e| e.to_string())?;
+            let len = frames as f32;
+            for (id, w) in &windows {
+                let spans: Vec<(f32, f32)> = w
+                    .iter()
+                    .map(|w| match *w {
+                        CopyWindow::Share(a, b) => (a * len, (b * len).min(len)),
+                        CopyWindow::Frames(a, b) => (a, b.min(len)),
+                    })
+                    .collect();
+                tracks.push(EventTrack::level(ks::KH2_RANGE, *id, &spans));
+            }
+            let build = || ks::retimed(&template, frames, &tracks).map_err(|e| e.to_string());
+            match cache.as_deref_mut() {
+                Some(c) => {
+                    let mut h = crate::slotcache::Hasher::default();
+                    h.str("KH1 motion copy").bytes(&template).u32(frames).str(&format!("{tracks:?}"));
+                    c.get_or_bake(h.finish(), build)
+                }
+                None => build().map(crate::slotcache::Block::new),
+            }
+        })();
+        match made {
+            Ok(block) => {
+                log!(Animation, "KH2 slots: KH1's own slot {slot} copied as a slot of ours for requests {} with KH2's windows {}", reqs.iter().map(|r| format!("{r:#x}")).collect::<Vec<_>>().join(", "), windows.iter().map(|(id, w)| format!("8.{id} {w:?}")).collect::<Vec<_>>().join(", "));
+                copies.push(Kh1Copy { stands_for: slot, requests: reqs });
+                blocks.push(block);
+            }
+            Err(e) => log!(Animation, "KH2 slots: KH1's own slot {slot} not copied ({e}); its windows are worked out as before"),
+        }
+    }
+    (copies, blocks)
+}
+
+/// A window on a copy of KH1's own motion (`kh1_copies`): at shares of the KH1 motion's length (a
+/// KH2 window placed by share), or at frames (a KH2 window at its own frames).
+#[derive(Clone, Copy, Debug)]
+enum CopyWindow {
+    Share(f32, f32),
+    Frames(f32, f32),
 }
 
 /// Our cast slot playing on `actor`: whether an Attack may follow it now (KH2's combo window,
@@ -2288,14 +2525,22 @@ struct Set {
     redirects: Vec<(usize, u32, u32, Kind, usize, bool, bool, Option<super::form::Kind>)>,
     /// The requests with a move of each Drive Form's (`redirect`: in that form those are its).
     form_requests: Vec<(super::form::Kind, Vec<usize>)>,
+    /// (t882) (request, KH1's entry, our copy's slot index in this set): the copy of the KH1 motion
+    /// that request plays, wherever KH1's own entry would be (`redirect`).
+    copy_redirects: Vec<(usize, u32, u32)>,
 }
 
 /// Our motions placed in memory (the game thread) and the sets made with them.
 struct Placed {
-    /// Each motion's address (ours, leaked) and its handle.
+    /// Each motion's address (ours, leaked) and its handle: the moves', then the copies'.
     motions: Vec<(usize, u32)>,
+    /// (t882) Each copy of KH1's own motions (`Built::copies`, same order): its index in `motions`.
+    copies: Vec<usize>,
     sets: Vec<Set>,
 }
+
+/// (t882) Our copies of KH1's own motions, by address (`kh1_copy_level`).
+static COPY_AT: Mutex<Vec<usize>> = Mutex::new(Vec::new());
 
 static PLACED: Mutex<Option<Placed>> = Mutex::new(None);
 /// Our motions' addresses, for `pose::slot_of` (slot by the instance's motion pointer).
@@ -2520,36 +2765,29 @@ unsafe fn place(b: &Built) -> Placed {
     let blocks = b.blocks.lock().map(|mut v| std::mem::take(&mut *v)).unwrap_or_default();
     let bytes: usize = blocks.iter().map(|b| b.len()).sum();
     for (m, block) in b.moves.iter().zip(blocks) {
-        // (16-aligned, never freed.)
-        let words: &'static mut [u128] = Box::leak(vec![0u128; block.len().div_ceil(16)].into_boxed_slice());
-        let p = words.as_mut_ptr() as usize;
-        std::ptr::copy_nonoverlapping(block.as_ptr(), p as *mut u8, block.len());
-        // Event groups' key offsets first (the group list is found by +0x3C's offset).
-        let mut g = p + rd::<u32>(p + ks::EVENTS) as usize;
-        while rd::<u32>(g) != ks::END {
-            wr(g + 8, handle(p + rd::<u32>(g + 8) as usize));
-            g += 12;
-        }
-        for f in ks::OFFSET_FIELDS {
-            wr(p + f, handle(p + rd::<u32>(p + f) as usize));
-        }
+        let p = put_motion(&block);
         motions.push((p, handle(p)));
         at.push((p, m.slot));
         // Its holder motion (Valor's left Keyblade), placed the same way, found by this motion.
         if let Some(hb) = m.holder_block.lock().ok().and_then(|mut g| g.take()) {
-            let words: &'static mut [u128] = Box::leak(vec![0u128; hb.len().div_ceil(16)].into_boxed_slice());
-            let q = words.as_mut_ptr() as usize;
-            std::ptr::copy_nonoverlapping(hb.as_ptr(), q as *mut u8, hb.len());
-            let mut g = q + rd::<u32>(q + ks::EVENTS) as usize;
-            while rd::<u32>(g) != ks::END {
-                wr(g + 8, handle(q + rd::<u32>(g + 8) as usize));
-                g += 12;
-            }
-            for f in ks::OFFSET_FIELDS {
-                wr(q + f, handle(q + rd::<u32>(q + f) as usize));
-            }
+            let q = put_motion(&hb);
             holders.push((p, q));
         }
+    }
+    // (t882) Our copies of KH1's own motions, after the moves (`Placed::copies`): to KH1's
+    // slot-by-motion lookups each is the KH1 slot it copies.
+    let copy_blocks = b.copy_blocks.lock().map(|mut v| std::mem::take(&mut *v)).unwrap_or_default();
+    let mut copies = Vec::new();
+    let mut copy_at = Vec::new();
+    for (c, block) in b.copies.iter().zip(copy_blocks) {
+        let p = put_motion(&block);
+        copies.push(motions.len());
+        motions.push((p, handle(p)));
+        at.push((p, c.stands_for));
+        copy_at.push(p);
+    }
+    if let Ok(mut v) = COPY_AT.lock() {
+        *v = copy_at;
     }
     if let Ok(mut v) = MOTION_AT.lock() {
         *v = at;
@@ -2558,7 +2796,25 @@ unsafe fn place(b: &Built) -> Placed {
         *v = holders;
     }
     log!(Animation, "KH2 slots: {} motions placed ({bytes} bytes; the build's copy freed) (handles {:08x?}); {} left Keyblade holder motions", motions.len(), motions.iter().map(|m| m.1).collect::<Vec<_>>(), HOLDER_AT.lock().map_or(0, |v| v.len()));
-    Placed { motions, sets: Vec::new() }
+    Placed { motions, copies, sets: Vec::new() }
+}
+
+/// One motion (file layout) copied where KH1 plays it from (16-aligned, never freed), its offsets
+/// turned into KH1's handles: the event groups' key offsets first (the group list is found by
+/// `+0x3C`'s offset), then the header's offset fields. Its address.
+unsafe fn put_motion(block: &[u8]) -> usize {
+    let words: &'static mut [u128] = Box::leak(vec![0u128; block.len().div_ceil(16)].into_boxed_slice());
+    let p = words.as_mut_ptr() as usize;
+    std::ptr::copy_nonoverlapping(block.as_ptr(), p as *mut u8, block.len());
+    let mut g = p + rd::<u32>(p + ks::EVENTS) as usize;
+    while rd::<u32>(g) != ks::END {
+        wr(g + 8, handle(p + rd::<u32>(g + 8) as usize));
+        g += 12;
+    }
+    for f in ks::OFFSET_FIELDS {
+        wr(p + f, handle(p + rd::<u32>(p + f) as usize));
+    }
+    p
 }
 
 /// Sora's bone count (his model and motions).
@@ -2704,6 +2960,18 @@ unsafe fn extend(b: &Built, p: &mut Placed, at: usize, why: &str) -> bool {
             }
         }
     }
+    // (t882) Our copies of KH1's own motions, on their requests where this set's entry holds the
+    // KH1 motion they copy (by its signature, as above).
+    let mut copy_redirects = Vec::new();
+    for (c, &k) in b.copies.iter().zip(p.copies.iter()) {
+        for &r in &c.requests {
+            let e = requests.get(r).copied().unwrap_or(0xFFF);
+            let own = (e & 0xFFF) as usize;
+            if own < count && pose::file_slot_of_motion(pose::ptr(slots[own])) == Some(c.stands_for) {
+                copy_redirects.push((r, e, (count + k) as u32));
+            }
+        }
+    }
     let mut form_requests: Vec<(super::form::Kind, Vec<usize>)> = Vec::new();
     for f in FORM_SLOTS.iter() {
         let mut v: Vec<usize> = redirects.iter().filter(|r| r.7 == Some(f.kind)).map(|r| r.0).collect();
@@ -2713,14 +2981,15 @@ unsafe fn extend(b: &Built, p: &mut Placed, at: usize, why: &str) -> bool {
             form_requests.push((f.kind, v));
         }
     }
-    let t = Set { kh1_slots: sh, kh1_requests: rh, slots_handle: handle(slots.as_ptr() as usize), requests_handle: handle(requests.as_ptr() as usize), requests, redirects, form_requests };
+    let t = Set { kh1_slots: sh, kh1_requests: rh, slots_handle: handle(slots.as_ptr() as usize), requests_handle: handle(requests.as_ptr() as usize), requests, redirects, form_requests, copy_redirects };
     log!(Animation,
-        "KH2 slots: Sora's set {f:#x} ({why}): {count} slots of its own, ours at {}..{}, {} requests; ours stand in for {}; our own requests {}{}",
+        "KH2 slots: Sora's set {f:#x} ({why}): {count} slots of its own, ours at {}..{}, {} requests; ours stand in for {}; our own requests {}; our copies of KH1's own motions on {}{}",
         count,
         count + p.motions.len() - 1,
         len,
         t.redirects.iter().filter(|r| r.5).map(|r| format!("{:#x} (its slot {})", r.0, r.1 & 0xFFF)).collect::<Vec<_>>().join(", "),
         if own_requests.is_empty() { "none".to_string() } else { own_requests.join(", ") },
+        if t.copy_redirects.is_empty() { "none".to_string() } else { t.copy_redirects.iter().map(|c| format!("{:#x}", c.0)).collect::<Vec<_>>().join(", ") },
         if missing.is_empty() { String::new() } else { format!("; not in this set: {}", missing.join(", ")) }
     );
     wr(at + 4, t.slots_handle);
@@ -3162,6 +3431,15 @@ unsafe fn redirect(p: &mut Placed) {
                 // travel flag on the request while that slot is on it, so KH1 moves him by its H10.)
                 if form.is_some() && *e & 0xFFF == ours && moved(id).is_some_and(|m| m.travel) {
                     *e |= TRAVEL_FLAG;
+                }
+            }
+        }
+        // (t882) Where a request plays KH1's own motion now, our copy of it (`Kh1Copy`): the same
+        // motion with KH2's windows on it. Where one of our KH2 slots is on it, left alone.
+        for &(req, kh1, copy) in &t.copy_redirects {
+            if let Some(e) = t.requests.get_mut(req) {
+                if *e & 0xFFF == kh1 & 0xFFF {
+                    *e = (kh1 & !0xFFF) | copy;
                 }
             }
         }

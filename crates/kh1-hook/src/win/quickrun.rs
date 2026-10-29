@@ -47,7 +47,7 @@
 //! `kh2slots` slots), asked through KH1's motion request (`0x14029F980`).
 
 use super::addr::{Build, Rva};
-use super::{log, pose, takeover};
+use super::{log, takeover};
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Mutex;
 
@@ -310,9 +310,12 @@ unsafe extern "system" fn transition(actor: usize, airborne: i32) -> u32 {
     }
     // 204 played to its end (KH2 then plays its queued fall, motion 4 with blend 8, which on the
     // floor is KH2's landing: Assumption, the end seen in play, s206).
+    // (t884) Its length as KH1 has it for the motion playing (`+0x280`, set from the motion's
+    // header length at its start, `0x1403948C0`, Checked (decomp)): our slot of 204, whose length
+    // is the clip's. Before, base Sora's 204 clip's length was looked up, also in Wisdom.
     let end = super::kh2slots::now_playing(actor).filter(|(m, _)| *m == STOP_MOTION).and_then(|(_, t)| {
-        let len = pose::kh2()?.character.moveset.clips.get(&STOP_MOTION)?.length as f32;
-        Some(t + super::shared::physics::dt() >= len)
+        let len = rd::<f32>(actor + 0x280);
+        (len > 0.0).then(|| t + super::shared::physics::dt() >= len)
     });
     if stopping != Some(true) || end != Some(true) {
         return STATE as u32;

@@ -870,16 +870,49 @@ travel can carry it is a separate check, done after part 2.
   Valor's Square; `cast_cut_open` reads 8.9.
 - **The reaction command's first frame:** only the old controller's step read it; deleted at t874.
 
-### 14.14 What's left (after t881)
+### 14.14 What was left after t881
 
-- **Part 7, KH1's own motions:** KH1's casts at Magic Combo KH2 (`formmagic::kh1_cast_window`),
-  KH1's finishers with Finishing Plus (`combomods::kh1_finisher_window`), Gravity / Stop as the
-  combo's finisher and Stop as Magnet (`finisher_spell_window`, `magnet_window`) place KH2's window
-  on KH1's own motion by share of its length. KH1's own motions aren't slots of ours, so there is
-  nowhere to bake a track yet; making them data needs copies of KH1's own motions as slots of ours
-  with the window baked in, pointed at only at the setting that wants them.
+- **Part 7, KH1's own motions:** done at t882 (§14.15).
 - **Not range rules but still read from KH2's clip at runtime:** the ATKP of the hit window at hit
   time (`kh1rows::kh2_atkp`, `native_atkp`), KH2's clocks (`combomods::dodge_clock`,
   `glide::kh2_clock`, the stop of Quick Run), Air Physics KH2's hover on KH1's own air cast
   (`shared::physics`, on KH1's motion), and KH2's row selection (`takeover::kh2_rows`, which hands
   KH2's windows to KH2's own selector).
+
+### 14.15 Part 7 done (t882): KH2's windows on KH1's own motions, as copies of them
+
+- **The copies:** `kh2slots::kh1_copies` copies each KH1 slot the requests below play (the file's
+  request table, plain entries only) as a slot of ours: KH1's motion as it is, with our level events
+  at the same share of its length as the KH2 window has of its clip. Built once into the slot cache.
+  - 8.10: Fire 56's combo window (from where it opens to the end) on KH1's grounded casts 0x36,
+    0x3D, 0x37, 0x38, 0x39, 0x3A, 0x3C (Magic Combo KH2; Gravity / Aero in their roles).
+  - 8.11 / 8.12: Magnet 68's Finishing Plus window, Sora's / Wisdom's, on Stop 0x3B (as Magnet).
+  - 8.14 / 8.15: 155's / 183's Finishing Plus window on KH1's combo requests 0xC8..0xDB (KH1's own
+    finishers with Finishing Plus). **Assumption**: KH1's ability finishers are in that run; one
+    that isn't is logged and keeps the share reading.
+- **On our casts:** 8.13, Thunder 63's window by share, on our ground casts of Gravity, Stop and
+  Aero (as the combo's finisher).
+- **Placing them:** after our moves in every set where the set's entry holds that KH1 motion;
+  `redirect` points the request at the copy wherever its entry would be KH1's own. To KH1's
+  slot-by-motion lookups a copy is the KH1 slot it copies.
+- **The share is exact (Checked (decomp)):** KH1's `+0x280` is the motion's header length, so a
+  window baked at share x length is on and off on the same frames as the old reading.
+- **The reads:** `kh1_copy_level` (copies), `kh1_level` (8.13), KH1's own reader. The share reading
+  stays only where no copy plays. The conditions (styles, roles, Finishing Plus, a finisher left)
+  are still checked when read: they change at run time.
+
+### 14.16 The runtime KH2-clip reads after item 5 (t883..t885)
+
+- **t883, the ATKP at a hit:** our level event 8.16 on every slot: a key wherever the frame's ATKP
+  changes (the right Keyblade's window, else his body's; `c` the ATKP, `d` the move's first). Read
+  at a hit by `kh1rows::kh2_atkp` and `native_atkp` (`kh2slots::atkp_now`).
+- **t884, Quick Run's stop:** it ends on KH1's own motion length (`+0x280`), not a lookup of 204's
+  clip; in Wisdom that is Wisdom's own 204 now.
+- **t885, Air Physics KH2 on KH1's own air cast:** KH2's air cast hold at its own frames on our
+  copies of KH1's air casts, one track per KH2 cast (8.(0x100 + cast)), read at KH1's time in the
+  cast. Through a blend KH1's time is held at the start, as KH2's is, so the hold starts that much
+  later after a blend than our old frame count did.
+- **Left:** KH2's dodge and glide clocks (`combomods::dodge_clock`, `glide::kh2_clock`) read only
+  which KH2 motion our slot plays and KH1's time; no clip. KH2's row selection
+  (`takeover::kh2_rows` → `Character::would_take_launch` / `would_take_square_exe`) still runs
+  KH2's selector, which reads the playing clip's windows itself.

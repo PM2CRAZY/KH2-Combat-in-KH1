@@ -369,9 +369,23 @@ pub unsafe fn kh1_finisher_window(actor: usize) {
         return;
     }
     let from = KH1_FINISHER_WINDOW_FROM[air as usize];
-    let Some(clip) = pose::kh2().and_then(|k| k.character.moveset.clips.get(&from)) else { return };
-    let at = (t / len * clip.length as f32) as u32;
-    if !clip.has(at, |k| matches!(k, character_core::WindowKind::Finisher)) {
+    // (t882) From our copy of KH1's finisher motion (our level event 8.14 on the ground, 8.15 in the
+    // air, placed by share at build, `kh2slots::kh1_copies`), read by KH1's own reader; by share
+    // here where no copy of ours plays (logged: a KH1 finisher whose request has no copy).
+    let id = if air { kh1_data::slot::RANGE_KH1_FINISHER_AIR } else { kh1_data::slot::RANGE_KH1_FINISHER_GROUND };
+    let (open, how) = match super::kh2slots::kh1_copy_level(actor, id) {
+        Some(on) => (on, "our copy's level event".to_string()),
+        None => {
+            static MISS: AtomicU32 = AtomicU32::new(0);
+            if Build::current() == Build::Steam && super::log_on(super::LogCat::Combat) && MISS.fetch_add(1, Ordering::Relaxed) < 8 {
+                log!(Combat, "KH1's own finisher (request {:#x}) has no copy of ours: its Finishing Plus window by share", request & 0xFFFF);
+            }
+            let Some(clip) = pose::kh2().and_then(|k| k.character.moveset.clips.get(&from)) else { return };
+            let at = (t / len * clip.length as f32) as u32;
+            (clip.has(at, |k| matches!(k, character_core::WindowKind::Finisher)), format!("KH2 {from}'s frame {at} by share"))
+        }
+    };
+    if !open {
         return;
     }
     let inst = pose::ptr(rd::<u32>(actor + 0x15C));
@@ -381,7 +395,7 @@ pub unsafe fn kh1_finisher_window(actor: usize) {
     wr(inst + 0x14, rd::<u32>(inst + 0x14) | KH1_COMBO_WINDOW);
     static N: AtomicU32 = AtomicU32::new(0);
     if super::log_on(super::LogCat::Combat) && N.fetch_add(1, Ordering::Relaxed) < 20 {
-        log!(Combat, "Finishing Plus window on KH1's own finisher (request {:#x}, time {t:.1} of {len:.1}, KH2 {from}'s frame {at}): KH1's combo window", request & 0xFFFF);
+        log!(Combat, "Finishing Plus window on KH1's own finisher (request {:#x}, time {t:.1} of {len:.1}, KH2 {from}'s window, {how}): KH1's combo window", request & 0xFFFF);
     }
 }
 

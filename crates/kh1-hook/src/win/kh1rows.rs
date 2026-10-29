@@ -662,7 +662,12 @@ pub unsafe fn kh2_atkp(attack: usize) -> Option<kh2_formats::battle::Atkp> {
     let kh2 = pose::kh2()?;
     let sora = super::takeover::sora_actor();
     // (The KH2 motion our slot plays: a next-finisher row's is the one KH2 picked.)
-    let now = super::kh2slots::now_playing(sora).and_then(|(m, t)| window_atkp(m, Some(t as u32)));
+    // (t883) From our slot's level event 8.16 by KH1's own reader (`kh2slots::atkp_now`); KH2's
+    // clip where that can't be read.
+    let now = match super::kh2slots::atkp_now(sora) {
+        Some((now, _)) => now,
+        None => super::kh2slots::now_playing(sora).and_then(|(m, t)| window_atkp(m, Some(t as u32))),
+    };
     let id = now.or_else(|| u16::try_from(ATKP_OF[n].load(Ordering::Relaxed)).ok())?;
     kh2.battle.attack_for_level(id, 0, 0).cloned()
 }
@@ -683,7 +688,12 @@ pub unsafe fn native_atkp(actor: usize) -> Option<kh2_formats::battle::Atkp> {
         return None;
     }
     let (m, t) = super::kh2slots::now_playing(actor)?;
-    let id = window_atkp(m, Some(t as u32)).or_else(|| window_atkp(m, None))?;
+    // (t883) From our slot's level event 8.16 by KH1's own reader (`kh2slots::atkp_now`); KH2's
+    // clip where that can't be read.
+    let id = match super::kh2slots::atkp_now(actor) {
+        Some((now, first)) => now.or(first),
+        None => window_atkp(m, Some(t as u32)).or_else(|| window_atkp(m, None)),
+    }?;
     pose::kh2()?.battle.attack_for_level(id, 0, 0).cloned()
 }
 

@@ -870,6 +870,12 @@ pub unsafe fn magnet_window(actor: usize) -> Option<bool> {
     if !super::combomods::finisher_left() {
         return Some(false);
     }
+    // (t882) From our copy of KH1's Stop cast (our level event 8.11, Wisdom's 8.12 in Wisdom: the
+    // moveset `finisher_share` reads), read by KH1's own reader; by share where no copy plays.
+    let id = if super::form::native_form() == Some(super::form::Kind::Wisdom) { kh1_data::slot::RANGE_KH1_MAGNET_WISDOM } else { kh1_data::slot::RANGE_KH1_MAGNET };
+    if let Some(on) = super::kh2slots::kh1_copy_level(actor, id) {
+        return Some(on);
+    }
     let Some((a, b)) = super::kh2slots::finisher_share(MAGNET_GROUND) else { return Some(false) };
     let (t, len) = (rd::<f32>(actor + 0x16C), rd::<f32>(actor + 0x280));
     Some(t >= 0.0 && len > 0.0 && t / len >= a && t / len < b)
@@ -933,8 +939,13 @@ pub unsafe fn finisher_spell_window(actor: usize) -> Option<bool> {
     if !super::combomods::finisher_left() {
         return Some(false);
     }
+    // (t882) Our level event 8.13 on our cast slot playing, placed there by share at build
+    // (`kh2slots::make`), read by KH1's own reader; by share where it can't be read.
+    if let Some(on) = super::kh2slots::kh1_level(actor, kh1_data::slot::KH2_RANGE, kh1_data::slot::RANGE_FINISHER_SPELL) {
+        return Some(on);
+    }
     // (All three on KH2's Thunder finisher cast's window, the animation they play at KH2, t651.)
-    let from = 63;
+    let from = super::kh2slots::FINISHER_SPELL_FROM;
     let Some((a, b)) = super::kh2slots::finisher_share(from) else { return Some(false) };
     let (t, len) = (rd::<f32>(actor + 0x16C), rd::<f32>(actor + 0x280));
     Some(t >= 0.0 && len > 0.0 && t / len >= a && t / len < b)
@@ -1008,9 +1019,18 @@ pub unsafe fn kh1_cast_window(actor: usize) {
     if !(KH1_WINDOW_REQUESTS.contains(&request) || role) || super::kh2slots::cast_playing(actor) {
         return;
     }
-    let Some(share) = super::kh2slots::combo_share(56) else { return };
     let (t, len) = (rd::<f32>(actor + 0x16C), rd::<f32>(actor + 0x280));
-    if !(t >= 0.0 && len > 0.0) || t / len < share {
+    // (t882) The window from our copy of KH1's cast motion (our level event 8.10, placed there by
+    // share at build, `kh2slots::kh1_copies`), read by KH1's own reader; by share here where no copy
+    // of ours plays.
+    let (open, from) = match super::kh2slots::kh1_copy_level(actor, kh1_data::slot::RANGE_KH1_CAST_COMBO) {
+        Some(on) => (on, "our copy's 8.10"),
+        None => {
+            let Some(share) = super::kh2slots::combo_share(56) else { return };
+            (t >= 0.0 && len > 0.0 && t / len >= share, "by share")
+        }
+    };
+    if !open {
         return;
     }
     let inst = pose::ptr(rd::<u32>(actor + 0x15C));
@@ -1020,7 +1040,7 @@ pub unsafe fn kh1_cast_window(actor: usize) {
     wr(inst + 0x14, rd::<u32>(inst + 0x14) | super::combomods::KH1_COMBO_WINDOW);
     static N: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
     if super::log_on(super::LogCat::Magic) && N.fetch_add(1, Ordering::Relaxed) < 20 {
-        log!(Magic, "Magic Combo: KH2 Fire's combo window on KH1's cast (request {request:#x}, time {t:.1} of {len:.1}, from {:.0}%)", share * 100.0);
+        log!(Magic, "Magic Combo: KH2 Fire's combo window on KH1's cast (request {request:#x}, time {t:.1} of {len:.1}, {from})");
     }
 }
 

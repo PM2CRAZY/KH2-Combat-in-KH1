@@ -65,6 +65,33 @@ pub const RANGE_COMBO: u16 = 8;
 /// 8.9: KH2's free state (range ids 0 / 1 / 2) on every slot, whatever KH1's "may be left" (0.0) on
 /// the slot was built from (t881).
 pub const RANGE_FREE: u16 = 9;
+/// 8.10: KH2 Fire's combo window (its motion 56's, from where it opens to the end) placed on KH1's
+/// own cast motion at the same share of its length, on our copy of that KH1 motion (Magic Combo
+/// KH2, `formmagic::kh1_cast_window`) (t882).
+pub const RANGE_KH1_CAST_COMBO: u16 = 10;
+/// 8.11: KH2 Magnet's Finishing Plus window (base Sora's motion 68) placed by share on our copy of
+/// KH1's Stop cast (Stop as Magnet on KH1's own animation) (t882).
+pub const RANGE_KH1_MAGNET: u16 = 11;
+/// 8.12: the same from Wisdom Form's motion 68 (its window and length differ from Sora's) (t882).
+pub const RANGE_KH1_MAGNET_WISDOM: u16 = 12;
+/// 8.13: KH2 Thunder's finisher cast's Finishing Plus window (motion 63) placed by share on our
+/// ground cast slots of Gravity, Stop and Aero (as the combo's finisher) (t882).
+pub const RANGE_FINISHER_SPELL: u16 = 13;
+/// 8.14 / 8.15: KH2's Finishing Plus window of its ground finisher 155 / air finisher 183 placed by
+/// share on our copies of KH1's own combo motions (KH1's finishers with Finishing Plus) (t882).
+pub const RANGE_KH1_FINISHER_GROUND: u16 = 14;
+pub const RANGE_KH1_FINISHER_AIR: u16 = 15;
+/// 8.16: the KH2 ATKP of the move's hit window at each frame (the right Keyblade's, else his
+/// body's), in the key's `c` ([`NO_ATKP`] where none), and the move's first ATKP in every key's `d`
+/// (a key at 0 holds it before the first window): what a hit at that time deals (t883).
+pub const RANGE_ATKP: u16 = 16;
+/// "No ATKP" in a [`RANGE_ATKP`] key.
+pub const NO_ATKP: u32 = u32::MAX;
+/// 8.(0x100 + KH2 motion): that KH2 air cast's no-gravity hold (range ids 3 / 24) at its own frames,
+/// on our copy of KH1's own air cast motion (Air Physics KH2 on KH1's air cast animation). One
+/// track per KH2 cast: a KH1 air cast slot plays for several spells (slot 81: Thunder, Cure, Stop,
+/// Aero) whose KH2 casts hold differently (t885).
+pub const RANGE_KH1_AIR_CAST_HOVER: u16 = 0x100;
 
 pub(crate) fn u32_at(b: &[u8], at: usize) -> Result<u32> {
     b.get(at..at + 4).map(|s| u32::from_le_bytes(s.try_into().unwrap())).ok_or_else(|| Error::Format(format!("motion: read past the end at {at:#x}")))
