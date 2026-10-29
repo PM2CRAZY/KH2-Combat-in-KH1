@@ -122,7 +122,7 @@ impl Kind {
         }
     }
     /// Runs on KH1's own states where it can (`native_ok`): its moves baked into KH1 slots
-    /// (`kh2slots::FORM_SLOTS`), its numbers on KH1's states. The others keep KH2's controller.
+    /// (`kh2slots::FORM_SLOTS`), its numbers on KH1's states. The others can't be entered (t873: refused, no KH2 controller).
     pub fn native_capable(self) -> bool {
         matches!(self, Kind::Valor | Kind::Wisdom)
     }
@@ -420,7 +420,7 @@ pub fn battle<'a>(d: &Drive, kh2: &'a pose::Kh2) -> &'a Arc<Battle> {
 /// The form's abilities (KH2's, exe): Sora's support abilities carry over, his action and
 /// growth ones don't; the form's own growth ability at its level; every combo row of the form's
 /// table unlocked.
-fn form_abilities(sora: &Abilities, form: &Character, kind: Kind) -> Abilities {
+pub fn form_abilities(sora: &Abilities, form: &Character, kind: Kind) -> Abilities {
     let mut a = Abilities {
         guard: form.moveset.clips.contains_key(&character_core::motion::GUARD),
         // (Sora's Aerial Recovery in the form, with its own recovery motion: the user, Wisdom and
@@ -605,7 +605,7 @@ unsafe fn yellow(sora: usize) -> u16 {
 //   High Jump at its form level, `formexp`); then Valor's arrival 53 on its request of ours.
 // - Revert: everything back to base Sora's, what was playing cut into KH1's idle (or fall).
 // The MP cost, drain, out-of-MP revert, KO revert, look and the second Keyblade's stats are the
-// same as on KH2's controller (`drain_step`). Wisdom and Final keep KH2's controller for now.
+// same as on KH2's controller (`drain_step`). Wisdom runs on KH1's states too; Final is refused (t873).
 
 /// The form arriving or playing runs on KH1's own states (Valor, `native_ok`).
 static NATIVE: AtomicBool = AtomicBool::new(false);

@@ -310,7 +310,7 @@ pub fn control(s: &Seen) -> u32 {
                 // KH2's action button while moving with no dodge roll of KH2's but Quick Run (KH2's
                 // order, `0x1403A75A0`: the guard with the stick at rest, else the dodge roll, else
                 // Quick Run): its Quick Run natively (`quickrun::start`), else the borrow.
-                let kh2_runs = s.moving && super::takeover::with_abilities(|a| a.dodge_roll == 0 && a.quick_run > 0) == Some(true);
+                let kh2_runs = s.moving && super::combomods::abilities_now().map(|a| a.dodge_roll == 0 && a.quick_run > 0) == Some(true);
                 if kh2_runs && unsafe { quick_run_on_stick("Square while moving (the Dodge Roll style KH2, no dodge roll of KH2's)") } {
                     return KH1_ACTION_BIT;
                 }
@@ -554,10 +554,13 @@ pub mod physics {
     }
     static NUMBERS: Mutex<Option<Numbers>> = Mutex::new(None);
 
-    pub fn set_numbers(n: Numbers) {
+    /// Whether they went in (not while another call holds them).
+    pub fn set_numbers(n: Numbers) -> bool {
         if let Ok(mut g) = NUMBERS.try_lock() {
             *g = Some(n);
+            return true;
         }
+        false
     }
 
     fn numbers() -> Option<Numbers> {

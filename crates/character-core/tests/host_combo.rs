@@ -167,3 +167,142 @@ fn no_clip_is_no_attack() {
     assert_eq!(p.press(1), None);
     assert!(!p.finisher_left(1));
 }
+
+fn hop_rows() -> Vec<ComboRow> {
+    let mut rs = rows();
+    // Hops: a ground jump (rows 0 / 1 style), an air swing hop, Retaliating Slash, the Square moves.
+    let mut j = row(1, 3, -1, 0, 182, 0.0, 0.0, 0);
+    (j.jump, j.jump_min, j.jump_max, j.speed_min, j.speed_max, j.distance_adjust) = (21.0, 17.0, 67.0, -8.0, 18.0, 85.0);
+    rs.insert(0, j);
+    for r in rs.iter_mut().filter(|r| r.id == 9 || r.id == 10) {
+        (r.jump, r.jump_min, r.jump_max, r.speed_min, r.speed_max) = (14.0, 10.0, 40.0, 0.0, 12.0);
+        r.flag |= FLAG_JUMP_ADJUST;
+    }
+    let mut ret = row(40, 0, -1, FLAG_AIR, 172, 0.0, 0.0, 101);
+    (ret.jump, ret.jump_min, ret.jump_max, ret.speed_max) = (21.0, 21.0, 121.0, 10.0);
+    rs.push(ret);
+    rs.push(row(39, 0, -1, 0, 171, 0.0, 0.0, 96));
+    rs.push(row(12, 0, -1, 0, 161, 0.0, 0.0, 18));
+    let mut hs = row(38, 0, -1, FLAG_AIR, 193, 0.0, 0.0, 99);
+    (hs.jump, hs.jump_min, hs.jump_max, hs.speed_max) = (14.0, 14.0, 14.0, 6.0);
+    rs.push(hs);
+    rs
+}
+
+fn close(a: Option<Launch>, b: Option<Launch>) -> bool {
+    match (a, b) {
+        (None, None) => true,
+        (Some(a), Some(b)) => (a.height - b.height).abs() < 1e-3 && (a.velocity[0] - b.velocity[0]).abs() < 1e-3 && (a.velocity[1] - b.velocity[1]).abs() < 1e-3 && a.gravity == b.gravity,
+        _ => false,
+    }
+}
+
+#[test]
+fn host_hops_forced_rows_and_square_moves_match_the_characters() {
+    let mut rng = Rng(11);
+    let all_rows = hop_rows();
+    let mut differ = 0;
+    let mut hops = 0;
+    for case in 0..4000 {
+        let equipped: Vec<u16> = [13u16, 33, 34, 93, 95, 101, 96, 18, 99].into_iter().filter(|_| rng.next() % 3 != 0).collect();
+        let plus = (rng.next() % 3) as u8;
+        let mut ch = character(all_rows.clone(), equipped.clone(), plus);
+        ch.set_auto_target(false);
+        ch.attack.target_lift = 70.0;
+        ch.attack.target_radius = 55.0;
+        ch.params.gravity = 0.4;
+        ch.params.jump_height = 120.0;
+        let n = rng.next() % 4;
+        let targets: Vec<TargetInfo> = (0..n)
+            .map(|i| TargetInfo { id: 10 + i, pos: [rng.f(-600.0, 600.0), rng.f(-50.0, 300.0), rng.f(-600.0, 600.0)], radius: rng.f(10.0, 80.0), height: rng.f(10.0, 120.0) })
+            .collect();
+        let lock = if n > 0 && rng.next() % 3 != 0 { Some(targets[(rng.next() % n) as usize].id) } else { None };
+        ch.set_lock(lock);
+        ch.set_face_lock(true);
+        ch.set_combo_direction_lock(true);
+        let facing = rng.f(-3.1, 3.1);
+        ch.set_facing(facing);
+        let air = rng.next() % 2 == 0;
+        let pos = [rng.f(-50.0, 50.0), if air { 120.0 } else { 0.0 }, rng.f(-50.0, 50.0)];
+        let env = Env { pos, grounded: !air, height_above_ground: pos[1], targets: &targets, ledges: &[] };
+        let stick = if rng.next() % 2 == 0 { [rng.f(-1.0, 1.0), rng.f(-1.0, 1.0)] } else { [0.0, 0.0] };
+        let len = ch.combo_length(air);
+        let host: Vec<HostTarget> = targets.iter().map(|t| HostTarget { id: t.id, pos: t.pos, radius: t.radius, height: t.height }).collect();
+        let primary = lock.and_then(|id| host.iter().find(|t| t.id == id).copied());
+        let has = |m: u16| all_rows.iter().any(|r| r.motion == m);
+        let p = HostPress {
+            rows: &all_rows,
+            has_motion: &has,
+            air,
+            pos,
+            facing,
+            primary,
+            targets: &host,
+            equipped: &equipped,
+            jump_height: ch.params.jump_height,
+            max_count: len,
+            max_finishers: ch.combo_rules.finisher_base + plus,
+            berserk: false,
+            drop_ahead: false,
+            playing: None,
+        };
+        let hop_in = |first: bool| HopIn { target_lift: 70.0, target_radius: 55.0, gravity: 0.4, stick, first, moving: false, vel_h: [0.0; 2] };
+        // A press in the combo: its row and hop.
+        let count = 1 + (rng.next() % (len as u32 + 1)) as u8;
+        let from = ComboState { count: count - 1, finishers: 1, hit: true, finisher_next: false };
+        let theirs = ch.would_take_launch(Some(from), None, air, false, stick, &env);
+        let ours = p.press(count).map(|r| {
+            let l = p.hop(&r, &hop_in(count - 1 == 0));
+            (r, l)
+        });
+        match (&theirs, &ours) {
+            (Some((a, la)), Some((b, lb))) if a.id == b.id && close(*la, *lb) => hops += la.is_some() as u32,
+            (None, None) => {}
+            _ => {
+                differ += 1;
+                eprintln!("case {case}: press {count}: character {:?}, host {:?}", theirs.as_ref().map(|t| (t.0.id, t.1)), ours.as_ref().map(|t| (t.0.id, t.1)));
+            }
+        }
+        // Forced rows (Retaliating Slash, Counterguard, the guard press's row).
+        for id in [40u8, 39, 1, 12] {
+            let square = id == 12;
+            let theirs = ch.would_take_row(id, Some(ComboState { count: 0, finishers: 1, hit: false, finisher_next: false }), air, stick, &env);
+            let ours = p.forced(id, square).map(|r| {
+                let l = p.hop(&r, &hop_in(true));
+                (r, l)
+            });
+            let same = match (&theirs, &ours) {
+                (Some((a, la)), Some((b, lb))) => a.id == b.id && close(*la, *lb),
+                (None, None) => true,
+                _ => false,
+            };
+            if !same {
+                differ += 1;
+                eprintln!("case {case}: forced {id}: character {:?}, host {:?}", theirs.as_ref().map(|t| (t.0.id, t.1)), ours.as_ref().map(|t| (t.0.id, t.1)));
+            }
+        }
+        // The Square moves.
+        let (combo, finisher, free) = (rng.next() % 2 == 0, rng.next() % 3 == 0, rng.next() % 2 == 0);
+        let fin = 1 + (rng.next() % 2) as u8;
+        let hit = rng.next() % 3 != 0;
+        let sc = (rng.next() % (len as u32 + 1)) as u8;
+        let skip: &[u8] = if rng.next() % 4 == 0 { &[0x25] } else { &[] };
+        let from = ComboState { count: sc, finishers: fin, hit, finisher_next: false };
+        let theirs = ch.would_take_square_exe(from, combo, finisher, free, skip, air, stick, &env);
+        let ours = p.square(sc, fin, hit, combo, finisher, free, skip).map(|(r, fresh)| {
+            let l = p.hop(&r, &hop_in(fresh || sc == 0));
+            (r, l)
+        });
+        let same = match (&theirs, &ours) {
+            (Some((a, la)), Some((b, lb))) => a.id == b.id && close(*la, *lb),
+            (None, None) => true,
+            _ => false,
+        };
+        if !same {
+            differ += 1;
+            eprintln!("case {case}: square ({sc}, {fin}, hit {hit}, combo {combo}, finisher {finisher}, free {free}): character {:?}, host {:?}", theirs.as_ref().map(|t| (t.0.id, t.1)), ours.as_ref().map(|t| (t.0.id, t.1)));
+        }
+    }
+    assert_eq!(differ, 0);
+    assert!(hops > 100, "{hops} hops compared");
+}

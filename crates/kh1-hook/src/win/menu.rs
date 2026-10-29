@@ -296,6 +296,8 @@ unsafe fn stats_inner(member: i32, out: usize) {
     f(member, out);
     // Valor's second Keyblade's Strength and MP on Sora's (`valorstats`).
     super::valorstats::add(member, out);
+    // KH2's combo length in Sora's own stats where it is his (`kh1picker::after_stats`, t896).
+    super::kh1picker::after_stats(out);
     // (No extra AP for the KH2 abilities any more, nor for the form levels' abilities: the
     // tester, what-is-still-missing after m17, "remove extra ap for now". KH1's own AP only.)
 }
@@ -471,6 +473,22 @@ pub struct Growth {
 
 unsafe fn rd<T: Copy>(p: usize) -> T {
     std::ptr::read_unaligned(p as *const T)
+}
+
+/// Sora's KH2 abilities read from KH1's own lists now (t893; the owner: "go ahead with whats
+/// open"): his ability list (save `+0x44`), the shared list (`+0x599`) and the KH2 list, as the
+/// game holds them this instant, through the same table of ours that tells which KH2 ability
+/// each entry is (`growth::Kh1Sora::kh2`; KH1 has no such numbers of its own), with the debug
+/// menu's growth overrides on top; the `abilities` setting's fixed sets for its test modes. Read
+/// at the moment of use (`combomods::abilities_now`) instead of from the copy our KH2 controller
+/// object refreshes once a second (`Growth::update`).
+pub unsafe fn kh1_abilities_now(base: usize) -> Option<character_core::Abilities> {
+    let a = match super::settings::get().abilities {
+        Mode::Test => growth::test(),
+        Mode::All => growth::all(),
+        Mode::Kh1 => Growth::kh1(base)?.kh2(),
+    };
+    Some(growth::with_growth_override(&a, &super::debugmenu::growth_overrides().0))
 }
 
 impl Growth {

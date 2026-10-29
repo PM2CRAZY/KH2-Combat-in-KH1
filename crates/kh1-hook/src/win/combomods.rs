@@ -49,7 +49,7 @@
 
 use super::addr::{Build, Rva};
 use super::{log, pose, takeover};
-use character_core::{ComboRow, ComboState};
+use character_core::ComboRow;
 use std::sync::atomic::{AtomicU32, AtomicU64, AtomicU8, Ordering};
 use std::sync::Mutex;
 
@@ -357,6 +357,34 @@ unsafe fn kh1_combo(actor: usize, air: bool) -> Option<(u8, u8, bool)> {
     Some((rd::<u8>(info + 0x41), len, rd::<u32>(info + 0x50) != 0))
 }
 
+/// Sora's KH2 abilities now, read from KH1's own lists at the moment of use (t893,
+/// `menu::kh1_abilities_now`), once a game frame at most; in a Drive Form on KH1's own states the
+/// form's (KH2's rule, `form::form_abilities`: Sora's combo abilities carried over, every row of
+/// the form's table, its growth at its form level). `None` before the game is up.
+pub fn abilities_now() -> Option<character_core::Abilities> {
+    static NOW: Mutex<Option<(u64, character_core::Abilities)>> = Mutex::new(None);
+    let at = frame();
+    if let Some(a) = NOW.try_lock().ok().and_then(|g| g.as_ref().filter(|(f, _)| *f == at).map(|(_, a)| a.clone())) {
+        return Some(a);
+    }
+    let base = takeover::game_base();
+    if base == 0 {
+        return None;
+    }
+    let sora = unsafe { super::menu::kh1_abilities_now(base) }?;
+    let a = match super::form::native_form() {
+        Some(kind) => {
+            let f = pose::kh2().and_then(|k| kind.data(k))?;
+            super::form::form_abilities(&sora, &f.character, kind)
+        }
+        None => sora,
+    };
+    if let Ok(mut g) = NOW.try_lock() {
+        *g = Some((at, a.clone()));
+    }
+    Some(a)
+}
+
 /// KH1's own calls KH2's walk measures its targets with (t889), as KH1's ground picker's target
 /// count `0x1402A7320` makes them (Steam, Checked (decomp)): the enemy walk `0x140291AB0 (actor,
 /// previous)` (KH1's live actors of another team than his, not hidden: `+0x374` bits 0 / 1 and
@@ -422,9 +450,13 @@ unsafe fn kh1_point(base: usize, actor: usize, point: i32) -> Option<character_c
 /// - every lock point of every enemy KH1's own walk gives (`kh1_calls`): KH2's kind-2 pass;
 /// - his place and facing (`+0x10`, `+0x3C`), the KH2 motion playing on KH1's request (KH2's
 ///   anti-repeat, `kh2slots::playing_motion`);
-/// - Sora's abilities as KH1's lists give them (`takeover::with_abilities`: KH1's own and the KH2
-///   list, read from the save each frame: **not native yet**, our reading of those lists into
-///   KH2's ability numbers), the combo's length and most finishers by KH2's rule on them.
+/// - Sora's abilities as KH1's lists hold them now (`abilities_now`, t893), the combo's length
+///   (KH1's stats, t891) and most finishers by KH2's rule on them;
+/// - for a row's hop (t892): the stick as KH1's pad and camera give it (`takeover::stick_now`) and
+///   his sideways speed in KH1's own fields (`+0x3C0` in the air, the move direction `+0x20`
+///   times `+0x2C` on the ground).
+/// With the Auto Aim setting off (t895), KH2's primary target is only KH1's lock-on (KH2's rule:
+/// no auto target), else KH1's own target for the press.
 /// Nothing of it is kept after the press.
 pub struct Kh1Press {
     table: &'static super::kh2table::Table,
@@ -438,13 +470,41 @@ pub struct Kh1Press {
     pub max_finishers: u8,
     playing: Option<u16>,
     drop_ahead: bool,
+    pub combo_master: bool,
+    stick: [f32; 2],
+    vel_h: [f32; 2],
+}
+
+/// KH1's own target for this press as KH2's primary target (t889 / t895): the combat info's
+/// `+0x54` (KH1's Attack step's target, Checked (decomp)), only while KH1 is locked on with Auto
+/// Aim off (KH2 without its auto target: the lock alone).
+unsafe fn kh1_press_target(base: usize, actor: usize) -> Option<character_core::HostTarget> {
+    let locked = takeover::kh1_locked();
+    if !super::settings::get().auto_aim {
+        let (t, point) = locked?;
+        return kh1_alive(t).then(|| kh1_point(base, t, point)).flatten();
+    }
+    let info = pose::ptr(rd::<u32>(actor + 0x14C));
+    if info < 0x10000 {
+        return None;
+    }
+    let t = pose::ptr(rd::<u32>(info + 0x54));
+    kh1_alive(t).then(|| kh1_point(base, t, rd::<i32>(info + 0x58).max(0))).flatten()
+}
+
+/// KH2's primary target's point now (y up), for KH2's turn windows on KH1's own motions
+/// (`kh2slots::turn_to_lock`, t895): KH1's target for the press that started the move
+/// (`kh1_press_target`).
+pub unsafe fn kh1_primary_point(actor: usize) -> Option<[f32; 3]> {
+    let base = kh1_calls()?;
+    kh1_press_target(base, actor).map(|t| t.pos)
 }
 
 impl Kh1Press {
     /// KH1's state at this press (`air`: KH1's air states). `None` without KH2's data or abilities.
     pub unsafe fn read(actor: usize, air: bool) -> Option<Kh1Press> {
         let table = super::kh2table::now()?;
-        let a = takeover::with_abilities(|a| a.clone())?;
+        let a = abilities_now()?;
         let p = rd::<[f32; 3]>(actor + 0x10);
         let mut press = Kh1Press {
             table,
@@ -463,15 +523,18 @@ impl Kh1Press {
             max_finishers: table.most_finishers(&a),
             playing: super::kh2slots::playing_motion(actor),
             drop_ahead: false,
+            combo_master: a.combo_master,
+            stick: takeover::stick_now(actor),
+            vel_h: if air {
+                let v = rd::<[f32; 4]>(actor + 0x3C0);
+                [v[0], v[2]]
+            } else {
+                let (d, sp) = (rd::<[f32; 3]>(actor + 0x20), rd::<f32>(actor + 0x2C));
+                [d[0] * sp, d[2] * sp]
+            },
         };
         if let Some(base) = kh1_calls() {
-            let info = pose::ptr(rd::<u32>(actor + 0x14C));
-            if info >= 0x10000 {
-                let t = pose::ptr(rd::<u32>(info + 0x54));
-                if kh1_alive(t) {
-                    press.primary = kh1_point(base, t, rd::<i32>(info + 0x58).max(0));
-                }
-            }
+            press.primary = kh1_press_target(base, actor);
             let foes: unsafe extern "system" fn(usize, usize) -> usize = std::mem::transmute(base + FOES_STEAM);
             let next_point: unsafe extern "system" fn(usize, i32) -> i32 = std::mem::transmute(base + NEXT_POINT_STEAM);
             let mut foe = foes(actor, 0);
@@ -527,12 +590,39 @@ impl Kh1Press {
         }
     }
 
-    /// The hop KH2's row starts at this press (`takeover::kh2_hop`; a row with no hop gives none).
-    pub unsafe fn hop(&self, actor: usize, row: &ComboRow, from: ComboState) -> Option<character_core::Launch> {
-        if !row.is_jump() {
-            return None;
-        }
-        takeover::kh2_hop(actor, row.id, from, self.air, self.primary.map(|t| t.id))
+    /// The hop KH2's row starts at this press (t892, `character_core::HostPress::hop`: Steam KH2
+    /// `0x1403D78D0`, on KH1's target and KH1's own speed; a row with no hop gives none). `first`:
+    /// the press starts a combo (with no target the stick turns him first).
+    pub fn hop(&self, row: &ComboRow, first: bool) -> Option<character_core::Launch> {
+        let t = self.table;
+        let h = character_core::HopIn { target_lift: t.target_lift, target_radius: t.target_radius, gravity: t.gravity, stick: self.stick, first, moving: t.moving.contains(&row.motion), vel_h: self.vel_h };
+        self.with(|p| p.hop(row, &h))
+    }
+
+    /// KH2's row `id` as a state's own move forces it (t894, `HostPress::forced`): Counterguard,
+    /// Retaliating Slash, the guard; with its hop (a new combo's).
+    pub fn forced(&self, id: u8) -> Option<(ComboRow, Option<character_core::Launch>)> {
+        // (A Square move that isn't a form's Square finisher stands for a swing.)
+        let square = matches!(id, 0x25 | 0x0C | 0x26) && !super::form::native_now();
+        let row = self.with(|p| p.forced(id, square))?;
+        let launch = self.hop(&row, true);
+        Some((row, launch))
+    }
+
+    /// KH2's Square move in a combo (t894, `HostPress::square`): KH1's count and finisher count
+    /// before the press, the swing connected (or Combo Master), KH2's windows at the frame; with
+    /// its hop.
+    pub fn square(&self, count: u8, finishers: u8, hit: bool, combo: bool, finisher: bool, free: bool, skip: &[u8]) -> Option<(ComboRow, Option<character_core::Launch>)> {
+        let (row, fresh) = self.with(|p| p.square(count, finishers, hit || self.combo_master, combo, finisher, free, skip))?;
+        let launch = self.hop(&row, fresh || count == 0);
+        Some((row, launch))
+    }
+
+    /// KH2's Retaliating Slash row (40) in the moveset, when it needs no ability or its ability is
+    /// equipped (`Character::retaliating_slash_row`'s rule).
+    pub fn retaliating_slash(&self) -> Option<u8> {
+        let r = self.table.row(40)?;
+        (r.ability == 0 || self.equipped.contains(&r.ability)).then_some(r.id)
     }
 
 }
@@ -545,7 +635,7 @@ pub fn kh1_length(len: u8) -> u8 {
     if len == 0 {
         return len;
     }
-    let negative = takeover::with_abilities(|a| a.negative_combo).unwrap_or(0);
+    let negative = abilities_now().map(|a| a.negative_combo).unwrap_or(0);
     len.saturating_sub(negative).max(1)
 }
 
@@ -559,7 +649,7 @@ pub fn kh1_length(len: u8) -> u8 {
 /// selection after m28: "if you set combat to kh2 for both settings you can attack out of your
 /// finisher indefinitely, it needs to behave exact like kh1").
 pub fn finisher_chain_open() -> bool {
-    let plus = takeover::with_abilities(|a| a.finishing_plus).unwrap_or(0);
+    let plus = abilities_now().map(|a| a.finishing_plus).unwrap_or(0);
     finisher_count() < 1 + plus
 }
 
@@ -569,7 +659,7 @@ pub fn finisher_chain_open() -> bool {
 /// style: the finishers so far (`FINISHERS`, at least 1) under one plus Finishing Plus's copies
 /// (the maximum's reading as `finisher_chain_open` takes it), Finishing Plus equipped.
 pub fn finisher_left() -> bool {
-    let plus = takeover::with_abilities(|a| a.finishing_plus).unwrap_or(0);
+    let plus = abilities_now().map(|a| a.finishing_plus).unwrap_or(0);
     plus > 0 && finisher_count() < 1 + plus
 }
 
@@ -621,7 +711,7 @@ pub unsafe fn kh1_finisher_window(actor: usize) {
     // (At the combo style KH2 a KH1 finisher plays only when the KH2 setting's walk took one of
     // KH1's own, `kh2_finisher_walk`; another finisher is left by KH2's count, `+0xD75` against
     // one plus Finishing Plus's copies.)
-    let plus = takeover::with_abilities(|a| a.finishing_plus).unwrap_or(0);
+    let plus = abilities_now().map(|a| a.finishing_plus).unwrap_or(0);
     let left = if super::styles::kh2(kind) { finisher_count() < 1 + plus } else { finisher_chain_open() };
     if plus == 0 || !left {
         return;
@@ -1043,8 +1133,8 @@ pub unsafe fn picker(actor: usize, row: i32, dir: usize, air: bool, bits: u32) -
     // (KH2's row checks on KH1's own state, `Kh1Press`, t889.)
     let taken = Kh1Press::read(actor, air).and_then(|p| {
         let row = p.with(|h| h.ability_row(finisher, &kh1_plays))?;
-        let from = ComboState { count: if finisher { p.max_count } else { 0 }, finishers: 1, hit: true, finisher_next: false };
-        let launch = p.hop(actor, &row, from);
+        // (A swing from a fresh count, a finisher past the length, as KH2's own trial of the row.)
+        let launch = p.hop(&row, !finisher);
         Some((row, launch))
     });
     let Some((pick, launch)) = taken else {
@@ -1273,9 +1363,8 @@ unsafe fn finisher_walk(actor: usize, row: i32, dir: usize, air: bool, bits: u32
     // (KH2's row checks on KH1's own state, `Kh1Press`, t889; a KH2 row's hop as it is taken.)
     let press = Kh1Press::read(actor, air);
     let walked = press.as_ref().map(|press| {
-        let from = ComboState { count: press.max_count, finishers: 1, hit: true, finisher_next: false };
         let kh2 = |r: ComboRow| -> Took {
-            let l = press.hop(actor, &r, from);
+            let l = press.hop(&r, false);
             Took::Kh2(r, l)
         };
         let plain_step = || -> Took {
@@ -1398,32 +1487,30 @@ pub enum Ask {
 /// finisher still playing.
 ///
 /// KH2's walk on KH1's own state (t889, `Kh1Press`): KH1's count, KH1's target for the press and
-/// its enemies' lock points, the moveset's records (`kh2table`); only a row's hop is still KH2's
-/// controller data's (`Kh1Press::hop`).
+/// its enemies' lock points, the moveset's records (`kh2table`), and the row's hop on them
+/// (`Kh1Press::hop`, t892).
 pub unsafe fn kh2_press(actor: usize, air: bool) -> Ask {
     let Some((count, _, _)) = kh1_combo(actor, air) else { return Ask::Unasked };
     let playing = rd::<u32>(actor + 0x164) & 0xFFFF;
     let Some(mut press) = Kh1Press::read(actor, air) else { return Ask::Unasked };
-    let neg = takeover::with_abilities(|a| a.negative_combo).unwrap_or(0);
+    let neg = abilities_now().map(|a| a.negative_combo).unwrap_or(0);
     let len = press.max_count;
     if let Some((n, _, true, _)) = last_step().filter(|l| l.3 == air && l.1 & 0xFFFF == playing) {
         let finishers = finisher_count();
         if let Some(row) = press.with(|p| p.next_finisher(n, finishers)) {
-            let from = ComboState { count: n, finishers, hit: true, finisher_next: true };
-            let launch = press.hop(actor, &row, from);
+            let launch = press.hop(&row, false);
             note(|| format!("KH2's walk on KH1's state (Finishing Plus, count {n}, finisher {finishers}): row {} motion {}", row.id, row.motion));
             return Ask::Took(Press { row, len, neg, launch, chained: true });
         }
     }
     press.test_drop_ahead(actor);
-    let from = ComboState { count: count.saturating_sub(1), finishers: 1, hit: true, finisher_next: false };
     match press.with(|p| p.press(count)) {
         None => {
             note(|| format!("KH2's walk on KH1's state (swing {count} of {len}, {} targets, KH1's target {}): no row", press.targets.len(), if press.primary.is_some() { "there" } else { "none" }));
             Ask::Refused
         }
         Some(row) => {
-            let launch = press.hop(actor, &row, from);
+            let launch = press.hop(&row, count <= 1);
             note(|| format!("KH2's walk on KH1's state (swing {count} of {len}, {} targets, KH1's target {}): row {} motion {}", press.targets.len(), if press.primary.is_some() { "there" } else { "none" }, row.id, row.motion));
             Ask::Took(Press { row, len, neg, launch, chained: false })
         }
@@ -1987,7 +2074,7 @@ pub fn control(s: &super::shared::Seen, jump_fresh: bool, square_fresh: bool) ->
     // Knocked away by KH1's own reaction: KH2's Aerial Recovery (the jump) or Retaliating Slash
     // (Square), on KH1 requests of their own (`kh1rows`) in KH1's air state.
     if s.launched && !s.can_act {
-        if jump_fresh && takeover::with_abilities(|a| a.aerial_recovery) == Some(true) {
+        if jump_fresh && abilities_now().map(|a| a.aerial_recovery) == Some(true) {
             if unsafe { recover(actor) } {
                 return Some(all);
             }
@@ -2001,13 +2088,15 @@ pub fn control(s: &super::shared::Seen, jump_fresh: bool, square_fresh: bool) ->
             return None;
         }
         if square_fresh {
-            let row = takeover::kh2_retaliating_slash();
+            // (KH2's row and checks on KH1's own state, t894.)
+            let press = unsafe { Kh1Press::read(actor, true) };
+            let row = press.as_ref().and_then(|p| p.retaliating_slash());
             if let Some(id) = row {
                 // Its own KH1 row: KH1's Attack command for it (as for the Square moves), its row
                 // ours, KH2's hop for the row (counts at 1 / 1, as KH2's).
                 let n = super::kh1rows::by_kh2_row(id).filter(|&n| super::kh1rows::installed() && super::kh2slots::has(super::kh1rows::request(n) as usize, super::kh1rows::OURS[n].motion));
                 if let (Some(n), 2) = (n, s.state) {
-                    if let Some((r, launch)) = unsafe { takeover::kh2_would_take_row(actor, id, true) } {
+                    if let Some((r, launch)) = press.as_ref().and_then(|p| p.forced(id)) {
                         unsafe { end_kh1_reaction(actor) };
                         if let Ok(mut g) = OURS.lock() {
                             *g = Some((n, launch, frame()));
@@ -2052,8 +2141,8 @@ pub fn control(s: &super::shared::Seen, jump_fresh: bool, square_fresh: bool) ->
         if count == 0 {
             return None;
         }
-        let from = ComboState { count, finishers: finisher_count(), hit, finisher_next: false };
-        let Some((row, launch)) = (unsafe { takeover::kh2_would_take_square(actor, from, combo, finisher, free, &[], air) }) else {
+        // (KH2's Square checks on KH1's own state, t894.)
+        let Some((row, launch)) = unsafe { Kh1Press::read(actor, air) }.and_then(|p| p.square(count, finisher_count(), hit, combo, finisher, free, &[])) else {
             note(|| format!("Square in a swing (count {count}, combo window {combo}, finisher window {finisher}, connected {hit}): KH2 takes no Square move here"));
             return None;
         };
@@ -2109,8 +2198,7 @@ pub fn valor_square(s: &super::shared::Seen, square_fresh: bool) -> Option<u32> 
     let windows = unsafe { super::kh2slots::windows_now(actor) };
     if let Some((m, f, combo, finisher, free)) = windows.filter(|w| w.2 || w.3) {
         let (count, _, hit) = unsafe { kh1_combo(actor, air) }?;
-        let from = ComboState { count, finishers: finisher_count(), hit, finisher_next: false };
-        let Some((row, launch)) = (unsafe { takeover::kh2_would_take_square(actor, from, combo, finisher, free, &pose::PORTED_TO_VALOR, air) }) else {
+        let Some((row, launch)) = unsafe { Kh1Press::read(actor, air) }.and_then(|p| p.square(count, finisher_count(), hit, combo, finisher, free, &pose::PORTED_TO_VALOR)) else {
             note(|| format!("Valor: Square in KH2 motion {m} frame {f} (combo window {combo}, finisher window {finisher}, count {count}, connected {hit}): KH2 takes no Square move here"));
             return None;
         };
@@ -2129,7 +2217,7 @@ pub fn valor_square(s: &super::shared::Seen, square_fresh: bool) -> Option<u32> 
     if s.state != 0 || !s.can_act {
         return None;
     }
-    let (row, launch) = unsafe { takeover::kh2_would_take_row(actor, 11, false) }?;
+    let (row, launch) = unsafe { Kh1Press::read(actor, false) }?.forced(11)?;
     let Some(n) = ours_for(&row) else {
         note(|| format!("Valor: Square: KH2's row 11 motion {} has no KH1 row of its own built: nothing", row.motion));
         return None;
@@ -2446,7 +2534,7 @@ fn yaw_to(d: [f32; 2]) -> Option<f32> {
 /// Square on the ground with the Dodge Roll style KH2 (`shared::control`): KH2's guard press on
 /// KH1's states, if KH2 would guard here (stick at rest, Guard equipped) and our request is built.
 pub fn guard_press() -> bool {
-    if super::form::in_form() || takeover::move_tilt() > 0.0 || takeover::with_abilities(|a| a.guard) != Some(true) {
+    if super::form::in_form() || takeover::move_tilt() > 0.0 || abilities_now().map(|a| a.guard) != Some(true) {
         return false;
     }
     unsafe {
@@ -2723,7 +2811,7 @@ pub unsafe fn counter_window(actor: usize) {
     if !super::shared::active() || super::form::in_form() || rd::<i32>(actor + 0x70) != 0 || super::kh2slots::playing_motion(actor) != Some(character_core::motion::GUARD) {
         return;
     }
-    if takeover::with_abilities(|a| a.equipped.contains(&COUNTERGUARD_ABILITY)) != Some(true) {
+    if abilities_now().map(|a| a.equipped.contains(&COUNTERGUARD_ABILITY)) != Some(true) {
         return;
     }
     let inst = pose::ptr(rd::<u32>(actor + 0x15C));
@@ -2749,7 +2837,7 @@ pub unsafe fn counter_open(actor: usize) -> bool {
         && !super::form::in_form()
         && rd::<i32>(actor + 0x70) == 0
         && super::kh2slots::playing_motion(actor) == Some(character_core::motion::GUARD)
-        && takeover::with_abilities(|a| a.equipped.contains(&COUNTERGUARD_ABILITY)) == Some(true)
+        && abilities_now().map(|a| a.equipped.contains(&COUNTERGUARD_ABILITY)) == Some(true)
 }
 
 /// After KH1's battle-menu fill (`drive::fill`, from whichever of `shortcuts` / `reflect` / `drive`
@@ -2784,7 +2872,8 @@ unsafe fn counterguard(actor: usize, air: bool, count: u8, request_of: &dyn Fn(i
         return None;
     }
     let n = k::by_kh2_row(k::COUNTERGUARD_ROW).filter(|&n| k::installed() && super::kh2slots::has(k::request(n) as usize, k::OURS[n].motion))?;
-    let Some((row, launch)) = takeover::kh2_would_take_row(actor, k::COUNTERGUARD_ROW, false) else {
+    // (KH2's row checks on KH1's own state, t894.)
+    let Some((row, launch)) = Kh1Press::read(actor, false).and_then(|p| p.forced(k::COUNTERGUARD_ROW)) else {
         note(|| "Attack in KH2's guard repel: KH2 wouldn't take Counterguard (row 39) now".to_string());
         return None;
     };

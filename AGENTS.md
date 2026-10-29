@@ -1,3 +1,45 @@
+### 2026-10-29: Stage 898 (testing branch: KH2's movement numbers from the moveset's records, written only when they change)
+- The owner (chat: "go ahead", item 2 of what was left: the movement numbers off our KH2 controller object).
+  - Before: `takeover::refresh_kh2_numbers` read the walk, run, jump, gravity, air and ground inertia numbers and High Jump's height from our KH2 controller object every frame and wrote them for KH2's physics on KH1's states.
+  - Now: `takeover::kh2_numbers`: the moveset's own (`kh2table`: its `prty` numbers and `fmab` levels, built once; base Sora's or a Drive Form's on KH1's states), High Jump at his level from KH1's lists (`combomods::abilities_now`, read at most every 30 game frames), written only when the moveset or the level changes (`shared::physics::set_numbers` now says whether they went in). The ability menu's own work (`menu::Growth::update`: abilities given, boxes, names) still runs each frame as before.
+  - Not checked in game; `cargo test` not run for `kh1-hook` here (no crate registry reachable). docs/kh1-anim-slots.md §7.z.11.
+
+### 2026-10-29: Stage 897 (testing branch: the growth abilities' levels and the remaining ability checks from KH1's lists)
+- The owner (same go-ahead, item 1).
+  - Before: Aerial Dodge, Dodge Roll, Quick Run and KH2 Glide took their level and `fmab` record from our KH2 controller object's copy (`takeover::kh2_air_dodge*`, `kh2_dodge_roll_growth`, `kh2_quick_run_growth`, `kh2_glide_growth`, `kh2_glide_open`, `kh2_square`), as did the guard's all-round check (`hurt`), the Quick Run-for-roll check (`shared`) and the debug menu's growth page.
+  - Now: the level from KH1's lists now (`combomods::abilities_now`, t893), the record from the moveset's (`kh2table::Table::growth_level`, Sora's or a Drive Form's `fmab`). `takeover::with_abilities` removed: nothing reads the controller object's ability copy. Comments in `form` corrected (Wisdom runs on KH1's states; Final is refused, t873).
+  - Not checked in game; `cargo test` not run for `kh1-hook` here. docs/kh1-anim-slots.md §7.z.11.
+
+### 2026-10-29: Stage 896 (testing branch: KH2's combo length through the one hook on KH1's stats builder)
+- The owner's t891 log: "hook party stats at 0x...5130: unexpected bytes [e9, ...], not hooked".
+  - Cause: t891 hooked KH1's stats builder (Steam `0x1402A5130`) a second time from `kh1picker`, installed before `menu`'s own party stats hook on the same function (Epic RVA `0x2A2FA0`), which then found our jump in its first bytes and refused: since t891, Valor's second Keyblade's Strength / MP on Sora's stats and the debug menu's stat locks were off.
+  - Now: no hook of `kh1picker`'s; `menu`'s party stats hook calls `kh1picker::after_stats` after KH1's own builder (KH2's length into Sora's `+0xD4` / `+0xD5` where it is his, as t891 did), Steam only.
+  - Not checked in game; `cargo test` not run for `kh1-hook` here. docs/kh1-anim-slots.md §7.z.11.
+
+### 2026-10-29: Stage 895 (testing branch: Auto Aim on KH2's primary target from KH1, and KH2's turn windows on KH1's target)
+- The owner (chat, after t891: "go ahead with whats open don't need my input just finish it").
+  - Before: since t889 KH2's walk took KH1's own target for the press whatever the Auto Aim setting (it only changed the hop's controller ask), and KH2's turn windows (`kh2slots::turn_to_lock`) turned him toward the controller object's primary target (`takeover::kh2_primary_target`, its own target list).
+  - Now: `combomods::kh1_press_target`: Auto Aim on, KH1's own target for the press (combat info `+0x54`, Checked (decomp)); off, KH1's lock-on alone (KH2's rule without its auto target). The turn windows turn him toward the same target (`combomods::kh1_primary_point`). `takeover::kh2_primary_target` removed.
+  - Not checked in game; `cargo test` not run for `kh1-hook` here (no crate registry reachable). docs/kh1-anim-slots.md §7.z.11.
+
+### 2026-10-29: Stage 894 (testing branch: the Square moves, Counterguard, Retaliating Slash and Valor's row 11 on KH1's own state)
+- The owner (same go-ahead).
+  - Before: these asked our KH2 controller object (`takeover::kh2_would_take_square`, `kh2_would_take_row`, `kh2_retaliating_slash`).
+  - Now: `character_core::HostPress::square` (the exe's order 0x25, 0x0C, 0x26 and checks, Steam KH2 `0x1403A81F0` / `0x1403A9950`, Checked (decomp)) and `HostPress::forced` (a state's forced row: a new combo's press, its conditions), on KH1's state (`combomods::Kh1Press::square` / `forced` / `retaliating_slash`), with their hops (t892); Combo Master counts as connected, as KH2's. The three `takeover` asks removed: no combo press asks the controller object now. `crates/character-core/tests/host_combo.rs` checks both against the controller's own on 4000 made-up cases (run here: passes).
+  - Not checked in game; `cargo test` not run for `kh1-hook` here. docs/kh1-anim-slots.md §7.z.11.
+
+### 2026-10-29: Stage 893 (testing branch: Sora's KH2 abilities read from KH1's own lists at the moment of use)
+- The owner (same go-ahead).
+  - Before: the combo's checks read the copy of his abilities our KH2 controller object refreshes once a second (`takeover::with_abilities`).
+  - Now: `menu::kh1_abilities_now` reads his ability list (save `+0x44`), the shared list (`+0x599`) and the KH2 list as KH1 holds them now, through our table of which KH2 ability each entry is (`growth::Kh1Sora::kh2`; KH1 has no KH2 numbers), with the debug menu's growth overrides and the `abilities` setting's test sets; in a Drive Form on KH1's states, the form's by KH2's rule (`form::form_abilities`, now `pub`). `combomods::abilities_now` (once a game frame at most) is used by the walk, the length (`kh1picker::sync_length`), Finishing Plus (and `kh2slots`' Finishing Plus window), the guard, Counterguard and Aerial Recovery's checks. Other systems (glide, Quick Run, the dodge roll) keep the controller's copy.
+  - Not checked in game; `cargo test` not run for `kh1-hook` here. docs/kh1-anim-slots.md §7.z.11.
+
+### 2026-10-29: Stage 892 (testing branch: a combo row's hop worked out on KH1's own state)
+- The owner (same go-ahead).
+  - Before: the hop of the row KH2's walk took on KH1's state came from our KH2 controller object (`takeover::kh2_hop`: `Character::would_take_row` with its own target list and speed).
+  - Now: `character_core::HostPress::hop` (Steam KH2 `0x1403D78D0`, Checked (decomp)): the height and sideways speed for KH1's target for the press, from his own target shape's centre (the moveset's `target_lift` / `target_radius`, now in `kh2table`), with no target the row's own along his facing (the stick on a combo's first press, as KH1's pad and camera give it); a moving row (an allow-movement range: Wisdom's air shots) keeps his speed in KH1's own fields (`+0x3C0` in the air, `+0x20` x `+0x2C` on the ground). Checked against the controller's own on 4000 made-up cases (run here: passes). `takeover::kh2_hop` removed.
+  - Not checked in game; `cargo test` not run for `kh1-hook` here. docs/kh1-anim-slots.md §7.z.11.
+
 ### 2026-10-29: Stage 891 (testing branch: KH2's combo length kept in KH1's own stats)
 - The owner (chat, the native plan for "which attack a press gives, and the Finishing Plus counter", part 4, answer 2 (a): "go ahead").
   - Before: at the combo style KH2, `combomods::kh2_length_for_picker` wrote KH2's length into Sora's stats length byte (`+0xD4` ground, `+0xD5` air) for the call of KH1's picker and put KH1's back after it, so every other reader saw KH1's length.

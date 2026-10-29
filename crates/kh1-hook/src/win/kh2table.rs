@@ -32,6 +32,19 @@ pub struct Table {
     pub finisher_base: u8,
     /// KH2's jump height (row flag 2 raises a row's height window by it).
     pub jump_height: f32,
+    /// For a row's hop (t892, `character_core::HopIn`): KH2's own target shape (its centre's
+    /// height over his feet, its radius: the plyr record's), the moveset's gravity, and the motions
+    /// with an allow-movement range (their hop keeps his speed: Wisdom's air shots).
+    pub target_lift: f32,
+    pub target_radius: f32,
+    pub gravity: f32,
+    pub moving: HashSet<u16>,
+    /// The moveset's movement numbers (`prty`: walk, run, jump, gravity, air and ground inertia)
+    /// and its growth abilities' levels (`fmab`: High Jump, Quick Run, Aerial Dodge, Glide, Dodge
+    /// Roll), for KH2's numbers on KH1's states (t897 / t898), read from here instead of our KH2
+    /// controller object's copy.
+    pub params: character_core::MoveParams,
+    pub growth: Vec<character_core::GrowthLevel>,
 }
 
 impl Table {
@@ -53,6 +66,12 @@ impl Table {
             air_base: ch.combo_rules.air_base,
             finisher_base: ch.combo_rules.finisher_base,
             jump_height: ch.params.jump_height,
+            target_lift: ch.attack.target_lift,
+            target_radius: ch.attack.target_radius,
+            gravity: ch.params.gravity,
+            params: ch.params.clone(),
+            growth: ch.growth.clone(),
+            moving: ch.moveset.clips.iter().filter(|(_, c)| c.windows.iter().any(|w| matches!(w.kind, character_core::WindowKind::AllowMovement))).map(|(m, _)| *m).collect(),
         }
     }
 
@@ -66,6 +85,21 @@ impl Table {
     /// KH2's most finishers in a row with these abilities (one plus Finishing Plus's copies).
     pub fn most_finishers(&self, a: &Abilities) -> u8 {
         self.finisher_base.saturating_add(a.finishing_plus)
+    }
+
+    /// The growth record for an ability level (1 = LV1, past the last the last; 0 has none), as
+    /// `Character::growth_level`.
+    pub fn growth_level(&self, level: u8) -> Option<&character_core::GrowthLevel> {
+        if level == 0 {
+            None
+        } else {
+            self.growth.get((level as usize - 1).min(self.growth.len().saturating_sub(1)))
+        }
+    }
+
+    /// KH2's row `id`, if the moveset has one.
+    pub fn row(&self, id: u8) -> Option<&ComboRow> {
+        self.rows.iter().find(|r| r.id == id)
     }
 
     /// The KH1 row of ours that plays KH2's row `id` (`kh1rows`), if it has one.

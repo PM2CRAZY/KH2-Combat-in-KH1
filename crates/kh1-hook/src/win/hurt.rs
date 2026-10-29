@@ -122,7 +122,7 @@ unsafe extern "system" fn hurt(actor: usize, out: usize) -> usize {
             let f = rd::<[f32; 4]>(actor + 0x30);
             let fwd = glam::Vec2::new(f[0], f[2]).normalize_or(glam::Vec2::Y);
             let yaw = if f[3].is_finite() { f[3] } else { fwd.x.atan2(fwd.y) };
-            let all_round = takeover::with_abilities(|a| a.guard_all_round) == Some(true);
+            let all_round = super::combomods::abilities_now().map(|a| a.guard_all_round) == Some(true);
             let mut repel: Option<(glam::Vec2, Option<i32>)> = None;
             for &r in &ready {
                 if rd::<u8>(r) & NO_EFFECT != 0 || (rd::<u32>(r + 0xC) >> 6) & 0xF >= 9 {

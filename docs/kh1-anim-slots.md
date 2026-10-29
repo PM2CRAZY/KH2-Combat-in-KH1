@@ -1963,15 +1963,42 @@ with none, row 5 / 9 marked and walked again.
   KH1's pickers; KH1's own length goes back (KH1's rule, its counter) when the style is KH1
   again. KH1's code and ours (the walk, the cast step in `formmagic`) read the one byte.
 
-**Not native yet (what's left).**
-- The hop of the row taken (`takeover::kh2_hop`): the controller object's `would_take_row`, with
-  KH1's press target as its lock.
-- His abilities as KH2's numbers come from our reading of KH1's lists (`takeover::with_abilities`).
-- The Square moves, Counterguard and Retaliating Slash still ask the controller object.
-- Berserk Charge: KH1 has no MP charge state for it to read (never refuses, as before).
+**The rest, native (t892 .. t895; the owner: "go ahead with whats open").**
+- t892, the hop: `character_core::HostPress::hop` (Steam KH2 `0x1403D78D0`, the same rule as the
+  controller's, tested against it on 4000 made-up cases), on KH1's target for the press, the stick
+  as KH1's pad and camera give it and his sideways speed in KH1's own fields (`+0x3C0` in the air,
+  `+0x20` times `+0x2C` on the ground) for a moving row (an allow-movement range: Wisdom's air
+  shots); KH2's own target shape, gravity and moving motions from the records (`kh2table`).
+  `takeover::kh2_hop` is gone.
+- t893, his abilities: read from KH1's own lists at the moment of use (`menu::kh1_abilities_now`:
+  his list, the shared list, the KH2 list, the debug menu's growth overrides; once a game frame at
+  most, `combomods::abilities_now`); in a Drive Form on KH1's states the form's by KH2's rule
+  (`form::form_abilities`). Used by the walk, the length, Finishing Plus, the guard, Counterguard
+  and Aerial Recovery's checks. (Before: the copy our KH2 controller object refreshed once a
+  second.) The translation of KH1's list entries into KH2's ability numbers stays a table of
+  ours (`growth`): KH1 has no KH2 numbers.
+- t894, the Square moves (`HostPress::square`: the exe's order 0x25, 0x0C, 0x26 and checks,
+  `0x1403A81F0` / `0x1403A9950`), Counterguard, Retaliating Slash and Valor's row 11
+  (`HostPress::forced`) on KH1's state with their hops; `takeover::kh2_would_take_square`,
+  `kh2_would_take_row`, `kh2_retaliating_slash` are gone. No combo press asks the controller
+  object now.
+- t895, Auto Aim: with the setting off, KH2's primary target is KH1's lock-on alone (KH2's rule
+  without its auto target); on, KH1's own target for the press. KH2's turn windows turn him toward
+  the same target (`combomods::kh1_primary_point`; `takeover::kh2_primary_target` is gone).
+
+- t896: KH2's length goes in through `menu`'s one hook on KH1's stats builder
+  (`kh1picker::after_stats`); t891's own second hook on it had made `menu`'s refuse (Valor's
+  second Keyblade's stats and the debug locks were off in t891 .. t895).
+
+- t897 / t898 (outside the combo): the growth abilities' levels (Aerial Dodge, Dodge Roll, Quick
+  Run, KH2 Glide) and the guard / Quick Run / debug menu checks read KH1's lists now
+  (`abilities_now`) with the moveset's `fmab` records (`kh2table`); KH2's movement numbers come
+  from the moveset's `prty` numbers, written only when the moveset or High Jump's level changes.
+  Nothing reads our KH2 controller object's ability copy any more.
+
+**Left.** Berserk Charge never refuses a finisher: the mod has no MP Charge yet for it to read.
 
 **Assumptions.** KH1's lock point has no height of its own (its radius stands for it, as
 before). A target is now each lock point of each enemy KH1's walk gives (before: one target a
 body near him, its first lock point, its widest part's radius). KH1's own aim with no lock-on is
-what KH2's primary target was by its own nearest-target rule (the Auto Aim setting no longer
-changes the walk, only the hop).
+what KH2's primary target was by its own nearest-target rule.

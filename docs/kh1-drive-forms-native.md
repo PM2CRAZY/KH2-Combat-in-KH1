@@ -720,13 +720,13 @@ wisdom can behave correctly without overwriting kh1's vanilla logic". Step 1:
   1. Done in t888 / t889 (`docs/kh1-anim-slots.md` §7.z.11): KH2's walk for an Attack press (and
      the KH1-style ability rows and finisher walks) runs on KH1's state alone
      (`combomods::Kh1Press`, `character_core::HostPress`) over the moveset's records
-     (`kh2table`), its targets KH1's own (the press's target, every enemy's lock points). Left:
-     the hop of the row taken (and the last speed a moving air row keeps, Wisdom's shots) is
-     still worked out by the controller object (`takeover::kh2_hop`).
+     (`kh2table`), its targets KH1's own (the press's target, every enemy's lock points). The
+     hop of the row taken too since t892 (`HostPress::hop`, KH1's own speed for a moving row).
   2. Done in t890: Finishing Plus's finisher count and the combo's last step live in KH1's
      combat info (`+0x44`, `+0x45` / `+0x46` / `+0x5C`), no state of ours.
-  3. The Square moves, Counterguard and Retaliating Slash still ask the controller object
-     (`kh2_would_take_square`, `kh2_would_take_row`).
+  3. Done in t894: the Square moves, Counterguard, Retaliating Slash and Valor's row 11 on KH1's
+     state too (`HostPress::square` / `forced`); his abilities read from KH1's lists at the press
+     (t893).
 
 #### 7.4.3 The Drive and the arrival in the air
 

@@ -631,12 +631,12 @@ pub fn pad_square() -> bool {
     raw || held & 0x10_0000 != 0 && held & 6 == 0
 }
 
-/// KH2's Aerial Dodge is equipped (the controller's abilities, from KH1's menu).
+/// KH2's Aerial Dodge is equipped (t897: Sora's abilities as KH1's lists hold them now,
+/// `combomods::abilities_now`). Not known yet: the last answer, not "no dodge", which let KH1 see
+/// the dodge's jump press as its glide.
 fn kh2_air_dodge() -> bool {
-    // (The controller busy this step: the last answer, not "no dodge", which let KH1 see the
-    // dodge's jump press as its glide.)
     static LAST: AtomicBool = AtomicBool::new(false);
-    match DRIVER.try_lock().ok().and_then(|d| d.as_ref().map(|d| d.character.abilities.aerial_dodge > 0)) {
+    match super::combomods::abilities_now().map(|a| a.aerial_dodge > 0) {
         Some(v) => {
             LAST.store(v, Ordering::Relaxed);
             v
@@ -646,14 +646,12 @@ fn kh2_air_dodge() -> bool {
 }
 
 /// KH2's Aerial Dodge at Sora's level (KH2's `fmab`: its height and its speed a frame), if
-/// equipped (`combomods::aerial_dodge`). The controller busy: the last answer.
+/// equipped (`combomods::aerial_dodge`): his level from KH1's lists now, the record from the
+/// moveset's (`kh2table`, t897). Not known yet: the last answer.
 pub fn kh2_air_dodge_growth() -> Option<(f32, f32)> {
     static LAST: Mutex<Option<(f32, f32)>> = Mutex::new(None);
-    let read = DRIVER.try_lock().ok().and_then(|d| {
-        d.as_ref().map(|d| {
-            let level = d.character.abilities.aerial_dodge;
-            d.character.growth_level(level).map(|g| (g.air_dodge_height, g.air_dodge_speed)).filter(|g| g.0.is_finite() && g.1.is_finite() && g.0 > 0.0)
-        })
+    let read = super::combomods::abilities_now().zip(super::kh2table::now()).map(|(a, t)| {
+        t.growth_level(a.aerial_dodge).map(|g| (g.air_dodge_height, g.air_dodge_speed)).filter(|g| g.0.is_finite() && g.1.is_finite() && g.0 > 0.0)
     });
     match read {
         Some(v) => {
@@ -667,15 +665,14 @@ pub fn kh2_air_dodge_growth() -> Option<(f32, f32)> {
 }
 
 /// KH2's dodge roll level and its invulnerable frames (`fmab` `dodge_roll_star_time`, 10 / 16 / 24 /
-/// 32 by level) for Sora's Dodge Roll now (`combomods::roll_press`, the native roll). The last answer
-/// while the controller is busy. `None` without KH2's Dodge Roll.
+/// 32 by level) for Sora's Dodge Roll now (`combomods::roll_press`, the native roll): his level from
+/// KH1's lists now, the record from the moveset's (`kh2table`, t897). Not known yet: the last
+/// answer. `None` without KH2's Dodge Roll.
 pub fn kh2_dodge_roll_growth() -> Option<(u8, f32)> {
     static LAST: Mutex<Option<(u8, f32)>> = Mutex::new(None);
-    let read = DRIVER.try_lock().ok().and_then(|d| {
-        d.as_ref().map(|d| {
-            let level = d.character.abilities.dodge_roll;
-            (level > 0).then(|| (level, d.character.growth_level(level).map_or(0.0, |g| g.dodge_roll_star_time).max(0.0)))
-        })
+    let read = super::combomods::abilities_now().zip(super::kh2table::now()).map(|(a, t)| {
+        let level = a.dodge_roll;
+        (level > 0).then(|| (level, t.growth_level(level).map_or(0.0, |g| g.dodge_roll_star_time).max(0.0)))
     });
     match read {
         Some(v) => {
@@ -691,14 +688,13 @@ pub fn kh2_dodge_roll_growth() -> Option<(u8, f32)> {
 /// KH2's Quick Run numbers for Sora's Quick Run level now (`quickrun`, its native state): the
 /// level (1 LV1 .. 4 MAX) and its `fmab` record (KH2's start `0x1403A9830` reads `+0xC` the time,
 /// `+0x10` the speed, `+0x14` the brake, `+0x18` the stop brake, `+0x1C` the invulnerable frames;
-/// Checked (decomp)). The last answer while the controller is busy. `None` without Quick Run.
+/// Checked (decomp)): his level from KH1's lists now, the record from the moveset's (`kh2table`,
+/// t897). Not known yet: the last answer. `None` without Quick Run.
 pub fn kh2_quick_run_growth() -> Option<(u8, character_core::GrowthLevel)> {
     static LAST: Mutex<Option<(u8, character_core::GrowthLevel)>> = Mutex::new(None);
-    let read = DRIVER.try_lock().ok().and_then(|d| {
-        d.as_ref().map(|d| {
-            let level = d.character.abilities.quick_run;
-            d.character.growth_level(level).cloned().filter(|g| g.quick_run_speed.is_finite() && g.quick_run_speed > 0.0).map(|g| (level, g))
-        })
+    let read = super::combomods::abilities_now().zip(super::kh2table::now()).map(|(a, t)| {
+        let level = a.quick_run;
+        t.growth_level(level).cloned().filter(|g| g.quick_run_speed.is_finite() && g.quick_run_speed > 0.0).map(|g| (level, g))
     });
     match read {
         Some(v) => {
@@ -712,15 +708,13 @@ pub fn kh2_quick_run_growth() -> Option<(u8, character_core::GrowthLevel)> {
 }
 
 /// KH2's glide numbers for Sora's Glide level (`glide`, KH2's glide in KH1's state): (level, its
-/// growth record). Its level kept aside counts (`KH2_GLIDE_KEPT`). The controller busy this step:
-/// as last read.
+/// growth record), his level from KH1's lists now and the record from the moveset's (`kh2table`,
+/// t897). Its level kept aside counts (`KH2_GLIDE_KEPT`). Not known yet: as last read.
 pub fn kh2_glide_growth() -> Option<(u8, character_core::GrowthLevel)> {
     static LAST: Mutex<Option<(u8, character_core::GrowthLevel)>> = Mutex::new(None);
-    let read = DRIVER.try_lock().ok().and_then(|d| {
-        d.as_ref().map(|d| {
-            let level = (d.character.abilities.glide as u32).max(KH2_GLIDE_KEPT.load(Ordering::Relaxed)).min(u8::MAX as u32) as u8;
-            d.character.growth_level(level).cloned().filter(|g| g.glide_speed.is_finite() && g.glide_speed > 0.0).map(|g| (level, g))
-        })
+    let read = super::combomods::abilities_now().zip(super::kh2table::now()).map(|(a, t)| {
+        let level = (a.glide as u32).max(KH2_GLIDE_KEPT.load(Ordering::Relaxed)).min(u8::MAX as u32) as u8;
+        t.growth_level(level).cloned().filter(|g| g.glide_speed.is_finite() && g.glide_speed > 0.0).map(|g| (level, g))
     });
     match read {
         Some(v) => {
@@ -757,18 +751,17 @@ pub fn note_launch(vel: [f32; 2]) {
 }
 
 /// KH2's glide would start now (t321, Glide at KH2): KH2's Glide equipped (its level kept aside
-/// counts: `KH2_GLIDE_KEPT`) and `above` (his height over the floor) past its start height.
+/// counts: `KH2_GLIDE_KEPT`) and `above` (his height over the floor) past its start height; the
+/// level from KH1's lists now, the record from the moveset's (`kh2table`, t897). Not known yet:
+/// the start height as last read.
 fn kh2_glide_open(above: f32) -> bool {
     if !super::styles::kh2(super::styles::Kind::Glide) || !above.is_finite() {
         return false;
     }
-    // (The controller busy this step: its start height as last read, as `kh2_air_dodge` does.)
     static START: AtomicU32 = AtomicU32::new(u32::MAX);
-    let read = DRIVER.try_lock().ok().and_then(|d| {
-        d.as_ref().map(|d| {
-            let level = (d.character.abilities.glide as u32).max(KH2_GLIDE_KEPT.load(Ordering::Relaxed)).min(u8::MAX as u32) as u8;
-            d.character.growth_level(level).map(|g| g.glide_start_height)
-        })
+    let read = super::combomods::abilities_now().zip(super::kh2table::now()).map(|(a, t)| {
+        let level = (a.glide as u32).max(KH2_GLIDE_KEPT.load(Ordering::Relaxed)).min(u8::MAX as u32) as u8;
+        t.growth_level(level).map(|g| g.glide_start_height)
     });
     let start = match read {
         Some(h) => {
@@ -780,18 +773,11 @@ fn kh2_glide_open(above: f32) -> bool {
     start.is_some_and(|h| above > h)
 }
 
-/// What KH2 has for Square on the ground (the controller's abilities, from KH1's menu): (a
-/// dodge roll, Guard or Quick Run; Quick Run).
+/// What KH2 has for Square on the ground (t897: Sora's abilities as KH1's lists hold them now):
+/// (a dodge roll, Guard or Quick Run; Quick Run).
 fn kh2_square() -> (bool, bool) {
-    DRIVER
-        .try_lock()
-        .ok()
-        .and_then(|d| {
-            d.as_ref().map(|d| {
-                let a = &d.character.abilities;
-                (a.dodge_roll > 0 || a.guard || a.quick_run > 0, a.quick_run > 0)
-            })
-        })
+    super::combomods::abilities_now()
+        .map(|a| (a.dodge_roll > 0 || a.guard || a.quick_run > 0, a.quick_run > 0))
         // (Not known yet: as if, so the press is KH2's as before.)
         .unwrap_or((true, false))
 }
@@ -1154,28 +1140,52 @@ unsafe fn form_native_frame(base: usize, actor: usize) {
     super::form::native_frame(&mut d.drive, &mut d.character, kh2, actor, battle, steps());
 }
 
-/// KH2's movement numbers with Sora's abilities now (KH1's menu), for KH2's physics on KH1's own
-/// states (`shared::physics`).
+/// The ability menu's own work each frame (`menu::Growth::update`: KH2's abilities given in KH1's
+/// lists, their boxes and menu names; it looks at the lists once a second), then KH2's movement
+/// numbers on KH1's states (`kh2_numbers`).
 unsafe fn refresh_kh2_numbers(base: usize) {
-    let Some(kh2) = pose::kh2() else { return };
-    let Ok(mut g) = DRIVER.try_lock() else { return };
-    let d = g.get_or_insert_with(|| new_driver(kh2));
-    d.growth.update(base, &mut d.character);
-    super::form::abilities(&mut d.drive, &mut d.character);
-    // (KH2 Sora's own numbers, not the controller's now: with physics KH1 those are KH1's,
-    // `shared::physics::kh2_controller`. In a Drive Form on KH1's own states, the form's: Valor's
-    // run 12 and jump, its High Jump at its form level (`formexp`), `prty` moveset 2, Checked (files).)
-    let own = match super::form::current().filter(|_| super::form::native_now()).and_then(|k| k.data(kh2)) {
-        Some(f) => &f.character,
-        None => &kh2.character,
-    };
-    let p = &own.params;
-    let high = d.character.abilities.high_jump;
-    let (jump, high_jump) = (p.jump_height, if high == 0 { p.jump_height } else { own.growth_level(high).map_or(p.jump_height, |g| g.high_jump_height) });
+    if let Some(kh2) = pose::kh2() {
+        if let Ok(mut g) = DRIVER.try_lock() {
+            let d = g.get_or_insert_with(|| new_driver(kh2));
+            d.growth.update(base, &mut d.character);
+            super::form::abilities(&mut d.drive, &mut d.character);
+        }
+    }
+    kh2_numbers();
+}
+
+/// KH2's movement numbers for KH2's physics on KH1's own states (`shared::physics`; t898): the
+/// moveset's own (`kh2table`: base Sora's `prty`, or a Drive Form's on KH1's states: Valor's run 12
+/// and jump, `prty` moveset 2, Checked (files)), its High Jump at his level from KH1's lists now
+/// (`combomods::abilities_now`). Worked out again only when the moveset or the High Jump level
+/// changes, those read at most every 30 game frames (the moveset at once: a form's change); before,
+/// written from our KH2 controller object's copy every frame. With physics KH1 the numbers are
+/// KH1's (`shared::physics::kh2_controller`).
+fn kh2_numbers() {
+    static KEY: Mutex<Option<(usize, u8)>> = Mutex::new(None);
+    static LEVEL: AtomicU8 = AtomicU8::new(0);
+    static READ_AT: AtomicU64 = AtomicU64::new(u64::MAX);
+    let Some(t) = super::kh2table::now() else { return };
+    let now = GAME_FRAME.load(Ordering::Relaxed);
+    let at = READ_AT.load(Ordering::Relaxed);
+    if at == u64::MAX || now.wrapping_sub(at) >= 30 {
+        if let Some(a) = super::combomods::abilities_now() {
+            LEVEL.store(a.high_jump, Ordering::Relaxed);
+            READ_AT.store(now, Ordering::Relaxed);
+        }
+    }
+    let high = LEVEL.load(Ordering::Relaxed);
+    let key = (t as *const super::kh2table::Table as usize, high);
+    let Ok(mut k) = KEY.lock() else { return };
+    if *k == Some(key) {
+        return;
+    }
+    let p = &t.params;
+    let (jump, high_jump) = (p.jump_height, if high == 0 { p.jump_height } else { t.growth_level(high).map_or(p.jump_height, |g| g.high_jump_height) });
     // (KH2's jump start with High Jump is its High Jump, whichever of KH1's takeoffs asked: Valor
     // always has it, so KH1's plain takeoff too, `kh2slots::VALOR_SPECS`.)
     let jump = if super::form::native_now() && high > 0 { high_jump } else { jump };
-    super::shared::physics::set_numbers(super::shared::physics::Numbers {
+    let set = super::shared::physics::set_numbers(super::shared::physics::Numbers {
         walk: p.walk_speed,
         run: p.run_speed,
         jump,
@@ -1187,6 +1197,10 @@ unsafe fn refresh_kh2_numbers(base: usize) {
         acceleration: p.acceleration,
         brake: p.brake,
     });
+    // (Kept as done only once they went in: else again next frame.)
+    if set {
+        *k = Some(key);
+    }
 }
 
 /// KH1's lock-on (R1) as KH2's lock: while it holds a target (`0x142DB3F10` its state, the
@@ -1215,98 +1229,6 @@ unsafe fn kh1_lock(base: usize, targets: &mut Vec<TargetInfo>) -> Option<u32> {
 }
 
 
-/// The hop KH2's row `id` starts at this press (`Character::would_take_row`'s launch: Steam KH2
-/// `0x1403D78D0`, its height and sideways speed for the primary target), for a row KH1's own
-/// picker took by KH2's walk on KH1's state (`combomods::Kh1Press`, t889): KH2's primary target is
-/// KH1's own target for the press (`primary`, the actor; its lock), `from` the press's combo. Only
-/// the hop is asked here: the row is already chosen (`None` for a row with no hop, or one KH2's
-/// numbers don't start). **Not native yet**: worked out by KH2's controller data with base Sora's
-/// targets as `combat::Strikes` sees them (the owner's plan: the hop moves onto the rows' records
-/// next).
-pub unsafe fn kh2_hop(actor: usize, id: u8, from: character_core::ComboState, air: bool, primary: Option<u32>) -> Option<character_core::Launch> {
-    let base = BASE.load(Ordering::Relaxed);
-    let kh2 = pose::kh2()?;
-    let mut g = DRIVER.try_lock().ok()?;
-    let d = g.get_or_insert_with(|| new_driver(kh2));
-    if !d.character.moveset.combo_rows.iter().any(|r| r.id == id && r.is_jump()) {
-        return None;
-    }
-    let mut targets = d.strikes.look(actor);
-    let lock = kh1_lock(base, &mut targets);
-    let tilt = move_tilt();
-    let stick = if tilt > 0.0 { (stick_dir(actor, tilt) * tilt).to_array() } else { [0.0, 0.0] };
-    d.character.set_facing(rd::<f32>(actor + 0x3C));
-    d.character.set_lock(primary.filter(|id| targets.iter().any(|t| t.id == *id)).or(lock));
-    d.character.set_auto_target(super::settings::get().auto_aim);
-    d.character.set_face_lock(true);
-    d.character.set_combo_direction_lock(true);
-    let p = rd::<[f32; 3]>(actor + 0x10);
-    let above = rd::<f32>(actor + 0x3D4);
-    let env = Env { pos: [p[0], -p[1], p[2]], grounded: !air, height_above_ground: above.max(0.0), targets: &targets, ledges: &[] };
-    d.character.set_drop_ahead(false);
-    let hop = d.character.would_take_row(id, Some(from), air, stick, &env).and_then(|(_, l)| l);
-    // (KH1's lock again, as every ask of KH2's rows leaves it.)
-    d.character.set_lock(lock);
-    hop
-}
-
-/// KH2's forced row `id` for base Sora now, KH1's own states having him (`Character::
-/// would_take_row`: Retaliating Slash's row out of KH1's knock-away, `combomods`): whether KH2
-/// would take it, at a new combo (the exe's counts reset to 1 / 1, `docs/aerial-recovery.md`), and
-/// its hop, with base Sora's targets and KH1's lock as KH2's step sees them.
-pub unsafe fn kh2_would_take_row(actor: usize, id: u8, air: bool) -> Option<(character_core::ComboRow, Option<character_core::Launch>)> {
-    let base = BASE.load(Ordering::Relaxed);
-    let kh2 = pose::kh2()?;
-    let mut g = DRIVER.try_lock().ok()?;
-    let d = g.get_or_insert_with(|| new_driver(kh2));
-    d.growth.update(base, &mut d.character);
-    super::form::abilities(&mut d.drive, &mut d.character);
-    let mut targets = d.strikes.look(actor);
-    let lock = kh1_lock(base, &mut targets);
-    let tilt = move_tilt();
-    let stick = if tilt > 0.0 { (stick_dir(actor, tilt) * tilt).to_array() } else { [0.0, 0.0] };
-    d.character.set_facing(rd::<f32>(actor + 0x3C));
-    d.character.set_lock(lock);
-    d.character.set_auto_target(super::settings::get().auto_aim);
-    d.character.set_face_lock(true);
-    d.character.set_combo_direction_lock(true);
-    let p = rd::<[f32; 3]>(actor + 0x10);
-    let above = rd::<f32>(actor + 0x3D4);
-    let env = Env { pos: [p[0], -p[1], p[2]], grounded: !air, height_above_ground: above.max(0.0), targets: &targets, ledges: &[] };
-    d.character.set_drop_ahead(false);
-    let from = character_core::ComboState { count: 0, finishers: 1, hit: false, finisher_next: false };
-    d.character.would_take_row(id, Some(from), air, stick, &env)
-}
-
-/// KH2's Square move in a combo for Sora now, KH1's own states having him (`Character::
-/// would_take_square_exe`: the exe's own order and checks, Steam KH2 `0x1403A81F0` /
-/// `0x1403A9950`), from KH1's combo `from`, KH2's combo / finisher window open at the motion's
-/// frame (`combo`, `finisher`), KH2's free state there (`free`), rows `skip` left out; with the
-/// targets and KH1's lock as KH2's step sees them (`kh2_would_take_launch`). Base Sora's and Valor
-/// Form's Square moves in a combo (`combomods::control`, `combomods::valor_square`): one path.
-pub unsafe fn kh2_would_take_square(actor: usize, from: character_core::ComboState, combo: bool, finisher: bool, free: bool, skip: &[u8], air: bool) -> Option<(character_core::ComboRow, Option<character_core::Launch>)> {
-    let base = BASE.load(Ordering::Relaxed);
-    let kh2 = pose::kh2()?;
-    let mut g = DRIVER.try_lock().ok()?;
-    let d = g.get_or_insert_with(|| new_driver(kh2));
-    d.growth.update(base, &mut d.character);
-    super::form::abilities(&mut d.drive, &mut d.character);
-    let mut targets = d.strikes.look(actor);
-    let lock = kh1_lock(base, &mut targets);
-    let tilt = move_tilt();
-    let stick = if tilt > 0.0 { (stick_dir(actor, tilt) * tilt).to_array() } else { [0.0, 0.0] };
-    d.character.set_facing(rd::<f32>(actor + 0x3C));
-    d.character.set_lock(lock);
-    d.character.set_auto_target(super::settings::get().auto_aim);
-    d.character.set_face_lock(true);
-    d.character.set_combo_direction_lock(true);
-    let p = rd::<[f32; 3]>(actor + 0x10);
-    let above = rd::<f32>(actor + 0x3D4);
-    let env = Env { pos: [p[0], -p[1], p[2]], grounded: !air, height_above_ground: above.max(0.0), targets: &targets, ledges: &[] };
-    d.character.set_drop_ahead(false);
-    d.character.would_take_square_exe(from, combo, finisher, free, skip, air, stick, &env)
-}
-
 /// The stick now as KH2 reads it for base Sora (the world direction times its tilt, KH2's x / z;
 /// 0 below KH1's dead zone): Aerial Recovery's direction (`combomods`).
 pub unsafe fn stick_now(actor: usize) -> [f32; 2] {
@@ -1316,24 +1238,6 @@ pub unsafe fn stick_now(actor: usize) -> [f32; 2] {
     } else {
         [0.0, 0.0]
     }
-}
-
-/// KH2's primary target for base Sora now (KH2's `+0xDC8`: KH1's lock as KH2's lock, else KH2's
-/// auto target among his targets, as `kh2_would_take_launch` sees them), its point (KH2's y-up):
-/// what KH2's turn windows turn him toward (`kh2slots::turn_to_lock`). Only asked inside such a
-/// window (it looks his targets up).
-pub unsafe fn kh2_primary_target(actor: usize) -> Option<[f32; 3]> {
-    let base = BASE.load(Ordering::Relaxed);
-    let kh2 = pose::kh2()?;
-    let mut g = DRIVER.try_lock().ok()?;
-    let d = g.get_or_insert_with(|| new_driver(kh2));
-    let mut targets = d.strikes.look(actor);
-    let lock = kh1_lock(base, &mut targets);
-    d.character.set_lock(lock);
-    d.character.set_auto_target(super::settings::get().auto_aim);
-    let p = rd::<[f32; 3]>(actor + 0x10);
-    let env = Env { pos: [p[0], -p[1], p[2]], grounded: rd::<i32>(actor + 0x70) == 0, height_above_ground: rd::<f32>(actor + 0x3D4).max(0.0), targets: &targets, ledges: &[] };
-    d.character.primary_target_pos(&env)
 }
 
 /// KH2's hits on his body in the KH2 motion KH1's own states play on base Sora (our slot,
@@ -1541,15 +1445,7 @@ pub unsafe fn kh2_hits(actor: usize) {
     }
 }
 
-/// Sora's KH2 abilities now (from KH1's menu), whoever has him (`combomods`).
-pub fn with_abilities<R>(f: impl FnOnce(&character_core::Abilities) -> R) -> Option<R> {
-    DRIVER.try_lock().ok().and_then(|d| d.as_ref().map(|d| f(&d.character.abilities)))
-}
 
-/// KH2's Retaliating Slash row, if equipped (`combomods`).
-pub fn kh2_retaliating_slash() -> Option<u8> {
-    DRIVER.try_lock().ok().and_then(|d| d.as_ref().and_then(|d| d.character.retaliating_slash_row()))
-}
 
 
 

@@ -262,18 +262,17 @@ unsafe extern "system" fn air(actor: usize, target: usize, dir: usize) -> i32 {
     super::combomods::picker(actor, row, dir, true, bits)
 }
 
-/// KH1's stats builder (Steam `0x1402A5130 (character, stats)`, Checked (decomp)): it writes the
-/// combo's length into the stats, `+0xD4` (ground) = Combo Plus (ability 6) equipped + 3 and
-/// `+0xD5` (air) = Air Combo Plus (7) + 3, counted in the character's ability list by
-/// `0x140284BE0 (ability, character)`; called whenever KH1 rebuilds a party member's stats
-/// (`0x1402A5AE0`, the party loop at `0x140284C30`'s callers, the menus). KH1's pickers'
-/// finisher test reads those bytes (`0x1402A6EE0` / `0x1402A6C70`: `len <= count`). Ours runs it,
-/// then puts KH2's length in Sora's own stats where KH2's length is his (`sync_length`).
-/// `mov [rsp+0x10], rbx; mov [rsp+0x18], rbp` (Checked (exe)).
-const STATS_STEAM: usize = 0x2A5130;
-const STATS_PROLOGUE: [u8; 10] = [0x48, 0x89, 0x5C, 0x24, 0x10, 0x48, 0x89, 0x6C, 0x24, 0x18];
-static ORIG_STATS: AtomicUsize = AtomicUsize::new(0);
-type StatsFn = unsafe extern "system" fn(i32, usize);
+// KH1's stats builder (Steam `0x1402A5130 (character, stats)`, Checked (decomp)): it writes the
+// combo's length into the stats, `+0xD4` (ground) = Combo Plus (ability 6) equipped + 3 and
+// `+0xD5` (air) = Air Combo Plus (7) + 3, counted in the character's ability list by
+// `0x140284BE0 (ability, character)`; called whenever KH1 rebuilds a party member's stats
+// (`0x1402A5AE0`, the party loop at `0x140284C30`'s callers, the menus). KH1's pickers'
+// finisher test reads those bytes (`0x1402A6EE0` / `0x1402A6C70`: `len <= count`). It is
+// hooked once, by `menu`'s party stats hook (Valor's second Keyblade, the debug menu's locks),
+// which calls `after_stats` after KH1's own (t896: t891 hooked it a second time here, and
+// `menu`'s hook then refused it, finding our jump in its first bytes: the log, "hook party stats
+// ... unexpected bytes, not hooked").
+
 /// KH1's ability counter `0x140284BE0 (ability, character) -> copies equipped`: `mov r8, [rip+..]`
 /// then `mov r9d, ecx; cmp edx, 9` (Checked (exe); the first instruction's offset not compared).
 const COUNT_STEAM: usize = 0x284BE0;
@@ -283,9 +282,12 @@ static COUNT: AtomicUsize = AtomicUsize::new(0);
 /// KH2's length is in the byte (ground, air): KH1's own goes back when it is no longer KH2's.
 static KH2_LENGTH_IN: [AtomicBool; 2] = [AtomicBool::new(false), AtomicBool::new(false)];
 
-unsafe extern "system" fn stats(character: i32, out: usize) {
-    let f: StatsFn = std::mem::transmute(ORIG_STATS.load(Ordering::Acquire));
-    f(character, out);
+/// After KH1's stats builder ran for a party member (`menu`'s party stats hook): KH2's length in
+/// Sora's own stats where it is his (`sync_length`). Steam only.
+pub unsafe fn after_stats(out: usize) {
+    if Build::current() != Build::Steam {
+        return;
+    }
     let actor = super::takeover::sora_actor();
     if actor >= 0x10000 && out >= 0x10000 && super::pose::ptr(rd::<u32>(actor + 0x6C)) == out {
         // (KH1 wrote its own length just now: none of KH2's is in it.)
@@ -324,7 +326,7 @@ pub unsafe fn sync_length(actor: usize, air: bool) {
     let at = stats + if air { 0xD5 } else { 0xD4 };
     let flag = &KH2_LENGTH_IN[air as usize];
     if ours_kh2(actor, air) {
-        let Some(len) = super::kh2table::now().zip(super::takeover::with_abilities(|a| a.clone())).map(|(t, a)| t.length(&a, air)) else { return };
+        let Some(len) = super::kh2table::now().zip(super::combomods::abilities_now()).map(|(t, a)| t.length(&a, air)) else { return };
         if rd::<u8>(at) != len {
             std::ptr::write_unaligned(at as *mut u8, len);
         }
@@ -351,7 +353,6 @@ pub unsafe fn install() {
     } else {
         super::log!(Combat, "KH1's ability counter (0x140284BE0) isn't the expected code here: KH1's own combo length isn't put back after KH2's");
     }
-    super::hook::install(base + STATS_STEAM, &STATS_PROLOGUE, stats as *const () as usize, &ORIG_STATS, "KH1's stats builder (KH2's combo length)");
     if rd::<[u8; 10]>(base + RANDOM_STEAM) == RANDOM_PROLOGUE {
         RANDOM.store(base + RANDOM_STEAM, Ordering::Relaxed);
     } else {

@@ -1458,8 +1458,8 @@ pub unsafe fn ground_hold(actor: usize) -> Option<u16> {
 /// (`0x1403BDDE0`) and, longer than 50, turns him toward it (`0x1403B9F70`) by at most twice the
 /// parameter (radians) an update, wherever he faced. KH2 takes one update a game frame (delta 2
 /// at 30 fps, `docs/animations.md`), so this is per game frame too. Here: KH1's time in the slot
-/// as the clip's frame, the target as KH2's controller picks it (`takeover::kh2_primary_target`:
-/// KH1's lock, else KH2's auto target), and KH1's facing fields set (`+0x30`, its yaw `+0x3C`
+/// as the clip's frame, the target KH1's own for the press (`combomods::kh1_primary_point`, t895:
+/// KH1's lock, else, with Auto Aim on, KH1's own aim), and KH1's facing fields set (`+0x30`, its yaw `+0x3C`
 /// and the yaw it turns toward `+0x150`, as `takeover` sets them for KH2's facing). Before KH1's
 /// physics frame (`takeover::physics`). The OG rewrite turned by the parameter once a 60 Hz
 /// frame, half the exe's at 60 fps.
@@ -1491,7 +1491,8 @@ pub unsafe fn turn_to_lock(actor: usize) {
     if !(rate.is_finite() && rate > 0.0) {
         return;
     }
-    let Some(target) = super::takeover::kh2_primary_target(actor) else { return };
+    // (KH1's own target for the press, t895, `combomods::kh1_primary_point`.)
+    let Some(target) = super::combomods::kh1_primary_point(actor) else { return };
     let p: [f32; 3] = rd(actor + 0x10);
     let d = [target[0] - p[0], target[2] - p[2]];
     let yaw: f32 = rd(actor + 0x3C);
@@ -3376,7 +3377,7 @@ unsafe fn finisher_window(actor: usize) {
     let Some(m) = current(actor) else { return };
     let t: f32 = rd(actor + TIME_NOW);
     // (t879) The window from our level event 8.6 on Steam (`finisher_range_now`).
-    if !(t >= 0.0) || !finisher_range_now(actor, m) || super::takeover::with_abilities(|a| a.finishing_plus > 0) != Some(true) || !super::shared::active() || !super::combomods::finisher_chain_open() {
+    if !(t >= 0.0) || !finisher_range_now(actor, m) || super::combomods::abilities_now().map(|a| a.finishing_plus > 0) != Some(true) || !super::shared::active() || !super::combomods::finisher_chain_open() {
         return;
     }
     // (A finisher cast's: only while Finishing Plus leaves another finisher, KH2's own test,

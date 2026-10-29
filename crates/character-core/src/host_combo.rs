@@ -8,9 +8,11 @@
 //! What the host gives (`HostPress`): KH2's row table and which of its motions there are clips of
 //! (KH2's data), the host's position, facing, primary target (its own target for the press) and
 //! every target it would measure (each with a point and a size), the abilities equipped, the jump
-//! height KH2's flag 2 reads, the combo's length and most finishers, and the motion playing.
+//! height KH2's flag 2 reads, the combo's length and most finishers, and the motion playing; for
+//! a row's hop (`HostPress::hop`), what `HopIn` holds.
 
-use crate::combo::{condition, in_range, select, ComboRow, Situation, TargetGeom};
+use crate::combo::{condition, in_range, select, ComboRow, Situation, TargetGeom, FLAG_JUMP_ADJUST};
+use crate::{Launch, KH2_GRAVITY};
 
 /// A target as the host has it: its point (y up) and its size (radius; height for the height
 /// window).
@@ -222,5 +224,112 @@ impl HostPress<'_> {
         }
         let id = fallback?;
         self.rows.iter().find(|r| r.id == id).cloned()
+    }
+}
+
+/// What a row's hop needs besides the press (`HostPress::hop`, Steam KH2 `0x1403D78D0`).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct HopIn {
+    /// KH2's own target shape: its centre's height over his feet and its radius (the plyr
+    /// record's, `AttackParams::target_lift` / `target_radius`).
+    pub target_lift: f32,
+    pub target_radius: f32,
+    /// The moveset's gravity (the launch's).
+    pub gravity: f32,
+    /// The stick (x / z, scaled by its tilt): with no target, a combo's first press faces it.
+    pub stick: [f32; 2],
+    /// The press starts a combo (KH2's count from 0: nothing carried), so with no target the stick
+    /// turns him first.
+    pub first: bool,
+    /// The row's motion moves as he moves (an allow-movement range: Wisdom's air shots): the hop
+    /// keeps `vel_h`, his sideways speed now, instead of the row's.
+    pub moving: bool,
+    pub vel_h: [f32; 2],
+}
+
+impl HostPress<'_> {
+    /// The hop row `row` starts at this press (as `Character`'s press: Steam KH2 `0x1403D78D0`,
+    /// Checked (decomp)): measured to the primary target, from his own target shape's centre to
+    /// the target's point: the height between the two within `jump_min .. jump_max` (plus the jump
+    /// height with flag 2); the sideways speed the gap (distance less both radii, plus
+    /// `distance_adjust`) over KH2's rise time for that height (KH2's own gravity constant), within
+    /// `speed_min .. speed_max`, toward the target. With no target: the row's `jump` and
+    /// `speed_max` along his facing (the stick's on a combo's first press). `None` for a row with no
+    /// hop.
+    pub fn hop(&self, row: &ComboRow, h: &HopIn) -> Option<Launch> {
+        if !row.is_jump() {
+            return None;
+        }
+        let (_, primary) = self.geoms();
+        let mut dir = [self.facing.sin(), self.facing.cos()];
+        if primary.is_none() && h.first && len2(h.stick) > 0.0 {
+            dir = norm(h.stick);
+        }
+        let (height, speed, dir) = match (primary, self.primary) {
+            (Some(t), Some(p)) => {
+                let extra = if row.flag & FLAG_JUMP_ADJUST != 0 { self.jump_height } else { 0.0 };
+                let bound = |v: f32, lo: f32, hi: f32| if !(lo <= v) { lo } else if v <= hi { v } else { hi };
+                let height = bound(t.dy - h.target_lift, row.jump_min, row.jump_max + extra);
+                let gap = t.distance - (t.radius + h.target_radius) + row.distance_adjust;
+                let up = (2.0 * height / KH2_GRAVITY).abs().sqrt();
+                let speed = bound(gap / up, row.speed_min, row.speed_max);
+                let to = [p.pos[0] - self.pos[0], p.pos[2] - self.pos[2]];
+                (height, speed, if len2(to) > 1e-6 { norm(to) } else { dir })
+            }
+            _ => (row.jump, row.speed_max, dir),
+        };
+        let velocity = if h.moving { h.vel_h } else { [dir[0] * speed, dir[1] * speed] };
+        Some(Launch { height: height.max(0.0), velocity, gravity: h.gravity })
+    }
+
+    /// One row by id as a state's own move forces it (Counterguard, Retaliating Slash, the guard:
+    /// `Character::would_take_row`, the exe's own forced rows such as `0x1403D6030`): a new combo's
+    /// press (counts 1 / 1), the row's conditions, a Square move only with a swing left, and a clip
+    /// of it. `square`: it is one of KH2's Square moves (Finishing Leap, Upper Slash, Horizontal
+    /// Slash) that isn't a form's Square finisher.
+    pub fn forced(&self, id: u8, square: bool) -> Option<ComboRow> {
+        let r = self.rows.iter().find(|r| r.id == id)?;
+        let (all, primary) = self.geoms();
+        let sit = self.situation(&all, primary, 1, 1, false);
+        let ok = condition(r, &sit) && (!square || r.is_finisher() || sit.count < sit.max_count) && (self.has_motion)(r.motion);
+        ok.then(|| r.clone())
+    }
+
+    /// KH2's Square moves in a combo as the exe reaches them (`Character::would_take_square_exe`:
+    /// Steam KH2's action-button handler `0x1403A81F0` tries rows 0x25, 0x0C, 0x26 through
+    /// `0x1403A9950`, Checked (decomp)): `count` / `finishers` the combo before the press, `hit`
+    /// the swing connected (or Combo Master), `combo` / `finisher` KH2's combo / finisher window
+    /// open, `free` KH2's free state, `skip` row ids left out. The row and whether the press starts
+    /// a combo (KH2's count step went to a free state: `HopIn::first`).
+    pub fn square(&self, count: u8, finishers: u8, hit: bool, combo: bool, finisher: bool, free: bool, skip: &[u8]) -> Option<(ComboRow, bool)> {
+        const ORDER: [u8; 3] = [0x25, 0x0C, 0x26];
+        if !(combo || finisher) {
+            return None;
+        }
+        let max = self.max_count;
+        let fin = finishers.max(1);
+        let fresh = if finisher && hit && fin < self.max_finishers {
+            false
+        } else if combo && hit {
+            false
+        } else if free {
+            true
+        } else {
+            return None;
+        };
+        let gate = |r: &ComboRow| -> bool {
+            if r.motion == 0 || (r.ability != 0 && !self.equipped.contains(&r.ability)) || r.is_air() != self.air {
+                return false;
+            }
+            if r.is_finisher() {
+                !self.berserk && (finisher || count as i32 + r.combo_offset as i32 >= max as i32)
+            } else {
+                self.berserk || (!finisher && count < max)
+            }
+        };
+        ORDER.into_iter().filter(|id| !skip.contains(id)).find_map(|id| {
+            let r = self.rows.iter().find(|r| r.id == id)?;
+            (gate(r) && (self.has_motion)(r.motion)).then(|| (r.clone(), fresh))
+        })
     }
 }

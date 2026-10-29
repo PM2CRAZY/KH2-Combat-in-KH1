@@ -668,7 +668,7 @@ unsafe fn rows(base: usize, page: Page) -> Vec<(String, Action)> {
         // (The quick-run-native thread, m6: each growth ability at a level of the tester's choosing,
         // and the level the controller has now.)
         Page::Growth => {
-            let now = super::takeover::with_abilities(|a| [a.high_jump, a.quick_run, a.dodge_roll, a.aerial_dodge, a.glide]);
+            let now = super::combomods::abilities_now().map(|a| [a.high_jump, a.quick_run, a.dodge_roll, a.aerial_dodge, a.glide]);
             let mut v: Vec<(String, Action)> = crate::growth::GROWTH_ROWS
                 .iter()
                 .enumerate()
