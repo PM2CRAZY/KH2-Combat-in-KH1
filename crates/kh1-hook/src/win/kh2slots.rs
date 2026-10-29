@@ -850,13 +850,22 @@ fn make(mset: &[u8], src: &pose::Src, bake: Option<&pose::Baker>, cache: Option<
         // from range id 11 alone.)
         tracks.retain(|t| t.kind != ks::COMBO);
         tracks.extend(cast_follow(clip, finisher_cast));
+        // (t879) KH2's combo window on the cast (`combo_kind`) as 8.7, finisher casts too, read
+        // by `cast_attack_window` / `cast_magic_window`.
+        let combo = cast_combo_spans(clip);
+        if !combo.is_empty() {
+            tracks.push(EventTrack::level(ks::KH2_RANGE, ks::RANGE_CAST_COMBO, &combo));
+        }
     }
     // (t-evts) KH2's frame triggers (sounds, voices, effect elements) as sound events of the
     // motion's own, which KH1's motion pass fires and KH1's sound event handler, wrapped
     // (`sound_event`), plays through `kh2sound` / `kh2fx` (`kh2_trigger_keys`).
     // (Steam only: KH1's handler is wrapped there. Elsewhere the old way, `tick` reading them.)
     let steam = super::addr::Build::current() == super::addr::Build::Steam;
-    let triggers = kh2_trigger_keys(motion, clip, reaction, src.form.is_some());
+    // (t880) KH2's next attacks on the Keyblade as edges of ours (`rearm_keys`), first, so the
+    // edge budget never drops them.
+    let mut triggers = rearm_keys(motion, clip);
+    triggers.extend(kh2_trigger_keys(motion, clip, reaction, src.form.is_some()));
     let events: Vec<(u32, EventKind)> = if steam { Vec::new() } else { kh2_trigger_events(clip, reaction) };
     if steam {
         let dropped = ks::add_sound_keys(&mut tracks, &triggers);
@@ -1547,6 +1556,11 @@ static BLADE_ATTACK: Mutex<Option<(u16, u16, u8, f32, bool)>> = Mutex::new(None)
 /// attack changes.
 pub unsafe fn keyblade_rearm(actor: usize) {
     use character_core::WindowKind as W;
+    // (t880) On Steam KH1's motion pass fires the re-arm from our slots' edge keys (`rearm_keys`,
+    // `sound_event`); this per-frame read is only for builds without them.
+    if super::addr::Build::current() == super::addr::Build::Steam {
+        return;
+    }
     let now = (|| {
         let m = current(actor)?;
         let clip = clip_of(m)?;
@@ -1700,6 +1714,35 @@ fn kh2_trigger_keys(motion: u16, clip: &character_core::Clip, reaction: bool, fo
     frames.dedup();
     keys.extend(frames.into_iter().map(|f| ks::EventKey { time: at(f), a: ks::KH2_EFFECTS, b: motion, c: ks::kh2_effects_value(f, form), d: 0 }));
     keys.sort_by(|x, y| x.time.total_cmp(&y.time));
+    keys
+}
+
+/// (t880) KH2's next attacks on the right Keyblade in `clip` (weapon 1; the left Keyblade's object
+/// re-arms itself, `lefthits`) as edge keys of ours (`ks::KH2_REARM`), the rule `keyblade_rearm`
+/// follows each frame: at each frame where an attack range is open and either none was open on the
+/// frame before or its ATKP or group differs, past the motion's first attack (KH1's row makes a
+/// fresh attack object for that one). Keyed as KH2 starts a range (`ks::kh2_trigger_time`: KH2's
+/// range is on from start <= t, KH1 fires a key at t with from <= t < to). Sora's (Checked
+/// (files)): 153's second attack at 38, Horizontal Slash's at 23, Aerial Finish's at 31, ...
+fn rearm_keys(motion: u16, clip: &character_core::Clip) -> Vec<ks::EventKey> {
+    let open = |f: u32| {
+        clip.windows.iter().filter(|w| w.contains(f)).find_map(|w| match w.kind {
+            WindowKind::Hitbox { attack, group, weapon: 1, .. } => Some((attack, group)),
+            _ => None,
+        })
+    };
+    let mut keys = Vec::new();
+    let (mut seen, mut last) = (false, None);
+    for f in 0..clip.length.max(1) {
+        let now = open(f);
+        if let Some((attack, _)) = now {
+            if seen && last != now {
+                keys.push(ks::EventKey { time: ks::kh2_trigger_time(f), a: ks::KH2_REARM, b: motion, c: attack as u32, d: 0 });
+            }
+            seen = true;
+        }
+        last = now;
+    }
     keys
 }
 
@@ -1858,7 +1901,43 @@ fn kh1_tracks(template: &[EventTrack], clip: &character_core::Clip, r: f32, leav
     if !turn.is_empty() {
         out.push(EventTrack::valued(ks::KH2_RANGE, ks::RANGE_TURN_TO_LOCK, &turn));
     }
+    // (t879) KH2's Finishing Plus window (range id 50) as 8.6, read by `finisher_window` and
+    // `cast_finisher_open` (their conditions, Finishing Plus and the finisher count, at the read).
+    let finisher: Vec<(f32, f32)> = clip.windows.iter().filter(|w| matches!(w.kind, WindowKind::Finisher)).map(span).collect();
+    if !finisher.is_empty() {
+        out.push(EventTrack::level(ks::KH2_RANGE, ks::RANGE_FINISHER, &finisher));
+    }
+    // (t881) KH2's combo window (range id 11) as 8.8 and its free state (0 / 1 / 2) as 8.9, read
+    // by the Square moves' checks (`windows_now`) and the cast cut (`cast_cut_open`).
+    let combo11: Vec<(f32, f32)> = clip.windows.iter().filter(|w| matches!(w.kind, WindowKind::Combo)).map(span).collect();
+    if !combo11.is_empty() {
+        out.push(EventTrack::level(ks::KH2_RANGE, ks::RANGE_COMBO, &combo11));
+    }
+    let free_state: Vec<(f32, f32)> = clip.windows.iter().filter(|w| matches!(w.kind, WindowKind::Grounded | WindowKind::Air | WindowKind::Free)).map(span).collect();
+    if !free_state.is_empty() {
+        out.push(EventTrack::level(ks::KH2_RANGE, ks::RANGE_FREE, &free_state));
+    }
     out
+}
+
+/// (t881) KH2's windows at KH1's time in our slot playing on `actor`, for KH2's Square handler's
+/// checks (`combomods`: base Sora's Square moves and Valor's): (KH2 motion, the clip frame, its
+/// combo window (range id 11), its Finishing Plus window (50), its free state (0 / 1 / 2)). On
+/// Steam our level events 8.8 / 8.6 / 8.9 read by KH1's own reader (`kh1_level`); KH2's clip where
+/// that can't be read.
+pub unsafe fn windows_now(actor: usize) -> Option<(u16, u32, bool, bool, bool)> {
+    let m = current(actor)?;
+    let t: f32 = rd(actor + TIME_NOW);
+    if !(t.is_finite() && t >= 0.0) {
+        return None;
+    }
+    let f = t as u32;
+    let level = |id: u16| kh1_level(actor, ks::KH2_RANGE, id);
+    if let (Some(combo), Some(finisher), Some(free)) = (level(ks::RANGE_COMBO), level(ks::RANGE_FINISHER), level(ks::RANGE_FREE)) {
+        return Some((m.motion, f, combo, finisher, free));
+    }
+    let clip = clip_of(m)?;
+    Some((m.motion, f, clip.has(f, |k| matches!(k, WindowKind::Combo)), clip.has(f, |k| matches!(k, WindowKind::Finisher)), clip.free_at(f)))
 }
 
 /// KH2's "don't leave the ground" ranges of `clip` as our level event 8.3 takes them (frames,
@@ -2054,18 +2133,22 @@ fn cast_follow(clip: &character_core::Clip, finisher: bool) -> Vec<EventTrack> {
     if finisher {
         return Vec::new();
     }
-    let len = clip.length.max(1) as f32;
-    let spans: Vec<(f32, f32)> = clip
-        .windows
-        .iter()
-        .filter(|w| combo_kind(clip, &w.kind))
-        .map(|w| (w.start as f32, w.end.map_or(len, |e| e as f32).min(len)))
-        .filter(|(a, b)| b > a)
-        .collect();
+    let spans = cast_combo_spans(clip);
     if spans.is_empty() {
         return Vec::new();
     }
     vec![EventTrack::level(ks::COMBO, 0, &spans)]
+}
+
+/// KH2's combo window on a cast (`combo_kind`), as frames start..end within the clip.
+fn cast_combo_spans(clip: &character_core::Clip) -> Vec<(f32, f32)> {
+    let len = clip.length.max(1) as f32;
+    clip.windows
+        .iter()
+        .filter(|w| combo_kind(clip, &w.kind))
+        .map(|w| (w.start as f32, w.end.map_or(len, |e| e as f32).min(len)))
+        .filter(|(a, b)| b > a)
+        .collect()
 }
 
 /// A cast's window kind that is KH2's combo window on it (Steam KH2's range step `0x14040D810`,
@@ -2115,9 +2198,29 @@ pub unsafe fn cast_attack_window(actor: usize) -> Option<bool> {
     if let Some(open) = super::formmagic::finisher_spell_window(actor) {
         return Some(open);
     }
+    cast_combo_now(actor, m)
+}
+
+/// (t879) KH2's combo window on our cast slot `m` playing on `actor` now: our level event 8.7 read
+/// by KH1's own reader on Steam (`kh1_level`), KH2's clip where that can't be read.
+unsafe fn cast_combo_now(actor: usize, m: &Move) -> Option<bool> {
+    if let Some(on) = kh1_level(actor, ks::KH2_RANGE, ks::RANGE_CAST_COMBO) {
+        return Some(on);
+    }
     let clip = clip_of(m)?;
     let t: f32 = rd(actor + TIME_NOW);
     Some(t.is_finite() && t >= 0.0 && clip.has(t as u32, |k| combo_kind(clip, k)))
+}
+
+/// (t879) KH2's Finishing Plus window (range id 50) on our slot `m` playing on `actor` now: our
+/// level event 8.6 read by KH1's own reader on Steam (`kh1_level`), KH2's clip where that can't be read.
+unsafe fn finisher_range_now(actor: usize, m: &Move) -> bool {
+    if let Some(on) = kh1_level(actor, ks::KH2_RANGE, ks::RANGE_FINISHER) {
+        return on;
+    }
+    let Some(clip) = clip_of(m) else { return false };
+    let t: f32 = rd(actor + TIME_NOW);
+    t.is_finite() && t >= 0.0 && clip.has(t as u32, |k| matches!(k, WindowKind::Finisher))
 }
 
 /// Our finisher cast playing on `actor` is in its Finishing Plus window now (the tester,
@@ -2130,9 +2233,7 @@ pub unsafe fn cast_attack_window(actor: usize) -> Option<bool> {
 /// (Checked (decomp)). `finisher_window` opens KH1's combo window there.
 pub unsafe fn cast_finisher_open(actor: usize) -> bool {
     let Some(m) = current(actor).filter(|m| matches!(m.kind, Kind::Magic | Kind::AirMagic)) else { return false };
-    let Some(clip) = clip_of(m) else { return false };
-    let t: f32 = rd(actor + TIME_NOW);
-    t.is_finite() && t >= 0.0 && clip.has(t as u32, |k| matches!(k, WindowKind::Finisher)) && super::shared::active() && super::combomods::finisher_left()
+    finisher_range_now(actor, m) && super::shared::active() && super::combomods::finisher_left()
 }
 
 /// One of our cast slots plays on `actor` (KH2's spells', Reflect's).
@@ -2147,6 +2248,10 @@ pub unsafe fn cast_playing(actor: usize) -> bool {
 /// cast's end, as in KH2.
 pub unsafe fn cast_cut_open(actor: usize) -> bool {
     let Some(m) = current(actor).filter(|m| matches!(m.kind, Kind::Magic | Kind::AirMagic)) else { return false };
+    // (t881) Our level event 8.9 on Steam (`kh1_level`); KH2's clip where that can't be read.
+    if let Some(free) = kh1_level(actor, ks::KH2_RANGE, ks::RANGE_FREE) {
+        return free;
+    }
     let Some(clip) = clip_of(m) else { return false };
     let t: f32 = rd(actor + TIME_NOW);
     t.is_finite() && t >= 0.0 && clip.free_at(t as u32)
@@ -2160,10 +2265,8 @@ pub unsafe fn cast_magic_window(actor: usize) -> Option<bool> {
     if let Some(open) = super::formmagic::finisher_spell_window(actor) {
         return Some(open);
     }
-    let clip = clip_of(m)?;
-    let t: f32 = rd(actor + TIME_NOW);
     // (KH2's magic command takes the same combo window as its Attack, `combo_kind`; t642.)
-    Some(t.is_finite() && t >= 0.0 && clip.has(t as u32, |k| combo_kind(clip, k)))
+    cast_combo_now(actor, m)
 }
 
 /// One of Sora's motion sets with ours added (`docs/kh1-anim-slots.md` §2): KH1 binds a set onto
@@ -2822,6 +2925,17 @@ static ORIG_SOUND_EVENT: AtomicUsize = AtomicUsize::new(0);
 /// `0x1401A22B0` sets with a stop of every sound and `0x1401A2130` / `0x1401B02C0` clear,
 /// Checked (decomp); Assumption: an event or cutscene. Our triggers are skipped then too.)
 unsafe extern "system" fn sound_event(actor: usize, a: i32, b: i32, c: u32) {
+    // (t880) KH2's next attack on the Keyblade (`rearm_keys`): the attack objects of ours re-armed.
+    if a == ks::KH2_REARM as i32 {
+        if actor == super::takeover::sora_actor() {
+            let n = super::kh1rows::rearm_rows(actor);
+            static R: AtomicU32 = AtomicU32::new(0);
+            if super::log_on(super::LogCat::Combat) && R.fetch_add(1, Ordering::Relaxed) < 40 {
+                log!(Combat, "KH2's next attack on the Keyblade (KH2 motion {b}, ATKP {c}, KH1's time {:.1}): {n} attack object(s) of ours re-armed with KH1's re-arm (KH1's motion pass)", rd::<f32>(actor + TIME_NOW));
+            }
+        }
+        return;
+    }
     if a == ks::KH2_RUMBLE as i32 {
         if actor == super::takeover::sora_actor() {
             super::rumble::play(b as u16, c as u16 as i16);
@@ -2990,11 +3104,10 @@ pub unsafe fn pick_own(request: usize, motion: u16) -> bool {
 /// (files)): 154 / 155 35..64, 183 21..50, 184 23..52, Explosion 60..72, Guard Break 48..60,
 /// Aerial Finish 89..108, Magnet Burst 70..86.
 unsafe fn finisher_window(actor: usize) {
-    use character_core::WindowKind as W;
     let Some(m) = current(actor) else { return };
-    let Some(clip) = clip_of(m) else { return };
     let t: f32 = rd(actor + TIME_NOW);
-    if !(t >= 0.0) || !clip.has(t as u32, |k| matches!(k, W::Finisher)) || super::takeover::with_abilities(|a| a.finishing_plus > 0) != Some(true) || !super::shared::active() || !super::combomods::finisher_chain_open() {
+    // (t879) The window from our level event 8.6 on Steam (`finisher_range_now`).
+    if !(t >= 0.0) || !finisher_range_now(actor, m) || super::takeover::with_abilities(|a| a.finishing_plus > 0) != Some(true) || !super::shared::active() || !super::combomods::finisher_chain_open() {
         return;
     }
     // (A finisher cast's: only while Finishing Plus leaves another finisher, KH2's own test,

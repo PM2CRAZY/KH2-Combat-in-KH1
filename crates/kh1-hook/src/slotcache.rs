@@ -27,7 +27,10 @@ use std::sync::Arc;
 /// invulnerable ranges as our level event 8.0 (`kh2slots::kh1_tracks`, t868). 4: the no-gravity
 /// ranges as 8.1 (t869). 5: the edge stop and the ground hold as 8.2 / 8.3 (t871). 6: the
 /// allow-movement range as 8.4 (t872). 7: the turn toward the target as 8.5, its rate in `c` (t878).
-pub const BAKE_FORMAT: u32 = 7;
+/// 8: the Finishing Plus window as 8.6 and a cast's combo window as 8.7 (t879). 9: KH2's next
+/// attacks on the Keyblade as edge keys of ours (`KH2_REARM`, t880). 10: KH2's combo window
+/// (range 11) as 8.8 and its free state as 8.9 (t881).
+pub const BAKE_FORMAT: u32 = 10;
 
 const MAGIC: &[u8; 8] = b"KH1KH2SC";
 /// The file's own layout (this module's), not the bake's.

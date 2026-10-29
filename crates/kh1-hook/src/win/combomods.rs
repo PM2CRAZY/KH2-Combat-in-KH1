@@ -1760,11 +1760,9 @@ pub fn control(s: &super::shared::Seen, jump_fresh: bool, square_fresh: bool) ->
     // combo window, no finisher window (**Assumption**: KH1's own swings have no KH2 windows).
     // (Not in KH2's guard repel: KH1's combo window there is Counterguard's, `counter_window`.)
     if square_fresh && unsafe { super::kh2slots::playing_motion(actor) } != Some(character_core::motion::GUARD) {
-        let kh2 = unsafe { super::kh2slots::now_playing(actor) }.and_then(|(m, t)| {
-            let clip = pose::kh2_moves()?.moveset.clips.get(&m)?;
-            let f = t as u32;
-            Some((clip.has(f, |k| matches!(k, character_core::WindowKind::Combo)), clip.has(f, |k| matches!(k, character_core::WindowKind::Finisher)), clip.free_at(f)))
-        });
+        // (t881) KH2's windows from our slot's level events, read by KH1's own reader
+        // (`kh2slots::windows_now`).
+        let kh2 = unsafe { super::kh2slots::windows_now(actor) }.map(|(_, _, combo, finisher, free)| (combo, finisher, free));
         let (combo, finisher, free) = match kh2 {
             Some(w) => w,
             None => (s.combo_window && matches!(pose::sora_slot(), Some(98..=104)), false, false),
@@ -1829,11 +1827,8 @@ pub fn valor_square(s: &super::shared::Seen, square_fresh: bool) -> Option<u32> 
     }
     let air = matches!(s.state, 1 | 2);
     // 1. In a swing of Valor's: KH2's combo / finisher window at the motion's frame.
-    let windows = unsafe { super::kh2slots::now_playing(actor) }.and_then(|(m, t)| {
-        let clip = pose::kh2_moves()?.moveset.clips.get(&m)?;
-        let f = t as u32;
-        Some((m, f, clip.has(f, |k| matches!(k, character_core::WindowKind::Combo)), clip.has(f, |k| matches!(k, character_core::WindowKind::Finisher)), clip.free_at(f)))
-    });
+    // (t881) From our slot's level events, read by KH1's own reader (`kh2slots::windows_now`).
+    let windows = unsafe { super::kh2slots::windows_now(actor) };
     if let Some((m, f, combo, finisher, free)) = windows.filter(|w| w.2 || w.3) {
         let (count, _, hit) = unsafe { kh1_combo(actor, air) }?;
         let from = ComboState { count, finishers: FINISHERS.load(Ordering::Relaxed).max(1), hit, finisher_next: false };

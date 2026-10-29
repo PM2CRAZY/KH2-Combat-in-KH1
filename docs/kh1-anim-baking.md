@@ -730,7 +730,7 @@ can carry them, and the plan.
 3. **Edge stop and ground hold** on their own bit.
 4. **Allow-movement steering** on its own bit.
 5. **Turn to target** on its own bit, the turn rate in the key (KH1's reader returns the key; done in `c`, §14.10).
-6. **Finishing Plus and Counterguard windows** as tracks of ours. The pass patch sets KH1's combo
+6. **Finishing Plus and Counterguard windows** as tracks of ours (done t879 without the pass patch, §14.11). The pass patch sets KH1's combo
    bit 22 from them only while their condition holds (Finishing Plus equipped and a finisher left;
    the guard's repel). The command checks read KH1's bits instead of KH2's clips.
 7. **KH1's own casts' window** at Magic Combo KH2 written into KH1's cast motions as a 5.0 track
@@ -834,3 +834,52 @@ travel can carry it is a separate check, done after part 2.
 - **The read:** `kh2slots::turn_to_lock` asks KH1's reader for 8.5 (`kh1_key`: the reader returns
   the key's address, Checked (decomp)) and turns by up to twice the key's rate a frame, as before.
 - **Still ours, every frame:** the turn itself; KH1 has no turn-toward-target to hand it to.
+
+### 14.11 Part 6 done (t879): the Finishing Plus window and a cast's combo window
+
+- **The bake:** range 50 as our level event 8.6 on every slot; a cast's combo window (range 11, or
+  35 naming the cast's own motion, `combo_kind`) as 8.7 on every cast slot, finisher casts too.
+- **The read:** `finisher_window`, `cast_finisher_open`, `cast_attack_window` and
+  `cast_magic_window` read them with KH1's reader on Steam. Their conditions (Finishing Plus, a
+  finisher left, KH1's states) are checked at the read: they change at runtime.
+- **Design change from §14.3:** no patch on KH1's pose pass setting bit 22. The reads already
+  happen where they're used, and the finisher window still ORs KH1's combo bit itself while its
+  conditions hold, as before.
+- **Counterguard:** no range. KH2 takes it on any frame of the guard repel (motion 42), and that is
+  read from the slot KH1 plays already.
+
+### 14.12 Part 8 done (t880): the Keyblade re-arm as an edge of ours
+
+- **The bake:** each new right-Keyblade attack after the motion's first (an attack range whose ATKP
+  or group differs from the last frame's, or one opening after a frame with none) as a type-6 key
+  of ours, `KH2_REARM` (`b` the motion, `c` the ATKP), at KH2's range start time, added before the
+  frame triggers so the edge budget never drops it.
+- **The fire:** KH1's motion pass fires it; our wrapped sound handler re-arms our attack objects
+  with KH1's own re-arm (`kh1rows::rearm_rows`). The per-frame `keyblade_rearm` runs only off
+  Steam now.
+- **Timing (Checked (decomp)):** KH1's physics step `0x140298230` queues the actor and the motion
+  pass `0x140298730` runs after it, so the re-arm comes in the pass that moves the time into the
+  attack, never later than the old per-frame read.
+
+### 14.13 Part 9 done (t881): KH2's combo window and free state for the Square moves
+
+- **The bake:** range 11 as 8.8 and the free state (0 / 1 / 2) as 8.9 on every slot. Our own, not
+  KH1's 5.0 / 0.0: those differ on cast slots (5.0 there is ranges 11 and 35) and on slots that
+  keep the template's "may be left".
+- **The read:** `kh2slots::windows_now` (8.8, 8.6, 8.9) for base Sora's Square moves in a swing and
+  Valor's Square; `cast_cut_open` reads 8.9.
+- **The reaction command's first frame:** only the old controller's step read it; deleted at t874.
+
+### 14.14 What's left (after t881)
+
+- **Part 7, KH1's own motions:** KH1's casts at Magic Combo KH2 (`formmagic::kh1_cast_window`),
+  KH1's finishers with Finishing Plus (`combomods::kh1_finisher_window`), Gravity / Stop as the
+  combo's finisher and Stop as Magnet (`finisher_spell_window`, `magnet_window`) place KH2's window
+  on KH1's own motion by share of its length. KH1's own motions aren't slots of ours, so there is
+  nowhere to bake a track yet; making them data needs copies of KH1's own motions as slots of ours
+  with the window baked in, pointed at only at the setting that wants them.
+- **Not range rules but still read from KH2's clip at runtime:** the ATKP of the hit window at hit
+  time (`kh1rows::kh2_atkp`, `native_atkp`), KH2's clocks (`combomods::dodge_clock`,
+  `glide::kh2_clock`, the stop of Quick Run), Air Physics KH2's hover on KH1's own air cast
+  (`shared::physics`, on KH1's motion), and KH2's row selection (`takeover::kh2_rows`, which hands
+  KH2's windows to KH2's own selector).

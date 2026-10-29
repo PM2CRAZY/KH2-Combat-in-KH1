@@ -53,6 +53,18 @@ pub const RANGE_ALLOW_MOVEMENT: u16 = 4;
 /// rate (radians, KH2's parameter in degrees converted) as an f32 in the key's `c`, one key per
 /// range (KH2's rate changes from range to range in one motion, Wisdom's 22 then 4) (t878).
 pub const RANGE_TURN_TO_LOCK: u16 = 5;
+/// 8.6: KH2's Finishing Plus window (range id 50): on while the motion's time is in it, whatever is
+/// equipped (the reader adds Finishing Plus and the finisher count) (t879).
+pub const RANGE_FINISHER: u16 = 6;
+/// 8.7: a cast's KH2 combo window (range id 11, or range id 35 naming the cast's own motion), on
+/// every cast slot, finisher casts too (KH1's 5.0 on them is left out where the cast ends the
+/// combo) (t879).
+pub const RANGE_CAST_COMBO: u16 = 7;
+/// 8.8: KH2's combo window (range id 11) on every slot, as KH2's Square handler reads it (t881).
+pub const RANGE_COMBO: u16 = 8;
+/// 8.9: KH2's free state (range ids 0 / 1 / 2) on every slot, whatever KH1's "may be left" (0.0) on
+/// the slot was built from (t881).
+pub const RANGE_FREE: u16 = 9;
 
 pub(crate) fn u32_at(b: &[u8], at: usize) -> Result<u32> {
     b.get(at..at + 4).map(|s| u32::from_le_bytes(s.try_into().unwrap())).ok_or_else(|| Error::Format(format!("motion: read past the end at {at:#x}")))
@@ -302,6 +314,11 @@ pub const KH2_EFFECTS: u16 = 0x83;
 /// KH2's pad vibration (frame trigger 31): `c` the pattern's id (`00battle.bin` vbrt), played by
 /// KH1's own vibration player (`crate::vibe`).
 pub const KH2_RUMBLE: u16 = 0x84;
+/// KH2's next attack on the right Keyblade in the same motion (an attack range whose ATKP or
+/// group differs from the last frame's, or one opening after a frame with none, past the motion's
+/// first): the Keyblade attack objects of ours re-armed as a new attack. `b` the KH2 motion, `c`
+/// the ATKP (t880).
+pub const KH2_REARM: u16 = 0x85;
 
 /// `c` of a [`KH2_EFFECTS`] key: the KH2 frame in the low 16 bits, bit 16 set for the form's
 /// moveset (its own effect package).
