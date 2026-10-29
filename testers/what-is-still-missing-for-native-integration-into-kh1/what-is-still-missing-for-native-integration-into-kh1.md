@@ -33,6 +33,12 @@
 - [27. Assistant: t865 should fix the fliers being thrown around inside Magnet](#^m27)
 - [28. Assistant: t866: Magnet Burst's knock-back hits now end the hold on a f](#^m28)
 - [29. Assistant: Your log backs that up. Before the change (t865), the flying](#^m29)
+- [30. Assistant: Here's item 5, KH2's motion-range rules, brought up to date ](#^m30)
+- [31. Assistant: I stopped before writing code: part 1 as I planned it can't ](#^m31)
+- [32. Assistant: t868, the invulnerable ranges as KH1 motion data. KH2's invu](#^m32)
+- [33. Assistant: t869, the no-gravity hold as KH1 motion data. KH2's no-gravi](#^m33)
+- [34. Assistant: t871, the edge stop and Ledge Carry as KH1 motion data. KH2'](#^m34)
+- [35. Assistant: t872, allow-movement steering as KH1 motion data. KH2's allo](#^m35)
 
 ---
 
@@ -1153,4 +1159,175 @@ it did fix it visually but rolling back caused them to not be hit in the entire 
 > Which do you want? Write "go ahead" with your pick.
 
 ^m29
+
+
+> [!tip] Assistant
+> Here's item 5, KH2's motion-range rules, brought up to date at t867, with a plan to move them onto KH1's motion events. No code yet, so there's no new version.
+>
+> **Correction first.** My t793 list counted the jump's apex, the Aerial Dodge's apex and clock and the glide clock as range rules. They aren't: they're KH2 timing rules and stay out of this item. The guard windows come from KH2's hit sweep and go with the body-hit work. Also, part of magic belongs here after all: the cast's windows are still read from KH2's clips.
+>
+> **What still reads KH2's ranges** (Checked (code), t867)
+> - **Every frame:** the Finishing Plus window, KH1's own casts' window at Magic Combo KH2, the Counterguard window, the invulnerable ranges (new in t860), the no-gravity hold, rise start, the forms' lift-off, the edge stop and Ledge Carry, allow-movement steering, turn to target and the Keyblade re-arm.
+> - **Only when you press a command:** the cast's Attack and magic windows, Valor's Square windows and the reaction command's first frame.
+> - **Already KH1's own:** KH2's free range as KH1's "may be left" and the cast's combo window as KH1's combo window, written into our slots once.
+>
+> **What KH2 does.** Each motion update sets a bit for every range the clip's frame is in, and the rest of the game reads those bits (Checked (decomp), earlier stages).
+>
+> **How KH1 does it** (Checked (decomp), Steam KH1)
+> - **Levels:** KH1's pose pass reads a fixed list of "on/off" tracks from the motion every frame (hit windows, "may be left", combo window, weapon trail) into one word on the actor. That word has free bits KH1 clears every frame and never sets.
+> - **Only the plain pose pass does this.** The blend pass doesn't, so what the word holds during a blend still needs checking.
+> - **One-off events:** KH1 fires only foot and sound events. Sound events with our own codes already reach our code through KH1's sound handler (that's how KH2's sounds and effects work since t677).
+>
+> **The plan, one version per part**
+> 1. **Invulnerable ranges:** a one-off event at the range's start sets KH1's no-damage timer. Smallest part, so it goes first.
+> 2. **KH1's pose pass learns our tracks, starting with the no-gravity hold.** New tracks baked into our slots, and a patch at the end of KH1's pass reads them with KH1's own reader into the free bits. The air step, rise start and lift-off read the bit instead of KH2's clip.
+> 3. **Edge stop and Ledge Carry** on their own bit.
+> 4. **Allow-movement steering.**
+> 5. **Turn to target,** with the turn rate stored in the track.
+> 6. **Finishing Plus and Counterguard windows:** KH1's combo bit is set from our tracks only while Finishing Plus has a finisher left, or during the guard's repel. The command checks read KH1's bits instead of KH2's clips.
+> 7. **KH1's own casts' window** written into KH1's cast motions as data.
+> 8. **The Keyblade re-arm** as a one-off event at each new attack window.
+> 9. **Valor's Square windows and the reaction command** read KH1's bits.
+>
+> **Not found yet**
+> - **Free bits:** whether anything else in KH1 uses those free bits. I'll check that in the decomp before part 2.
+> - **Blends:** what KH1 and KH2 each do with ranges during a blend. That matters for ranges starting at frame 0 (Aerial Recovery, Counterguard).
+> - **Root travel in the hold** isn't a range. I'll look at it after part 2.
+>
+> **Questions**
+> 1. Order? (a) The list above, smallest first. (b) The physics parts (2 to 5) first, since they run every frame. Either way you get the same result. I recommend (a): part 1 proves the one-off event path on its own before part 2 changes KH1's pose pass.
+> 2. The timing rules (apex, Aerial Dodge clock, glide clock)? (a) Leave them as they are. They're already 1:1 and run only in those moves. (b) Make them their own item after this one. I recommend (a): they don't read ranges, and KH1 has no data for them to move into.
+>
+> Notes are in `docs/kh1-anim-baking.md` §14. Write "go ahead" with your answers and I'll start with part 1.
+
+^m30
+
+
+> [!tip] Assistant
+> I stopped before writing code: part 1 as I planned it can't be 1:1 with KH2. Nothing has changed, so we're still on t867.
+>
+> **The correction.** I planned the invulnerable ranges as a one-off event at the range's start that starts KH1's no-damage timer. The KH2 decomp shows that isn't how KH2 works:
+> - **KH2 checks the range every frame.** Each motion update clears every range bit and sets it again while the clip's time is in the range. During the blend into a move, KH2 uses the move's start time. So Sora is invulnerable exactly while the time is in the range, including during the blend, and it ends on the next update if the move is cut (Checked (decomp)).
+> - **A one-off event would miss two cases.** KH1 fires no events while a blend holds the time, so Aerial Recovery's and Counterguard's invulnerability (from frame 0) would start late by the blend's length. And if the move is cut early, the timer would keep running.
+>
+> **Two more things I found in KH1** (Checked (decomp))
+> - **Levels are frozen during blends.** KH1 copies its motion levels into the actor every frame, but only the plain pose pass writes them. During a blend they keep the old motion's values. Part 2 has to handle that too.
+> - **KH1's "no damage" is a flag on the actor,** read in six places in its hit and damage code, not a motion level.
+>
+> **The options**
+> 1. How should part 1 work?
+>    - (a) **Level-based, 1:1.** A track of ours for the invulnerable range, read into a free bit by a patch on KH1's pose passes (the blend pass too, reading the new move at its held time). A patch in KH1's motion step, beside its own "may be left" handling, holds KH1's no-damage flag while the bit is on and drops it when it goes off. This also builds part 2's plumbing, so part 1 gets bigger and part 2 smaller.
+>    - (b) **The one-off event as planned.** Smaller, but invulnerability starts late after a blend and runs on when a move is cut.
+>    - (c) **Leave t860's per-frame check as it is** and start with part 2.
+>
+>    I recommend (a). It's KH2's rule frame for frame and it's the same plumbing every later part needs. First I'll check in the decomp which motion KH1's blend holds.
+>
+> Notes are in `docs/kh1-anim-baking.md` §14.5. Write "go ahead" with your answer.
+
+^m31
+
+
+> [!tip] Assistant
+> **t868, the invulnerable ranges as KH1 motion data.** KH2's invulnerable ranges are now written into our slots as a track of ours, which KH1's own reader reads. While the track is on, KH1's no-damage flag stays on, and it's dropped the first frame the track is off. This is part 1, (a).
+>
+> **What changes in game compared with t860**
+> - **Ranges from frame 0** (Aerial Recovery, Counterguard) now cover the blend into the move as well, as in KH2. Before, they started after the blend.
+> - **Cutting a move early** ends the invulnerability on the next frame, as in KH2. Before, the timer kept running.
+> - **Explosion and Finishing Leap** should feel the same as before.
+>
+> **How I checked it**
+> - **KH2 decomp:** every motion update clears the range bits and sets them again while the time is in the range, using the move's start time during a blend.
+> - **KH1 decomp:** what KH1's level reader reads, that vanilla KH1 never asks for the new track type, that KH1 holds the time at the new move's start during a blend, and the six places KH1 reads the no-damage flag.
+> - **KH1 exe:** the reader's first bytes, checked before every first use.
+> - **Your KH2 files:** the ranges themselves (Explosion 32 to 64, Aerial Recovery 0 to 16, Counterguard 0 to 20, Finishing Leap 24 to 38).
+> - **Not checked:** anything in game, and `cargo test` didn't run here (no crate registry reachable).
+> - **Assumption, as in t860:** the flag goes on in the pose pass, so the range's first frame counts from KH1's next hit check.
+>
+> **Please test:**
+> 1. After installing, the first start rebuilds the slots once (the bake format changed), so it takes a little longer.
+> 2. Do an Aerial Recovery while an enemy is attacking. Sora should take no damage from the moment it starts, including the first few frames.
+> 3. Do a Counterguard. The same: no damage from its first frame.
+> 4. Explosion and Finishing Leap: the invulnerable part should feel the same as before.
+> 5. Cut one of those moves early, for example with a jump if it lets you, and check you can be hit straight after.
+> 6. If something looks off, send the log. "KH1's level 8.0" lines show when the flag is held and dropped.
+>
+> **Still open on my side (no answer needed)**
+> - **The free bits:** before part 2, I'll check nothing else in KH1 uses the free bits. Part 1 doesn't write any.
+> - **The per-frame call:** one call to KH1's reader each frame still comes from our pose-pass hook.
+>
+> Notes are in `docs/kh1-anim-baking.md` §14.6 and `docs/kh1-intangible.md`.
+
+^m32
+
+
+> [!tip] Assistant
+> **t869, the no-gravity hold as KH1 motion data.** KH2's no-gravity ranges are now a track in our slots, read by KH1's own reader. Everything that follows the hold reads that track instead of KH2's clips: the air step's hold, the root travel during it, the forms' lift-off and the end of Finishing Leap's rise start. This is part 2.
+>
+> **One change to the plan.** I dropped the patch on KH1's pose pass and the free bits. KH1 only fills its level bits on the plain pose pass, so during a blend they'd still show the old move. Reading the track with KH1's reader at KH1's time gives the new move at its start during a blend, which is exactly what KH2 reads. So there's no free-bit question any more, and t868 already works this way.
+>
+> **How I checked it**
+> - **KH2 decomp:** the range timing, the same check as t868.
+> - **KH1:** the reader and the time field, both already checked for t868. The hold uses the same frames as before (start up to the end), so it should feel identical.
+> - **Your KH2 files:** the ranges themselves.
+> - **Not checked:** anything in game, and `cargo test` didn't run here.
+>
+> **Please test:**
+> 1. The first start rebuilds the slots once again.
+> 2. Air moves that hover: Aerial Finish, Finishing Leap, air spells, Magnet Burst. They should hang and drop exactly as in t868.
+> 3. Finishing Leap from the ground: it should still rise straight away, with no landing flash.
+> 4. Drive Forms: Valor's ground finisher should still lift off, and Wisdom's shots should still steer and not hover.
+> 5. If something hangs too long or drops early, send a trace of that move.
+>
+> **Still open on my side (no answer needed)**
+> - **Still read from KH2's clip:** the root travel during the hold. KH1 has nowhere to store it yet, so it's a separate item.
+> - **Next:** part 3, the edge stop and Ledge Carry, which also covers the ground-hold check.
+>
+> Notes are in `docs/kh1-anim-baking.md` §14.7.
+
+^m33
+
+
+> [!tip] Assistant
+> **t871, the edge stop and Ledge Carry as KH1 motion data.** KH2's edge stop and its "don't leave the ground" ranges are now tracks in our slots, read by KH1's own reader. The ground swings' edge stop and the Ledge Carry read those tracks instead of KH2's clips. This is part 3. (Between parts 2 and 3, t870 fixed Wisdom's movement during casts, from the owner's trace in chat.)
+>
+> **How I checked it**
+> - **KH2 decomp:** which ranges set which bits (3, 24, 29 and 30), and which of those KH2's ground mover reads to keep Sora on the ground or on a ledge.
+> - **Your KH2 files:** range 30 isn't in any of Sora's or the forms' motions, so the tracks carry 3, 24 and 29.
+> - **Same frames as before**, using KH1's time (during a blend, the new move's start, as KH2 does). It should feel identical.
+> - **Not checked:** anything in game, and `cargo test` didn't run here.
+>
+> **Please test:**
+> 1. The first start rebuilds the slots once.
+> 2. Swing at an enemy on a ledge with the finishers (154 / 155), Guard Break or Flash Step. Sora should stop at the edge and the move should go on.
+> 3. With Ledge Carry on (debug menu), moves that hold you on the ground should still carry you off a ledge and drop you when they end. Also try Valor's ground finisher.
+>
+> **Still open on my side (no answer needed)**
+> - **The floor check itself** still uses our sweep on KH1's collision. Only where the ranges come from changed.
+> - **Next:** part 4, allow-movement steering.
+>
+> Notes are in `docs/kh1-anim-baking.md` §14.8.
+
+^m34
+
+
+> [!tip] Assistant
+> **t872, allow-movement steering as KH1 motion data.** KH2's allow-movement range is now a track in our slots, read by KH1's own reader. Wisdom's steering during her shots and casts, and the forms' steering in the air, read that track instead of KH2's clips. This is part 4.
+>
+> **How I checked it**
+> - **KH2 decomp:** range 41 sets its own bit, and KH2's input step keeps the stick only while that bit or a free range is on.
+> - **KH1 side:** the free-range half was already KH1's own. Our slots carry KH2's free range as KH1's "may be left", which hands Sora back to KH1's walk.
+> - **Same frames as before**, so the steering windows should be identical: Wisdom's Blizzard from 10, its finisher from 34, Fire from 24.
+> - **Not checked:** anything in game, and `cargo test` didn't run here.
+>
+> **Please test:**
+> 1. The first start rebuilds the slots once.
+> 2. As Wisdom, steer during the shots and during Fire and Blizzard on the ground. Steering should start at the same point as in t871.
+> 3. As Wisdom, steer the air shot and air casts. They should steer as before.
+>
+> **Still open on my side (no answer needed)**
+> - **Next:** part 5, turn to target, with the turn rate stored in the track.
+>
+> Notes are in `docs/kh1-anim-baking.md` §14.9.
+
+^m35
 

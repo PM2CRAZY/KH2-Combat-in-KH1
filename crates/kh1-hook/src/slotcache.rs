@@ -23,8 +23,11 @@ use std::sync::Arc;
 
 /// Bump when the bake's output changes for the same inputs without the mod's version changing
 /// (the version is in the manifest too, so every release rebuilds once anyway). 2: KH2's frame
-/// triggers written into the baked motion's own sound events (`kh2slots::kh2_trigger_keys`).
-pub const BAKE_FORMAT: u32 = 2;
+/// triggers written into the baked motion's own sound events (`kh2slots::kh2_trigger_keys`). 3: KH2's
+/// invulnerable ranges as our level event 8.0 (`kh2slots::kh1_tracks`, t868). 4: the no-gravity
+/// ranges as 8.1 (t869). 5: the edge stop and the ground hold as 8.2 / 8.3 (t871). 6: the
+/// allow-movement range as 8.4 (t872).
+pub const BAKE_FORMAT: u32 = 6;
 
 const MAGIC: &[u8; 8] = b"KH1KH2SC";
 /// The file's own layout (this module's), not the bake's.

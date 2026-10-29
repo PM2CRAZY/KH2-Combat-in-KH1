@@ -1097,67 +1097,65 @@ pub unsafe fn now_playing(actor: usize) -> Option<(u16, f32)> {
     (t.is_finite() && t >= 0.0).then_some((m.motion, t))
 }
 
-/// The invulnerable range of ours KH1's no-damage timer runs for (`invulnerable_step`): its KH2
-/// motion, the range's start frame and KH1's time last seen in it.
-static RANGE_TIMER: Mutex<Option<(u16, u32, f32)>> = Mutex::new(None);
-/// Our timer's mark: we write a range's whole frames less this, so its fraction tells ours from
-/// KH1's own (whole frames: 12, 30, 8). KH1 counts down by whole 60 Hz frames, so it still ends
-/// on the same frame.
+/// The KH2 motion whose invulnerable range holds KH1's no-damage flag now (`invulnerable_step`),
+/// for the log and to know the hold is ours to end.
+static RANGE_ON: Mutex<Option<u16>> = Mutex::new(None);
+/// Our timer's mark: we write whole frames less this, so its fraction tells ours from KH1's own
+/// (whole frames: 12, 30, 8). KH1 counts down by whole 60 Hz frames, so the fraction stays.
 const RANGE_MARK: f32 = 0.25;
+/// The no-damage timer written while the range holds (re-written each frame): enough to last until
+/// the next frame's check through KH1's countdown (`0x140297FE0`, by the frame scale, 1 or 2 a
+/// frame), carrying `RANGE_MARK`.
+const RANGE_HOLD: f32 = 3.0 - RANGE_MARK;
 
-/// (t860) KH2's invulnerable ranges (range id 27, `WindowKind::Invulnerable`) of our slot playing
-/// on `actor`, at KH1's time in it (Explosion 32..64, Aerial Recovery 0..16, Counterguard 0..20,
-/// Finishing Leap 24..38; Checked (files)), on KH1's own no-damage timer
-/// (`combomods::kh1_no_damage`), each frame he is posed (`frame`): when a range opens, the timer
-/// is set to the frames left in it and KH1 counts it down itself. KH2 (Checked (decomp)): range
-/// 27's start sets `+0x18C` bit 22 (`0x14040D810` case 0x1B on the motion's `+0x34`, the actor's
-/// `+0x158` motion block), which the actor's invulnerable test reads (vtable `+0xB8`), so a hit
-/// there lands as KH2's kind 4, as on KH2's timer. **Assumption**: KH2 drops the bit when the
-/// motion is left early (cut by another move), so the timer is ended here then, if it is still ours
-/// (`RANGE_MARK`). Replaces `hurt`'s throw-away of those hits (before t860).
+/// (t868) KH2's invulnerable ranges (range id 27: Explosion 32..64, Aerial Recovery 0..16,
+/// Counterguard 0..20, Finishing Leap 24..38; Checked (files)) on KH1's own no-damage flag, each
+/// frame he is posed (`frame`): our level event 8.0 of the motion KH1 plays, read with KH1's own
+/// level reader at KH1's time in it (`kh1_level`), holds the flag (KH1's timer, `RANGE_HOLD`) while
+/// it is on and ends it the first frame it is off, if the timer is still ours.
+///
+/// KH2 (Checked (decomp)): every motion update clears the range bits (`0x1403C83B0` from
+/// `0x14040E5C0`) and sets them again for each range the clip's time is in (`0x14040E740` ->
+/// `0x14040D810`; range 27 sets `+0x18C` bit 22, which the actor's invulnerable test reads, vtable
+/// `+0xB8`), at a blending motion's start time. So the invulnerability lasts exactly while the
+/// time is in the range, through the blend into the move (KH1 holds its time at the new motion's
+/// start there too), and ends on the first update after the move is cut. KH1 reads "no damage"
+/// from the actor's flags in six places (`0x1000080`), so the flag is what it gets.
+///
+/// t860 set the timer once to the frames left when the range opened: it started after a blend
+/// into a range from frame 0 and ran on when the move was cut (that end was an **Assumption**).
+/// A longer KH1 timer of its own (a reaction's 30, the roll's) is kept and isn't ours to end, as
+/// KH2 tests its timer and the range apart.
 pub unsafe fn invulnerable_step(actor: usize) {
-    use character_core::WindowKind as W;
-    let open = (|| {
+    let on = (|| {
         if !super::shared::active() {
             return None;
         }
         let m = current(actor)?;
-        let clip = clip_of(m)?;
-        let t: f32 = rd(actor + TIME_NOW);
-        if !(t.is_finite() && t >= 0.0) {
-            return None;
-        }
-        let w = clip.windows.iter().find(|w| matches!(w.kind, W::Invulnerable) && w.contains(t as u32))?;
-        let end = w.end.unwrap_or(clip.length) as f32;
-        Some((m.motion, w.start, t, (end - t).ceil()))
+        kh1_level(actor, ks::KH2_RANGE, ks::RANGE_INVULNERABLE)?.then_some(m.motion)
     })();
-    let Ok(mut g) = RANGE_TIMER.try_lock() else { return };
-    match (open, *g) {
-        // The same range still playing (not started over): KH1 counts our timer down.
-        (Some((m, s, t, _)), Some((om, os, ot))) if m == om && s == os && t >= ot => {
-            *g = Some((m, s, t));
-        }
-        (Some((m, s, t, left)), _) => {
-            *g = Some((m, s, t));
-            // (KH2 tests the range's bit and its timer apart, either one enough: a longer KH1
-            // timer already running, a reaction's 30, is kept as it is, and isn't ours to end.)
-            let running: f32 = rd(actor + 0xC);
-            if super::combomods::kh1_no_damage_on(actor) && running >= left {
-                return;
+    let Ok(mut g) = RANGE_ON.try_lock() else { return };
+    let left: f32 = rd(actor + 0xC);
+    let running = super::combomods::kh1_no_damage_on(actor) && left > 0.0;
+    let ours = running && (left.fract() - (1.0 - RANGE_MARK)).abs() < 0.01;
+    match on {
+        Some(m) => {
+            if !(running && !ours && left >= RANGE_HOLD) {
+                super::combomods::kh1_no_damage(actor, RANGE_HOLD);
             }
-            super::combomods::kh1_no_damage(actor, left - RANGE_MARK);
-            log!(Combat, "KH2's invulnerable range of motion {m} (from frame {s}) at frame {t:.0}: KH1's no-damage timer {:.0} frames", left);
+            if *g != Some(m) {
+                log!(Combat, "KH2's invulnerable range of motion {m} (KH1's level 8.0) at frame {:.0}: KH1's no-damage flag held", rd::<f32>(actor + TIME_NOW));
+            }
+            *g = Some(m);
         }
-        (None, Some((m, _, _))) => {
-            *g = None;
-            let left: f32 = rd(actor + 0xC);
-            let ours = super::combomods::kh1_no_damage_on(actor) && left > 0.0 && ((left.fract() - (1.0 - RANGE_MARK)).abs() < 0.01);
-            if ours {
-                super::combomods::kh1_no_damage(actor, 0.0);
-                log!(Combat, "KH2's invulnerable range of motion {m} left early: KH1's no-damage timer ended ({left:.2} frames left)");
+        None => {
+            if let Some(m) = g.take() {
+                if ours {
+                    super::combomods::kh1_no_damage(actor, 0.0);
+                }
+                log!(Combat, "KH2's invulnerable range of motion {m} over (frame {:.0}{}): KH1's no-damage flag {}", rd::<f32>(actor + TIME_NOW), if current(actor).is_some_and(|c| c.motion == m) { "" } else { ", the move left" }, if ours { "dropped" } else { "left to KH1's own timer" });
             }
         }
-        (None, None) => {}
     }
 }
 
@@ -1202,21 +1200,34 @@ pub unsafe fn keyblade_guard(actor: usize) -> Option<(u16, u8)> {
     }).min_by_key(|g| g.1)
 }
 
-/// KH2's clip of our slot playing on `actor` holds him with no gravity now (its range id 3 / 24,
-/// `WindowKind::NoGravity`, at KH1's time in the slot, which runs in the clip's 60 Hz frames: the
-/// slot is retimed to its length). Not for a clip that allows movement all through (Wisdom
-/// Form's shots), as KH2's controller has it (`Character`'s action step). KH1's air step holds
-/// his rise or fall there (`shared::physics`).
+/// Our slot playing on `actor` holds him with no gravity now: KH2's no-gravity range (range id 3 /
+/// 24, `WindowKind::NoGravity`) as our level event 8.1 of the motion KH1 plays, read by KH1's own
+/// level reader at KH1's time in it (`kh1_level`, t869; through a blend at the new motion's start,
+/// as KH2 reads its ranges). Not for a clip that allows movement all through (Wisdom Form's shots),
+/// as KH2's controller has it (`Character`'s action step): the bake leaves 8.1 out of those
+/// (`no_gravity_spans`). KH1's air step holds his rise or fall there (`shared::physics`), and the
+/// root travel, lift-off and rise start follow it (`air_root`, `air_root_form`, `lifts_off`,
+/// `rise_start`). Off Steam (no level reader) KH2's clip is read as before t869.
 pub unsafe fn no_gravity(actor: usize) -> bool {
-    use character_core::WindowKind as W;
+    if super::addr::Build::current() == super::addr::Build::Steam {
+        return kh1_level(actor, ks::KH2_RANGE, ks::RANGE_NO_GRAVITY) == Some(true);
+    }
     let Some(m) = current(actor) else { return false };
     let Some(clip) = clip_of(m) else { return false };
     let t: f32 = rd(actor + TIME_NOW);
-    if !(t >= 0.0) || !clip.windows.iter().any(|w| matches!(w.kind, W::NoGravity)) {
-        return false;
-    }
+    t >= 0.0 && no_gravity_spans(clip).iter().any(|&(a, b)| a <= t && t < b)
+}
+
+/// KH2's no-gravity ranges of `clip` as our level event 8.1 takes them (frames, start..end): none
+/// for a clip that allows movement all through (`no_gravity`).
+fn no_gravity_spans(clip: &character_core::Clip) -> Vec<(f32, f32)> {
+    use character_core::WindowKind as W;
     let moving = clip.windows.iter().any(|w| matches!(w.kind, W::AllowMovement) && w.start == 0 && w.end.is_none());
-    !moving && clip.has(t as u32, |k| matches!(k, W::NoGravity))
+    if moving {
+        return Vec::new();
+    }
+    let len = clip.length as f32;
+    clip.windows.iter().filter(|w| matches!(w.kind, W::NoGravity)).map(|w| (w.start as f32, w.end.map_or(len, |e| e as f32))).collect()
 }
 
 /// KH2's allow-movement range (range id 41, `WindowKind::AllowMovement`) of our slot playing on
@@ -1224,6 +1235,12 @@ pub unsafe fn no_gravity(actor: usize) -> bool {
 /// Drive Form with ground inertia steers with the stick there (`shared::physics`, Wisdom's shots).
 pub unsafe fn allow_movement(actor: usize) -> Option<bool> {
     use character_core::WindowKind as W;
+    // (t872) Our level event 8.4 of the motion KH1 plays, read by KH1's own reader (`kh1_level`,
+    // `Some` only while one of our slots plays); off Steam KH2's clip as before. KH2's input step
+    // keeps the stick only with range 41 or a free range on (`0x1403A89A0`, Checked (decomp)).
+    if super::addr::Build::current() == super::addr::Build::Steam {
+        return kh1_level(actor, ks::KH2_RANGE, ks::RANGE_ALLOW_MOVEMENT);
+    }
     let m = current(actor)?;
     let clip = clip_of(m)?;
     let t: f32 = rd(actor + TIME_NOW);
@@ -1354,6 +1371,11 @@ pub unsafe fn rise_start(actor: usize, dt: f32) -> Option<[f32; 3]> {
 /// 169 (0..17), and 161 (0..28).
 pub unsafe fn edge_stop(actor: usize) -> bool {
     use character_core::WindowKind as W;
+    // (t871) Our level event 8.2 of the motion KH1 plays, read by KH1's own reader (`kh1_level`);
+    // off Steam KH2's clip as before.
+    if super::addr::Build::current() == super::addr::Build::Steam {
+        return kh1_level(actor, ks::KH2_RANGE, ks::RANGE_EDGE_STOP) == Some(true);
+    }
     let Some(m) = current(actor) else { return false };
     let Some(clip) = clip_of(m) else { return false };
     let t: f32 = rd(actor + TIME_NOW);
@@ -1377,6 +1399,12 @@ pub unsafe fn edge_stop(actor: usize) -> bool {
 /// its end) and 155 (0..64); the Drive 52 (no gravity all through). Returns the KH2 motion.
 pub unsafe fn ground_hold(actor: usize) -> Option<u16> {
     use character_core::WindowKind as W;
+    // (t871) Our level event 8.3 of the motion KH1 plays (`ground_hold_spans`), read by KH1's own
+    // reader (`kh1_level`); off Steam KH2's clip as before.
+    if super::addr::Build::current() == super::addr::Build::Steam {
+        let m = current(actor)?;
+        return (kh1_level(actor, ks::KH2_RANGE, ks::RANGE_GROUND_HOLD) == Some(true)).then_some(m.motion);
+    }
     let m = current(actor)?;
     let clip = clip_of(m)?;
     let t: f32 = rd(actor + TIME_NOW);
@@ -1767,7 +1795,96 @@ fn kh1_tracks(template: &[EventTrack], clip: &character_core::Clip, r: f32, leav
     if !left_trail.is_empty() {
         out.push(EventTrack::level(ks::TRAIL, LEFT_TRAIL_ID, &left_trail));
     }
+    // (t868) KH2's invulnerable ranges (range id 27, `WindowKind::Invulnerable`) as a level event
+    // of ours, 8.0 (`ks::KH2_RANGE`): on from the range's start, off at its end, as KH2's
+    // `0x14040E740` takes a range (start <= t < end; no end: to the motion's end). Read with KH1's
+    // own level reader on the motion KH1 plays (`kh1_level`, `invulnerable_step`).
+    let invulnerable: Vec<(f32, f32)> = clip.windows.iter().filter(|w| matches!(w.kind, WindowKind::Invulnerable)).map(span).collect();
+    if !invulnerable.is_empty() {
+        out.push(EventTrack::level(ks::KH2_RANGE, ks::RANGE_INVULNERABLE, &invulnerable));
+    }
+    // (t869) KH2's no-gravity ranges (range ids 3 / 24) as our level event 8.1, the same way
+    // (`no_gravity_spans`: none for a clip that allows movement all through), read by `no_gravity`.
+    let hold = no_gravity_spans(clip);
+    if !hold.is_empty() {
+        out.push(EventTrack::level(ks::KH2_RANGE, ks::RANGE_NO_GRAVITY, &hold));
+    }
+    // (t871) KH2's edge stop (range id 29) as 8.2, read by `edge_stop`, and the ranges KH2's ground
+    // mover reads as "don't leave the ground" (no gravity 3 / 24 on every clip, or the edge stop) as
+    // 8.3, read by `ground_hold` (`ground_hold_spans`).
+    let edge: Vec<(f32, f32)> = clip.windows.iter().filter(|w| matches!(w.kind, WindowKind::EdgeStop)).map(span).collect();
+    if !edge.is_empty() {
+        out.push(EventTrack::level(ks::KH2_RANGE, ks::RANGE_EDGE_STOP, &edge));
+    }
+    let ground = ground_hold_spans(clip);
+    if !ground.is_empty() {
+        out.push(EventTrack::level(ks::KH2_RANGE, ks::RANGE_GROUND_HOLD, &ground));
+    }
+    // (t872) KH2's allow-movement range (range id 41) as 8.4, read by `allow_movement` (the
+    // forms' ground steering in their actions, `shared::physics::ground_inertia`, and their air
+    // steering, `form_air_steer`).
+    let steer: Vec<(f32, f32)> = clip.windows.iter().filter(|w| matches!(w.kind, WindowKind::AllowMovement)).map(span).collect();
+    if !steer.is_empty() {
+        out.push(EventTrack::level(ks::KH2_RANGE, ks::RANGE_ALLOW_MOVEMENT, &steer));
+    }
     out
+}
+
+/// KH2's "don't leave the ground" ranges of `clip` as our level event 8.3 takes them (frames,
+/// start..end): no gravity (range ids 3 / 24, `WindowKind::NoGravity`, every clip) or the edge stop
+/// (29, `WindowKind::EdgeStop`), the ranges KH2's ground mover reads (`ground_hold`).
+fn ground_hold_spans(clip: &character_core::Clip) -> Vec<(f32, f32)> {
+    let len = clip.length as f32;
+    clip.windows.iter().filter(|w| matches!(w.kind, WindowKind::NoGravity | WindowKind::EdgeStop)).map(|w| (w.start as f32, w.end.map_or(len, |e| e as f32))).collect()
+}
+
+/// KH1's motion event level reader (Steam `0x140394770 (motion, type << 16 | id, time f32) -> key`,
+/// the last key of that type and id at or before the time; its pose pass reads 0.0, 1.x, 5.0 and
+/// 7.0 with it; Checked (decomp)) and its first bytes (Checked (exe), as `leftblade` checks them).
+const LEVEL_READER_STEAM: usize = 0x394770;
+const LEVEL_READER_PROLOGUE: [u8; 5] = [0x48, 0x89, 0x5C, 0x24, 0x10];
+/// The actor's motion table handle (`+0x1D4`; the motion of slot `+0x168` is its entry there).
+const ACTOR_MOTIONS: usize = 0x1D4;
+/// The reader's first bytes checked: 0 not yet, 1 as expected, 2 not (nothing is read then).
+static LEVEL_READER_OK: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+
+/// (t868) A level event of the motion KH1 plays on `actor` now (its slot `+0x168` in its table
+/// `+0x1D4`) at KH1's time in it (`+0x16C`), read by KH1's own level reader: whether it is on.
+/// While a blend runs KH1 holds that time at the new motion's start (`0x14029F0A0`, Checked
+/// (decomp)), as KH2 reads its ranges at a blending motion's start time (`0x1403C6740`: `+0x4C`
+/// while `+0x48` > 0, Checked (decomp)). Only on one of our slots (`current`), whose pointers are
+/// KH1's own; `None` off Steam, off our slots, or with the reader not where expected.
+pub unsafe fn kh1_level(actor: usize, kind: u16, id: u16) -> Option<bool> {
+    if super::addr::Build::current() != super::addr::Build::Steam {
+        return None;
+    }
+    current(actor)?;
+    let base = super::takeover::game_base();
+    match LEVEL_READER_OK.load(Ordering::Relaxed) {
+        0 => {
+            let ok = std::slice::from_raw_parts((base + LEVEL_READER_STEAM) as *const u8, LEVEL_READER_PROLOGUE.len()) == LEVEL_READER_PROLOGUE;
+            LEVEL_READER_OK.store(if ok { 1 } else { 2 }, Ordering::Relaxed);
+            if !ok {
+                log!(Animation, "KH2 slots: KH1's motion event reader not where expected: our level events (KH2's ranges) aren't read");
+                return None;
+            }
+        }
+        1 => {}
+        _ => return None,
+    }
+    let table = pose::ptr(rd::<u32>(actor + ACTOR_MOTIONS));
+    if table < 0x10000 {
+        return None;
+    }
+    let slot = rd::<u16>(actor + SLOT_NOW) as usize;
+    let motion = pose::ptr(rd::<u32>(table + slot * 4));
+    let time: f32 = rd(actor + TIME_NOW);
+    if motion < 0x10000 || !time.is_finite() {
+        return None;
+    }
+    let reader: unsafe extern "system" fn(usize, u32, f32) -> usize = std::mem::transmute(base + LEVEL_READER_STEAM);
+    let key = reader(motion, (kind as u32) << 16 | id as u32, time);
+    Some(key >= 0x10000 && rd::<u8>(key + 4) != 0)
 }
 
 /// The id of our left-Keyblade trail level event (type 7, `ks::TRAIL`; KH1's own trail is 7.0).
@@ -2554,7 +2671,7 @@ pub unsafe fn frame(actor: usize) {
     super::formmagic::kh1_cast_window(actor);
     // KH2's Counterguard window in its guard's repel (`combomods::counter_window`).
     super::combomods::counter_window(actor);
-    // KH2's invulnerable ranges on KH1's no-damage timer (`invulnerable_step`, t860).
+    // KH2's invulnerable ranges on KH1's no-damage flag (`invulnerable_step`, t860; KH1's level reader on our 8.0 since t868).
     invulnerable_step(actor);
     // KH2's hits on his body in the KH2 motion KH1 plays (`body_strike`): KH1 attack objects of
     // ours (`bodyhits`), else KH2's own sweep (`kh2_hits`, which keeps the guards and the pull).

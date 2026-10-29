@@ -361,6 +361,12 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [27. Assistant: t865 should fix the fliers being thrown around inside Magnet](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m27)
   - [28. Assistant: t866: Magnet Burst's knock-back hits now end the hold on a f](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m28)
   - [29. Assistant: Your log backs that up. Before the change (t865), the flying](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m29)
+  - [30. Assistant: Here's item 5, KH2's motion-range rules, brought up to date ](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m30)
+  - [31. Assistant: I stopped before writing code: part 1 as I planned it can't ](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m31)
+  - [32. Assistant: t868, the invulnerable ranges as KH1 motion data. KH2's invu](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m32)
+  - [33. Assistant: t869, the no-gravity hold as KH1 motion data. KH2's no-gravi](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m33)
+  - [34. Assistant: t871, the edge stop and Ledge Carry as KH1 motion data. KH2'](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m34)
+  - [35. Assistant: t872, allow-movement steering as KH1 motion data. KH2's allo](../testers/what-is-still-missing-for-native-integration-into-kh1/what-is-still-missing-for-native-integration-into-kh1.md#^m35)
 
 ---
 

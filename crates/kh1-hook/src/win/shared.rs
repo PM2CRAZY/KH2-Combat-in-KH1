@@ -1514,14 +1514,19 @@ pub mod physics {
     /// to `target × (1 − acceleration) + velocity × acceleration` (`0x140141AE0`), the target the
     /// stick's direction at the walk or run speed (`0x1403A8FA0`: run from 0.8 of tilt), and with
     /// it at rest multiplies the velocity by the brake; the move is the velocity × dt. Checked
-    /// (decomp). Taken per KH2 physics tick, two 60 Hz frames (`dt / 2` of them a game frame, as
-    /// `air_step`'s air steering, from the same 30 Hz tick finding). So he slides to a stop in his
+    /// (decomp). On KH2's physics tick (t870: KH2's clock, `GROUND_TICK`: the step on the first
+    /// frame and every second 60 Hz frame, its velocity held in between, `0x1403B89A0`; before t870
+    /// eased each frame by `dt / 2` powers). So he slides to a stop in his
     /// idle, and a turn eases round. KH1's choice of walk / run / idle (its animation) is kept; only
     /// the move is KH2's. In one of KH1's actions on our slot (Wisdom's shots and casts): steered
     /// the same way inside the clip's allow-movement range (range id 41, `kh2slots::allow_movement`),
-    /// braked outside it (**Assumption**: KH2's attack actions take the same velocity function with
-    /// the stick cleared outside the range, as the OG rewrite's action step does; the attack
-    /// action's caller wasn't traced). KH1's own travel (`+0x200`, the root) is added by KH1 after.
+    /// braked outside it: KH2's input step clears the stick unless a free range (0 / 1 / 2) or
+    /// range 41 is on (`0x1403A89A0`, Checked (decomp), t870). On the ground KH2's cast start only
+    /// sets the motion (`0x1403C5170`, Checked (decomp)), so the free state's move (`0x140422350`,
+    /// its inertia path on range 42, on Wisdom's casts all through, Checked (files)) goes on
+    /// (**Assumption**: that the action stays the free state is inferred, not traced). KH2's push
+    /// on him (Blizzard's) is added (`inertia_push`, t870). KH1's own travel
+    /// (`+0x200`, the root) is added by KH1 after.
     /// False (KH1's step as it is) for base Sora and forms with no inertia.
     unsafe fn ground_inertia(actor: usize, disp: *mut [f32; 4]) -> bool {
         let Some(n) = numbers().filter(|n| n.acceleration > 0.0 && super::super::form::native_form().is_some()) else {
@@ -1534,10 +1539,24 @@ pub mod physics {
             return false;
         }
         let dt = dt();
-        let per = |k: f32| if dt == 2.0 { k } else { k.powf(dt / 2.0) };
-        let (a, b) = (per(n.acceleration), per(n.brake));
+        let (a, b) = (n.acceleration, n.brake);
         let action = rd::<u32>(actor) & 4 != 0;
         let Ok(mut g) = GROUND_V.try_lock() else { return false };
+        let Ok(mut tick) = GROUND_TICK.try_lock() else { return false };
+        // (t870) KH2's velocity step clock (`0x1403B89A0`: `+0xBA8`, 0 at an action change, down by
+        // the frame scale each frame; below 0 the step runs and 2 is added): from a fresh ground
+        // velocity the step runs this frame, then every second 60 Hz frame, and the velocity it
+        // gives is held in between. **Assumption**: KH2's ground cast keeps the action it started
+        // from (the cast start `0x1403C5170` sets only the motion on the ground), so the clock
+        // isn't restarted by a cast.
+        if g.is_none() {
+            *tick = 0.0;
+        }
+        *tick -= dt;
+        let step = *tick < 0.0;
+        if step {
+            *tick += 2.0;
+        }
         // (Coming onto the ground: KH1's sideways speed in its air state, `+0x3C0`, per 60 Hz frame;
         // **Assumption** that KH1 still holds it on the landing frame, else 0.)
         let mut v = g.unwrap_or_else(|| {
@@ -1571,19 +1590,69 @@ pub mod physics {
         } else {
             None
         };
-        v = match target {
-            Some(t) => [t[0] * (1.0 - a) + v[0] * a, t[1] * (1.0 - a) + v[1] * a],
-            None => [v[0] * b, v[1] * b],
-        };
+        if step {
+            v = match target {
+                Some(t) => [t[0] * (1.0 - a) + v[0] * a, t[1] * (1.0 - a) + v[1] * a],
+                None => [v[0] * b, v[1] * b],
+            };
+        }
         if v[0].hypot(v[1]) < 1e-3 || !v.iter().all(|x| x.is_finite()) {
             v = [0.0; 2];
         }
         *g = Some(v);
+        // (t870) A push of KH2's on him (Blizzard's push of its caster, `inertia_push`), added to the
+        // move as KH2's physics step adds it (`0x1403B89A0`: the velocity's move, the root, then
+        // `0x1403D4570`'s push, each frame): direction × speed × the frame, then speed × 0.9 a
+        // frame, ended once the speed is below 1. Checked (decomp).
+        let mut push = [0.0f32; 2];
+        if let Ok(mut p) = INERTIA_PUSH.try_lock() {
+            if let Some((dir, s)) = *p {
+                if s < 1.0 || !s.is_finite() {
+                    *p = None;
+                } else {
+                    push = [dir[0] * s * dt, dir[1] * s * dt];
+                    *p = Some((dir, s * KH2_PUSH_DECAY.powf(dt)));
+                }
+            }
+        }
         // (In an action KH1's own step moves him by nothing of the stick; outside, its walk or run
         // is replaced by KH2's.)
-        d[0] = v[0] * dt + if action { d[0] } else { 0.0 };
-        d[2] = v[1] * dt + if action { d[2] } else { 0.0 };
+        d[0] = v[0] * dt + push[0] + if action { d[0] } else { 0.0 };
+        d[2] = v[1] * dt + push[1] + if action { d[2] } else { 0.0 };
         true
+    }
+
+    /// KH2's velocity step clock for `ground_inertia` (KH2's `+0xBA8`, in 60 Hz frames).
+    static GROUND_TICK: Mutex<f32> = Mutex::new(0.0);
+    /// A push of KH2's added to `ground_inertia`'s move: its flat direction (KH1's x / z) and its
+    /// speed this frame (`inertia_push`).
+    static INERTIA_PUSH: Mutex<Option<([f32; 2], f32)>> = Mutex::new(None);
+    /// KH2's push decay a 60 Hz frame (`0x1403D4570`: × 0.9 ^ the frame scale, Checked (decomp)).
+    const KH2_PUSH_DECAY: f32 = 0.9;
+
+    /// (t870) A push of KH2's on Sora at `speed` a frame along `dir` (Blizzard's push of its caster,
+    /// `hitreact::script_push`), while a Drive Form's ground inertia moves him on the ground
+    /// (Wisdom): added to his ground move each frame (`ground_inertia`), as KH2 adds its push to
+    /// the move (`0x1403B89A0`, Checked (decomp)). KH1's own push (`0x1402C7070`, from its physics
+    /// step `0x14029A3C0`) puts its push in place of the frame's move instead (Checked (decomp)),
+    /// which threw away Wisdom's steering while it ran and snapped back to it when it ended (the
+    /// owner's trace f11371..f11546: no steering from frame 10, the allow-movement range of 59,
+    /// until the push ended at 24; 45 on 60). False (KH1's push as before) anywhere else.
+    pub unsafe fn inertia_push(actor: usize, dir: [f32; 3], speed: f32) -> bool {
+        if !is_sora(actor) || rd::<i32>(actor + 0x70) != 0 || !kh2() || numbers().filter(|n| n.acceleration > 0.0 && super::super::form::native_form().is_some()).is_none() {
+            return false;
+        }
+        let flat = dir[0].hypot(dir[2]);
+        if !(flat > 1e-4) || !(speed >= 1.0) || !speed.is_finite() {
+            return false;
+        }
+        match INERTIA_PUSH.lock() {
+            Ok(mut p) => {
+                *p = Some(([dir[0] / flat, dir[2] / flat], speed));
+                true
+            }
+            Err(_) => false,
+        }
     }
 
     /// KH1's state change (`0x1402AF7D0`, Steam via the map) and its air fields (`+0x3B0` air time,
@@ -1839,6 +1908,12 @@ pub mod physics {
         if sora {
             if let Ok(mut g) = GROUND_V.try_lock() {
                 *g = None;
+            }
+            // (t870) KH2's push added to the ground move ends with it here (**Assumption**: off the
+            // ground KH2's push would go on; none of the pushes it carries, Blizzard's, starts in
+            // the air on this path, `inertia_push` takes only the ground state.)
+            if let Ok(mut p) = INERTIA_PUSH.try_lock() {
+                *p = None;
             }
         }
         let v0: [f32; 4] = if sora { rd(actor + 0x3C0) } else { [0.0; 4] };

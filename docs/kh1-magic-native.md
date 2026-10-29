@@ -1275,6 +1275,9 @@ update and the collision pass in the frame (task priorities 80000, 80001, 0x2172
   push runs on it (`hitreact`), whatever the Hit Reactions style. Only on KH1's states (KH1's
   physics step runs his push); under KH2's controller (Wisdom's casts) it isn't applied (logged).
   **Assumption:** KH2's player bonus to the distance (player record `+0x1C8`) is 0 for Sora.
+  **t870:** KH1's push replaces the frame's move (`0x14029A3C0` -> `0x1402C7070`), KH2's is added to
+  it (`0x1403B89A0`), both Checked (decomp). Under Wisdom's ground inertia the push now goes into the
+  ground move instead (`physics::inertia_push`), so the steering in the cast's range 41 goes on.
 
 Not checked: in game. Still open: the ground and wall tests the scripts ask for (`ground` uses
 Sora's floor, `bg_hit` says no wall); Donald and Goofy aren't objects of the scripts' world (the

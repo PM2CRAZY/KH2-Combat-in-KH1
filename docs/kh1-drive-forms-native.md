@@ -901,6 +901,15 @@ allow-movement range (`kh2slots::allow_movement`) and brakes outside it. **Assum
 attack actions use the same velocity function with the stick cleared outside range 41 (the caller
 in the attack action wasn't traced); KH1's air speed `+0x3C0` seeds the velocity on landing.
 
+**Movement during casts (t870, Checked (decomp)).** KH2 adds its push (Blizzard's push of its caster)
+to the move each frame (`0x1403B89A0` -> `0x1403D4570`); KH1's push replaces the frame's move
+(`0x14029A3C0` -> `0x1402C7070`). So under Wisdom's ground inertia the push goes into our ground move
+(`physics::inertia_push`) and his slide and steering go on under it. The velocity step runs on KH2's
+clock (`+0xBA8`: the first frame, then every second 60 Hz frame, held between), not eased per frame.
+The stick is kept only in a free range or range 41 (`0x1403A89A0`); Wisdom's casts have range 42 all
+through (59: 41 from 10; 60: from 34; 56: from 24; Checked (files)). **Assumption**: a ground cast keeps
+KH2's free-state action (the cast start sets only the motion).
+
 **Square** (`shared::control`): KH2's action-button handler `0x1403A81F0` (Checked (decomp)) finds
 no glide, no Square rows, no row 11 and no dodge roll in Wisdom, so Square is Quick Run (growth kind
 1): on the ground from a free state, along the stick vector (none: his facing), stick pushed or not.

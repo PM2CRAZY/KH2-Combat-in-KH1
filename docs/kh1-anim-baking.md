@@ -677,3 +677,148 @@ The tester (after m14): "9. (a) if rumble is on it should work then".
   (the order traced on Epic, `0x140295E50`: think, physics, matrix, animation; not re-traced on
   Steam). Not checked in game.
 
+
+## 14. KH2's motion ranges as KH1 motion events (what-is-still-missing, item 5)
+
+Status at t867, before any code. What still reads KH2's ranges at runtime, how KH1's motion events
+can carry them, and the plan.
+
+### 14.1 What still reads KH2's ranges (Checked (code), t867)
+
+- **Each frame Sora is posed** (`kh2slots::frame`): the Finishing Plus window (range 50,
+  `finisher_window`), KH1's own casts' window at Magic Combo KH2 (`formmagic::kh1_cast_window`),
+  the Counterguard window (`combomods::counter_window`), the invulnerable ranges (range 27,
+  `invulnerable_step`, t860: KH1's no-damage timer does the work, but the range is read here).
+- **Each frame in KH1's physics step** (`shared::physics`): the no-gravity hold (range 3 / 24),
+  rise start, the forms' lift-off, the edge stop and ground hold / Ledge Carry (range 29),
+  allow-movement steering (range 41), root travel in the hold. Turn to target (range 28,
+  `turn_to_lock`) before it. The Keyblade re-arm (`keyblade_rearm`, the attack windows) each frame
+  KH1 has him.
+- **On a command only:** the cast checks in `combat::command_step` (`cast_attack_window`,
+  `cast_magic_window`: range 11 / 35; `cast_finisher_open`: range 50), Valor's Square windows
+  (`combomods`), the reaction command's first frame (`takeover`). `formmagic::cast_cut` reads the
+  free range only on a fresh press during a cast (no cast motion has one).
+- **Already KH1's own data:** KH2's free range as KH1's "may be left" (type 0) and the cast's combo
+  window as KH1's combo (type 5), baked once into our slots (`Leave`, `cast_follow`).
+- **Correction to the t793 list:** the jump's apex swap (`kh2_apex`), the Aerial Dodge's apex and
+  clock (`dodge_apex`, `dodge_clock`) and the glide clock (`glide::kh2_clock`) are KH2 timing
+  rules, not motion ranges. They aren't part of this item. The guard windows come from KH2's
+  sweep (`takeover::kh2_hits`) and go with the body-hit work.
+
+### 14.2 How KH1 reads a motion's events (Checked (decomp), Steam KH1)
+
+- **Levels.** KH1's plain pose pass (`0x140391C70`) clears the top half of the instance's level
+  word (`+0x14`, bits 16..31) and asks its level reader (`0x140394770`, by exact type and id: the
+  last key at or before the time, "on" in `a`) for 1.0..1.3 (bits 16..19), 0.0 (bit 20), 5.0
+  (bit 22) and 7.0 (bit 23). Nothing else. Bits 21 and 24..31 are cleared every pass and never set
+  by it. The word ends up in the actor's `+0x1CC`.
+- **Only the plain pass reads levels.** The blend pass (`0x140392560`) doesn't call the level
+  reader. What `+0x1CC` holds during a blend is not checked yet.
+- **Edges.** KH1's edge pass (`0x14029FB30`) fires only types 4 (foot) and 6 (sound). Type 6 keys
+  with codes of ours in `a` already reach our code through KH1's wrapped sound handler
+  (`0x140295420`, §13). No edge fires while a blend holds the time.
+
+### 14.3 The plan, one version per part
+
+1. **Invulnerable ranges as a KH1 edge event.** A type-6 key of ours at range 27's start, carrying
+   the range's length. The wrapped handler gives KH1's no-damage timer those frames.
+   `invulnerable_step` goes.
+2. **KH1's level pass learns our types, with the no-gravity hold first.** New level tracks of ours
+   (type 8; vanilla KH1 never asks for it) baked into our slots. A patch at the end of KH1's plain
+   pass asks KH1's own reader for them and sets free bits (24 and up) in the same word. The air step
+   reads the bit instead of KH2's clip. Rise start and the forms' lift-off read it too.
+3. **Edge stop and ground hold** on their own bit.
+4. **Allow-movement steering** on its own bit.
+5. **Turn to target** on its own bit, the turn rate in the key's `b` (KH1's reader returns the key).
+6. **Finishing Plus and Counterguard windows** as tracks of ours. The pass patch sets KH1's combo
+   bit 22 from them only while their condition holds (Finishing Plus equipped and a finisher left;
+   the guard's repel). The command checks read KH1's bits instead of KH2's clips.
+7. **KH1's own casts' window** at Magic Combo KH2 written into KH1's cast motions as a 5.0 track
+   (data only), taken out again at KH1.
+8. **The Keyblade re-arm** as a type-6 edge of ours at each KH2 attack window's start.
+   `keyblade_rearm` goes.
+9. **Valor's Square windows and the reaction command's first frame** read KH1's bits.
+
+Root travel in the hold isn't a window: it moves him by the clip's root. Whether KH1's own motion
+travel can carry it is a separate check, done after part 2.
+
+### 14.4 Still to check before each part
+
+- **The free bits.** That nothing else in KH1 reads or writes bits 21 / 24..31 of `+0x1CC`.
+  Assumption until a full pass over the decomp.
+- **Blends.** What `+0x1CC` holds during a blend, and whether KH2's ranges count during KH2's own
+  blend (`0x1403C6740` sets the range bits from the clip's time). This decides whether a range at
+  frame 0 (Aerial Recovery's invulnerability, a no-gravity hold from frame 0) needs anything extra.
+
+### 14.5 Correction after the go-ahead: the invulnerable ranges can't be a one-off event (Checked (decomp))
+
+- **KH2** clears every range bit at each motion update (`0x1403C83B0` from `0x14040E5C0`) and sets
+  them again for each range the clip's time is in (`0x14040E740` -> `0x14040D810`; range 27 sets
+  bit 22). During a blend it uses the new motion's start time (`+0x4C`). So the invulnerability
+  holds exactly while the time is in the range, during the blend into the move too, and is gone on
+  the first update after the move is cut.
+- **A one-off event misses two cases.** KH1 fires no edge while a blend holds the time, so a range
+  from frame 0 (Aerial Recovery, Counterguard) would start only after the blend. A timer started at
+  the range's start also keeps running if the move is cut early.
+- **KH1's levels lag during blends.** KH1's motion step (`0x14029F0A0`) copies the instance's level
+  word into `+0x1CC` every frame, but only the plain pass writes that word; the blend pass
+  (`0x140392560`) never does. During a blend `+0x1CC` keeps the outgoing motion's last levels.
+- **KH1 reads "no damage" from the actor's flag word, in six places** (flags `0x1000080`:
+  `0x140291920`, `0x140297FE0`, `0x14029BBD0`, `0x1402A3BA0`, `0x1402B4060`, `0x1402BEEE0`), not
+  from a motion level.
+- **Revised part 1 (proposed):** a level track of ours for range 27, read into a free bit by a
+  patch on KH1's pose passes (the blend pass too, reading the incoming motion at its held time),
+  and a patch in KH1's motion step, next to its own "may be left" handling of bit 20, that holds
+  KH1's no-damage flag while the bit is on and drops it when it goes off. That is KH2's rule frame
+  for frame and also builds part 2's plumbing. Open: which motion the instance holds during a
+  blend.
+
+### 14.6 Part 1 done (t868): the invulnerable ranges as KH1 motion data
+
+- **The bake:** range 27 goes into each of our slots as our level event 8.0 (`kh1_data::slot::KH2_RANGE`,
+  `RANGE_INVULNERABLE`): on at the range's start, off at its end (no end: the motion's end).
+- **The read:** `kh2slots::kh1_level` asks KH1's own level reader for it on the motion of the
+  actor's slot `+0x168` (its table `+0x1D4`) at `+0x16C`, only while one of our slots plays. During
+  a blend KH1 holds that time at the new motion's start, as KH2 reads its ranges at a blending
+  motion's start time, so a range from frame 0 is on through the blend. Nothing reads `+0x1CC`,
+  so the frozen levels during a blend (§14.2) don't matter here.
+- **The effect:** `invulnerable_step` holds KH1's no-damage flag while 8.0 is on and drops it the
+  first frame it is off. KH1's hit code reads that flag in all six places.
+- **Still ours each frame:** one call to KH1's reader from the pose-pass hook we already had. No
+  free bit of `+0x1CC` is written yet; part 2 decides that after checking nothing else uses them.
+
+### 14.7 Part 2 done (t869): the no-gravity hold as KH1 motion data
+
+- **Design change from §14.3:** no patch on KH1's pose pass and no free bits. Our level events are
+  read with KH1's reader where they are used (`kh2slots::kh1_level`). Bits in `+0x1CC` would hold
+  the old motion's values through a blend (§14.2), while the reader at KH1's time gives the new
+  motion at its start there, as KH2 reads its ranges. The free-bit check is no longer needed.
+- **The bake:** KH2's no-gravity ranges (range ids 3 / 24) as our level event 8.1, left out for a
+  clip that allows movement all through (Wisdom's shots), as `no_gravity` always did.
+- **The read:** `kh2slots::no_gravity` asks KH1's reader for 8.1 (Steam). The air step's hold and
+  its cut, the root travel in the hold, the forms' travel outside it, the forms' lift-off and the
+  end of the rise start all go through it.
+- **Still KH2 data at runtime:** the root travel (the clip's root curve; KH1 has no field for it
+  yet), `rise_start`'s first-frame lookup, `ground_hold` (part 3), and the KH2 hover on KH1's own
+  air cast animation (no slot of ours there).
+
+### 14.8 Part 3 done (t871): the edge stop and the Ledge Carry as KH1 motion data
+
+- **The bake:** range 29 as our level event 8.2; the ranges KH2's ground mover reads as "don't
+  leave the ground" (no gravity 3 / 24 on every clip, none left out, or 29) as 8.3. KH2's range
+  handler sets bits 5 / 6 / 23 / 24 for ranges 3 / 24 / 29 / 30, and its mover (`0x1403B9090`,
+  `0x1403BA9A0`) reads them (Checked (decomp)); range 30 isn't in Sora's or the forms' motions.
+- **The read:** `kh2slots::edge_stop` (the ground swing's edge stop) reads 8.2 and
+  `kh2slots::ground_hold` (the Ledge Carry) reads 8.3, with KH1's reader at KH1's time.
+- **Still ours:** the floor sweep of the edge stop (KH1's collision) and the Ledge Carry's hook on
+  KH1's ground-to-air test; only where the ranges come from changed.
+
+### 14.9 Part 4 done (t872): allow-movement steering as KH1 motion data
+
+- **The bake:** range 41 as our level event 8.4.
+- **The read:** `kh2slots::allow_movement` reads 8.4 with KH1's reader; Wisdom's ground steering in
+  its shots and casts and the forms' air steering go through it. KH2 keeps the stick only with
+  range 41 or a free range (`0x1403A89A0`, Checked (decomp)); the free half is KH1's own "may be
+  left" on our slots already.
+- **Still KH2 data at runtime here:** the old controller's KH1-spell-in-a-form clock
+  (`takeover::FormCast`), which is KH2's controller path, not KH1's states.

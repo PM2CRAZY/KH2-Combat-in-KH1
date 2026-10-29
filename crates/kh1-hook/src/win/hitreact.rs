@@ -144,6 +144,12 @@ pub unsafe fn script_push(actor: usize, dir: [f32; 3], dist: f32) -> bool {
     if !(flat > 1e-4) {
         return false;
     }
+    // (t870) Under a Drive Form's ground inertia (Wisdom on the ground) KH2's push is added to his
+    // move, as KH2 adds it (`physics::inertia_push`); KH1's push would take the move's place.
+    if physics::inertia_push(actor, dir, dist * KH2_START) {
+        note(|| format!("a spell script's push added to KH2's ground move (ground inertia): {dist:.0}, {:.1} a frame, x {KH2_DECAY} a frame", dist * KH2_START));
+        return true;
+    }
     let at = super::takeover::game_base() + PUSH_START_STEAM;
     if std::slice::from_raw_parts(at as *const u8, PUSH_START_BYTES.len()) != PUSH_START_BYTES {
         note(|| "KH1's push start isn't where expected: a script's push not applied".to_string());

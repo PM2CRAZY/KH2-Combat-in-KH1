@@ -53,9 +53,14 @@ So KH2's invulnerability is KH1's timer (`combomods::kh1_no_damage`):
   32). It runs on if the roll is left early, as KH2's timer does.
 - **t859** Quick Run: its start sets the level's frames (0 / 8 / 12 / 16; 0 ends a roll's timer).
 - **t860** range 27 of our slots (Explosion 32..64, Aerial Recovery 0..16, Counterguard 0..20,
-  Finishing Leap 24..38): `kh2slots::invulnerable_step` sets the frames left in the range when it
-  opens, a quarter frame less as our mark; a longer KH1 timer already running is kept; ours is ended
-  if the move is left before the range ends (**Assumption**: KH2 drops the bit with the motion).
+  Finishing Leap 24..38): set the timer to the frames left when the range opened. Replaced by t868.
+- **t868** range 27 as KH1 motion data: our level event 8.0 baked into the slot, read each frame
+  he is posed with KH1's own level reader (`0x140394770`) on the motion KH1 plays at its time
+  (`kh2slots::kh1_level`). While it is on, KH1's no-damage flag is held (timer 2.75, re-written
+  each frame, its fraction our mark); the first frame it is off, ours is ended. KH2 clears and
+  re-sets its range bits every motion update, at a blending motion's start time (Checked (decomp),
+  `0x1403C6740`), so this matches it through a blend into a range from frame 0 and when the move
+  is cut. A longer KH1 timer of its own is kept. `docs/kh1-anim-baking.md` §14.6.
 - The guard repel's 80 (Recoil KH2) was already on this timer (`combomods::guard_repel`).
 
 Before t858, `hurt` marked those hits "no effect": KH1's normal spark had already played and the

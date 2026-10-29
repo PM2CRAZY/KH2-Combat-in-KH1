@@ -31,6 +31,24 @@ pub const FOOT: u16 = 4;
 pub const COMBO: u16 = 5;
 pub const SOUND: u16 = 6;
 pub const TRAIL: u16 = 7;
+/// Our own level event type: KH2's motion ranges baked into our slots (t868). Vanilla KH1 never
+/// asks for it: its pose pass asks its level reader (Steam `0x140394770`, by exact type and id)
+/// only for 0.0, 1.0..1.3, 5.0 and 7.0, and its edge reader only collects types 2, 3, 4 and 6
+/// (Steam, Checked (decomp)). Our code asks KH1's reader for it on the motion KH1 plays.
+pub const KH2_RANGE: u16 = 8;
+/// 8.0: KH2's invulnerable range (range id 27), on while the motion's time is in it.
+pub const RANGE_INVULNERABLE: u16 = 0;
+/// 8.1: KH2's no-gravity hold (range ids 3 / 24), on while the motion's time is in it; not written
+/// for a motion that allows movement all through (Wisdom Form's shots) (t869).
+pub const RANGE_NO_GRAVITY: u16 = 1;
+/// 8.2: KH2's edge stop (range id 29): KH2's ground mover keeps him on a ledge there (t871).
+pub const RANGE_EDGE_STOP: u16 = 2;
+/// 8.3: KH2's "don't leave the ground" ranges, as its ground mover reads them: no gravity (range
+/// ids 3 / 24, every clip, none left out) or the edge stop (29) (t871).
+pub const RANGE_GROUND_HOLD: u16 = 3;
+/// 8.4: KH2's allow-movement range (range id 41): the stick steers him during the move there
+/// (KH2's input step keeps the stick only with it or a free range) (t872).
+pub const RANGE_ALLOW_MOVEMENT: u16 = 4;
 
 pub(crate) fn u32_at(b: &[u8], at: usize) -> Result<u32> {
     b.get(at..at + 4).map(|s| u32::from_le_bytes(s.try_into().unwrap())).ok_or_else(|| Error::Format(format!("motion: read past the end at {at:#x}")))
