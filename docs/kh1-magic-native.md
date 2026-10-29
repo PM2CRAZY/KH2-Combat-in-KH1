@@ -1323,5 +1323,22 @@ is fixed only on KH1's processes (`reflect_chain_shares_the_teamwork_block` stil
   kh1 thats how magic is scaled (assumption)"). The heal (the row's power over `CURE_SHARE` of the
   max HP) is times Sora's max MP factor (`combat::magic_factor`: +10% a max MP point, at most 30,
   times the ini's `magic_scale`), the stand-in for KH2's Magic the mod's other Magic-based hits
-  already use. KH2's own is power × the caster's Magic / 100. **Assumption** (the owner's): KH1
-  scales its magic by max MP.
+  already use. KH2's own is power × the caster's Magic / 100.
+  **KH1 scales its magic by max MP: Checked (decomp + files)** (the owner asked for the check):
+  - The attack constructor (`0x1402B2DC0`, Steam) puts a stat term in the attack's `+0x2C` by its
+    data's stat source (data `+0`): 0 the owner's Strength (stats `+0x4C`), 1 its max MP
+    (stats `+0x48`), 3 / 4 / 5 max MP × 2 / 3 / 5, 2 none, 6 the party leader's Strength. Stats
+    `+0x48` is max MP: KH1's party refill (`0x1402AD0B0`; Assumption: it is
+    the save point's) raises MP `+0x44` toward it, as it raises HP `+0x3C` toward `+0x40`.
+  - KH1's damage (`0x1402BFA80`): the amount is the data's power (`+0x14` against Sora's side,
+    `+0x48` against enemies) + that stat term. A normal hit looks it up in KH1's damage curve
+    (minus the target's Defense); a percentage hit (kind 8, Gravity) takes amount % of the
+    target's HP; a heal (kind 11) and a few others return the amount as it is.
+  - The record (`0x1402BEEE0`): kind 11 heals the target by that amount through KH1's HP add
+    (`0x1402A4920`).
+  - KH1's own spell data (`btltbl.bin`, the owner's own file, entries from `0x5F28`): Fire, Blizzard,
+    Cure, Stop and Aero use stat source 1 (max MP), Thunder 3 (max MP × 2), Gravity 5
+    (max MP × 5). Cure (element 11): power 15 / 27 / 36 by level. So **KH1's own Cure heals
+    15 / 27 / 36 + Sora's max MP**, added, not multiplied.
+  - Not checked: that the save block's byte `+8` `combat::magic_factor` reads is the same max MP
+    as stats `+0x48`.
