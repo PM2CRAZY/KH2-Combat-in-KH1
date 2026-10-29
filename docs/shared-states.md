@@ -1,11 +1,12 @@
 # Shared states (testing branch)
 
-`shared.rs`, ini `shared = on` (default). This replaces the old model for base Sora. Under the
-old model, KH2's controller had him whenever KH1 showed him standing, walking or running, and
-KH1's own idle, walk, run and jump were drawn back over KH2's when a move style was KH1. Drive
-Forms still use the old model: KH2's controller has them all through, except Valor Form, which
-runs on KH1's own states with its own slots, rows and numbers (`form::native_now`,
-`docs/kh1-drive-forms-native.md` §7).
+`shared.rs`. Base Sora is always on KH1's own states (the ini's old `shared` switch is gone,
+t877). Under the old model, KH2's controller had him whenever KH1 showed him standing, walking
+or running; that controller is deleted (t874..t877, the section at the end). Drive Forms run on
+KH1's own states with their own slots, rows and numbers where they are ported (Valor, Wisdom:
+`form::native_now`, `docs/kh1-drive-forms-native.md` §7); Final Form is refused until it is.
+Where a section below still describes KH2's controller having him or a borrow, it is the
+history before t874: that path no longer exists.
 
 Every move's animation (KH1 slot, KH2 motion, owner, setting) is listed in `animations.md`.
 
@@ -310,7 +311,7 @@ Still borrowing base Sora (plan in the what-is-still-missing thread, m6):
   (`docs/kh1-anim-slots.md` §7.z.10);
 - the Drive (a form's entry) and everything in a form (the Drive Forms thread).
 
-## The old KH2 controller: cut off on Steam (t873), to be deleted
+## The old KH2 controller: deleted (t873..t877)
 
 The owner (chat): delete the old controller outright; Final Form is moved over to KH1's states when
 ready. First the cut-off, then the dead code, one area per version, each tested before the next.
@@ -330,4 +331,30 @@ ready. First the cut-off, then the dead code, one area per version, each tested 
   frame, the old hand-off and take-back around KH1's moves and its give-back are gone. The cut-off
   applies to every build (off Steam there is nothing left to run it). KH2's controller data
   (`DRIVER`) stays: the native paths read its rows, abilities and form data.
+- **t875, its command and Attack borrows deleted:** the paths that handed a command or an Attack
+  to KH2's controller (`combat::exec`'s hand-offs, `spell_not_yet`'s cut-window and casting
+  hand-offs, the borrow wait in `command_step`, the KH2-has command section, the waiting /
+  resumed command, `formmagic::spell_chosen`, `reflect::chosen`) and their partners in
+  `shared.rs` (`BORROW`, `WANT_KH2`, `KH2_MOVE`, `lent`, `give_back`). A command that would have
+  needed a borrow is refused with KH1's "can't" (logged). `shared::control` leaves every press
+  to KH1's own control step except the ones the move styles give (logged if a borrow is ever
+  asked for).
+- **t876, KH1's jump / roll hand-off deleted:** `stylejump.rs` and `styleroll.rs` (KH1's own jump
+  or roll started for KH2's controller and handed back), with `takeover`'s `style_air_start` /
+  `style_roll_start` and the pose's roll override. KH1's roll and jump are KH1's own states' as
+  everywhere else.
+- **t877, the controller checks left elsewhere:** `kh2_has` / `driver_form` / `with_kh2` folded
+  to their KH1-states answer in `bodyhits`, `cmdmenu`, `combomods`, `form`, `formmagic`,
+  `reflect`, `hitreact`; `hurt::hurt` keeps only its KH1-states path; `pose::wanted` mode 0 no
+  longer has the controller's pose route; the ini's `shared` setting, `controller_cut_off` and
+  `setting_on` are gone; the controller's per-step hooks nothing called (`form` / `formmagic` /
+  `reflect` `before_step` / `after_step`, `Strikes::strike`, `shared::physics::kh2_controller`,
+  `kh1_takes_air`, `kh1_velocity`) deleted. KH1's control step no longer asks whether the
+  controller's move can be left before letting a ground jump through.
+- **Kept on purpose:** `DRIVER` (KH2's character data: the native row picks, abilities, growth
+  and form data read it); `combat::Strikes::strike_as` (native spells' hits); Reflect's
+  `intangible` (its native step uses it); the left Keyblade's Final-only copy (`leftblade`,
+  waiting for Final Form's port); KH1's control step's strip of the jump / Square bits during
+  one of KH1's commands (the input guard after a command, still reachable); `takeover.rs` is not
+  split into a helper module yet.
 - **Final Form** is refused on Steam until it is ported to KH1's states.

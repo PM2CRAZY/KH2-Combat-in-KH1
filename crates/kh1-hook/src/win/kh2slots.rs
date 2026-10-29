@@ -1428,17 +1428,31 @@ pub unsafe fn ground_hold(actor: usize) -> Option<u16> {
 pub unsafe fn turn_to_lock(actor: usize) {
     use character_core::WindowKind as W;
     let Some(m) = current(actor) else { return };
-    let Some(clip) = clip_of(m) else { return };
     let t: f32 = rd(actor + TIME_NOW);
     if !(t >= 0.0) {
         return;
     }
-    let Some(rate) = clip.open(t as u32).find_map(|w| match w.kind {
-        W::TurnToLock(r) => Some(r),
-        _ => None,
-    }) else {
-        return;
+    // (t878) Our level event 8.5 of the motion KH1 plays, its rate in the key's `c`, read by
+    // KH1's own reader (`kh1_key`); off Steam KH2's clip as before.
+    let rate = if super::addr::Build::current() == super::addr::Build::Steam {
+        let Some(Some(key)) = kh1_key(actor, ks::KH2_RANGE, ks::RANGE_TURN_TO_LOCK) else { return };
+        if rd::<u16>(key + 4) == 0 {
+            return;
+        }
+        f32::from_bits(rd::<u32>(key + 8))
+    } else {
+        let Some(clip) = clip_of(m) else { return };
+        let Some(r) = clip.open(t as u32).find_map(|w| match w.kind {
+            W::TurnToLock(r) => Some(r),
+            _ => None,
+        }) else {
+            return;
+        };
+        r
     };
+    if !(rate.is_finite() && rate > 0.0) {
+        return;
+    }
     let Some(target) = super::takeover::kh2_primary_target(actor) else { return };
     let p: [f32; 3] = rd(actor + 0x10);
     let d = [target[0] - p[0], target[2] - p[2]];
@@ -1827,6 +1841,23 @@ fn kh1_tracks(template: &[EventTrack], clip: &character_core::Clip, r: f32, leav
     if !steer.is_empty() {
         out.push(EventTrack::level(ks::KH2_RANGE, ks::RANGE_ALLOW_MOVEMENT, &steer));
     }
+    // (t878) KH2's turn toward the target (range id 28) as 8.5, each range's rate (radians) in its
+    // key's `c` (`EventTrack::valued`: KH2's rate changes between ranges of one motion), read by
+    // `turn_to_lock`.
+    let turn: Vec<(f32, f32, u32)> = clip
+        .windows
+        .iter()
+        .filter_map(|w| match w.kind {
+            WindowKind::TurnToLock(rate) if rate.is_finite() => {
+                let (a, b) = span(w);
+                Some((a, b, rate.to_bits()))
+            }
+            _ => None,
+        })
+        .collect();
+    if !turn.is_empty() {
+        out.push(EventTrack::valued(ks::KH2_RANGE, ks::RANGE_TURN_TO_LOCK, &turn));
+    }
     out
 }
 
@@ -1848,13 +1879,16 @@ const ACTOR_MOTIONS: usize = 0x1D4;
 /// The reader's first bytes checked: 0 not yet, 1 as expected, 2 not (nothing is read then).
 static LEVEL_READER_OK: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
 
-/// (t868) A level event of the motion KH1 plays on `actor` now (its slot `+0x168` in its table
-/// `+0x1D4`) at KH1's time in it (`+0x16C`), read by KH1's own level reader: whether it is on.
+/// (t868, t878) The key of a level event of the motion KH1 plays on `actor` now (its slot `+0x168`
+/// in its table `+0x1D4`) at KH1's time in it (`+0x16C`), from KH1's own level reader: the last key
+/// at or before the time, as a pointer into the motion's own key list (16 bytes: time, `a`, `b`,
+/// `c`, `d`; Checked (decomp): `0x140394770` returns the key's address, 0 before the first key).
+/// `Some(None)` when there is no such key.
 /// While a blend runs KH1 holds that time at the new motion's start (`0x14029F0A0`, Checked
 /// (decomp)), as KH2 reads its ranges at a blending motion's start time (`0x1403C6740`: `+0x4C`
 /// while `+0x48` > 0, Checked (decomp)). Only on one of our slots (`current`), whose pointers are
 /// KH1's own; `None` off Steam, off our slots, or with the reader not where expected.
-pub unsafe fn kh1_level(actor: usize, kind: u16, id: u16) -> Option<bool> {
+pub unsafe fn kh1_key(actor: usize, kind: u16, id: u16) -> Option<Option<usize>> {
     if super::addr::Build::current() != super::addr::Build::Steam {
         return None;
     }
@@ -1884,7 +1918,13 @@ pub unsafe fn kh1_level(actor: usize, kind: u16, id: u16) -> Option<bool> {
     }
     let reader: unsafe extern "system" fn(usize, u32, f32) -> usize = std::mem::transmute(base + LEVEL_READER_STEAM);
     let key = reader(motion, (kind as u32) << 16 | id as u32, time);
-    Some(key >= 0x10000 && rd::<u8>(key + 4) != 0)
+    Some((key >= 0x10000).then_some(key))
+}
+
+/// (t868) A level event of the motion KH1 plays on `actor` now, read by KH1's own level reader
+/// (`kh1_key`): whether it is on (the key's `a`).
+pub unsafe fn kh1_level(actor: usize, kind: u16, id: u16) -> Option<bool> {
+    Some(kh1_key(actor, kind, id)?.is_some_and(|key| rd::<u8>(key + 4) != 0))
 }
 
 /// The id of our left-Keyblade trail level event (type 7, `ks::TRAIL`; KH1's own trail is 7.0).

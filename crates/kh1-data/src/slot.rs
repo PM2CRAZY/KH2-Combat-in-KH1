@@ -49,6 +49,10 @@ pub const RANGE_GROUND_HOLD: u16 = 3;
 /// 8.4: KH2's allow-movement range (range id 41): the stick steers him during the move there
 /// (KH2's input step keeps the stick only with it or a free range) (t872).
 pub const RANGE_ALLOW_MOVEMENT: u16 = 4;
+/// 8.5: KH2's turn toward the target (range id 28): on while the motion's time is in it, the turn
+/// rate (radians, KH2's parameter in degrees converted) as an f32 in the key's `c`, one key per
+/// range (KH2's rate changes from range to range in one motion, Wisdom's 22 then 4) (t878).
+pub const RANGE_TURN_TO_LOCK: u16 = 5;
 
 pub(crate) fn u32_at(b: &[u8], at: usize) -> Result<u32> {
     b.get(at..at + 4).map(|s| u32::from_le_bytes(s.try_into().unwrap())).ok_or_else(|| Error::Format(format!("motion: read past the end at {at:#x}")))
@@ -143,6 +147,26 @@ impl EventTrack {
             }
         }
         let keys = merged.iter().flat_map(|&(a, b)| [EventKey::level(a, true), EventKey::level(b, false)]).collect();
+        EventTrack { id, kind, keys }
+    }
+
+    /// A level track on over each window (start, end frames) carrying its own value in `c`: a key
+    /// "on" with the value at each start, "off" at each end unless the next window starts by then
+    /// (no two keys at one time; a later start takes over from an earlier window).
+    pub fn valued(kind: u16, id: u16, windows: &[(f32, f32, u32)]) -> EventTrack {
+        let mut w: Vec<(f32, f32, u32)> = windows.iter().copied().filter(|(a, b, _)| b > a).collect();
+        w.sort_by(|a, b| a.0.total_cmp(&b.0));
+        let mut keys: Vec<EventKey> = Vec::new();
+        for (i, &(a, b, c)) in w.iter().enumerate() {
+            if keys.last().is_some_and(|k| k.time >= a) {
+                keys.pop();
+            }
+            keys.push(EventKey { time: a, a: 1, b: 0, c, d: 0 });
+            let next = w.get(i + 1).map(|n| n.0);
+            if next.map_or(true, |n| n > b) {
+                keys.push(EventKey::level(b, false));
+            }
+        }
         EventTrack { id, kind, keys }
     }
 }
@@ -427,6 +451,14 @@ mod tests {
         let times: Vec<(f32, u16)> = t.keys.iter().map(|k| (k.time, k.a)).collect();
         assert_eq!(times, vec![(10.0, 1), (25.0, 0), (30.0, 1), (40.0, 0)]);
     }
+    #[test]
+    fn valued_tracks_keep_each_windows_value() {
+        // (Wisdom's 360: 22 degrees from 0 to 8, then 4 from 8 to the end; a gap then a window.)
+        let t = EventTrack::valued(KH2_RANGE, RANGE_TURN_TO_LOCK, &[(8.0, 30.0, 4), (0.0, 8.0, 22), (40.0, 44.0, 9)]);
+        let keys: Vec<(f32, u16, u32)> = t.keys.iter().map(|k| (k.time, k.a, k.c)).collect();
+        assert_eq!(keys, vec![(0.0, 1, 22), (8.0, 1, 4), (30.0, 0, 0), (40.0, 1, 9), (44.0, 0, 0)]);
+    }
+
     #[test]
     fn skipped_start_fires_frames_0_and_1_on_the_update_from_1() {
         // (KH1 fires a key when from <= t < to; the dodge's first update steps 1 -> 2.)

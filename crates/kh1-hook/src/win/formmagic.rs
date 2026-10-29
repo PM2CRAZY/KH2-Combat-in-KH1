@@ -158,8 +158,6 @@ const ENVELOPE_FRAMES: u32 = 90;
 /// round him), started by the arrival and kept until the revert (the user: "wisdom is missing
 /// its effects around sora"; s192 had ended it with the arrival).
 const AURA: u16 = 100;
-/// How long a chosen spell waits for KH2's move to allow a cast.
-const WAIT_S: f32 = 5.0;
 /// `Runtime::casting`'s mark for a cast motion seen playing, and how many frames one may wait
 /// for it (ours).
 const SEEN: u8 = u8::MAX;
@@ -366,42 +364,7 @@ pub fn end_all() {
     rt.fx.clear();
 }
 
-/// A KH1 spell chosen (`combat::command`, magic `spell`): in the form, KH2's; in base form,
-/// KH2's when the spell's row is KH2's (`base_kh2_spell`). Returns
-/// whether it was taken (else KH1 casts its own).
-pub unsafe fn spell_chosen(actor: usize, spell: u8) -> bool {
-    // (Wisdom: Fire, Blizzard, Thunder; Cure is KH1's own on the form's Cure motion, as Gravity,
-    // Stop and Aero are: the user, "wisdom form currently casts kh2 cure, it needs to be kh1 cure
-    // with kh2s cures animation". Base Sora's KH2 magic: Cure too, KH2's.)
-    if !super::takeover::kh2_has() {
-        return false;
-    }
-    let wisdom = spell <= 2 && super::form::in_wisdom() && super::settings::get().drive;
-    let base = base_kh2_spell(spell);
-    if !(wisdom || base) {
-        return false;
-    }
-    let level = super::reflect::kh1_spell_level(spell);
-    if spell_file(spell, level).is_none() || magc(spell, level).is_none() {
-        return false;
-    }
-    let cost = super::reflect::kh1_spell_cost(spell);
-    if !affordable(actor, spell, cost) {
-        super::reflect::menu_sound(4);
-        log!(Magic, "{} {} refused: can't pay {cost}", who(), SPELL_NAMES[spell as usize]);
-        return true;
-    }
-    if let Ok(mut w) = WAITING.lock() {
-        *w = Some((spell, Instant::now(), super::takeover::KH2_MOTION.load(Ordering::Relaxed)));
-    }
-    log!(Magic, "{} {} chosen (level {level}, cost {cost})", who(), SPELL_NAMES[spell as usize]);
-    true
-}
 
-/// A spell is waiting for its window (`takeover`).
-pub fn waiting() -> bool {
-    WAITING.try_lock().map_or(false, |w| w.is_some())
-}
 
 /// Something of the scripts' still runs or plays (`takeover::native_spells` runs their frame).
 pub fn busy() -> bool {
@@ -1071,7 +1034,7 @@ pub unsafe fn kh1_cast_window(actor: usize) {
 unsafe fn kh1_spell_start(actor: usize, spell: u8) -> bool {
     // (Wisdom on KH1's own states too, `wisdom_kh2_spell`; forms on KH2's controller cast theirs
     // from its step.)
-    if actor < 0x10000 || actor != super::takeover::sora_actor() || super::form::driver_form() || !super::shared::active() {
+    if actor < 0x10000 || actor != super::takeover::sora_actor() || !super::shared::active() {
         return false;
     }
     let count = rd::<u32>(actor + QUEUE_COUNT);
@@ -1146,14 +1109,6 @@ unsafe fn kh1_cast_voice(actor: usize, spell: u8, finisher: bool) {
     log!(Magic, "KH2 magic {} with Battle Quotes KH1: KH1's voice group {group} ({})", SPELL_NAMES[spell as usize], if finisher { "the finisher's spell line" } else { "a grunt" });
 }
 
-/// Whether Sora can pay for `spell` now: in a Drive Form KH1's 1 MP (`cost`); base Sora KH2's
-/// cost scaled onto KH1's MP (`mpcost`), magic allowed as KH1 judges it.
-unsafe fn affordable(actor: usize, spell: u8, cost: i32) -> bool {
-    if super::form::in_form() {
-        return super::reflect::can_pay(actor, cost);
-    }
-    super::reflect::can_pay(actor, 1) && super::mpcost::units(actor, spell).is_some()
-}
 
 unsafe fn rd<T: Copy>(p: usize) -> T {
     std::ptr::read_unaligned(p as *const T)
@@ -1163,64 +1118,7 @@ unsafe fn wr<T: Copy>(p: usize, v: T) {
     std::ptr::write_unaligned(p as *mut T, v)
 }
 
-/// Before KH2's step: a chosen spell's cast, as soon as KH2's move allows one.
-pub unsafe fn before_step(actor: usize, ch: &mut Character) {
-    let Ok(mut w) = WAITING.try_lock() else { return };
-    let Some((spell, when, motion)) = *w else { return };
-    if !ch.can_cast() {
-        // (No buffer, s249: dropped at once; it waited for the move's next window:)
-        // if !super::takeover::same_move(motion) || !ch.magic_later() || when.elapsed().as_secs_f32() > WAIT_S {
-        let _ = (when, WAIT_S, super::takeover::same_move(motion) && ch.magic_later());
-        {
-            *w = None;
-            log!(Magic, "{} {}: dropped, the move it was chosen in (motion {motion}) ended without a window for it", who(), SPELL_NAMES[spell as usize]);
-        }
-        return;
-    }
-    *w = None;
-    let level = super::reflect::kh1_spell_level(spell);
-    let cost = super::reflect::kh1_spell_cost(spell);
-    if !affordable(actor, spell, cost) {
-        super::reflect::menu_sound(4);
-        return;
-    }
-    let Some(m) = magc(spell, level) else { return };
-    let pick = |v: i16| (v >= 0).then_some(v as u16);
-    let motions = CastMotions { ground: pick(m.ground_motion).unwrap_or(56), air: pick(m.air_motion).unwrap_or(58), finisher: pick(m.finish_motion) };
-    let Some(motion) = ch.cast(motions) else {
-        log!(Magic, "{} {}: no cast motion ({motions:?})", who(), SPELL_NAMES[spell as usize]);
-        return;
-    };
-    if super::form::in_form() {
-        super::reflect::pay_mp(actor, cost);
-    } else {
-        super::mpcost::pay(actor, spell);
-    }
-    let finisher = Some(motion) == motions.finisher && motions.finisher != Some(motions.ground);
-    if let Ok(mut g) = RT.lock() {
-        runtime(&mut g).fresh = Some(Fresh { spell, level, finisher, motion, kh1_anim: None });
-    }
-    let v = if finisher { m.voice_finisher } else { m.voice };
-    if v != 255 {
-        super::kh2sound::voice(v as i16);
-    }
-    kh1_cast_voice(actor, spell, finisher);
-    log!(Magic, "{} {} (level {level}) cast: motion {motion}{}", who(), SPELL_NAMES[spell as usize], if finisher { " (combo finisher)" } else { "" });
-}
 
-/// The form's own cast motion for a KH1 spell it has no KH2 version of (Gravity, Stop, Aero):
-/// Thunder's (MAGC) at that level, ground or air (the user: "the same logic as thunder").
-pub fn kh1_spell_motion(spell: u8, level: u8, air: bool) -> u16 {
-    // Gravity on Thunder's motion; Cure, Stop and Aero on Cure's (`pose::follow` shows the same).
-    let thunder = spell == 4;
-    let m = magc(if thunder { 2 } else { 3 }, level.clamp(1, 3));
-    let pick = |v: i16| (v >= 0).then_some(v as u16);
-    if air {
-        m.and_then(|m| pick(m.air_motion)).unwrap_or(if thunder { 64 } else { 67 })
-    } else {
-        m.and_then(|m| pick(m.ground_motion)).unwrap_or(if thunder { 62 } else { 65 })
-    }
-}
 
 fn row(battle: &Battle, atk: u16, sub: u8, count: u8) -> Option<&Atkp> {
     battle.attack_for_level(atk, sub, count)

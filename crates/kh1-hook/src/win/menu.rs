@@ -328,8 +328,6 @@ pub unsafe fn kh1_stats(member: i32, out: usize) -> bool {
 /// lines from `+0x70`); the layout as KH1's own box updater (`0x140270DA0`) reads it. Shows one
 /// box in Sora's place; false while that box is in use (a level-up's own, say).
 const PROMPT_BOX_RVA: Rva = Rva(0x283BD90);
-#[allow(dead_code)]
-const PROMPT_TEXT_RVA: Rva = Rva(0x2DC3068);
 /// Boxes per party member (`0x3A20` / `0xBA0`) and their size.
 const PROMPT_BOXES: usize = 5;
 const PROMPT_BOX_SIZE: usize = 0xBA0;

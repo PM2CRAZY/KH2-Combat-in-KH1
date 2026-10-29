@@ -131,13 +131,13 @@ const PUSH_START_BYTES: [u8; 8] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x57, 0x48, 0x8
 /// `0x1403D4960`, Checked (decomp), a push of `dist` along `dir` at distance × 0.1 a frame, × 0.9
 /// each frame): KH1's own push started on him along `dir` (KH1 world, flattened), then KH2's speed
 /// and decay on it (`push_frame`), so he travels `dist` on KH2's curve through KH1's collision.
-/// While KH1's states have him KH1's physics step runs his push; while KH2's controller has him
-/// (Wisdom Form), the controller's move adds it as KH1's step would (`controller_push`, t824).
+/// KH1's states have him whenever it runs (the old KH2 controller's push is deleted, t877), so
+/// KH1's physics step runs his push.
 /// Returns whether it started.
 /// (Assumption: KH2's player bonus to the distance, its player record `+0x1C8`, is 0 for Sora; not
 /// read in KH2.)
 pub unsafe fn script_push(actor: usize, dir: [f32; 3], dist: f32) -> bool {
-    if actor < 0x10000 || !(super::shared::active() || super::takeover::kh2_has()) || super::addr::Build::current() != super::addr::Build::Steam || !dist.is_finite() || dist <= 0.0 {
+    if actor < 0x10000 || !super::shared::active() || super::addr::Build::current() != super::addr::Build::Steam || !dist.is_finite() || dist <= 0.0 {
         return false;
     }
     let flat = dir[0].hypot(dir[2]);
@@ -330,32 +330,6 @@ pub unsafe fn push_frame(actor: usize) {
     *g = Some((v * KH2_DECAY.powf(dt), v));
 }
 
-/// One of KH2's controller's 60 Hz steps with a spell script's push on him (`script_push`, t824):
-/// KH1's physics step, which moves him by his push (`0x1402C7070`: direction `+0x3F0` × speed
-/// `+0x3FC` × the step, flat; Checked (decomp)), doesn't run while the controller has him, so its
-/// move takes it as KH1's step would, on KH2's curve (× 0.9 a step, ended below 1). Returns the
-/// push's part of this step's move (KH1 world); nothing without one.
-pub unsafe fn controller_push(actor: usize) -> [f32; 3] {
-    if !SCRIPT.load(Ordering::Relaxed) || actor < 0x10000 {
-        return [0.0; 3];
-    }
-    let Ok(mut g) = PUSH.lock() else { return [0.0; 3] };
-    let flags = rd::<u32>(actor + PUSH_FLAG_FIELD);
-    let v: f32 = rd(actor + PUSH_SPEED);
-    if flags & PUSH_FLAG == 0 || !(v.is_finite() && v >= 1.0) {
-        wr(actor + PUSH_SPEED, 0.0f32);
-        wr(actor + PUSH_FLAG_FIELD, flags & !PUSH_FLAG);
-        *g = None;
-        SCRIPT.store(false, Ordering::Relaxed);
-        return [0.0; 3];
-    }
-    let dir: [f32; 3] = rd(actor + 0x3F0);
-    let next = v * KH2_DECAY;
-    wr(actor + PUSH_SPEED, next);
-    // (Left as `push_frame` expects to find it, should KH1's states take him meanwhile.)
-    *g = Some((next, next));
-    [dir[0] * v, 0.0, dir[2] * v]
-}
 
 /// KH1's middle kind of hit (kind 4: 20..29% of his max HP, btltbl `+0x10` / `+0x11`, mapped from
 /// kind 1 by `0x1402BF290`, Checked (decomp)) as a KH2 flinch (the Config menu's Medium Hits row,

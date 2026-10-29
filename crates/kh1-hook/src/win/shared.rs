@@ -38,42 +38,18 @@ use super::takeover;
 use character_core::StateName;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU8, Ordering};
 
-/// Base Sora is KH1's own states' (the ini's `shared`, not in a Drive Form on KH2's controller; Valor Form runs on
-/// them too, `form::native_now`).
+/// Base Sora is KH1's own states' (always, t877: the ini's `shared` and the old KH2 controller it
+/// switched to are deleted; Drive Forms run on them too, `form::native_now`).
 pub fn on() -> bool {
-    setting_on() && !super::form::driver_form()
-}
-
-/// (t873) The old KH2 controller is cut off: on Steam nothing hands Sora to it (the owner, chat:
-/// "deprecate the old controller", answer "2": delete it outright, Final Form moved over to KH1's
-/// states when ready; the cut-off first, the deletion in the versions after). Every way in
-/// refuses there instead: a borrow from KH1's states (`takeover::shared_frame`), a command waiting
-/// for it (`combat::command_step`), a Drive Form that can't run on KH1's states (`form::choose`),
-/// and the ini's `shared = off` (`setting_on`). Since t874 on every build: the controller's
-/// driving is deleted (`takeover::takeover`), so nothing could run it off Steam either.
-pub fn controller_cut_off() -> bool {
     true
 }
 
-/// The ini's `shared`, on whatever it says on Steam (t873, `controller_cut_off`: `off` handed base
-/// Sora to the old controller), logged once there when it says off.
-pub fn setting_on() -> bool {
-    let set = super::settings::get().shared;
-    if !set && controller_cut_off() {
-        static N: AtomicBool = AtomicBool::new(false);
-        if !N.swap(true, Ordering::Relaxed) {
-            super::log!(Takeover, "the ini's shared = off is ignored: the old KH2 controller is cut off on Steam (t873), KH1's own states run base Sora");
-        }
-        return true;
-    }
-    set
-}
-
-/// (t873) A way into the old controller refused (`controller_cut_off`), logged (the first 40).
+/// (t873) Something only the old KH2 controller ran, refused (the owner, chat: "deprecate the old
+/// controller", answer "2": delete it outright; deleted t874..t877), logged (the first 40).
 pub fn note_cut_off(what: &str) {
     static N: AtomicU32 = AtomicU32::new(0);
     if super::log_on(super::LogCat::Takeover) && N.fetch_add(1, Ordering::Relaxed) < 40 {
-        super::log!(Takeover, "{what}: not handed to the old KH2 controller (cut off on Steam, t873)");
+        super::log!(Takeover, "{what}: refused (only the old KH2 controller ran it; it is deleted)");
     }
 }
 
@@ -112,25 +88,15 @@ pub fn kh1_combo(air: bool) -> bool {
 /// KH2's motion is drawn over this KH1 slot: its style is KH2's (base Sora; a Drive Form draws
 /// the form's motions over every slot it has one for, as before).
 pub fn kh2_look(slot: Option<usize>) -> bool {
-    if super::form::driver_form() {
-        return true;
-    }
     slot.and_then(slot_kind).is_some_and(styles::kh2)
 }
 
 /// The hand-off now running is ours: KH1 has base Sora in its own states.
 static MODE: AtomicBool = AtomicBool::new(false);
-/// KH2's controller has him for one of its moves (`borrow` .. `give_back`).
-static KH2_MOVE: AtomicBool = AtomicBool::new(false);
 
 /// KH1 has base Sora in its own states now.
 pub fn active() -> bool {
     MODE.load(Ordering::Relaxed) && takeover::handing_off()
-}
-
-/// KH2 has him for one of its own moves.
-pub fn kh2_move() -> bool {
-    KH2_MOVE.load(Ordering::Relaxed)
 }
 
 /// Any hand-off (`takeover::hand_to_kh1`) ends the mode; ours sets it after.
@@ -141,19 +107,10 @@ pub fn clear() {
 /// KH1's states have him from now (after `takeover::hand_to_kh1`).
 pub fn started() {
     MODE.store(true, Ordering::Relaxed);
-    KH2_MOVE.store(false, Ordering::Relaxed);
-    BORROW.store(NONE, Ordering::Relaxed);
 }
 
-/// KH2's controller took him for a move.
-pub fn lent() {
-    MODE.store(false, Ordering::Relaxed);
-    KH2_MOVE.store(true, Ordering::Relaxed);
-    WANT_KH2.store(false, Ordering::Relaxed);
-}
-
-/// What KH2 borrows him for out of KH1's states, read off the buttons in KH1's control step
-/// (`control`) and acted on in its physics step (`takeover`).
+/// What the old KH2 controller would have been asked for out of KH1's states (t875: no longer
+/// borrowed; `control` logs it and leaves the press to KH1).
 pub const NONE: u8 = 0;
 /// Square: KH2's dodge roll / guard / Quick Run on the ground (Dodge Roll at KH2).
 pub const SQUARE: u8 = 1;
@@ -163,33 +120,16 @@ pub const AIR_JUMP: u8 = 2;
 /// has Quick Run (it has no style of its own: KH2's move, by its ability).
 pub const QUICK_RUN: u8 = 3;
 // (4 was KH2's glide's borrow, t321..: KH2's glide runs in KH1's glide state now, `glide`.)
-static BORROW: AtomicU8 = AtomicU8::new(NONE);
 /// Square held since it started KH1's roll (`QUICK_RUN`), and how long KH1's roll motion has
 /// played in that hold (frames at 60 Hz, f32 bits; 0 not yet seen).
 static ROLL_HELD: AtomicBool = AtomicBool::new(false);
 static ROLL_FRAMES: AtomicU32 = AtomicU32::new(0);
-/// A command of KH2's chosen while KH1 has him (`combat::command`: a KH2 spell, Reflect, a Drive):
-/// KH2 takes him for it, then runs it (`combat::resume_command`).
-static WANT_KH2: AtomicBool = AtomicBool::new(false);
 /// Aerial Dodge used in this air time (KH2 allows one; back on the ground, again).
 static AIR_DODGED: AtomicBool = AtomicBool::new(false);
 /// The jump button has been let go since the Aerial Dodge's press (a glide needs a fresh press).
 static DODGE_JUMP_UP: AtomicBool = AtomicBool::new(true);
 /// Buttons on KH1's last control step, for fresh presses.
 static LAST: AtomicU32 = AtomicU32::new(0);
-
-pub fn want_kh2() {
-    WANT_KH2.store(true, Ordering::Relaxed);
-}
-
-pub fn take_want_kh2() -> bool {
-    WANT_KH2.swap(false, Ordering::Relaxed)
-}
-
-/// This frame's borrow, taken.
-pub fn take_borrow() -> u8 {
-    BORROW.swap(NONE, Ordering::Relaxed)
-}
 
 /// What KH1's control step sees of the buttons while KH1 has base Sora, and what it should not
 /// see (`kh1_hides`: KH1's own bits to take out of its button state for its step).
@@ -220,7 +160,7 @@ pub struct Seen {
     pub kh2_square: bool,
     /// KH2's Quick Run is equipped.
     pub quick_run: bool,
-    /// KH1's roll motion (`styleroll::ROLL_MOTION`) is playing.
+    /// KH1's roll motion (`0xDC`) is playing.
     pub kh1_rolling: bool,
     /// KH1 has its own roll (its Dodge Roll equipped: bit `0x20` of `0x142D5F610`).
     pub kh1_roll: bool,
@@ -417,7 +357,8 @@ pub fn control(s: &Seen) -> u32 {
     // KH1's roll, guard row and Quick Run state, its Aerial Dodge on KH1's air state; when none of
     // those can take the press here (KH1's deep water for the roll, a slot not built), the press is
     // KH1's as unmodded, as t630 left KH1 its Square and jump where no KH1 row plays KH2's move.
-    if borrow != NONE && super::addr::Build::current() == super::addr::Build::Steam {
+    // (t875: on every build; the borrow itself is deleted.)
+    if borrow != NONE {
         static N: AtomicU32 = AtomicU32::new(0);
         if super::log_on(super::LogCat::Takeover) && N.fetch_add(1, Ordering::Relaxed) < 20 {
             super::log!(Takeover,
@@ -431,11 +372,6 @@ pub fn control(s: &Seen) -> u32 {
             );
         }
         borrow = NONE;
-    }
-    if borrow != NONE {
-        BORROW.store(borrow, Ordering::Relaxed);
-        // (The press is KH2's: KH1 sees none of the button this step.)
-        return if matches!(borrow, SQUARE | QUICK_RUN) { KH1_ACTION_BIT } else { KH1_JUMP_BITS | KH1_ACTION_BIT };
     }
     let mut hide = 0;
     // On the ground: Square is KH2's with the Dodge Roll style at KH2 (KH2's roll, guard and
@@ -482,45 +418,8 @@ unsafe fn quick_run_on_stick(why: &str) -> bool {
     super::quickrun::start(actor, super::takeover::stick_now(actor), why)
 }
 
-/// KH2 gives him back to KH1's states: on the ground (KH1's ground state), or falling (KH1's fall
-/// state).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Back {
-    Ground,
-    Air,
-    /// KH2's air move touched down (its `Land`): KH1's fall state on the floor, so KH1 lands him
-    /// itself (its landing slot, its hold, its can-act rules) instead of KH2 playing the landing.
-    Land,
-}
 
-/// Frames KH2's controller has been in a state KH1 shares.
-static SHARED_FRAMES: AtomicU32 = AtomicU32::new(0);
-/// An air combo ended this long ago (frames since its last swing): KH1's fall from there (KH2
-/// keeps a combo going until landing otherwise).
-const AIR_COMBO_DONE: u32 = 24;
 
-/// After KH2's step during one of its moves: whether its move is over and where he goes back to.
-/// `combo`: KH2's combo going and frames since its last swing; `waiting`: a command or press of
-/// KH2's still to run.
-pub fn give_back(state: StateName, grounded: bool, falling: bool, combo: (bool, u32), waiting: bool) -> Option<Back> {
-    // KH2's air move has touched down: KH1 lands him (t307: "kh1 needs to handle landing kh2
-    // attacks with its own internal animation state instead of giving it back"; t306 let KH2's own
-    // `Land` hold play out and gave him back at idle). At once: no wait for a second frame. A
-    // command or press of KH2's still to run keeps KH2's landing, as before.
-    if state == StateName::Land && grounded && !waiting {
-        SHARED_FRAMES.store(0, Ordering::Relaxed);
-        return Some(Back::Land);
-    }
-    let back = match state {
-        StateName::Idle | StateName::Walk | StateName::Run if grounded && !combo.0 => Some(Back::Ground),
-        StateName::Air if !grounded && falling && (!combo.0 || combo.1 >= AIR_COMBO_DONE) => Some(Back::Air),
-        _ => None,
-    };
-    let back = back.filter(|_| !waiting);
-    let n = if back.is_some() { SHARED_FRAMES.fetch_add(1, Ordering::Relaxed) + 1 } else { SHARED_FRAMES.store(0, Ordering::Relaxed); 0 };
-    // (Two frames in it: a move's own one-frame pass through idle doesn't end it.)
-    back.filter(|_| n >= 2).inspect(|_| SHARED_FRAMES.store(0, Ordering::Relaxed))
-}
 
 /// Whose physics move base Sora: the physics setting (`kh1phys::Rule`, the ini's `physics = kh1 |
 /// kh2`, the Config menu's Physics row; the move styles choose the animations only). The user:
@@ -749,7 +648,7 @@ pub mod physics {
     /// KH2's physics apply to KH1's states now (KH1's own states have base Sora, the physics
     /// setting is KH2's).
     fn kh2() -> bool {
-        super::active() && source() == Rule::Kh2 && !super::super::form::driver_form()
+        super::active() && source() == Rule::Kh2
     }
 
     /// The Air Physics row (Config > Combat > Magic; `styles::Kind::AirPhysics`): whose physics move
@@ -768,7 +667,7 @@ pub mod physics {
 
     /// KH2's air-cast physics apply to KH1's air state now (`cast_rule`, base Sora on KH1's states).
     fn cast_kh2() -> bool {
-        super::active() && cast_rule() == Rule::Kh2 && !super::super::form::driver_form()
+        super::active() && cast_rule() == Rule::Kh2
     }
 
     /// KH1's request ids of its air casts (`kh2slots::CASTS`: `0x83 + spell`, Fire's second part
@@ -942,37 +841,6 @@ pub mod physics {
         }
     }
 
-    /// KH1's air state takes him from KH2's controller in the air (KH1's air command, KH2's move
-    /// given back as a fall; KH1's state already set to 2): KH1's fields with KH2's momentum, the
-    /// last `mirror` moved to where he is. (Before, the arc was zeroed here: KH1 started him
-    /// falling from rest, the user's "no momentum during his kh1 move".) Returns that motion.
-    pub unsafe fn kh1_takes_air(actor: usize) -> Motion {
-        let y: f32 = rd(actor + 0x14);
-        let last = LAST.try_lock().ok().and_then(|l| *l).filter(|(_, _, f)| game_frame().saturating_sub(*f) <= 2);
-        let fresh = last.is_some();
-        let m = match last {
-            Some((mut m, then, _)) => {
-                m.arc.y0 += y - then;
-                m
-            }
-            None => Motion { h: kh1phys::carried(super::super::takeover::kh2_sideways()), arc: kh1phys::Arc::rest(y) },
-        };
-        set_kh1_motion(actor, &m, dt());
-        off_air();
-        static N: AtomicU32 = AtomicU32::new(0);
-        if N.fetch_add(1, Ordering::Relaxed) < 40 {
-            let (h, up) = m.velocity();
-            super::super::log!(Takeover,
-                "KH1's air state takes him with KH2's momentum{}: sideways {:.1}/frame, up {up:.1}/frame (KH1's arc: time {:.1}, apex at {:.1}, {:.0} higher)",
-                if fresh { "" } else { " (no KH2 step written lately: from rest, KH2's sideways speed)" },
-                h[0].hypot(h[1]),
-                m.arc.t,
-                m.arc.up_t,
-                m.arc.rise_left()
-            );
-        }
-        m
-    }
 
     /// KH2's hop of a combo row (`combomods`: a ground row with `jump`, KH1's air swing row run
     /// for it out of KH1's air state just entered, or an air row's own hop on KH1's air swing,
@@ -1195,11 +1063,6 @@ pub mod physics {
     /// The game frame a KH1 air attack was started out of KH2's move (`combat::command`), 0 none.
     static LUNGE_FROM: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
-    /// A KH1 air attack was just started out of KH2's air move: its lunge to be seeded once it
-    /// plays (`seed_kh1_lunge`).
-    pub fn kh1_air_attack_from_kh2() {
-        LUNGE_FROM.store(game_frame().max(1), Ordering::Relaxed);
-    }
 
     /// After KH1's physics frame (`takeover::physics`): a KH1 air attack started out of KH2's air
     /// move went on with no sideways speed at all (the user: "this bug also appears any time a kh2
@@ -1294,16 +1157,6 @@ pub mod physics {
         ours.then(|| kh1_motion(actor))
     }
 
-    /// His velocity in KH1's own air state, per 60 Hz frame (sideways, up), for KH2's controller
-    /// taking him from KH1's states: KH1's fields, not his travel over the game frame (two 60 Hz
-    /// frames' worth at 30 fps). None outside state 2 (KH1's other states keep none there).
-    pub unsafe fn kh1_velocity(actor: usize) -> Option<([f32; 2], f32)> {
-        if rd::<i32>(actor + 0x70) != 2 || rd::<u32>(actor) & AIR_HELD != 0 {
-            return None;
-        }
-        let (h, up) = kh1_motion(actor).velocity();
-        (h.iter().all(|x| x.is_finite()) && up.is_finite()).then(|| (kh1phys::carried(h), up.clamp(-30.0, 30.0)))
-    }
 
     /// KH1's own movement numbers on base Sora's stats block (`+0x6C`, `kh1phys::Stats`).
     unsafe fn kh1_stats(actor: usize) -> kh1phys::Stats {
@@ -1315,47 +1168,6 @@ pub mod physics {
         kh1phys::Stats::read(s(4), s(8), s(0x10), s(0x14), s(0x18))
     }
 
-    /// KH2's controller's numbers for base Sora's next step (each frame it has him, `takeover`):
-    /// with physics KH1 and no Drive Form, KH1's (`kh1phys::kh1_params`, `kh1_growth`: KH1's
-    /// gravity and fall, its jump for the jump and High Jump, its walk and run, its air steering
-    /// and drag, from his stats now); else the moveset's own (`template`: KH2 Sora's, or the
-    /// form's). So KH2's borrowed moves (Aerial Dodge, KH2's air combo, its roll, Quick Run, its
-    /// spells) and the `kh1_slots` moves it runs move on KH1's numbers; what they bring themselves
-    /// (Aerial Dodge's height and speed, Quick Run's speed and brake, root motion, an attack row's
-    /// hop and lunge) stays theirs, under KH1's gravity and fall (`docs/kh1-physics.md` §7).
-    pub unsafe fn kh2_controller(actor: usize, ch: &mut Character, template: &Character) {
-        let stats = (source() == Rule::Kh1).then(|| kh1_stats(actor));
-        let p = match &stats {
-            Some(s) => kh1phys::kh1_params(&template.params, s),
-            None => template.params.clone(),
-        };
-        if ch.params != p {
-            static N: AtomicU32 = AtomicU32::new(0);
-            if super::super::log_on(super::super::LogCat::Takeover) && N.fetch_add(1, Ordering::Relaxed) < 20 {
-                super::super::log!(Takeover,
-                    "KH2's controller on {} numbers: gravity {:.3}, fall {:.0}, jump {:.0}, walk {:.1}, run {:.1} (past {:.2} tilt), air {}",
-                    if stats.is_some() { "KH1's" } else { "its own (KH2's)" },
-                    p.gravity,
-                    p.fall_max,
-                    p.jump_height,
-                    p.walk_speed,
-                    p.run_speed,
-                    p.run_threshold,
-                    if p.air_accel > 0.0 { format!("steering +{:.3} x speed a frame, drag {:.3} a tick", p.air_accel, p.air_drag) } else { format!("keep {:.3}, drag {:.3} a tick", p.air_keep, p.air_drag) }
-                );
-                if let Some(s) = &stats {
-                    if s.air_accel.is_none() || s.air_drag.is_none() || s.jump.is_none() {
-                        super::super::log!(Takeover, "(KH1's stats not all read: {s:?}; those stay KH2's)");
-                    }
-                }
-            }
-            ch.params = p;
-        }
-        let jump = stats.and_then(|s| s.jump);
-        for (l, t) in ch.growth.iter_mut().zip(&template.growth) {
-            l.high_jump_height = jump.unwrap_or(t.high_jump_height);
-        }
-    }
 
     /// Puts our wrappers in KH1's state table (each Sora physics frame: KH1 fills the table itself
     /// when it sets its states up, which would drop them).

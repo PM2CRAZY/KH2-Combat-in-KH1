@@ -32,15 +32,7 @@ pub fn clear() {
     COMBO.store(false, Ordering::Relaxed);
 }
 
-/// Around KH1's command step for an Attack it is to run.
-pub fn starting(on: bool) {
-    STARTING.store(on, Ordering::Relaxed);
-}
 
-/// KH1 took him for its combo (after `hand_to_kh1`).
-pub fn started() {
-    COMBO.store(true, Ordering::Relaxed);
-}
 
 /// An Attack row KH1's command step runs on Sora (`combat::exec`) is KH1's own: the press that
 /// starts a KH1 combo, or one during it (its next swing, or a new combo once he is free) where

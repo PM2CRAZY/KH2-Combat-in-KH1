@@ -58,10 +58,6 @@ static ORIG_COMMAND: AtomicUsize = AtomicUsize::new(0);
 const COMMAND_STEP_RVA: Rva = Rva(0x2A5380);
 const COMMAND_STEP_PROLOGUE: [u8; 11] = [0x40, 0x55, 0x56, 0x57, 0x48, 0x81, 0xEC, 0x60, 0x01, 0x00, 0x00];
 const STATE_RVA: Rva = Rva(0x2AF7D0);
-/// KH1's can-act test (`takeover`'s too).
-const CAN_ACT_RVA: Rva = Rva(0x2956E0);
-/// The Attack command was given since KH2's last frame.
-static PRESSED: AtomicBool = AtomicBool::new(false);
 /// While KH2's hit is landed: its power in percent (0 otherwise).
 pub static POWER: AtomicU32 = AtomicU32::new(0);
 static LOGGED: AtomicU32 = AtomicU32::new(0);
@@ -178,69 +174,6 @@ unsafe extern "system" fn exec(actor: usize, row: i32, dir: usize) {
         let f: ExecFn = std::mem::transmute(ORIG_EXEC.load(Ordering::Acquire));
         return f(actor, row, dir);
     }
-    // Flying (KH1 has him, state 8): KH2's aerial combo instead of KH1's flying attack.
-    // (t873: not on Steam, `shared::controller_cut_off`: KH1's flight attack row runs instead.)
-    if actor == sora && command == 1 && !super::shared::controller_cut_off() && takeover::ON.load(Ordering::Relaxed) && rd::<i32>(actor + 0x70) == 8 {
-        takeover::FLY_ATTACK.store(true, Ordering::Relaxed);
-        note(|| format!("Attack command while flying (KH1 row {row}): KH2's aerial combo"));
-        return;
-    }
-    // KH1's jump or glide (`stylejump`) with KH1's combo where he is: KH1's own row, and the
-    // hand-off is that combo's from here.
-    if actor == sora && command == 1 && takeover::ON.load(Ordering::Relaxed) && super::stylejump::active() && super::stylecombo::kh1_here(matches!(rd::<i32>(actor + 0x70), 1 | 2)) {
-        super::stylejump::clear();
-        super::stylecombo::started();
-        takeover::FROM_COMMAND.store(true, Ordering::Relaxed);
-        note(|| format!("Attack command in KH1's jump (KH1 row {row}): KH1's combo"));
-        let f: ExecFn = std::mem::transmute(ORIG_EXEC.load(Ordering::Acquire));
-        return f(actor, row, dir);
-    }
-    // KH1's roll (`styleroll`) takes an Attack (KH1's own window for it): by the Base Combo
-    // style, KH1's combo from there, or KH2 takes him with the press for its combo.
-    // (t873: none of these four hand the press to the old controller on Steam, where it is cut off,
-    // `shared::controller_cut_off`: the Attack goes on to KH1's own row below.)
-    let cut_off = super::shared::controller_cut_off();
-    if actor == sora && command == 1 && !cut_off && takeover::ON.load(Ordering::Relaxed) && super::styleroll::active() {
-        if super::stylecombo::kh1_here(false) {
-            super::styleroll::clear();
-            super::stylecombo::started();
-            takeover::FROM_COMMAND.store(true, Ordering::Relaxed);
-            note(|| format!("Attack command in KH1's roll (KH1 row {row}): KH1's combo"));
-            let f: ExecFn = std::mem::transmute(ORIG_EXEC.load(Ordering::Acquire));
-            return f(actor, row, dir);
-        }
-        super::styleroll::attack();
-        takeover::ATTACK_AFTER.store(true, Ordering::Relaxed);
-        note(|| format!("Attack command in KH1's roll (KH1 row {row}): KH2's combo, KH2 takes him"));
-        return;
-    }
-    // KH1 still has him for one of its own moves (a spell's cast, an item): the press is KH2's
-    // once that ends, not KH1's own combo (the user: KH1's Ripple Drive came out after a spell,
-    // twice, finishing Riku).
-    if actor == sora && command == 1 && !cut_off && takeover::ON.load(Ordering::Relaxed) && takeover::kh1_move() {
-        takeover::ATTACK_AFTER.store(true, Ordering::Relaxed);
-        note(|| format!("Attack command during KH1's own move (KH1 row {row}): KH2's once it ends"));
-        return;
-    }
-    if actor == sora && command == 1 && !cut_off && takeover::ON.load(Ordering::Relaxed) && takeover::kh2_has() {
-        PRESSED.store(true, Ordering::Relaxed);
-        if let Some(r) = row_info(actor, row) {
-            attack_shown(r.motion as u16 as u32);
-        }
-        note(|| format!("Attack command (KH1 row {row}, motion {}): KH2's attack button", row_info(actor, row).map_or(-1, |r| r.motion as i32)));
-        return;
-    }
-    // KH1 is playing one of its own motions on him (a reaction, the end of a spell), or KH2 lost
-    // him for a frame: the press is KH2's once KH1 lets go, never KH1's own attack row (the user:
-    // Attack on the first free frame after a KH1 move gave KH1's attacks, and its combo carried
-    // on from there out of order).
-    if actor == sora && command == 1 && !cut_off && takeover::kh1_borrows(actor) {
-        takeover::set_air_cast(None);
-        takeover::hand_to_kh1(&format!("Attack pressed during KH1's own motion (KH1 row {row})"));
-        takeover::ATTACK_AFTER.store(true, Ordering::Relaxed);
-        note(|| format!("Attack command during KH1's own motion (KH1 row {row}): KH2's once it ends"));
-        return;
-    }
     // Valor Form: no KH1 attack row run for a command other than Attack (its specials, which the
     // command step runs as attack rows; `command` refuses them, this in case one comes another
     // way).
@@ -264,11 +197,6 @@ unsafe extern "system" fn exec(actor: usize, row: i32, dir: usize) {
 /// Epic alike). `attack_seen` gives the script that motion for a moment after a KH2 attack.
 static ATTACK_SHOWN: std::sync::Mutex<Option<(u32, std::time::Instant)>> = std::sync::Mutex::new(None);
 
-fn attack_shown(motion: u32) {
-    if let Ok(mut a) = ATTACK_SHOWN.lock() {
-        *a = Some((motion, std::time::Instant::now()));
-    }
-}
 
 /// The motion an event script should see on Sora instead of his `+0x164` (KH2 attacked within
 /// the last 0.6 s: about one KH1 swing).
@@ -278,83 +206,9 @@ pub fn attack_seen() -> Option<u32> {
     (t.elapsed().as_secs_f32() < 0.6).then_some(m)
 }
 
-/// A command chosen while KH2's move couldn't take it (`command`): KH1's command record
-/// (`COMMAND_RVA`, 16 bytes), when, and the KH2 move it was chosen in (`u32::MAX`: during KH1's
-/// cast); given back to KH1 as soon as Sora can act (`resume_command`). It lives only as long
-/// as that move (KH2's own buffer: into the move's next combo window or not at all; the user:
-/// a queue of its own let magic come out however long after, apart from the combo string).
-static PENDING_COMMAND: std::sync::Mutex<Option<([u8; 16], std::time::Instant, u32)>> = std::sync::Mutex::new(None);
 
-/// A spell is waiting in the queue for KH2's move to take it (`takeover`).
-/// Any command waits for KH2 (`resume_command`).
-pub fn command_waiting() -> bool {
-    PENDING_COMMAND.try_lock().map_or(true, |p| p.is_some())
-}
 
-pub fn spell_waiting() -> bool {
-    PENDING_COMMAND.try_lock().map_or(false, |p| p.is_some_and(|(r, _, _)| r[0] == 2))
-}
 
-/// Before KH1's control step: a waiting command goes back into KH1's command record once KH2's
-/// move allows it (KH1's control step then runs it as if just chosen).
-pub unsafe fn resume_command() {
-    let Ok(mut p) = PENDING_COMMAND.lock() else { return };
-    let Some((rec, t, motion)) = *p else { return };
-    let kind = rec[0];
-    // (Chosen during KH1's cast: it waits for that to be cut or to end, as the combo's next
-    // step.)
-    if takeover::kh1_casting() {
-        // (A frame or two at most now: it is only stored while the cut is open, s249.)
-        if t.elapsed().as_secs_f32() > 0.2 {
-            *p = None;
-            cmd_log(|| format!("command {kind:#x} dropped: KH1's cast wasn't cut"));
-        }
-        return;
-    }
-    // Chosen during a KH2 move: only while that move plays.
-    if motion != u32::MAX && !takeover::same_move(motion) {
-        *p = None;
-        cmd_log(|| format!("command {kind:#x} dropped: the move it was chosen in (motion {motion}) ended without a window for it"));
-        return;
-    }
-    // (Chosen in KH1's jump or glide, `stylejump`, or its own states, `shared`: KH2 is taking him
-    // for it.)
-    if super::stylejump::active() || super::styleroll::active() || super::shared::active() {
-        if t.elapsed().as_secs_f32() > 0.2 {
-            *p = None;
-            cmd_log(|| format!("command {kind:#x} dropped: KH1's jump, glide or roll didn't let him go"));
-        }
-        return;
-    }
-    if !takeover::kh2_has() {
-        *p = None;
-        cmd_log(|| format!("command {kind:#x} dropped: KH2 no longer has Sora"));
-        return;
-    }
-    let base = BASE.load(Ordering::Relaxed);
-    if rd::<u8>(base + COMMAND_RVA) != 0 {
-        // A new choice replaces it.
-        *p = None;
-        cmd_log(|| format!("command {kind:#x} dropped: another command was chosen"));
-        return;
-    }
-    let ready = takeover::with_kh2(|c, _| if kind == 2 { c.can_cast() } else { c.can_take_command() });
-    if kind == 2 && ready == Some(false) && takeover::with_kh2(|c, _| c.magic_later()) == Some(false) {
-        *p = None;
-        cmd_log(|| format!("command {kind:#x} dropped: the move playing has no window left for it"));
-        return;
-    }
-    if ready == Some(true) {
-        *p = None;
-        // The menu step's own flags this frame (`0x140291660`) kept; the choice put back.
-        let flags = rd::<u32>(base + COMMAND_RVA) & 0xFF00_0000 & !0x0100_0000;
-        let mut r = rec;
-        let v = u32::from_le_bytes([r[0], r[1], r[2], r[3]]) | flags;
-        r[..4].copy_from_slice(&v.to_le_bytes());
-        wr(base + COMMAND_RVA, r);
-        cmd_log(|| format!("command {kind:#x}: KH2's move allows it now ({:.2} s after it was chosen)", t.elapsed().as_secs_f32()));
-    }
-}
 
 /// A spell's attack data `+0x30` (its MP cost) put back when dropped (`command`).
 struct CostPatch {
@@ -531,45 +385,14 @@ unsafe fn command_step(actor: usize, dir: usize) {
         cmd_log(|| format!("command {kind:#x} ({full:08x}) refused: KH2's cast playing, outside its combo window"));
         return;
     }
-    // KH1 has him for its jump or glide (`stylejump`): a command (magic, an item, a Drive) is
-    // KH2's, after KH2 takes him back (it waits for that, `resume_command`).
-    // (KH1's roll, `styleroll`, too: KH2's once the roll is over.)
-    if actor == sora && !matches!(kind, 0 | 1) && super::settings::get().commands && takeover::ON.load(Ordering::Relaxed) && (super::stylejump::active() || super::styleroll::active()) {
-        // (No queue, s249: only when KH1 lets him act on this frame, KH2 taking him now; else
-        // refused, the menu's "can't".)
-        let can: unsafe extern "system" fn(usize) -> i32 = std::mem::transmute(base + CAN_ACT_RVA);
-        if can(actor) == 0 {
-            let sound: unsafe extern "system" fn(i32) = std::mem::transmute(base + SOUND_RVA);
-            sound(4);
-            cmd_log(|| format!("command {kind:#x} ({full:08x}) refused: KH1's jump, glide or roll has him and he can't act now (no queue)"));
-            return;
-        }
-        // (t873) The old controller is cut off on Steam: refused, KH1's "can't".
-        if super::shared::controller_cut_off() {
-            let sound: unsafe extern "system" fn(i32) = std::mem::transmute(base + SOUND_RVA);
-            sound(4);
-            super::shared::note_cut_off(&format!("command {kind:#x} ({full:08x}) during KH1's jump, glide or roll"));
-            return;
-        }
-        if let Ok(mut p) = PENDING_COMMAND.lock() {
-            *p = Some((rd::<[u8; 16]>(base + COMMAND_RVA), std::time::Instant::now(), u32::MAX));
-        }
-        if super::styleroll::active() {
-            super::styleroll::want_kh2();
-        } else {
-            super::stylejump::want_kh2();
-        }
-        cmd_log(|| format!("command {kind:#x} ({full:08x}) waits: KH1's jump or glide has him, KH2 takes him for it"));
-        return;
-    }
     // KH1's usable check reading KH2's cost for a native cast (below), put back after the step.
     let mut _cost_patch: Option<CostPatch> = None;
     // The spell is cast out of KH2's glide (`glide_cast`): its velocity kept over KH1's think after.
     let mut from_glide = false;
     // Base Sora in KH1's own states (`shared`): a command of KH2's (a spell where the Magic style
-    // is KH2's, Reflect, a Drive) waits for KH2 to borrow him (`takeover::shared_frame`), then runs
-    // as KH2's (`resume_command`); KH1's own commands (its spells at the KH1 style, items,
-    // specials, summons) are KH1's as unmodded.
+    // is KH2's, Reflect, a Drive) runs on KH1's own states (native paths below), else is refused;
+    // KH1's own commands (its spells at the KH1 style, items, specials, summons) are KH1's as
+    // unmodded.
     if actor == sora && kind == 2 && super::settings::get().commands && takeover::ON.load(Ordering::Relaxed) && super::shared::active() {
         let drive = super::drive::on() && arg >= super::drive::FORM_ARG;
         // A Drive Form run on KH1's own states (Valor, `form::native_choice`): its change and its
@@ -680,32 +503,12 @@ unsafe fn command_step(actor: usize, dir: usize) {
             }
             return;
         } else if drive || arg == super::reflect::SPELL || (arg <= 3 && super::formmagic::base_kh2_spell(arg)) || ((4..=6).contains(&arg) && super::formmagic::anim_kh2(arg) && !kh1_on_kh2) {
-            // (A spell whose row is KH1's is KH1's command step's, as unmodded: below; with its
-            // animation row at KH2, KH1's Blizzard, Thunder and Cure play our slot of KH2's cast
-            // motion on KH1's request, `kh2slots::redirect`, and so do Gravity, Stop and Aero with
-            // theirs at KH2 (`kh1_on_kh2`); only in a state KH1 casts nothing in are those borrowed
-            // and drawn on KH2's motion, `takeover::command_started`.)
-            let can: unsafe extern "system" fn(usize) -> i32 = std::mem::transmute(base + CAN_ACT_RVA);
-            if can(actor) == 0 {
-                let sound: unsafe extern "system" fn(i32) = std::mem::transmute(base + SOUND_RVA);
-                sound(4);
-                cmd_log(|| format!("command {kind:#x} ({full:08x}) refused: KH1's move has him and he can't act now (no queue)"));
-                return;
-            }
-            // (t873) The old controller is cut off on Steam: a command only it could run (a KH2
-            // spell whose cast slot didn't build, a Drive no KH1 state runs) is refused with KH1's
-            // "can't", not borrowed for.
-            if super::shared::controller_cut_off() {
-                let sound: unsafe extern "system" fn(i32) = std::mem::transmute(base + SOUND_RVA);
-                sound(4);
-                super::shared::note_cut_off(&format!("command {kind:#x} ({full:08x}) (spell / Drive {arg})"));
-                return;
-            }
-            if let Ok(mut p) = PENDING_COMMAND.lock() {
-                *p = Some((rd::<[u8; 16]>(base + COMMAND_RVA), std::time::Instant::now(), u32::MAX));
-            }
-            super::shared::want_kh2();
-            cmd_log(|| format!("command {kind:#x} ({full:08x}) is KH2's: KH2 borrows him for it (shared states)"));
+            // (A spell whose row is KH1's is KH1's command step's, as unmodded: below.) A command only
+            // the old KH2 controller could run (a KH2 spell whose cast slot didn't build, a Drive no
+            // KH1 state runs) is refused with KH1's "can't" (t873; the borrow for it deleted in t875).
+            let sound: unsafe extern "system" fn(i32) = std::mem::transmute(base + SOUND_RVA);
+            sound(4);
+            super::shared::note_cut_off(&format!("command {kind:#x} ({full:08x}) (spell / Drive {arg})"));
             return;
         }
         // KH1's own grounded cast at the Magic Combo row KH2: its step of the combo, worked out
@@ -765,29 +568,12 @@ unsafe fn command_step(actor: usize, dir: usize) {
         super::drive::chosen(actor, (arg - super::drive::FORM_ARG) as usize);
         return;
     }
-    // Fire, Blizzard, Thunder, Cure in Wisdom Form: KH2's Wisdom versions (`formmagic`).
-    if actor == sora && kind == 2 && super::formmagic::spell_chosen(actor, arg) {
-        return;
-    }
+    // Reflect where KH1's own cast state couldn't take it (above): KH1 has no spell 7 to run, so
+    // KH1's "can't" (t875: its old wait for KH2's controller, `reflect::chosen`, is deleted).
     if actor == sora && kind == 2 && ((full >> 8) & 0xFF) as u8 == super::reflect::SPELL {
-        super::reflect::chosen(actor);
-        return;
-    }
-    // A spell chosen while KH1 casts one: it waits for the cast to be cut (once out) or to end,
-    // then runs as the combo's next step (`takeover`'s MAGIC_AFTER; spec: magic into magic).
-    if actor == sora && kind == 2 && super::settings::get().commands && takeover::ON.load(Ordering::Relaxed) && takeover::kh1_casting() {
-        // (No queue, s249: taken only while KH1's spell can be cut now; else refused.)
-        if !takeover::SPELL_CUT_OPEN.load(Ordering::Relaxed) {
-            let sound: unsafe extern "system" fn(i32) = std::mem::transmute(base + SOUND_RVA);
-            sound(4);
-            cmd_log(|| format!("command {kind:#x} ({full:08x}) refused: KH1's spell can't be cut yet (no queue)"));
-            return;
-        }
-        if let Ok(mut p) = PENDING_COMMAND.lock() {
-            *p = Some((rd::<[u8; 16]>(base + COMMAND_RVA), std::time::Instant::now(), u32::MAX));
-        }
-        takeover::MAGIC_AFTER.store(true, Ordering::Relaxed);
-        cmd_log(|| format!("command {kind:#x} ({full:08x}) waits: KH1's spell is still being cast"));
+        let sound: unsafe extern "system" fn(i32) = std::mem::transmute(base + SOUND_RVA);
+        sound(4);
+        cmd_log(|| format!("command {kind:#x} ({full:08x}) refused: Reflect can't be cast here"));
         return;
     }
     // Valor Form: none of KH1's specials (Sonic Blade, Strike Raid, ...: the user, "dont let
@@ -806,8 +592,7 @@ unsafe fn command_step(actor: usize, dir: usize) {
         return;
     }
     let ours = actor == sora && super::settings::get().commands && takeover::ON.load(Ordering::Relaxed);
-    let air = takeover::kh2_airborne();
-    if ours && !matches!(kind, 0 | 1 | 2 | 99 | 0x47) && (air || rd::<i32>(actor + 0x70) == 2) {
+    if ours && !matches!(kind, 0 | 1 | 2 | 99 | 0x47) && rd::<i32>(actor + 0x70) == 2 {
         static N: AtomicU32 = AtomicU32::new(0);
         if super::log_on(super::LogCat::Combat) && N.fetch_add(1, Ordering::Relaxed) < 20 {
             log!(Combat, "command {kind:#x} ({full:08x}) refused in the air, as KH1 would");
@@ -816,201 +601,26 @@ unsafe fn command_step(actor: usize, dir: usize) {
         sound(4);
         return;
     }
-    // (Attack is KH2's attack button, unless the combo there is KH1's: then it goes to KH1 as
-    // the other commands do, `stylecombo`.)
-    let kh1_combo = kind == 1 && super::stylecombo::kh1_here(air);
-    // KH2 has base Sora for one of its moves (`shared`: an ability move out of KH1's combo, a
-    // spell) with the combo style KH1's where he is: KH1's next row goes on from KH2's combo
-    // count, unless KH2's next is one of its ability moves again, which KH2 keeps (`combomods`).
-    let next = if actor == sora && kh1_combo && super::shared::on() && super::settings::get().commands && takeover::ON.load(Ordering::Relaxed) && takeover::kh2_has() {
-        Some(super::combomods::next_from_kh2(actor, air))
-    } else {
-        None
-    };
-    let kh1_combo = kh1_combo && !matches!(next, Some(super::combomods::Next::Kh2));
-    if actor != sora || kind == 0 || kind == 1 && !kh1_combo || NOT_SORAS.contains(&kind) || !super::settings::get().commands || !takeover::ON.load(Ordering::Relaxed) || !takeover::kh2_has() {
-        // KH1's own air attack out of KH2's jump arc on KH1's states (physics KH2): it keeps KH2's
-        // momentum as out of KH2's own moves (below; `shared::physics`).
-        let on_kh2 = if actor == sora && kind == 1 { super::shared::physics::kh2_air_motion(actor) } else { None };
-        f(actor, dir);
-        // (A native KH2 air cast at physics KH2: KH2's kept velocity and hop back over KH1's halving
-        // and 30 hop, `shared::physics::cast_after_command`.)
-        if actor == sora && kind == 2 {
-            super::shared::physics::cast_after_command(actor);
-            if from_glide {
-                super::glide::keep_cast_velocity(actor);
-            }
-        }
-        if let Some(m) = on_kh2 {
-            super::shared::physics::kh1_air_attack_started(actor, &m, false);
-        }
-        return;
-    }
-    // KH2 runs a command only when Sora can act: a spell when free, landing or in an attack's
-    // "combo magic" window (`can_cast`), anything else when free or in a combo window
-    // (`can_take_command`). Chosen mid-move, it waits and runs as soon as he can (the user: magic
-    // cancelled any KH2 move).
-    let ready = takeover::with_kh2(|c, _| if kind == 2 { c.can_cast() } else { c.can_take_command() }).unwrap_or(true);
-    // A spell no window of the move playing can take (a finisher's, the combo's last): not
-    // kept for after it (the user: "regardless of if a spell is inputted during a finisher it
-    // should not be allowed to execute ... there shouldn't be any buffer system like that for
-    // magic").
-    if !ready && kind == 2 && takeover::with_kh2(|c, _| c.magic_later()) == Some(false) {
-        cmd_log(|| format!("command {kind:#x} ({full:08x}) refused: the move playing has no window for a spell"));
-        let sound: unsafe extern "system" fn(i32) = std::mem::transmute(base + SOUND_RVA);
-        sound(4);
-        return;
-    }
-    if !ready {
-        let motion = takeover::KH2_MOTION.load(Ordering::Relaxed);
-        // (No queue, s249, the user: "comment out any code that is related to queueing/buffering
-        // moves". It waited for the move's next window:)
-        // if let Ok(mut p) = PENDING_COMMAND.lock() {
-        //     *p = Some((rd::<[u8; 16]>(base + COMMAND_RVA), std::time::Instant::now(), motion));
-        // }
-        let sound: unsafe extern "system" fn(i32) = std::mem::transmute(base + SOUND_RVA);
-        sound(4);
-        cmd_log(|| format!("command {kind:#x} ({full:08x}) refused: KH2's move (motion {motion}) can't be cancelled now (no queue)"));
-        return;
-    }
-    static AIR_LOG: AtomicU32 = AtomicU32::new(0);
-    if super::log_on(super::LogCat::Combat) && AIR_LOG.fetch_add(1, Ordering::Relaxed) < 40 {
-        log!(Combat, "command {kind:#x}: KH2 has him {}", if air { "in the air" } else { "on the ground" });
-    }
-    trail_off(actor);
-    let before = (rd::<i32>(actor + 0x70), rd::<u32>(actor + 0x164));
-    // KH1's air state with KH2's momentum (its air speed `+0x3C0` and its arc, as KH2's steps wrote
-    // them, `shared::physics::kh1_takes_air`; before, its arc was zeroed here, so KH1 started him
-    // falling from rest: the user, "if sora does a kh1 air move from a kh2 air move then he gets
-    // no momentum during his kh1 move"). KH1's command step then slows the sideways speed as for
-    // its own air casts (the user: "when sora does aerial magic the kh1 animation currently does
-    // not carry momentum from kh2s jump").
-    let carried = if air {
-        let set_state: unsafe extern "system" fn(usize, u32) -> u32 = std::mem::transmute(base + STATE_RVA);
-        set_state(actor, 2);
-        let m = super::shared::physics::kh1_takes_air(actor);
-        cmd_log(|| format!("air command: KH2's speed {:.1}/frame sideways, {:.1}/frame up carried into KH1's air state", m.h[0].hypot(m.h[1]), m.arc.up_speed()));
-        wr(actor + 0x3D0, 0u32);
-        wr(actor, rd::<u32>(actor) & !0x1_0000);
-        Some(m)
-    } else {
-        None
-    };
-    // What KH1 doing something with him changes: his state, motion request, the script-held
-    // flag 0x1000000 (spells and items set it, the user's log), his motion slot.
-    // ... and above all any motion KH1 sets on him (`probe`'s set-motion hooks count them: the
-    // air cast's `0x14029D7F0(actor, 0x83 + spell)` changed none of the others, the user's log).
-    let look = || (rd::<i32>(actor + 0x70), rd::<u32>(actor + 0x164), rd::<u32>(actor) & 0x100_0000, pose::sora_slot(), super::probe::SORA_MOTIONS.load(Ordering::Relaxed));
-    let set = look();
-    // (KH1's combo at KH2's count for its step, `combomods`; put back after it.)
-    let saved = match next {
-        Some(super::combomods::Next::Kh1 { count, hit }) if kh1_combo => super::combomods::kh1_count_in(actor, count, hit),
-        _ => None,
-    };
-    super::stylecombo::starting(kh1_combo);
+    // KH1's command step runs it (t875: the old KH2 controller's own command handling, for a
+    // command chosen while it had Sora, is deleted; it never has him now).
+    // KH1's own air attack out of KH2's jump arc on KH1's states (physics KH2): it keeps KH2's
+    // momentum as out of KH2's own moves (below; `shared::physics`).
+    let on_kh2 = if actor == sora && kind == 1 { super::shared::physics::kh2_air_motion(actor) } else { None };
     f(actor, dir);
-    super::stylecombo::starting(false);
-    if let Some(s) = saved {
-        super::combomods::restore(actor, s);
+    // (A native KH2 air cast at physics KH2: KH2's kept velocity and hop back over KH1's halving
+    // and 30 hop, `shared::physics::cast_after_command`.)
+    if actor == sora && kind == 2 {
+        super::shared::physics::cast_after_command(actor);
+        if from_glide {
+            super::glide::keep_cast_velocity(actor);
+        }
     }
-    // Only if KH1 did something with him (a new state or motion request); else as before.
-    let after = look();
-    if after != set {
-        // KH1's air attack out of KH2's move: its start replaced the speed and arc carried in with
-        // its own lunge and hop; the faster sideways speed is kept, not KH2's rise (t332, the user:
-        // a jump attack right after the take-off, f8556, climbed to 258 up; "grounded attacks
-        // only" keep one, and here he is in the air).
-        if let Some(m) = carried.filter(|_| kind == 1) {
-            super::shared::physics::kh1_air_attack_started(actor, &m, false);
-            // (Its lunge, which KH1's start leaves at 0 out of KH2's move: once it plays.)
-            super::shared::physics::kh1_air_attack_from_kh2();
-        }
-        // A spell mid-combo takes a step of it, and the combo goes on after it (the user: magic
-        // cast mid-combo inserts itself in the combo, as a modifier does).
-        // A spell takes its slot of the combo string as KH2's casts do (spec: one slot each).
-        let slot = if kind == 2 {
-            let s = takeover::with_kh2(|c, _| (c.magic_step(), c.combo_state()));
-            let code = match s.map(|x| x.0) {
-                Some(Some(character_core::SpellSlot::Step)) => 1,
-                Some(Some(character_core::SpellSlot::Finisher { more: true })) => 2,
-                _ => 3,
-            };
-            log!(Combat, "spell cast: combo slot {code} ({:?}; 1 a step, 2 a finisher with another to come, 3 the combo's last)", s);
-            code
-        } else {
-            0
-        };
-        takeover::SPELL_SLOT.store(slot, Ordering::Relaxed);
-        takeover::FROM_COMMAND.store(true, Ordering::Relaxed);
-        // (A spell in the air: its index in the command's second byte (Fire 0 .. Aero 6).)
-        takeover::set_air_cast((air && kind == 2).then_some(((full >> 8) & 0xFF) as u8));
-        // (Items are command type 3, the item in the second byte: `takeover`'s item end frame.)
-        takeover::ITEM_COMMAND.store(kind == ITEM_COMMAND_TYPE, Ordering::Relaxed);
-        takeover::command_started(sora_shots(actor), (kind == 2).then_some(((full >> 8) & 0xFF) as u8));
-        takeover::hand_to_kh1(&format!("command {kind:#x} ({full:08x}){}, KH1 motion {:#x}", if air { " in the air" } else { "" }, super::probe::SORA_LAST_SLOT.load(Ordering::Relaxed)));
-        if kh1_combo {
-            super::stylecombo::started();
-            log!(Combat, "KH1's own {} combo (move style KH1)", if air { "aerial" } else { "ground" });
-            // Base Sora (`shared`): KH1's own states have him for it from its first swing, so
-            // KH2's abilities still apply at its next presses (`combomods`).
-            if super::shared::on() {
-                takeover::shared_now();
-            }
-        }
-    } else {
-        if air {
-            wr(actor + 0x70, before.0);
-        }
-        note(|| format!("command {kind:#x} ({full:08x}){}: KH1 did nothing with Sora, KH2 keeps him", if air { " in the air" } else { "" }));
+    if let Some(m) = on_kh2 {
+        super::shared::physics::kh1_air_attack_started(actor, &m, false);
     }
 }
 
-/// During KH1's cast: an Attack (1) or a spell (2) just chosen in the command menu, taken off
-/// KH1's command record (KH1 runs none while it casts); a spell goes to the queue
-/// (`resume_command`) to run once KH2 has Sora.
-pub unsafe fn take_chosen_command() -> Option<u8> {
-    let base = BASE.load(Ordering::Relaxed);
-    let kind = rd::<u8>(base + COMMAND_RVA);
-    match kind {
-        // (In KH1's own combo its presses stay in the record: KH1's command step chains them.)
-        1 if super::stylecombo::active() => None,
-        1 => {
-            wr(base + COMMAND_RVA, 0u8);
-            cmd_log(|| "Attack chosen during KH1's cast: KH2's once the spell is out".to_string());
-            Some(1)
-        }
-        2 if ((rd::<u32>(base + COMMAND_RVA) >> 8) & 0xFF) as u8 >= super::drive::FORM_ARG && super::drive::on() => {
-            // A Drive form chosen in KH1's move's cut window (`takeover::kh1_cut_window`): the
-            // form's, KH2 takes him to change (`form::choose` sets `takeover::DRIVE_CUT`).
-            let arg = ((rd::<u32>(base + COMMAND_RVA) >> 8) & 0xFF) as u8;
-            wr(base + COMMAND_RVA, 0u8);
-            let sora = rd::<u64>(base + PARTY_RVA) as usize;
-            super::drive::chosen(sora, (arg - super::drive::FORM_ARG) as usize);
-            cmd_log(|| "Drive chosen during KH1's move".to_string());
-            None
-        }
-        2 if takeover::SPELL_CUT_OPEN.load(Ordering::Relaxed) => {
-            if let Ok(mut p) = PENDING_COMMAND.lock() {
-                *p = Some((rd::<[u8; 16]>(base + COMMAND_RVA), std::time::Instant::now(), u32::MAX));
-            }
-            wr(base + COMMAND_RVA, 0u8);
-            cmd_log(|| "spell chosen during KH1's cast while it can be cut: cuts it now".to_string());
-            Some(2)
-        }
-        // (No queue, s249: before KH1's spell can be cut, dropped.)
-        2 => {
-            wr(base + COMMAND_RVA, 0u8);
-            cmd_log(|| "spell chosen during KH1's cast before it can be cut: dropped (no queue)".to_string());
-            None
-        }
-        _ => None,
-    }
-}
 
-/// The Attack command since the last call (KH2's attack button press).
-pub fn take_press() -> bool {
-    PRESSED.swap(false, Ordering::Relaxed)
-}
 
 #[derive(Clone, Copy, Debug)]
 struct Row {
@@ -1568,17 +1178,6 @@ fn clashes(guard: u32, swing: u32) -> bool {
     CLASH_TABLE[(guard & 7) as usize] & (1 << (swing & 7)) != 0
 }
 
-/// Sora's own live attack objects in KH1's pool (a spell's shot among them): owner `+0x34`.
-pub unsafe fn sora_shots(sora: usize) -> usize {
-    let base = BASE.load(Ordering::Relaxed);
-    (0..ATTACK_SLOTS)
-        .filter(|k| {
-            let g = base + ATTACK_POOL_RVA + k * 0xC0;
-            let flags = rd::<u32>(g);
-            flags & 0x800 != 0 && flags & 0xC != 0 && flags & 0x0020_0000 == 0 && pose::ptr(rd::<u32>(g + 0x34)) == sora
-        })
-        .count()
-}
 
 const ATTACK_POOL_RVA: Rva = Rva(0x2DB5110);
 const ATTACK_SLOTS: usize = 0x40;
@@ -1597,10 +1196,6 @@ const CLASH_RVA: Rva = Rva(0x2B2890);
 const CLASH_HALF_RVA: Rva = Rva(0x2B2A30);
 /// KH1's attack pairing table (8 bytes, a bit per type that may meet).
 const PAIRS_RVA: Rva = Rva(0x5299B8);
-/// KH1's attack-vs-background ray (`0x1402B1870 (attack, from, to)`): spark, sound, and a
-/// clash record on the owner when it meets a wall.
-#[allow(dead_code)]
-const WALL_RVA: Rva = Rva(0x2B1870);
 /// KH1's background ray (`0x140191520 (ray, mode)`): ray from `+0`, direction `+0x10`; out:
 /// the point `+0x20`, the face `+0x30` (i16, -1 none), its object `+0x34` (-1 the map).
 const RAY_RVA: Rva = Rva(0x191520);
@@ -1692,7 +1287,6 @@ pub unsafe fn clang(at: [f32; 3]) {
 
 const TRAIL_RVA: Rva = Rva(0x2C0160);
 const EFFECT_RVA: Rva = Rva(0x2ABB60);
-const VOICE_RVA: Rva = Rva(0x28E060);
 /// Actor `+0x1CC` bit: the weapon trail is drawn (`0x1402BFD70`; KH1's attack motions' triggers
 /// set it over their swing).
 const TRAIL_FLAG: u32 = 0x80_0000;
@@ -1707,85 +1301,8 @@ pub unsafe fn trail_off(sora: usize) {
 }
 
 impl Strikes {
-    /// Phase 9: a KH2 swing starts with what KH1's matching combo row plays when its motion
-    /// starts (`0x1402A17F0`): the Keyblade trail asked for, the swing's effect and Sora's
-    /// voice. `count` is KH2's combo count (1 on the first swing).
-    pub unsafe fn swing_start(&mut self, sora: usize, air: bool, count: u8, finisher: bool, kh1_voice: bool) {
-        let obj = pose::ptr(rd::<u32>(sora + 0x130));
-        let model = if obj > 0x10000 { rd::<u16>(obj + 0x4C) } else { u16::MAX };
-        if self.swing_rows.as_ref().map(|r| r.0) != Some(model) {
-            let mut m = HashMap::new();
-            for i in 0..0x40 {
-                let Some(r) = row_info(sora, i) else { break };
-                if (200..=206).contains(&r.motion) {
-                    m.entry(r.motion).or_insert(r);
-                }
-            }
-            log!(Combat, "KH1 swing rows (motion: trail / effect / voice): {}", {
-                let mut v: Vec<_> = m.values().map(|r| format!("{}: {} / {} / {}", r.motion, r.trail, r.effect, r.voice)).collect();
-                v.sort();
-                v.join(", ")
-            });
-            if m.is_empty() {
-                return;
-            }
-            self.swing_rows = Some((model, m));
-        }
-        let n = count.max(1) as i16 - 1;
-        let motion = match (air, finisher) {
-            (false, false) => 200 + n.min(2),
-            (false, true) => 203,
-            (true, false) => 204 + n.min(1),
-            (true, true) => 206,
-        };
-        let Some(r) = self.swing_rows.as_ref().and_then(|m| m.1.get(&motion)).copied() else { return };
-        if super::trace::wants(super::trace::cat::HIT_FX) {
-            super::trace::note_as(super::trace::cat::HIT_FX, &format!("swing start fx: KH1 motion {motion} (air {air} count {count} finisher {finisher}): trail {} effect {} voice {}", r.trail, r.effect, r.voice));
-        }
-        let base = BASE.load(Ordering::Relaxed);
-        let cs = pose::ptr(rd::<u32>(sora + 0x14C));
-        let source = if cs > 0x10000 { rd::<u64>(cs + 0x18) as usize } else { 0 };
-        if source > 0x10000 {
-            if r.trail >= 0 {
-                let f: unsafe extern "system" fn(usize, u32) = std::mem::transmute(base + TRAIL_RVA);
-                f(sora, r.trail as u32);
-                self.trail_asked = Some(0);
-                self.trail_id = Some(r.trail as u32);
-            }
-            if r.effect >= 0 {
-                let f: unsafe extern "system" fn(usize, i32, usize, u32) -> usize = std::mem::transmute(base + EFFECT_RVA);
-                f(source, r.effect as i32, sora, 0x30);
-            }
-        }
-        if r.voice >= 0 && kh1_voice {
-            let f: unsafe extern "system" fn(usize, i32, usize) = std::mem::transmute(base + VOICE_RVA);
-            f(sora, r.voice as i32, 0);
-        }
-    }
 
-    /// The trail's flag over KH2's swing (its hit windows); only ever cleared if we set it.
-    /// A trail has been asked of KH1 for the current move.
-    pub fn has_trail(&self) -> bool {
-        self.trail_id.is_some()
-    }
 
-    /// The guard's swish: KH1's Keyblade trail of a ground swing (the guard has no swing row).
-    pub unsafe fn trail_for_guard(&mut self, sora: usize) {
-        if self.swing_rows.is_none() {
-            // The rows are read on the first swing; a guard first reads them the same way.
-            self.swing_start(sora, false, 1, false, false);
-            return;
-        }
-        let Some(r) = self.swing_rows.as_ref().and_then(|m| m.1.get(&200)).copied() else { return };
-        let cs = pose::ptr(rd::<u32>(sora + 0x14C));
-        let source = if cs > 0x10000 { rd::<u64>(cs + 0x18) as usize } else { 0 };
-        if source > 0x10000 && r.trail >= 0 {
-            let f: unsafe extern "system" fn(usize, u32) = std::mem::transmute(BASE.load(Ordering::Relaxed) + TRAIL_RVA);
-            f(sora, r.trail as u32);
-            self.trail_asked = Some(0);
-            self.trail_id = Some(r.trail as u32);
-        }
-    }
 
     pub unsafe fn trail(&mut self, sora: usize, swinging: bool) {
         let flags = rd::<u32>(sora + 0x1CC);
@@ -2054,11 +1571,6 @@ impl Strikes {
         }
     }
 
-    /// After KH2's step and pose: its live attack shapes against the enemies' bodies.
-    pub unsafe fn strike(&mut self, sora: usize, out: &Output, anim: &RigAnim, character: &mut Character, battle: &Battle) {
-        let air = character.airborne();
-        self.strike_as(sora, out, anim, character, battle, air, 1.0, false);
-    }
 
     /// `strike` for the hits of a KH2 motion KH1's own states play (`takeover::kh2_hits`): `air`
     /// is KH1's (its air state), not KH2's controller's, and the hit records' re-hit clocks move
@@ -3703,7 +3215,6 @@ const RUN_ENTRY_PROLOGUE: [u8; 14] = [0x48, 0x89, 0x5C, 0x24, 0x10, 0x48, 0x89, 
 const RECORD_RVA: Rva = Rva(0x28D7D0);
 /// The menu chain's top (`[top - 8]` is the list under it), and its first slot (the top level).
 const CHAIN_RVA: Rva = Rva(0x2D54450);
-const MENU_ROOT_RVA: Rva = Rva(0x2D543F0);
 static ORIG_RUN_ENTRY: AtomicUsize = AtomicUsize::new(0);
 
 /// KH2's menu takes a command only when Sora can act on it; before that the press does nothing
@@ -3759,50 +3270,6 @@ unsafe fn spell_not_yet(menu: usize, entry: i32) -> bool {
         return false;
     }
     let (kind, arg, sub) = (rd::<u8>(record + 6), rd::<u8>(record + 7), rd::<i8>(record + 8));
-    // In one of KH1's moves at its cut frame (`takeover::kh1_cut_window`: KH1 Fire from frame
-    // 49): KH1's menu takes nothing while Sora can't act (`0x1402912F0`: its can-act test lets
-    // only plain spells through; the user: Attack only came out when Fire ended, the Drive list
-    // was greyed), so Attack and a Drive form are taken here, as KH2's.
-    // (KH2 has him again while KH1's leftover cast still plays, `takeover::cut_left`: KH1 greys
-    // its menu then, so Attack is KH2's attack button from here; the user: an Attack waited 21-25
-    // frames after the form's KH1 spell.)
-    if kind == 1 && takeover::cut_left() {
-        PRESSED.store(true, Ordering::Relaxed);
-        cmd_log(|| "Attack while KH1's cut cast plays on: KH2's attack".to_string());
-        return true;
-    }
-    // During one of KH1's spells (any, in a form too): Attack is taken here as KH2's, its cut
-    // then decided by `takeover` (once the spell is out, or a form's spell at its cast motion's
-    // input frame; the combo goes on from the spell's step). KH1's menu refused it while it holds
-    // him (the user: "kh1s magic animation states are hard coded to where you can't interrupt
-    // them into an attack ... make it so that kh1s magic animation states are able to be
-    // interrupted by an attack and are part of a combo string"). Pressed too early it is dropped
-    // (no buffer).
-    // (t873: not on Steam, `shared::controller_cut_off`: KH2's cut of KH1's spell is the old
-    // controller's.)
-    if kind == 1 && !super::shared::controller_cut_off() && takeover::kh1_casting() && takeover::kh1_spell_now().is_some() {
-        takeover::ATTACK_AFTER.store(true, Ordering::Relaxed);
-        cmd_log(|| "Attack during KH1's spell: KH2's, to cut it once it may be".to_string());
-        return true;
-    }
-    if takeover::kh1_cut_window() {
-        // (Not in KH1's own combo, whose window is open for a Drive only: its Attack is KH1's.)
-        // (t873: not on Steam, where the old controller is cut off; the Attack is KH1's command
-        // step's as unmodded, `shared::controller_cut_off`.)
-        if kind == 1 && !super::stylecombo::active() && !super::shared::controller_cut_off() {
-            takeover::ATTACK_AFTER.store(true, Ordering::Relaxed);
-            cmd_log(|| "Attack in KH1's move's cut window: KH2 takes him for the combo".to_string());
-            return true;
-        }
-        if kind == 2 && arg >= super::drive::FORM_ARG && super::drive::on() && super::form::accept_now() {
-            let sora = rd::<u64>(base + PARTY_RVA) as usize;
-            super::drive::chosen(sora, (arg - super::drive::FORM_ARG) as usize);
-            // The menu back to its top, as KH1 leaves it after a command.
-            wr(base + CHAIN_RVA, (base + MENU_ROOT_RVA) as u64);
-            cmd_log(|| "Drive in KH1's move's cut window: KH2 takes him to change".to_string());
-            return true;
-        }
-    }
     // Disabled entries: KH1's own "can't".
     if disabled {
         return false;

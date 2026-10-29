@@ -93,11 +93,6 @@ camera = kh2\r\n\
 ; camera_scale: KH2's camera distances and heights times this; 0.89 = KH1 Sora's size against\r\n\
 ; KH2 Sora's (hips 78.9 / 88.5), so he is framed exactly as in KH2\r\n\
 camera_scale = 0.89\r\n\
-; shared: on = KH1's own states run base Sora (idle, walk, run, jump, fall, landing), with\r\n\
-;   KH2's animations where a move style is KH2 (and KH2's physics with physics = kh2); KH2\r\n\
-;   borrows him only for its own moves; off = KH2's controller has him whenever he stands,\r\n\
-;   walks or runs (older builds)\r\n\
-shared = on\r\n\
 ; kh1_slots: on = KH2's moves that have one play as new slots in KH1's own motion table (KH1's\r\n\
 ;   clock, events, hit windows and blends; for now KH2's ground combo, 151 / 152 / 154, and air combo 183 / 184 / 181, at Base\r\n\
 ;   / Aerial Base Combo KH2); a list of KH2 motions (e.g. 152) = only those; off = KH2's motions drawn over\r\n\
@@ -450,11 +445,6 @@ pub struct Settings {
     pub chest_anim_kh2: bool,
     /// An item picked up off the ground leaves Sora free (`item_pickup = vanilla | skip`, t795; `chest.rs`).
     pub item_pickup: bool,
-    /// KH1's own states own base Sora (`shared = on`, `shared.rs`): KH2's animations on KH1's
-    /// states per move style (its physics by `physics_rule`), KH2's controller only for KH2's own
-    /// moves. Off: the old
-    /// way (KH2's controller has him whenever KH1 shows him standing, walking or running).
-    pub shared: bool,
     /// KH2's moves as new slots in KH1 Sora's motion table (`kh2slots.rs`): `None` off (the
     /// default), `Some(None)` every move that has one (`on`), else only these KH2 motions.
     pub kh1_slots: Option<Option<Vec<u16>>>,
@@ -713,7 +703,6 @@ fn load(first: bool) -> Option<Settings> {
         },
         chest_anim_kh2: on(&text, "chest_anim", "kh2", false),
         item_pickup: on(&text, "item_pickup", "skip", false),
-        shared: on(&text, "shared", "on", true),
         kh1_slots: match setting(&text, "kh1_slots").as_deref() {
             Some("off") | Some("0") | Some("no") => None,
             None | Some("on") | Some("all") | Some("yes") => Some(None),

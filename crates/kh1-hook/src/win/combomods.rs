@@ -454,7 +454,7 @@ pub unsafe fn attack(actor: usize, row: i32, _dir: usize, request_of: &dyn Fn(i3
 unsafe fn attack_row(actor: usize, row: i32, request_of: &dyn Fn(i32) -> Option<u32>) -> Run {
     // (KH1's ground state or its jump / fall: not its flight, 8, nor its other states.)
     let state = rd::<i32>(actor + 0x70);
-    if !matches!(state, 0..=2) || super::form::driver_form() {
+    if !matches!(state, 0..=2) {
         return Run::Row(row);
     }
     let air = matches!(state, 1 | 2);
@@ -2111,83 +2111,10 @@ pub unsafe fn launched(actor: usize) -> bool {
     f >= RECOVERY_AFTER && rd::<f32>(actor + 0x3D4) > AIR
 }
 
-/// An Attack in KH2's move with the combo style KH1's where he is (`combat::command`): what comes
-/// next.
-#[derive(Clone, Copy, Debug)]
-pub enum Next {
-    /// KH2's next is one of its ability moves again: KH2 keeps the press.
-    Kh2,
-    /// KH1's next row, its combo at KH2's count.
-    Kh1 { count: u8, hit: bool },
-    /// No combo of KH2's going: KH1's own combo from its start.
-    Fresh,
-}
 
-pub unsafe fn next_from_kh2(actor: usize, air: bool) -> Next {
-    let Some((state, going, master, in_finisher)) = takeover::kh2_combo() else { return Next::Fresh };
-    // In KH2's finisher: its next finisher with Finishing Plus (KH2's), else a new combo of KH1's.
-    if in_finisher {
-        let pick = takeover::kh2_would_take(actor, None, None, air, false).filter(|(r, ..)| r.is_finisher());
-        if let Some((r, ..)) = pick {
-            note(|| format!("Attack in KH2's finisher with the combo style KH1's: KH2's next finisher, row {} motion {} (Finishing Plus)", r.id, r.motion));
-            return Next::Kh2;
-        }
-        return Next::Fresh;
-    }
-    if !going || state.count == 0 {
-        return Next::Fresh;
-    }
-    let kh1_len = kh1_combo(actor, air).map_or(u8::MAX, |c| c.1);
-    let pick = takeover::kh2_would_take(actor, None, None, air, false);
-    let next = state.count.saturating_add(1);
-    let why = pick.as_ref().and_then(|(r, len, neg)| ability_move(r, *len, *neg, next, kh1_len));
-    let out = if why.is_some() { Next::Kh2 } else { Next::Kh1 { count: state.count, hit: state.hit || master } };
-    note(|| format!(
-        "Attack in KH2's combo (count {}) with the combo style KH1's: KH2 would take {}: {out:?}{}",
-        state.count,
-        pick.as_ref().map_or("nothing".to_string(), |(r, ..)| format!("row {} motion {}", r.id, r.motion)),
-        why.map_or(String::new(), |w| format!(" ({w})"))
-    ));
-    out
-}
 
-/// What `kh1_count_in` changed, put back after KH1's step.
-pub struct Saved {
-    info: usize,
-    /// The hit flags before, if we set them.
-    hit: Option<u32>,
-    window: bool,
-}
 
-/// Before KH1's Attack step out of KH2's combo: KH1's combo at KH2's count (its count, its combo
-/// window, its swing's hit), so the step goes on from there (one more, its finisher at its
-/// length).
-pub unsafe fn kh1_count_in(actor: usize, count: u8, hit: bool) -> Option<Saved> {
-    let info = pose::ptr(rd::<u32>(actor + 0x14C));
-    if info < 0x10000 {
-        return None;
-    }
-    let flags = rd::<u32>(actor + 0x1CC);
-    let before = rd::<u32>(info + 0x50);
-    let saved = Saved { info, hit: (hit && before == 0).then_some(before), window: flags & KH1_COMBO_WINDOW != 0 };
-    wr(info + 0x41, count);
-    wr(actor + 0x1CC, flags | KH1_COMBO_WINDOW);
-    if saved.hit.is_some() {
-        wr(info + 0x50, 1u32);
-    }
-    Some(saved)
-}
 
-pub unsafe fn restore(actor: usize, s: Saved) {
-    // (Only if KH1's step made no attack object of its own swing, which clears them itself.)
-    if let Some(h) = s.hit.filter(|_| rd::<u32>(s.info + 0x50) == 1) {
-        wr(s.info + 0x50, h);
-    }
-    if !s.window {
-        wr(actor + 0x1CC, rd::<u32>(actor + 0x1CC) & !KH1_COMBO_WINDOW);
-    }
-    note(|| format!("KH1's combo goes on from KH2's: count now {}", rd::<u8>(s.info + 0x41)));
-}
 
 /// KH2's guard press, its repel and Counterguard on KH1's states (the tester, combo row selection
 /// m15 question 3: "(a)", Guard native, then Counterguard on its own KH1 row). KH2's rules (the

@@ -81,8 +81,6 @@ const SOUND_RVA: Rva = Rva(0x177F60);
 const COST: i32 = 100;
 const ROW_BYTES: usize = 0xC0;
 const ROWS: usize = 8;
-/// How long a chosen Reflect waits for KH2's move to allow a cast (as KH1's queued commands).
-const WAIT_S: f32 = 5.0;
 
 /// Sora in the spell scripts' world; enemies are `FOE0 + i`.
 pub(super) const SORA: ObjId = 1;
@@ -254,11 +252,6 @@ pub fn cast_voices(kh2: &pose::Kh2) -> Vec<i16> {
 
 // ---------------------------------------------------------------- KH1's MP
 
-/// Fire's own cost field (KH1's loaded spell data `+0x18 → +0x30`), for the log only.
-unsafe fn fire_cost(base: usize) -> Option<i32> {
-    let data = rd::<u64>(base + SPELLS_RVA + 0x18) as usize;
-    (data > 0x10000 && super::crash::readable(data + 0x34)).then(|| rd::<i32>(data + 0x30))
-}
 
 /// Magic is allowed now and Sora has 1 MP, as KH1 judges its own spells (`0x14028CE40`).
 unsafe fn affordable(base: usize, sora: usize) -> bool {
@@ -292,23 +285,7 @@ pub(super) unsafe fn kh1_spell_level(spell: u8) -> u8 {
     }
 }
 
-/// A KH1 spell's MP cost in the payment's units: 1 MP for every spell, as KH1 judges its own
-/// (`0x14028CE40`; the spell data's `+0x30`, read as one, gave 30 for Fire and Blizzard and
-/// nothing usable for Thunder and Cure).
-pub(super) fn kh1_spell_cost(_spell: u8) -> i32 {
-    COST
-}
 
-/// Whether Sora can pay `cost` now, magic allowed, as KH1 judges its own spells.
-pub(super) unsafe fn can_pay(sora: usize, cost: i32) -> bool {
-    let base = base();
-    let save = rd::<u64>(base + SAVE_PTR_RVA) as usize;
-    if sora < 0x10000 || save < 0x10000 || rd::<u8>(base + MAGIC_SEAL_RVA) & 4 != 0 || rd::<u8>(save + 0x874) & 1 != 0 {
-        return false;
-    }
-    let check: unsafe extern "system" fn(usize, i32) -> u32 = std::mem::transmute(base + MP_CHECK_RVA);
-    check(sora, cost) & 0xFF != 0
-}
 
 /// Whether Sora has `cost` MP (KH1's own test, `0x1402A2A80`, without the magic checks): below
 /// 100 it counts the yellow part (stats `+0xBE`) and what breaking blue bars into it would give.
@@ -320,11 +297,6 @@ pub(super) unsafe fn has_mp(sora: usize, cost: i32) -> bool {
     check(sora, cost) & 0xFF != 0
 }
 
-/// Plays one of KH1's menu sounds (4: can't).
-pub(super) unsafe fn menu_sound(n: i32) {
-    let sound: unsafe extern "system" fn(i32) = std::mem::transmute(base() + SOUND_RVA);
-    sound(n);
-}
 
 /// KH1's own payment of MP (`cost` in hundredths of a bar from 100 up; `form`'s Drive).
 pub(super) unsafe fn pay_mp(sora: usize, cost: i32) {
@@ -452,13 +424,13 @@ unsafe fn in_menus(base: usize) -> bool {
 unsafe fn usable(base: usize, actor: usize, flags: usize) -> bool {
     let save = rd::<u64>(base + SAVE_PTR_RVA) as usize;
     let allowed = flags > 0x10000 && rd::<u8>(flags) & 0x20 != 0;
-    allowed && affordable(base, actor) && (takeover::kh2_has() || super::shared::active()) && cast_level(save).is_some()
+    allowed && affordable(base, actor) && super::shared::active() && cast_level(save).is_some()
 }
 
 /// Why it's greyed (for the log).
 unsafe fn greyed_why(actor: usize, flags: usize) -> String {
     let allowed = flags > 0x10000 && rd::<u8>(flags) & 0x20 != 0;
-    format!("magic allowed {allowed}, MP {:?} of cost 1 ({COST}), KH2 has Sora {}, files loaded {}", mp(actor), takeover::kh2_has(), PARSED.get().is_some())
+    format!("magic allowed {allowed}, MP {:?} of cost 1 ({COST}), KH1's states have Sora {}, files loaded {}", mp(actor), super::shared::active(), PARSED.get().is_some())
 }
 
 /// For a shortcut holding Reflect, after KH1's fill (`shortcuts`): `None` when it can't be offered
@@ -611,34 +583,6 @@ unsafe fn refuse(base: usize, why: &str) {
     note(|| format!("Reflect refused: {why}"));
 }
 
-/// KH1's command step got our command (`combat::command`: from the Magic menu or a shortcut, the
-/// same command): KH1 never runs it.
-pub unsafe fn chosen(actor: usize) {
-    let base = base();
-    if !super::settings::get().reflect {
-        return refuse(base, "reflect = off");
-    }
-    let save = rd::<u64>(base + SAVE_PTR_RVA) as usize;
-    if cast_level(save).is_none() {
-        return refuse(base, "its spell files aren't loaded");
-    }
-    if !takeover::kh2_has() {
-        return refuse(base, "KH1 has Sora (KH2 casts Reflect)");
-    }
-    if !affordable(base, actor) {
-        return refuse(base, &format!("MP {:?}, cost 1 ({COST})", mp(actor)));
-    }
-    if let Ok(mut w) = WAITING.lock() {
-        *w = Some((Instant::now(), takeover::KH2_MOTION.load(Ordering::Relaxed)));
-    }
-    note(|| format!(
-        "Reflect chosen (level {}, MP {:?}, cost 1; Fire's own cost field {:?}; KH2 can cast now: {:?})",
-        level(save),
-        mp(actor),
-        fire_cost(base),
-        takeover::with_kh2(|c, _| c.can_cast())
-    ));
-}
 
 // ---------------------------------------------------------------- on KH1's cast state
 
@@ -949,10 +893,6 @@ static RT: Mutex<Option<Runtime>> = Mutex::new(None);
 static BARRIER: AtomicBool = AtomicBool::new(false);
 static BLOCKS: AtomicU32 = AtomicU32::new(0);
 
-/// `hurt`: a barrier stands around Sora now.
-pub fn barrier_up() -> bool {
-    BARRIER.load(Ordering::Relaxed)
-}
 
 /// `hurt`: the barrier stopped an enemy hit (counted for the counter).
 pub fn blocked(from: usize) {
@@ -966,66 +906,6 @@ fn row(battle: &Battle, atk: u16, sub: u8, count: u8) -> Option<&Atkp> {
     battle.attack_for_level(atk, sub, count).or_else(|| battle.attack_for_level(atk, sub & !1, count))
 }
 
-/// Before KH2's step: a chosen Reflect starts its cast once KH2's move allows one.
-pub unsafe fn before_step(actor: usize, ch: &mut Character) {
-    let Ok(mut w) = WAITING.try_lock() else { return };
-    let Some((t, motion)) = *w else { return };
-    if !ch.can_cast() {
-        // Only while the move it was chosen in plays and has a window for it (KH2's buffer, not
-        // a queue of its own; none through a finisher, the user).
-        // (No buffer, s249: dropped at once; it waited for the move's next window:)
-        // if !takeover::same_move(motion) || !ch.magic_later() || t.elapsed().as_secs_f32() > WAIT_S {
-        let _ = (t, WAIT_S, takeover::same_move(motion) && ch.magic_later());
-        {
-            *w = None;
-            note(|| format!("Reflect dropped: the move it was chosen in (motion {motion}) ended without a window for it"));
-        }
-        return;
-    }
-    *w = None;
-    let base = base();
-    if !affordable(base, actor) {
-        return refuse(base, &format!("MP {:?} (spent meanwhile)", mp(actor)));
-    }
-    let save = rd::<u64>(base + SAVE_PTR_RVA) as usize;
-    let Some(level) = cast_level(save) else {
-        return refuse(base, "its spell files aren't loaded");
-    };
-    let m = motions(level);
-    let Some(motion) = ch.cast(m) else {
-        note(|| format!("Reflect: KH2 couldn't start its cast motion ({m:?})"));
-        return;
-    };
-    // In the air: his fall stops as the cast starts, then he falls through it from rest (s177's;
-    // the user, s229: "roll back the physics of reflect to version s177"), into KH2's landing.
-    if ch.airborne() {
-        note(|| format!("Reflect in the air: stopped, then falling through the cast (motion {motion})"));
-    }
-    // KH1's own payment of a spell's cost: 1 MP at every level in a Drive Form; base Sora KH2's
-    // cost scaled onto KH1's MP (`mpcost`).
-    let pay: unsafe extern "system" fn(usize, i32) = std::mem::transmute(base + MP_PAY_RVA);
-    let before = mp(actor);
-    if super::form::in_form() {
-        pay(actor, COST);
-    } else {
-        super::mpcost::pay(actor, SPELL);
-    }
-    let finisher = Some(motion) == m.finisher && m.finisher != Some(m.ground);
-    if let Ok(mut g) = RT.lock() {
-        if let Some(rt) = runtime(&mut g) {
-            rt.fresh = Some((motion, finisher, level));
-            rt.started = Some(Instant::now());
-        }
-    }
-    cast_voice(actor, level, finisher);
-    note(|| format!(
-        "{} cast (level {level}): motion {motion}{}, MP {before:?} -> {:?} (its effects loaded: {})",
-        NAMES[(level - 1) as usize],
-        if finisher { " (combo finisher)" } else if motion == m.air { " (air)" } else { "" },
-        mp(actor),
-        super::kh2fx::spell_ready(level)
-    ));
-}
 
 fn runtime(g: &mut Option<Runtime>) -> Option<&mut Runtime> {
     if g.is_none() {
@@ -1274,10 +1154,6 @@ impl World for KhWorld {
         self.get(o).map_or(0, |x| x.motion)
     }
     fn airborne(&self, o: ObjId) -> bool {
-        // (Sora under KH2's controller: its air state, as our step saw it this frame.)
-        if o == SORA && takeover::kh2_has() {
-            return self.get(o).is_some_and(|x| x.air);
-        }
         // (KH1's air states: 1 jump, 2 fall, 8 flight.)
         self.actor(o).is_some_and(|a| matches!(unsafe { rd::<i32>(a + 0x70) }, 1 | 2 | 8))
     }
@@ -1515,18 +1391,6 @@ pub unsafe fn star_step(actor: usize) {
     }
 }
 
-/// After KH2's step (Sora moved and posed, his swings struck): the spell's frame.
-pub unsafe fn after_step(actor: usize, out: &Output, airborne: bool, strikes: &mut combat::Strikes, battle: &Arc<Battle>, lock: Option<u32>) {
-    step(actor, out, airborne, strikes, battle, lock);
-    // Out of reach of every hit while KH2 has him invulnerable (a dodge, Quick Run, Aerial
-    // Dodge, Aerial Recovery, the Drive) or behind Reflect (its cast and barrier), as KH1's
-    // dodge roll is (`intangible`).
-    // (Behind the barrier only, as `native_step`.)
-    let reflecting = BARRIER.load(Ordering::Relaxed);
-    // (Also KH2's star a script gave him, `star`.)
-    let star = star_tick();
-    intangible(actor, out.invulnerable || reflecting || star);
-}
 
 /// The actor flag KH1's hit pass skips an actor by (`0x14028FEE0`: hittable only while its flags
 /// word `& 0x8048` is `0x8000`): its motion events `0x2B` / `0x2A` set and clear it

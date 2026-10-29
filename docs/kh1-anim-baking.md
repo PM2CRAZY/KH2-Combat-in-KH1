@@ -729,7 +729,7 @@ can carry them, and the plan.
    reads the bit instead of KH2's clip. Rise start and the forms' lift-off read it too.
 3. **Edge stop and ground hold** on their own bit.
 4. **Allow-movement steering** on its own bit.
-5. **Turn to target** on its own bit, the turn rate in the key's `b` (KH1's reader returns the key).
+5. **Turn to target** on its own bit, the turn rate in the key (KH1's reader returns the key; done in `c`, §14.10).
 6. **Finishing Plus and Counterguard windows** as tracks of ours. The pass patch sets KH1's combo
    bit 22 from them only while their condition holds (Finishing Plus equipped and a finisher left;
    the guard's repel). The command checks read KH1's bits instead of KH2's clips.
@@ -821,4 +821,16 @@ travel can carry it is a separate check, done after part 2.
   range 41 or a free range (`0x1403A89A0`, Checked (decomp)); the free half is KH1's own "may be
   left" on our slots already.
 - **Still KH2 data at runtime here:** the old controller's KH1-spell-in-a-form clock
-  (`takeover::FormCast`), which is KH2's controller path, not KH1's states.
+  (`takeover::FormCast`), which was KH2's controller path, not KH1's states (deleted, t877).
+
+### 14.10 Part 5 done (t878): the turn toward the target as KH1 motion data
+
+- **The bake:** range 28 as our level event 8.5, one "on" key per range carrying its rate (radians,
+  f32) in the key's `c`, "off" at the range's end unless the next range starts there. KH2's rate
+  changes from range to range inside one motion (Wisdom's casts: 22 degrees, then 4 to the end;
+  base Sora's 304 / 312 / 318), so the plain merged level track wouldn't do (Checked (files)). No
+  two turn ranges overlap in Sora's or Wisdom's files; if they did, the later start would take
+  over.
+- **The read:** `kh2slots::turn_to_lock` asks KH1's reader for 8.5 (`kh1_key`: the reader returns
+  the key's address, Checked (decomp)) and turns by up to twice the key's rate a frame, as before.
+- **Still ours, every frame:** the turn itself; KH1 has no turn-toward-target to hand it to.

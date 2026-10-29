@@ -434,12 +434,7 @@ unsafe fn on_actor(m: Mat4) -> Mat4 {
     // ride, the water.)
     static LAST_ROLL: std::sync::Mutex<Option<Instant>> = std::sync::Mutex::new(None);
     let recent = match LAST_ROLL.try_lock() {
-        Ok(mut g) => {
-            if super::styleroll::active() {
-                *g = Some(Instant::now());
-            }
-            g.is_some_and(|t| t.elapsed().as_secs_f32() < 0.6)
-        }
+        Ok(g) => g.is_some_and(|t| t.elapsed().as_secs_f32() < 0.6),
         Err(_) => false,
     };
     if !recent {
@@ -570,36 +565,7 @@ unsafe fn note_small(instance: usize, world: usize) {
 /// KH1 posed them and as we drew them, and whether this frame's matrices were already ours.
 static BLADE: Mutex<Option<(Mat4, Mat4, Mat4, Mat4, bool)>> = Mutex::new(None);
 
-fn blade_report() -> String {
-    let Some(Some((o0, o3, d0, d3, ours))) = BLADE.lock().ok().map(|b| *b) else { return "weapon bones not seen".into() };
-    let h = HANDS_NOW.lock().ok().and_then(|h| *h);
-    let det = |m: &Mat4| glam::Mat3::from_mat4(*m).determinant();
-    let p = |m: &Mat4| m.w_axis.truncate();
-    format!(
-        "weapon bones: KH1's 280 at {:.0?} (det {:.2}, {:.0} from KH1's hand), 283 at {:.0?} (det {:.2}); drawn 280 at {:.0?} (det {:.2}, {:.0} from the drawn hand), 283 at {:.0?} (det {:.2}){}",
-        p(&o0), det(&o0), h.map_or(-1.0, |h| (p(&o0) - h.orig[0].w_axis.truncate()).length()), p(&o3), det(&o3),
-        p(&d0), det(&d0), h.map_or(-1.0, |h| (p(&d0) - h.drawn[0].w_axis.truncate()).length()), p(&d3), det(&d3),
-        if ours { " (KH1 did not repose him this frame)" } else { "" }
-    )
-}
 
-/// Where the Keyblade was last posed, against the hands.
-pub fn weapon_report() -> String {
-    let small = SMALL.lock().ok().map(|g| {
-        let mut v: Vec<String> = g
-            .as_ref()
-            .map(|m| {
-                m.iter()
-                    .filter(|(_, s)| s.at.elapsed().as_secs_f32() < 5.0)
-                    .map(|(i, s)| format!("{i:#x} {}b {}ms ago at {:.0?} {:.0} from drawn hand{}", s.bones, s.at.elapsed().as_millis(), s.pos, s.dist_hand, s.from_bone.map_or(String::new(), |b| format!(", placed by Sora's bone {b}"))))
-                    .collect()
-            })
-            .unwrap_or_default();
-        v.sort();
-        v.join(" | ")
-    });
-    format!("{}; small models near Sora: [{}]", blade_report(), small.unwrap_or_default())
-}
 
 
 /// Small models seen near Sora: whether each is held, by which hand, with what relation.
@@ -915,14 +881,6 @@ fn note_kh2(pose: &[Mat4], to_world: &Mat4) {
     }
 }
 
-/// KH2 Sora's pose (model space) and model → world, if one was drawn in the last half second.
-/// (Unused since t817: the spell scripts read KH1's own skeleton, `reflect::KhWorld`.)
-#[allow(dead_code)]
-pub fn kh2_pose<R>(f: impl FnOnce(&[Mat4], &Mat4) -> R) -> Option<R> {
-    let g = KH2_POSE.lock().ok()?;
-    let (pose, w, at) = g.as_ref()?;
-    (super::frameadv::age(*at).as_secs_f32() < 0.5).then(|| f(pose, w))
-}
 
 /// The blend argument of KH1's last ground-IK pass (diagnostics).
 static LAST_T: AtomicU32 = AtomicU32::new(0);
@@ -1191,33 +1149,10 @@ fn wanted_inner(s: &mut Sora, slot: Option<usize>, to_world: &Mat4) -> Option<Ve
                 s.follow.slot = slot;
                 return None;
             }
-            // KH2's controller has him (a KH2 move, or a Drive Form): its pose. Recent, or the last
-            // frame of his was KH2's (a pause stops the game's frames, not the clock: after one, the
-            // old pose went stale and KH1's slot was drawn until KH2's next frame; the user: paused
-            // mid KH2 move, resumed in KH1's).
-            let kh2_frame = super::takeover::kh2_frame();
-            // (Not over KH1's own moves from their first frame: its combo, its roll, an item's use.)
-            let kh1_move = super::stylecombo::active() || super::styleroll::active() || super::takeover::item_use_now() || super::shared::active();
-            let fresh = if kh1_move { None } else { super::takeover::POSE.try_lock().ok().and_then(|p| p.as_ref().filter(|(_, _, t)| kh2_frame || super::frameadv::age(*t).as_secs_f32() < 0.15).map(|(b, w, _)| (b.clone(), w.clone()))) };
-            match (fresh, s.retarget.as_ref()) {
-                (Some((b, w)), Some(r)) => {
-                    s.follow.slot = slot;
-                    DRAW_ROUTE.store(1, Ordering::Relaxed);
-                    note_kh2(&b, to_world);
-                    let pose = r.pose_grip(&b, super::takeover::GRIP.load(Ordering::Relaxed));
-                    // (What KH2's clips blend from once KH1 has him again: this pose, not the last one
-                    // a clip of ours drew, which was before KH2's move: the t317 trace, an Aerial
-                    // Dodge's end blended in from the old jump pose.)
-                    s.follow.last = b.iter().chain(w.iter()).copied().collect();
-                    s.follow.last_at = Some(Instant::now());
-                    s.follow.blend_start = None;
-                    s.kh2_now = Some((b, w));
-                    Some(pose)
-                }
-                // KH1's own states (`shared`): KH1's slot, drawn with KH2's motion for it where its
-                // move style is KH2's (KH1 treats KH2's animation as its own), else KH1's own.
-                _ => follow(s, slot, to_world),
-            }
+            // KH1's own states (`shared`): KH1's slot, drawn with KH2's motion for it where its move
+            // style is KH2's (KH1 treats KH2's animation as its own), else KH1's own. (t877: the old
+            // KH2 controller's own pose, `takeover::POSE`, is gone with it.)
+            follow(s, slot, to_world)
         }
         1 => follow(s, slot, to_world),
         3 => Some(s.bind.clone()),

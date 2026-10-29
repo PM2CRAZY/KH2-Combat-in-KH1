@@ -399,15 +399,11 @@ pub unsafe fn command_taken(open: &[usize; 7]) {
 /// Command Lock KH2: the command can't be taken yet (Steam KH2 `0x1403BA070`: Sora's action done or
 /// in a window that takes a command). Natively: KH1's can-act, or KH1's combo window, which our
 /// slots carry from KH2's combo and Finishing Plus windows (`kh2slots`, as `form::native_can_change`).
-/// While KH2's controller has Sora (the fallback), its own rule (`Character::can_take_command`).
 /// Assumption: KH1's can-act covers KH2's free states (idle, walk, run, jump, fall, a landing past
 /// its lock), as `form` assumes for the Drive.
 pub unsafe fn locked(actor: usize) -> bool {
     if !on() || !lock_kh2() || actor < 0x10000 {
         return false;
-    }
-    if super::takeover::kh2_has() {
-        return super::takeover::with_kh2(|c, _| c.can_take_command()) == Some(false);
     }
     let can: unsafe extern "system" fn(usize) -> i32 = std::mem::transmute(base() + CAN_ACT_STEAM);
     can(actor) == 0 && rd::<u32>(actor + 0x1CC) & super::combomods::KH1_COMBO_WINDOW == 0
