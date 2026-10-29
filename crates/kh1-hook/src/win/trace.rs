@@ -62,6 +62,7 @@ fn keep_ms() -> u64 {
 pub mod cat {
     pub const MOVEMENT: u32 = 1 << 0;
     pub const KH1_STATE: u32 = 1 << 1;
+    /// (t906: KH2 State, the old KH2 controller's columns, gone with it; its bit stays unused.)
     pub const KH2_STATE: u32 = 1 << 2;
     pub const FORM: u32 = 1 << 3;
     pub const DRAW: u32 = 1 << 4;
@@ -86,10 +87,9 @@ pub struct Item {
 }
 
 /// Every category, in the debug menu's order.
-pub const ITEMS: [Item; 13] = [
+pub const ITEMS: [Item; 12] = [
     Item { bit: cat::MOVEMENT, key: "trace_movement", name: "Movement & Physics" },
     Item { bit: cat::KH1_STATE, key: "trace_kh1_state", name: "KH1 State" },
-    Item { bit: cat::KH2_STATE, key: "trace_kh2_state", name: "KH2 State" },
     Item { bit: cat::FORM, key: "trace_form", name: "Form" },
     Item { bit: cat::DRAW, key: "trace_draw", name: "Animation Draw" },
     Item { bit: cat::FEET, key: "trace_feet", name: "Feet / IK" },
@@ -110,11 +110,11 @@ pub struct Group {
 
 pub const GROUPS: [Group; 6] = [
     Group { name: "KH1 Actor", items: &[0, 1] },
-    Group { name: "KH2 Controller", items: &[2, 3] },
-    Group { name: "Pose", items: &[4, 5] },
-    Group { name: "Camera", items: &[6, 7] },
-    Group { name: "Input & Config", items: &[8, 9] },
-    Group { name: "Events", items: &[10, 11, 12] },
+    Group { name: "Drive Form", items: &[2] },
+    Group { name: "Pose", items: &[3, 4] },
+    Group { name: "Camera", items: &[5, 6] },
+    Group { name: "Input & Config", items: &[7, 8] },
+    Group { name: "Events", items: &[9, 10, 11] },
 ];
 
 /// The live settings (from the ini, or the debug menu's since): the mode (0 off, 1 on, 2
@@ -250,22 +250,6 @@ impl Mode {
     }
 }
 
-/// KH2's side of a row (its controller's state after the frame).
-#[derive(Clone, Default)]
-pub struct Kh2 {
-    pub state: String,
-    pub motion: u16,
-    pub frame: u32,
-    pub air: bool,
-    pub grounded: bool,
-    pub on_top: Option<f32>,
-    pub facing: f32,
-    pub combo: u8,
-    pub lock: Option<u32>,
-    pub invulnerable: bool,
-    pub guarding: bool,
-}
-
 /// One of Sora's frames.
 #[derive(Clone, Default)]
 pub struct Row {
@@ -301,7 +285,6 @@ pub struct Row {
     pub velocity: [f32; 4],
     pub arc: [f32; 4],
     pub push: [f32; 3],
-    pub kh2: Option<Kh2>,
     pub form: Option<String>,
     pub buttons: u16,
     pub kh1_buttons: u32,
@@ -319,16 +302,15 @@ pub struct Row {
 }
 
 /// The columns, by category (`cat`; `0` = always there), in the CSV's order.
-const COLUMNS: [(u32, &str); 12] = [
+const COLUMNS: [(u32, &str); 11] = [
     (0, "frame,ticks,steps,ms,owner,shared,world,room,event"),
     (cat::CONFIG, "cfg_camera,cfg_physics,physics_now,cfg_ground_combo,cfg_air_combo,cfg_magic,cfg_air_magic,cfg_jump,cfg_glide,\
 cfg_dodge_roll,cfg_misc_anims,cfg_player_model,cfg_battle_quotes,cfg_cure,cfg_hit_reactions,cfg_recoil,\
-cfg_fire,cfg_blizzard,cfg_thunder,cfg_anim_blizzard,cfg_anim_thunder,cfg_anim_cure,cfg_anim_gravity,cfg_anim_stop,cfg_anim_aero,cfg_air_physics,cfg_magic_combo"),
+cfg_fire,cfg_blizzard,cfg_thunder,cfg_anim_blizzard,cfg_anim_thunder,cfg_anim_cure,cfg_anim_gravity,cfg_anim_stop,cfg_anim_aero,cfg_air_physics,cfg_magic_combo,cfg_guard_anim,cfg_guard_shape"),
     (cat::MOVEMENT, "pos_x,pos_up,pos_z,moved_x,moved_up,moved_z,asked_x,asked_up,asked_z,\
 above_floor,floor_up,collision,stand_on,platform,yaw,\
 kh1_vel_x,kh1_vel_y,kh1_vel_z,kh1_vel_w,kh1_arc_0,kh1_arc_1,kh1_arc_2,kh1_arc_3,push_x,push_y,push_z"),
     (cat::KH1_STATE, "kh1_state,kh1_motion,actor_flags,combo_window"),
-    (cat::KH2_STATE, "kh2_state,kh2_motion,kh2_frame,kh2_air,kh2_grounded,kh2_on_top,kh2_facing,kh2_combo,kh2_lock,kh2_invulnerable,kh2_guarding"),
     (cat::FORM, "form"),
     (cat::INPUT, "buttons,kh1_buttons,stick_rx,stick_ry,stick_lx,stick_ly"),
     (cat::DRAW, "draw_route,draw_slot,draw_play,draw_kh2_motion,draw_clip_frame,draw_blend,draw_restart,draw_age_ms"),
@@ -695,28 +677,6 @@ fn line(t: &mut String, r: &Row, mask: u32) {
             let _ = write!(t, "{},{:#x},{:#010x},{:#x},", r.kh1_state, r.kh1_motion, r.flags, r.combo_window);
         } else {
             t.push_str(",,,,");
-        }
-    }
-    if col(cat::KH2_STATE) {
-        match r.kh2.as_ref().filter(|_| has(cat::KH2_STATE)) {
-            Some(k) => {
-                let _ = write!(t, "{},{},{},{},{},", k.state, k.motion, k.frame, b(k.air), b(k.grounded));
-                match k.on_top {
-                    Some(v) => {
-                        let _ = write!(t, "{v:.1},");
-                    }
-                    None => t.push(','),
-                }
-                let _ = write!(t, "{:.3},{},", k.facing, k.combo);
-                match k.lock {
-                    Some(v) => {
-                        let _ = write!(t, "{v:#x},");
-                    }
-                    None => t.push(','),
-                }
-                let _ = write!(t, "{},{},", b(k.invulnerable), b(k.guarding));
-            }
-            None => t.push_str(",,,,,,,,,,,"),
         }
     }
     if col(cat::FORM) {

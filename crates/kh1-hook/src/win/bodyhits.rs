@@ -206,6 +206,105 @@ struct GuardShapes {
 
 static GUARDS: Mutex<Vec<GuardShapes>> = Mutex::new(Vec::new());
 
+/// KH2's guard windows on his body as KH1 guard objects placed by KH1's own pass (t909; the owner:
+/// "do all 3"): each object, the KH2 body shape it stands on (placed from KH1's state each pass, as
+/// the body hits' are: his root, facing and KH1's bone, `centre`) and last frame's centre for KH2's
+/// sweep. `combat::Strikes::guard_step` makes and frees them with the window; nothing of ours poses
+/// KH2's rig for them.
+static BODY_GUARDS: Mutex<Vec<(usize, BodyShape, Option<([f32; 3], u64)>)>> = Mutex::new(Vec::new());
+
+/// The guard object `obj` stands on KH2's body shape `s` (`BODY_GUARDS`): false where the shape can't
+/// be placed by KH1's state (a KH2 cube, never met in KH2; a KH2 bone with no KH1 bone of the same
+/// frame), for the caller's own placing.
+pub fn body_guard_keep(obj: usize, s: &kh2_data::sora::BoneShape) -> bool {
+    let kh1_type = match s.shape {
+        0 | 3 => 1u32,
+        1 => 2,
+        _ => return false,
+    };
+    let bone = match s.bone {
+        None => None,
+        Some(b) => match BONES.iter().find(|x| x.0 == b) {
+            Some(&(_, k)) => Some(k),
+            None => return false,
+        },
+    };
+    if !ON.load(Ordering::Relaxed) || !TEST_OK.load(Ordering::Relaxed) {
+        return false;
+    }
+    let shape = BodyShape { kh1_type, radius: s.radius, height: s.height, bone, offset: s.offset, lift: s.lift };
+    let Ok(mut g) = BODY_GUARDS.try_lock() else { return false };
+    match g.iter_mut().find(|x| x.0 == obj) {
+        Some(x) => x.1 = shape,
+        None => g.push((obj, shape, None)),
+    }
+    true
+}
+
+/// KH2's body shape `s` can be placed from KH1's state (`body_guard_keep`): not a KH2 cube, on his
+/// root or on a KH2 bone with a KH1 bone of the same frame (`BONES`).
+pub fn body_shape_ok(s: &kh2_data::sora::BoneShape) -> bool {
+    s.shape != 2 && s.bone.map_or(true, |b| BONES.iter().any(|x| x.0 == b))
+}
+
+/// A body guard object freed (`combat::Strikes::guard_step`).
+pub fn body_guard_forget(obj: usize) {
+    if let Ok(mut g) = BODY_GUARDS.try_lock() {
+        g.retain(|x| x.0 != obj);
+    }
+}
+
+/// `entries` for a body guard object (`BODY_GUARDS`): `Some(new count)` when `obj` is one. Its shape
+/// from KH1's state now and KH2's sweep back to last frame's (as the body hits'). A pure guard of
+/// clash type 4: KH1's pass never meets it with a body.
+unsafe fn body_guard_entries(obj: usize, list: usize, count: i32) -> Option<i32> {
+    let mut g = BODY_GUARDS.try_lock().ok()?;
+    let e = g.iter_mut().find(|x| x.0 == obj)?;
+    if !TEST_OK.load(Ordering::Relaxed) || list < 0x10000 {
+        return Some(count);
+    }
+    let owner = pose::ptr(rd::<u32>(obj + 0x34));
+    if owner < 0x10000 {
+        return Some(count);
+    }
+    let Some(c) = centre(owner, &e.1) else { return Some(count) };
+    let frame = super::takeover::GAME_FRAME.load(Ordering::Relaxed);
+    let shape = e.1;
+    let r = shape.radius;
+    let mut centres: [[f32; 3]; SPELL_SHAPES] = [[0.0; 3]; SPELL_SHAPES];
+    let mut n = 1usize;
+    centres[0] = c;
+    if let Some((p, pf)) = e.2 {
+        if frame.saturating_sub(pf) <= 1 && pf != frame && r > 0.0 {
+            let d = [p[0] - c[0], p[1] - c[1], p[2] - c[2]];
+            let mut len = (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt();
+            if len > 0.0 {
+                let step = [d[0] / len * r, d[1] / len * r, d[2] / len * r];
+                let mut q = c;
+                while r * 1.5 < len && n < centres.len() {
+                    q = [q[0] + step[0], q[1] + step[1], q[2] + step[2]];
+                    centres[n] = q;
+                    n += 1;
+                    len -= r;
+                }
+            }
+        }
+    }
+    if e.2.map_or(true, |(_, pf)| pf != frame) {
+        e.2 = Some((c, frame));
+    }
+    drop(g);
+    let c4 = [c[0], c[1], c[2], 1.0f32];
+    wr(obj + 0x10, c4);
+    wr(obj + 0x40, c4);
+    let bit = rd::<u32>(obj + 0x54);
+    let mut count = count;
+    for q in &centres[..n] {
+        count = put_entry(obj, owner, bit, list, count, shape.kh1_type, shape.radius, shape.height, *q);
+    }
+    Some(count)
+}
+
 /// A barrier's guard object `obj` stands on `shapes` (KH2 y-up) this frame.
 pub fn guard_shapes(obj: usize, shapes: &[combat_core::Shape]) {
     use combat_core::ShapeKind;
@@ -934,6 +1033,10 @@ unsafe extern "system" fn entries(obj: usize, list: usize, count: i32) -> i32 {
     super::lefthits::before_build(obj);
     // (A Reflect barrier's guard object: KH2's barrier shapes, t796.)
     if let Some(n) = guard_entries(obj, list, count) {
+        return n;
+    }
+    // (A body guard of KH2's, placed from KH1's state, t909.)
+    if let Some(n) = body_guard_entries(obj, list, count) {
         return n;
     }
     let Some(i) = pool_index(obj) else { return f(obj, list, count) };

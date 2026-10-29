@@ -20,7 +20,7 @@
 
 use super::reflect::{flip, world_now, KhWorld, SORA};
 use super::{combat, log, pose};
-use character_core::{CastMotions, Character, Output};
+use character_core::Output;
 use glam::{Mat4, Quat, Vec3};
 use kh2_formats::battle::{Atkp, Battle};
 use kh2_magic::{Event, Magic, SpellFile, World};

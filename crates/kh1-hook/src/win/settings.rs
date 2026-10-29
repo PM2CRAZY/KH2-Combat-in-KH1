@@ -214,6 +214,13 @@ medium_hits = blow\r\n\
 ;   also what Sora's KH2 guard does when it blocks: KH1's own block (KH1) or KH2's guard repel\r\n\
 ;   (KH2: motion 42, pushed back 200, 80 frames without damage, Counterguard)\r\n\
 recoil = kh1\r\n\
+; guard_anim: kh1 or kh2, what Sora's guard press plays (Square standing, Dodge Roll kh2): KH1's own\r\n\
+;   guard (its motion and its guard on KH1's Keyblade) or KH2's guard (motion 173, its repel and\r\n\
+;   Counterguard)\r\n\
+guard_anim = kh1\r\n\
+; guard_shape: kh1 or kh2, the shape of KH2's guard on the Keyblade: KH1's own blade (kh1) or KH2's\r\n\
+;   guard shapes (kh2)\r\n\
+guard_shape = kh1\r\n\
 ; jump_style / glide_style: kh1 or kh2, KH1's or KH2's jump and glide for base Sora\r\n\
 jump_style = kh2\r\n\
 glide_style = kh2\r\n\
@@ -269,12 +276,11 @@ trace_seconds = 10\r\n\
 ; (the debug menu's Trace Recorder page switches it; turning Frame Advance on turns it on)\r\n\
 trace_game_frames = off\r\n\
 ; trace_*: what each trace row holds (on / off each; the debug menu's Trace Recorder page switches\r\n\
-; them): movement (position, floor, collision, velocity), kh1_state, kh2_state, form, draw\r\n\
+; them): movement (position, floor, collision, velocity), kh1_state, form, draw\r\n\
 ; (animation draw), feet (feet / IK), kh1_camera, kh2_camera, input, config, log (log lines),\r\n\
 ; hit_fx (hit effect lines), sounds (sound log lines)\r\n\
 trace_movement = on\r\n\
 trace_kh1_state = on\r\n\
-trace_kh2_state = on\r\n\
 trace_form = on\r\n\
 trace_draw = on\r\n\
 trace_feet = on\r\n\
@@ -682,6 +688,8 @@ fn load(first: bool) -> Option<Settings> {
                 // (Air casts moved by the Physics row before: its value, KH2's without it.)
                 on(&text, "magic_air_physics", "kh2", crate::kh1phys::Rule::parse(setting(&text, "physics").as_deref()) == crate::kh1phys::Rule::Kh2),
                 on(&text, "magic_combo", "kh2", false),
+                on(&text, "guard_anim", "kh2", false),
+                on(&text, "guard_shape", "kh2", false),
             ]
         },
         knockback_numbers: super::hitreact::Numbers::parse(setting(&text, "knockback_numbers").as_deref()),

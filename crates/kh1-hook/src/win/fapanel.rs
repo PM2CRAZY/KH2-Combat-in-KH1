@@ -66,7 +66,6 @@ pub fn anim() -> Anim {
         "kh2_controller" => "kh2_controller",
         _ => "kh1_own",
     };
-    let ours = d.slot.and_then(super::kh2slots::kh2_motion);
     let field = d.slot.is_some_and(super::kh2slots::is_field) || d.play.contains("field: true");
     let motion = matches!(route, "baked" | "live").then_some(d.motion);
     let kh1_slot = d.slot.map(|n| super::kh2slots::stands_for(n).unwrap_or(n));

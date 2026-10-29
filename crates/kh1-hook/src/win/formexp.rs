@@ -34,7 +34,7 @@
 
 use super::{form::Kind, log, pose};
 use crate::formlevel::{self, Record, Table};
-use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 /// The forms' records in Sora's save (three u16, Valor, Wisdom, Final).
@@ -164,9 +164,6 @@ unsafe fn add(kind: Kind, n: u32, why: &str) {
     let cap = cap(s);
     let ups = formlevel::add(&mut rec, kh2_form(kind), n, cap, t);
     std::ptr::write_unaligned((s + FORM_LEVELS_OFF + slot(kind) * 2) as *mut u16, rec.pack());
-    if !ups.is_empty() {
-        GENERATION.fetch_add(1, Ordering::Relaxed);
-    }
     for u in &ups {
         let growth = u.form_growth.map(|g| format!(", {} {}", kind.growth(), growth_name(g))).unwrap_or_default();
         log!(Forms, "{} LV{} ({why}, cap {cap}){growth}; Sora's own: {}{} (given by KH1's menu, abilities = kh1)", kind.name(), u.level, u.sora_growth.map(|g| format!("{} {}, ", kind.growth(), growth_name(g))).unwrap_or_default(), if u.reward != 0 { format!("KH2 ability {}", u.reward) } else { "no ability".into() });
@@ -176,13 +173,6 @@ unsafe fn add(kind: Kind, n: u32, why: &str) {
     if ups.is_empty() && LOGGED.fetch_add(1, Ordering::Relaxed) < 40 {
         log!(Forms, "{} EXP +{n} ({why}): LV{} with {} EXP (cap {cap})", kind.name(), rec.level, rec.exp);
     }
-}
-
-/// Counts the level-ups (`form::abilities` refreshes the form's growth when it changes).
-static GENERATION: AtomicU32 = AtomicU32::new(0);
-
-pub fn generation() -> u32 {
-    GENERATION.load(Ordering::Relaxed)
 }
 
 fn growth_name(g: u8) -> &'static str {

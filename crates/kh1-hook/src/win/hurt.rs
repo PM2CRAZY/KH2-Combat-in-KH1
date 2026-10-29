@@ -37,9 +37,7 @@
 
 use super::addr::Rva;
 use super::{combat, hook, log, pose, takeover};
-use character_core::reaction::Hit;
-use character_core::StateName;
-use std::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 
 const HURT_RVA: Rva = Rva(0x299A40);
 const HURT_PROLOGUE: [u8; 11] = [0x48, 0x8B, 0xC4, 0x55, 0x57, 0x41, 0x54, 0x41, 0x56, 0x41, 0x57];

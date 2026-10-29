@@ -35,11 +35,10 @@
 use super::{log, pose};
 use character_core::{Abilities, Character, EventKind};
 use kh2_formats::battle::Battle;
-use kh2_rig::RigAnim;
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::Arc;
 
-pub use super::formmagic::{element_sounds, package_spell, shots_step, LAST_PACKAGE};
+pub use super::formmagic::{element_sounds, package_spell, LAST_PACKAGE};
 
 pub const DRIVE_MOTION: u16 = 52;
 pub const ARRIVE_MOTION: u16 = 53;
@@ -380,7 +379,8 @@ pub unsafe fn choose(sora: usize, kind: Kind) -> Result<&'static str, String> {
     Ok(kind.name())
 }
 
-/// The Driver's form state (`takeover`).
+/// The Drive Form's state on KH1's own states (t899: its own, `DRIVE`; it was part of our KH2
+/// controller object, `takeover`'s driver).
 #[derive(Default)]
 pub struct Drive {
     /// Changing: Sora's Drive motion playing, its frames.
@@ -397,21 +397,15 @@ struct InForm {
     kind: Kind,
     /// Half frames toward the next MP drained (2 a frame in battle, 1 out of it).
     left: u32,
-    sora: Abilities,
-    own: Abilities,
     logged_s: u32,
 }
 
-/// The form's controller data while in it, else Sora's.
-pub fn character<'a>(d: &Drive, kh2: &'a pose::Kh2) -> &'a Character {
-    match d.form.as_ref().and_then(|f| f.kind.data(kh2)) {
-        Some(f) => &f.character,
-        None => &kh2.character,
-    }
-}
+/// The form's state (`Drive`), its own since t899.
+static DRIVE: std::sync::Mutex<Option<Drive>> = std::sync::Mutex::new(None);
 
-pub fn battle<'a>(d: &Drive, kh2: &'a pose::Kh2) -> &'a Arc<Battle> {
-    match d.form.as_ref().and_then(|f| f.kind.data(kh2)) {
+/// The battle data (ATKP) of the moveset now: a Drive Form's on KH1's states, else Sora's.
+pub fn battle(kh2: &pose::Kh2) -> &Arc<Battle> {
+    match native_form().and_then(|k| k.data(kh2)) {
         Some(f) => &f.battle,
         None => &kh2.battle,
     }
@@ -460,84 +454,6 @@ fn form_growth(a: &mut Abilities, kind: Kind) {
         Kind::Final => a.glide = g,
     }
 }
-
-/// Replaces the controller (keeps facing, lock-on, the glide button, and his movement: speed,
-/// fall, in the air or not).
-fn swap(ch: &mut Character, anim: &mut RigAnim, data: &Character, rig: &Arc<kh2_data::sora::Rig>, abilities: Abilities) {
-    let (facing, lock, glide) = (ch.facing(), ch.lock(), ch.glide_button);
-    let mut c = data.clone();
-    c.carry_movement(ch);
-    c.abilities = abilities;
-    c.glide_button = glide;
-    c.air_magic_falls = ch.air_magic_falls;
-    c.air_magic_gravity = ch.air_magic_gravity;
-    c.set_facing(facing);
-    c.set_lock(lock);
-    *ch = c;
-    let field = anim.field;
-    *anim = RigAnim::new(rig.clone());
-    anim.queued_blend = 14.0;
-    anim.field = field;
-}
-
-
-
-/// Back to Sora: what played is cut, he is free with his movement (the user: on the ground
-/// "return you to whatever animation is being called from the control stick and not halt his
-/// movement"; in the air, falling).
-unsafe fn revert(d: &mut Drive, ch: &mut Character, anim: &mut RigAnim, kh2: &pose::Kh2, why: &str) {
-    CHANGING.store(false, Ordering::Relaxed);
-    d.change = None;
-    d.revert = false;
-    d.changing_to = None;
-    let Some(f) = d.form.take() else { return };
-    IN_FORM.store(false, Ordering::Relaxed);
-    CURRENT.store(0, Ordering::Relaxed);
-    if f.kind.two_blades() {
-        super::valor::ended();
-    }
-    swap(ch, anim, &kh2.character, &kh2.rig, f.sora);
-    super::formmagic::end_all();
-    super::kh2fx::owner_gone();
-    for el in REVERT_ELEMENTS {
-        super::kh2fx::event(REVERT_FX, EventKind::Effect(el));
-        super::kh2sound::event(REVERT_FX, EventKind::Effect(el));
-    }
-    log!(Forms, "Revert ({why}){}", if ch.airborne() { ", falling" } else { "" });
-}
-
-/// After KH1's menu set Sora's abilities (`menu::Growth`): in the form, they are his own for
-/// after it, and the form's stay.
-pub fn abilities(d: &mut Drive, ch: &mut Character) {
-    if let Some(f) = d.form.as_mut() {
-        if ch.abilities != f.own {
-            f.sora = ch.abilities.clone();
-            // (Its own growth ability and rows stay.)
-            let mut own = f.own.clone();
-            own.combo_plus = f.sora.combo_plus;
-            own.air_combo_plus = f.sora.air_combo_plus;
-            own.finishing_plus = f.sora.finishing_plus;
-            own.negative_combo = f.sora.negative_combo;
-            own.combo_master = f.sora.combo_master;
-            form_growth(&mut own, f.kind);
-            f.own = own.clone();
-            ch.abilities = own;
-        }
-        // (A form level gained in the form: its growth ability at once, `formexp`; looked at only
-        // when a level was gained.)
-        static SEEN: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
-        let gen = super::formexp::generation();
-        if SEEN.swap(gen, Ordering::Relaxed) != gen {
-            let mut own = f.own.clone();
-            form_growth(&mut own, f.kind);
-            if own != f.own {
-                f.own = own.clone();
-                ch.abilities = own;
-            }
-        }
-    }
-}
-
 
 /// `after_step`'s work (KH2's controller's step, or `native_frame` for a form on KH1's states).
 unsafe fn drain_step(d: &mut Drive, actor: usize, battle: bool) {
@@ -748,19 +664,21 @@ unsafe fn ask_own_then(actor: usize, motion: u16, then: Option<u16>, air: bool) 
 
 /// The form's frame on KH1's own states (`takeover::form_native_frame`, each physics frame of
 /// Sora's while KH1's states have him: `steps` 60 Hz frames of it, `battle` KH1's battle flag).
-pub unsafe fn native_frame(d: &mut Drive, ch: &mut Character, kh2: &pose::Kh2, actor: usize, battle: bool, steps: u32) {
+pub unsafe fn native_frame(kh2: &pose::Kh2, actor: usize, battle: bool, steps: u32) {
     if !NATIVE.load(Ordering::Relaxed) {
         return;
     }
+    let Ok(mut g) = DRIVE.try_lock() else { return };
+    let d = g.get_or_insert_with(Drive::default);
     let knocked = REQUEST.load(Ordering::Relaxed) == 3 && REQUEST.swap(0, Ordering::Relaxed) == 3;
     if (d.form.is_some() || d.change.is_some()) && (knocked || hp(actor) <= 0) {
-        native_revert(d, ch, kh2, actor, "knocked out");
+        native_revert(d, kh2, actor, "knocked out");
         return;
     }
     match REQUEST.swap(0, Ordering::Relaxed) {
         1 if d.form.is_none() && d.change.is_none() => native_start(d, actor),
         2 if d.form.is_some() => {
-            native_revert(d, ch, kh2, actor, "the Revert command");
+            native_revert(d, kh2, actor, "the Revert command");
             return;
         }
         _ => {}
@@ -770,7 +688,7 @@ pub unsafe fn native_frame(d: &mut Drive, ch: &mut Character, kh2: &pose::Kh2, a
         d.change = Some(n);
         if n >= DRIVE_FRAMES {
             d.change = None;
-            native_arrive(d, ch, kh2, actor);
+            native_arrive(d, kh2, actor);
         }
         return;
     }
@@ -787,7 +705,7 @@ pub unsafe fn native_frame(d: &mut Drive, ch: &mut Character, kh2: &pose::Kh2, a
     }
     if d.revert && native_can_change(actor) {
         d.revert = false;
-        native_revert(d, ch, kh2, actor, "out of MP");
+        native_revert(d, kh2, actor, "out of MP");
     }
 }
 
@@ -827,19 +745,20 @@ unsafe fn native_start(d: &mut Drive, actor: usize) {
 }
 
 /// The swap: Valor's slots on his requests, its data for KH2's pick, its numbers, its arrival.
-unsafe fn native_arrive(d: &mut Drive, ch: &mut Character, kh2: &pose::Kh2, actor: usize) {
+unsafe fn native_arrive(d: &mut Drive, kh2: &pose::Kh2, actor: usize) {
     CHANGING.store(false, Ordering::Relaxed);
     let kind = d.changing_to.take().unwrap_or(Kind::Valor);
     let Some(f) = kind.data(kh2) else { return };
-    let sora = ch.abilities.clone();
+    // (Sora's abilities from KH1's lists, `combomods::abilities_now`; the form's by KH2's rule,
+    // which `abilities_now` gives itself once he is in it.)
+    let sora = super::combomods::abilities_now().unwrap_or_default();
     let own = form_abilities(&sora, &f.character, kind);
     let growth = growth_name(&own, kind);
     // (Valor's Square moves on KH1's states are KH2's own Square rows as the exe reaches them,
     // `combomods::valor_square`: the controller's `square_finishers`, which took 12 / 38 for
     // finishers, isn't used here.)
-    native_data(ch, &f.character, own.clone());
     super::kh2fx::owner_gone();
-    d.form = Some(InForm { kind, left: 0, sora, own, logged_s: 0 });
+    d.form = Some(InForm { kind, left: 0, logged_s: 0 });
     CURRENT.store(kind.code(), Ordering::Relaxed);
     IN_FORM.store(true, Ordering::Relaxed);
     if kind.two_blades() {
@@ -873,23 +792,9 @@ fn growth_name(a: &Abilities, kind: Kind) -> &'static str {
     ["none", "LV1", "LV2", "LV3", "MAX"][(level as usize).min(4)]
 }
 
-/// KH2's controller's data (only read on KH1's states: KH2's pick, its rows' checks, its growth)
-/// for the moveset `data`, his facing, lock-on and glide button kept.
-fn native_data(ch: &mut Character, data: &Character, abilities: Abilities) {
-    let (facing, lock, glide) = (ch.facing(), ch.lock(), ch.glide_button);
-    let mut c = data.clone();
-    c.abilities = abilities;
-    c.glide_button = glide;
-    c.air_magic_falls = ch.air_magic_falls;
-    c.air_magic_gravity = ch.air_magic_gravity;
-    c.set_facing(facing);
-    c.set_lock(lock);
-    *ch = c;
-}
-
 /// Back to Sora on KH1's own states: base Sora's slots and data again, what played cut into KH1's
 /// idle (or fall), the revert's light and sound.
-unsafe fn native_revert(d: &mut Drive, ch: &mut Character, kh2: &pose::Kh2, actor: usize, why: &str) {
+unsafe fn native_revert(d: &mut Drive, _kh2: &pose::Kh2, actor: usize, why: &str) {
     CHANGING.store(false, Ordering::Relaxed);
     d.change = None;
     d.revert = false;
@@ -904,7 +809,6 @@ unsafe fn native_revert(d: &mut Drive, ch: &mut Character, kh2: &pose::Kh2, acto
     if f.kind.two_blades() {
         super::valor::ended();
     }
-    native_data(ch, &kh2.character, f.sora);
     super::kh2slots::refresh();
     super::formmagic::end_all();
     super::kh2fx::owner_gone();

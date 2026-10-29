@@ -430,10 +430,14 @@ const CAMERA: [Item; 2] = [
     Item::Set([0x7F00_0121, 0x7F00_011D, 0x7F00_011E, 0x7F00_0122], Row::R2Hold),
 ];
 // (Tweaks inside Combat, after Magic: the tester, combo row selection m22 answer 1 (b).)
-const COMBAT: [Item; 5] = [
+// (Guard Animation and Guard Shape: the owner, t903, "make a toggle in combat to change the guard
+// animation (a)", two rows.)
+const COMBAT: [Item; 7] = [
     Item::Set(kh(0x7F00_0119, 0x7F00_011A), Row::Physics),
     Item::Set(kh(0x7F00_0101, 0x7F00_0102), Row::Style(Kind::GroundCombo)),
     Item::Set(kh(0x7F00_0103, 0x7F00_0104), Row::Style(Kind::AirCombo)),
+    Item::Set(kh(0x7F00_0238, 0x7F00_0239), Row::Style(Kind::GuardAnim)),
+    Item::Set(kh(0x7F00_023A, 0x7F00_023B), Row::Style(Kind::GuardShape)),
     Item::Open(0x7F00_0207, 0x7F00_0208, List::Magic),
     Item::Open(0x7F00_020F, 0x7F00_0210, List::Tweaks),
 ];
@@ -483,7 +487,7 @@ const BUTTON_HELP: u32 = 0x7F00_0202;
 /// Misc's help, and the same without the debug menu (its row isn't there without the debug tools).
 const MISC_HELP: u32 = 0x7F00_020C;
 const MISC_HELP_NO_DEBUG: &str = "Battle quotes.";
-const STRINGS: [(u32, &str); 133] = [
+const STRINGS: [(u32, &str); 137] = [
     (0x7F00_0201, "KH1 in KH2"),
     (0x7F00_0202, "Choose KH1's or KH2's camera, combat, movement and more."),
     (0x7F00_0203, "Camera"),
@@ -558,6 +562,10 @@ const STRINGS: [(u32, &str); 133] = [
     (0x7F00_0233, "Skip"),
     (0x7F00_0236, "Item Pickup"),
     (0x7F00_0237, "Vanilla: KH1's. Skip: picking an item up off the ground doesn't stop\nSora; the small \"Obtained\" box shows while he keeps moving."),
+    (0x7F00_0238, "Guard Animation"),
+    (0x7F00_0239, "KH1's own guard or KH2's guard (its repel and Counterguard)\nwhen Sora guards standing. Drive Forms keep their own."),
+    (0x7F00_023A, "Guard Shape"),
+    (0x7F00_023B, "What KH2's guard blocks with: KH1's Keyblade (KH1) or\nKH2's guard shapes (KH2)."),
     (0x7F00_0234, "Chest Animation"),
     (0x7F00_0235, "The animation Sora plays when he opens a chest on Quick."),
     (0x7F00_0197, "Cast from Glide"),

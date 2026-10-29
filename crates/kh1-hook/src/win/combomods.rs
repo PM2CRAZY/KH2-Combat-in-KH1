@@ -424,6 +424,26 @@ unsafe fn kh1_calls() -> Option<usize> {
     }
 }
 
+/// KH1's enemies of `actor` now, as KH1's own walk gives them (`0x140291AB0`: live, another team,
+/// not hidden; Checked (decomp)); empty where KH1's calls aren't the expected code (`kh1_calls`).
+/// For the spell scripts' world (`reflect::world_now`, t902).
+pub unsafe fn kh1_foes(actor: usize) -> Vec<usize> {
+    let mut out = Vec::new();
+    let Some(base) = kh1_calls() else { return out };
+    let foes: unsafe extern "system" fn(usize, usize) -> usize = std::mem::transmute(base + FOES_STEAM);
+    let mut foe = foes(actor, 0);
+    while foe != 0 && out.len() < 256 {
+        out.push(foe);
+        foe = foes(actor, foe);
+    }
+    out
+}
+
+/// KH1's enemy walk and lock point calls are the expected code here (`kh1_calls`).
+pub fn kh1_calls_ok() -> bool {
+    unsafe { kh1_calls() }.is_some()
+}
+
 /// A KH1 actor's live flags (`0x140291FF0`: `+0x374` bit 0 set, bit 1 clear, Checked (decomp)).
 unsafe fn kh1_alive(a: usize) -> bool {
     a >= 0x10000 && rd::<u32>(a + 0x374) & 3 == 1
@@ -2542,6 +2562,10 @@ pub fn guard_press() -> bool {
         if actor < 0x10000 {
             return false;
         }
+        // (Guard Animation KH1, t903: KH1's own guard, as KH1's Square handler starts it.)
+        if super::styles::kh1_now(super::styles::Kind::GuardAnim) {
+            return kh1_guard(actor);
+        }
         let me = rd::<[f32; 3]>(actor + 0x10);
         let face = super::kh1rows::lock_actor().and_then(|t| {
             let p = rd::<[f32; 3]>(t + 0x10);
@@ -2556,6 +2580,86 @@ pub fn guard_press() -> bool {
         note(|| format!("Square standing: KH2's guard (motion 173) on KH1's request {:#x} of its own{}", super::kh1rows::by_motion(character_core::motion::GUARD_PRESS).map_or(0, super::kh1rows::request), if face.is_some() { ", facing KH1's lock" } else { "" }));
         true
     }
+}
+
+/// KH1's guard as its own Square handler starts it (Steam `0x1402A7B30`'s guard branch, Checked
+/// (decomp)): turned toward KH1's target (`0x1402A3B00 (actor, 0x142DB3518, scratch)`: the target's
+/// lock point, else his facing), KH1's guard row 0x3D started (`0x1402A3980 (actor, row)`: request
+/// 0xD4 and its guard object, data 0x4DA8 on KH1's Keyblade, clash type 2, arc about 100 degrees each
+/// side, Checked (files)), the idle queued after it (`0x14029FA30 (actor, 0x40000000, 0)`), KH1's
+/// count `+0x41` set to 1. First bytes checked (Checked (exe)). Guard Animation KH1 (t903): KH1's
+/// guard blocks by KH1's own meeting; KH2's repel and Counterguard come with KH2's guard only.
+const KH1_FACE_STEAM: usize = 0x2A3B00;
+const KH1_FACE_BYTES: [u8; 15] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x74, 0x24, 0x10, 0x57, 0x48, 0x83, 0xEC, 0x20];
+const KH1_ROW_START_STEAM: usize = 0x2A3980;
+const KH1_ROW_START_BYTES: [u8; 15] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x6C, 0x24, 0x10, 0x48, 0x89, 0x74, 0x24, 0x18];
+const KH1_TARGET_STEAM: usize = 0x2DB3518;
+const KH1_GUARD_ROW: i32 = 0x3D;
+
+/// KH1's own guard object while it stands (`kh1_guard_frame`) and the game frame it was seen.
+static KH1_GUARD_OBJ: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// KH2's repel and Counterguard on KH1's own guard (Guard Animation KH1; the owner, t906, "do the
+/// small leftovers"): each game frame while KH1's guard plays (request 0xD4), its guard object (KH1's,
+/// `combat::kh1_guard_object`) is known to KH1's meeting as ours, and an enemy attack it met (both of
+/// KH1's directional tests passed) is KH2's guard reaction with the Recoil row at KH2: the repel 42 on
+/// its request of ours, pushed back, KH2's 80 frames without damage, Counterguard in it
+/// (`guard_repel`, refact self 1 as KH2's guard press's ATKP 161, Checked (files)). With the Recoil row
+/// at KH1, KH1's own block stands as it is (nothing of ours). From `kh2slots`' frame.
+pub unsafe fn kh1_guard_frame(actor: usize) {
+    let had = KH1_GUARD_OBJ.load(Ordering::Relaxed);
+    let guarding = actor >= 0x10000 && rd::<u32>(actor + 0x164) & 0xFFFF == 0xD4 && !super::form::in_form() && super::styles::kh1_now(super::styles::Kind::GuardAnim);
+    let now = if guarding && Build::current() == Build::Steam { super::combat::kh1_guard_object(actor) } else { None };
+    if had != 0 && now != Some(had) {
+        super::combat::kh1_guard_forget(had);
+        KH1_GUARD_OBJ.store(0, Ordering::Relaxed);
+    }
+    let Some(o) = now else { return };
+    KH1_GUARD_OBJ.store(o, Ordering::Relaxed);
+    let met = super::combat::kh1_guard_met(o);
+    let Some(&(at, priority)) = met.first() else { return };
+    if !repel_kh2() {
+        return;
+    }
+    let me = rd::<[f32; 3]>(actor + 0x10);
+    let d = [at[0] - me[0], at[2] - me[2]];
+    let toward = if d[0].hypot(d[1]) > 1e-3 {
+        d
+    } else {
+        let f = rd::<[f32; 4]>(actor + 0x30);
+        [f[0], f[2]]
+    };
+    note(|| format!("KH1's own guard met {} enemy attack(s): KH2's guard repel (Guard Animation KH1, Recoil KH2)", met.len()));
+    guard_repel(actor, toward, 1, Some(priority));
+}
+
+unsafe fn kh1_guard(actor: usize) -> bool {
+    if Build::current() != Build::Steam || rd::<i32>(actor + 0x70) != 0 {
+        return false;
+    }
+    let base = takeover::game_base();
+    if base == 0 || rd::<[u8; 15]>(base + KH1_FACE_STEAM) != KH1_FACE_BYTES || rd::<[u8; 15]>(base + KH1_ROW_START_STEAM) != KH1_ROW_START_BYTES {
+        note(|| "Square standing: KH1's guard calls aren't the expected code here: no guard".to_string());
+        return false;
+    }
+    let face: unsafe extern "system" fn(usize, usize, *mut [f32; 4]) = std::mem::transmute(base + KH1_FACE_STEAM);
+    let start: unsafe extern "system" fn(usize, i32) -> usize = std::mem::transmute(base + KH1_ROW_START_STEAM);
+    let queue: unsafe extern "system" fn(usize, u32, f32) -> usize = std::mem::transmute(base + QUEUE_MOTION_RVA);
+    let mut dir = [0.0f32; 4];
+    face(actor, base + KH1_TARGET_STEAM, &mut dir);
+    start(actor, KH1_GUARD_ROW);
+    queue(actor, 0x4000_0000, 0.0);
+    let info = pose::ptr(rd::<u32>(actor + 0x14C));
+    if info >= 0x10000 {
+        wr(info + 0x41, 1u8);
+    }
+    set_last_step(None);
+    new_combo();
+    if let Ok(mut p) = PUSH.lock() {
+        *p = None;
+    }
+    note(|| "Square standing: KH1's own guard (row 0x3D, request 0xD4), Guard Animation KH1".to_string());
+    true
 }
 
 /// KH1's roll start (Steam `0x1402C9E60`, Checked (decomp)): its 12-frame no-damage timer

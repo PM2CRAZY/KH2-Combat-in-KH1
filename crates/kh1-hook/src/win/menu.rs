@@ -27,7 +27,6 @@
 use super::addr::Rva;
 use super::log;
 use crate::growth::{self, Kh1Sora, Mode};
-use character_core::Character;
 
 const SAVE_PTR_RVA: Rva = Rva(0x28695A0);
 const SAVE_RVA: Rva = Rva(0x2DE9D60);
@@ -491,6 +490,17 @@ pub unsafe fn kh1_abilities_now(base: usize) -> Option<character_core::Abilities
     Some(growth::with_growth_override(&a, &super::debugmenu::growth_overrides().0))
 }
 
+/// The menu's ability work (`Growth`), its own since t900 (it was part of our KH2 controller
+/// object, `takeover`'s driver): each frame of Sora's on KH1's states (`takeover`).
+static GROWTH: std::sync::Mutex<Option<Growth>> = std::sync::Mutex::new(None);
+
+/// One frame of the ability menu's own work (`Growth::update`).
+pub unsafe fn growth_frame(base: usize) {
+    if let Ok(mut g) = GROWTH.try_lock() {
+        g.get_or_insert_with(Growth::new).update(base);
+    }
+}
+
 impl Growth {
     pub fn new() -> Growth {
         Growth { mode: super::settings::get().abilities, frames: 0, seen: None, applied: false, no_room: Vec::new(), yielded: Vec::new(), prompts: Default::default(), idle: 0, qr_level: None, hj_level: None, gl_level: None, given: None, ov_gen: 0, names: [None; 3] }
@@ -581,11 +591,10 @@ impl Growth {
 
     /// Gives Sora `a`, with the debug menu's growth overrides on it (the quick-run-native thread,
     /// m6: `debugmenu::growth_overrides`, all Normal without the debug tools).
-    fn give(&mut self, ch: &mut Character, a: character_core::Abilities) {
+    fn give(&mut self, a: character_core::Abilities) {
         let (ov, gen) = super::debugmenu::growth_overrides();
-        ch.abilities = growth::with_growth_override(&a, &ov);
         if ov.iter().any(|o| o.is_some()) {
-            log!(Debug, "debug growth overrides on Sora's abilities: {}", growth::describe(&ch.abilities));
+            log!(Debug, "debug growth overrides on Sora's abilities: {}", growth::describe(&growth::with_growth_override(&a, &ov)));
         }
         self.given = Some(a);
         self.ov_gen = gen;
@@ -593,24 +602,26 @@ impl Growth {
 
     /// Every second: KH1's menu and level, and Sora's abilities from them (`kh1`), or the
     /// mode's fixed set once.
-    pub unsafe fn update(&mut self, base: usize, ch: &mut Character) {
+    /// (t900: no KH2 controller object to give them to: what reads them reads KH1's lists itself,
+    /// `kh1_abilities_now`; this is the menu's own work on those lists.)
+    pub unsafe fn update(&mut self, base: usize) {
         self.frames = self.frames.wrapping_add(1);
         ensure_table(base);
         if !self.applied {
             self.applied = true;
             match self.mode {
-                Mode::Test => self.give(ch, growth::test()),
-                Mode::All => self.give(ch, growth::all()),
+                Mode::Test => self.give(growth::test()),
+                Mode::All => self.give(growth::all()),
                 Mode::Kh1 => self.frames = 59,
             }
             if self.mode != Mode::Kh1 {
-                super::styles::note_abilities(&ch.abilities);
+                super::styles::note_abilities(&self.given.clone().unwrap_or_default());
             }
         }
         // A debug menu growth override changed: applied at once to what was last given.
         if super::debugmenu::growth_overrides().1 != self.ov_gen {
             if let Some(a) = self.given.clone() {
-                self.give(ch, a);
+                self.give(a);
             }
         }
         if let Ok(mut q) = QUEUED.try_lock() {
@@ -853,7 +864,7 @@ impl Growth {
         if self.mode == Mode::Kh1 {
             // (A combo ability only KH2 has makes the combo KH2's: `styles::kh2`.)
             super::styles::note_abilities(&from_kh1);
-            self.give(ch, from_kh1);
+            self.give(from_kh1);
         }
         self.seen = Some(now);
     }

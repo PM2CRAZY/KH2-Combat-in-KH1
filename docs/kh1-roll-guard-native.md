@@ -232,3 +232,48 @@ KH2 controller run during rolls and guards.
   halves stop the attack or turn a shot back. `hurt`'s check runs only where this can't. A hit that
   reaches his body is taken (the owner: attacks that are an enemy's body follow the
   attack-against-attack rule). Body guards (weapon 0) are unchanged.
+
+## 9. Built: Guard Animation and Guard Shape rows (t903 / t904)
+
+The owner: "for guard I want you to make a toggle in combat to change the guard animation (a)",
+then two rows, one for the animation and one for the shape.
+
+- **Combat > Guard Animation** (ini `guard_anim`, KH1 by default). KH1: the guard press (Square
+  standing, Dodge Roll KH2, Guard equipped) starts KH1's own guard exactly as KH1's Square handler's
+  guard branch does (`0x1402A7B30`, Checked (decomp)): faced toward KH1's target (`0x1402A3B00` with
+  `0x142DB3518`), row 0x3D started (`0x1402A3980`: request 0xD4, data 0x4DA8), the idle queued
+  (`0x14029FA30`), the count `+0x41` 1. KH1's guard object blocks by KH1's own meeting; KH2's repel
+  and Counterguard belong to KH2's guard (KH2 on this row). KH2: KH2's guard press (motion 173, §5..8).
+- **Combat > Guard Shape** (ini `guard_shape`, KH1 by default). For KH2's Keyblade guard windows
+  (173, 42, Guard Break 165). KH1: a KH1 guard object from KH1's own guard row's data (bone 0x30:
+  KH1's builder places it along KH1's Keyblade, the same blade KH1's swings clash with; clash type 2),
+  the window's ATKP arc on it, always live while the window is open; KH1's meeting notes what it meets
+  and KH2's guard reaction follows. KH2: KH2's own guard shapes placed each frame (§8). Body guards
+  keep KH2's shapes on his body either way.
+- Data (btltbl.bin, Sora's table `+0xA9F0`, Checked (files)): row 0x3D request 0xD4, data 0x4DA8;
+  data `+0x10` 0x30 (the Keyblade, as the swings' 0x4B78 / 0x4C58), `+0x38` 0x10002 (clash type 2,
+  spent), `+0x64` -0.174.
+- (t906) KH2's repel and Counterguard on KH1's own guard too: while KH1's guard plays (request
+  0xD4, Guard Animation KH1), its guard object (KH1's, found in KH1's pool by its data, row 0x3D's)
+  is known to KH1's meeting as ours (`combat::kh1_guard_met`), and an enemy attack it meets is KH2's
+  guard reaction with Recoil at KH2 (`combomods::kh1_guard_frame` → `guard_repel`: the repel 42,
+  pushed back, 80 frames without damage, Counterguard in it). With Recoil at KH1, KH1's own block as
+  it is.
+
+## 10. Built: KH2's body guards placed by KH1's own pass (t909)
+
+- **Before**: each body guard window (Aerial Dodge 406, Aerial Recovery 124, Explosion 124, Magnet
+  Burst 406, every `Guard` window with weapon 0) was a KH1 guard object we moved each frame onto
+  KH2's shapes on KH2's rig, posed by us at KH1's time in our slot (`takeover::kh2_hits`).
+- **Now** (Steam, KH1's entry builder hooked, `bodyhits::native`): each shape of the window's group
+  (KH2's body shapes of kind 6 / 13, `P_EX100.mdlx`, Checked (files)) is a KH1 guard object (clash
+  type 4, priority 100, the window's ATKP arc, as before) that KH1's own collision pass places from
+  KH1's state each pass: his position and facing for a root shape, KH1's bone of the same frame for
+  KH2's bone 67 (KH1 70), the offset and lift as KH2's, KH2's sweep back to last frame's
+  (`bodyhits::body_guard_entries`, the body hits' `centre`). KH2's rig isn't posed for them
+  (`combat::guard_needs_pose`). A window with a shape KH1 can't place (a cube, another bone) keeps
+  the old way.
+- Left: Guard Shape KH2 (KH2's Keyblade guard shapes) is still placed by us on KH2's posed rig: KH2's
+  Keyblade shapes are on KH2's weapon skeleton, and the frame of KH2's weapon root against KH1's grip
+  (bone 280) isn't checked yet (Assumption needed: how KH2's Keyblade bones line up with KH1's grip;
+  `pose`'s `keyblade_teeth_up` turns KH1's grip half round, so they don't match as they are).

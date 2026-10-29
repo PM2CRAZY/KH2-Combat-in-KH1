@@ -70,6 +70,17 @@ pub enum Kind {
     /// for kh1 magics logic you just apply kh2s fire combo logic on the first shot and the repeated
     /// shot animation" (`formmagic::kh1_cast_window`).
     MagicCombo,
+    /// What Sora's guard press plays (the owner, t903: "make a toggle in combat to change the guard
+    /// animation"): KH1's own guard (KH1's guard row 0x3D: its motion, request 0xD4, and its guard
+    /// object on KH1's Keyblade, as KH1's Square handler starts it) or KH2's guard press (motion 173
+    /// on our request, its guard window, KH2's repel and Counterguard). The press is KH2's either
+    /// way (the stick at rest, Dodge Roll KH2: `combomods::guard_press`).
+    GuardAnim,
+    /// The shape of KH2's guard windows on the Keyblade (the owner, t903, answer "(a)" with a row
+    /// for it): KH1's own blade (KH1: a KH1 guard object placed by KH1's own builder on KH1's
+    /// Keyblade, as KH1's guard and swings are) or KH2's guard shapes (KH2: KH2's rig's shapes, placed
+    /// by us each frame, `combat::Strikes::guard_step`).
+    GuardShape,
 }
 
 impl Kind {
@@ -98,6 +109,8 @@ impl Kind {
         Kind::AeroAnim,
         Kind::AirPhysics,
         Kind::MagicCombo,
+        Kind::GuardAnim,
+        Kind::GuardShape,
     ];
 
     /// Its ini key.
@@ -128,6 +141,8 @@ impl Kind {
             Kind::AeroAnim => "anim_aero",
             Kind::AirPhysics => "magic_air_physics",
             Kind::MagicCombo => "magic_combo",
+            Kind::GuardAnim => "guard_anim",
+            Kind::GuardShape => "guard_shape",
         }
     }
 
@@ -158,6 +173,8 @@ impl Kind {
             Kind::AeroAnim => "Aero Animation",
             Kind::AirPhysics => "Air Physics",
             Kind::MagicCombo => "Magic Combo",
+            Kind::GuardAnim => "Guard Animation",
+            Kind::GuardShape => "Guard Shape",
         }
     }
 
@@ -171,7 +188,7 @@ impl Kind {
 static KH2: [AtomicBool; COUNT] = [const { AtomicBool::new(false) }; COUNT];
 
 /// How many kinds there are (`Kind::EVERY`, the ini's `settings::styles`).
-pub const COUNT: usize = 24;
+pub const COUNT: usize = 26;
 static INIT: Once = Once::new();
 
 fn init() {

@@ -36,7 +36,7 @@
 
 use super::addr::Rva;
 use super::{combat, hook, log, pose, takeover};
-use character_core::{CastMotions, Character, EventKind, Output, StateName};
+use character_core::{CastMotions, EventKind, Output, StateName};
 use glam::{Mat4, Quat, Vec3};
 use kh2_formats::battle::{Atkp, Battle};
 use kh2_magic::{Event, Magic, ObjId, SpellFile, World};
@@ -1047,8 +1047,10 @@ pub(super) unsafe fn kh1_sized_shapes(actor: usize, mut shapes: Vec<combat_core:
     shapes
 }
 
-/// The world as the scripts see it: Sora (`SORA`) and the enemies near him (`FOE0 + i`, from
-/// `strikes`' look); everything else is read from KH1 when a script asks.
+/// The world as the scripts see it: Sora (`SORA`) and KH1's enemies of his (`FOE0 + i`, KH1's own
+/// enemy walk, `combomods::kh1_foes`, t902; before, our hit state's list of the hittable ones near
+/// him, `Strikes::look`, which stays the fallback where KH1's walk isn't the expected code);
+/// everything else is read from KH1 when a script asks.
 pub(super) unsafe fn world_now(actor: usize, out: &Output, airborne: bool, strikes: &combat::Strikes, _lock: Option<u32>, seed: u32) -> KhWorld {
     let mut objs = vec![Obj { id: SORA, actor, motion: out.motion, air: airborne }];
     // KH1's party (slots 1 and 2, `PARTY_STEAM`): the scripts' party members (Cure's circle, t822).
@@ -1059,7 +1061,9 @@ pub(super) unsafe fn world_now(actor: usize, out: &Output, airborne: bool, strik
             objs.push(Obj { id: PARTY0 + slot as u32, actor: a, motion: 0, air: false });
         }
     }
-    for (i, a) in strikes.target_actors().into_iter().enumerate() {
+    let foes = super::combomods::kh1_foes(actor);
+    let foes = if foes.is_empty() && !super::combomods::kh1_calls_ok() { strikes.target_actors() } else { foes };
+    for (i, a) in foes.into_iter().enumerate() {
         objs.push(Obj { id: FOE0 + i as u32, actor: a, motion: 0, air: false });
     }
     KhWorld { objs, auto: None, rng: seed, sink: None }

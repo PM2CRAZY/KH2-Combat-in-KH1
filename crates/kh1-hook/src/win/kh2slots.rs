@@ -2673,7 +2673,8 @@ pub fn is_field(slot: usize) -> bool {
     moved(slot).is_some_and(|m| m.field)
 }
 
-/// Our slot's KH2 motion, if `slot` is one of ours.
+/// Our slot's KH2 motion, if `slot` is one of ours (`pose`, `shared`; t908: t907 took it out as
+/// unused, missing these two).
 pub fn kh2_motion(slot: usize) -> Option<u16> {
     moved(slot).map(|m| m.motion)
 }
@@ -3084,6 +3085,8 @@ pub unsafe fn frame(actor: usize) {
     super::formmagic::kh1_cast_window(actor);
     // KH2's Counterguard window in its guard's repel (`combomods::counter_window`).
     super::combomods::counter_window(actor);
+    // KH2's repel on KH1's own guard (Guard Animation KH1, `combomods::kh1_guard_frame`, t906).
+    super::combomods::kh1_guard_frame(actor);
     // KH2's invulnerable ranges on KH1's no-damage flag (`invulnerable_step`, t860; KH1's level reader on our 8.0 since t868).
     invulnerable_step(actor);
     // KH2's hits on his body in the KH2 motion KH1 plays (`body_strike`): KH1 attack objects of

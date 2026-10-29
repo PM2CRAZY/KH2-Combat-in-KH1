@@ -1,3 +1,76 @@
+### 2026-10-29: Stage 910 (testing branch: the spell scripts' lock-on straight from KH1)
+- The owner (chat: "do all 3 and finish whatever is left", item 3).
+  - Before: `takeover::native_spells` worked out a lock id from our hit state's targets (`kh1_lock` over `Strikes::look`) for the spell scripts' world; the world never read it (its lock-on is KH1's own, `reflect::KhWorld::locked`, `takeover::kh1_locked`).
+  - Now: the lock passed is KH1's own (`kh1_locked`); `kh1_lock` removed. Our hit state's look stays for the spells' own fallbacks and Reflect's barrier.
+  - `cargo test` not run for `kh1-hook` here (no crate registry reachable).
+
+### 2026-10-29: Stage 909 (testing branch: KH2's body guards placed by KH1's own collision pass)
+- The owner (same request, item 1).
+  - Before: KH2's guard windows on his body (Aerial Dodge, Aerial Recovery, Explosion, Magnet Burst) were KH1 guard objects we moved each frame onto KH2's shapes on KH2's rig, posed by us.
+  - Now (Steam, KH1's entry builder hooked): each shape is a KH1 guard object (clash type 4, priority 100, the ATKP's arc) that KH1's pass places from KH1's state each pass (`bodyhits::body_guard_keep` / `body_guard_entries`, the body hits' placement: his root and facing, KH1's bone 70 for KH2's 67, KH2's sweep); KH2's rig isn't posed for them, nor for KH1's own blade (`combat::guard_needs_pose`). A window with a shape KH1 can't place keeps the old way. With Guard Shape KH1, one KH1 blade guard a window (was one a shape, the same object several times).
+  - Left: Guard Shape KH2's Keyblade shapes stay on KH2's posed rig (KH2's weapon bones against KH1's grip not checked).
+  - Not checked in game; `cargo test` not run for `kh1-hook` here. docs/kh1-roll-guard-native.md §10.
+
+### 2026-10-29: Stage 908 (testing branch: t907's build errors, and unused imports)
+- The owner's build of t907: "cannot find value `kh2_motion` in module `super::kh2slots`" (`pose.rs`, `shared.rs`).
+  - Cause: t907 removed `kh2slots::kh2_motion` as unused; `pose` and `shared` pass it as a function (no call parentheses), which the search for its calls missed.
+  - Now: `kh2slots::kh2_motion` back. The build's unused-import warnings cleared: `form` (`shots_step` re-export), `formmagic` (`CastMotions`, `Character`), `hurt` (`Hit`, `StateName`, `AtomicU64`), `shared` (`StateName`, `AtomicU8`), `reflect` (`Character`), `takeover` (`Button`, `Env`, `EventKind`, `Input`). `chest`'s deprecated `fetch_update` left as it is (its replacement needs a newer Rust than the workspace's 1.75).
+  - `cargo test` not run for `kh1-hook` here (no crate registry reachable).
+
+### 2026-10-29: Stage 907 (testing branch: dead code of the deleted controller, and two warnings)
+- The owner (chat: "okay do the small leftovers go ahead").
+  - The trace's KH2 State category removed (its columns, `trace::Kh2`, `Row::kh2`, the ini's `trace_kh2_state`, the debug menu's "KH2 Controller" group, now "Drive Form" with Form alone): it held the deleted controller's state and stayed empty since t901. Its bit stays unused. The CSV loses those 11 columns.
+  - `formexp::generation` and its counter removed (the deleted `form::abilities` read it; a form level-up reaches the form's abilities through `combomods::abilities_now` each frame); `kh2slots::kh2_motion` removed (only `fapanel`'s unused `ours` read it); `shared::control`'s unread `borrow = NONE` removed.
+  - `cargo test` not run for `kh1-hook` here (no crate registry reachable).
+
+### 2026-10-29: Stage 906 (testing branch: KH2's repel and Counterguard on KH1's own guard)
+- The owner (same go-ahead; the item "KH2's repel and Counterguard on Guard Animation KH1").
+  - Before (t903): with Guard Animation KH1, KH1's own guard blocked by KH1's own meeting and nothing of KH2's followed.
+  - Now: `combomods::kh1_guard_frame` (each frame Sora is posed, `kh2slots::frame`): while KH1's guard plays (request 0xD4), its guard object (`combat::kh1_guard_object`: Sora's live attack object on row 0x3D's data, Checked (files) and (decomp)) is known to KH1's meeting as ours (`combat::kh1_guard_met`), and an enemy attack it meets (KH1's two directional tests passed) is KH2's guard reaction with the Recoil row at KH2 (`guard_repel`, refact self 1 as KH2's guard ATKP 161: the repel 42 on its request of ours, pushed back, KH2's 80 frames without damage, Counterguard in it). With Recoil at KH1, KH1's own block as it is. Cost: two reads a frame, a 64-slot pool look only while KH1's guard plays.
+  - Not checked in game; `cargo test` not run for `kh1-hook` here. docs/kh1-roll-guard-native.md §9.
+
+### 2026-10-29: Stage 905 (testing branch: the trace's Config columns for the two guard rows)
+- The owner's build of t904: "error[E0080]: evaluation panicked: assertion failed: fields(COLUMNS[1].1) == CONFIG" (`trace.rs`).
+  - Cause: t903 / t904 added two move styles (`styles::Kind::GuardAnim`, `GuardShape`) without their names in the trace's Config header, which the build checks against `Kind::EVERY` (t-config-columns).
+  - Now: `cfg_guard_anim`, `cfg_guard_shape` at the header's end, in `Kind::EVERY`'s order (29 Config columns, inside the row's 32 bits).
+  - `cargo test` not run for `kh1-hook` here (no crate registry reachable).
+
+### 2026-10-29: Stage 904 (testing branch: Guard Shape row: KH2's Keyblade guard on KH1's own blade)
+- The owner (chat: "for guard I want you to make a toggle in combat to change the guard animation (a)", then "Both, two rows"; the guard-window question's answer (a)).
+  - New Config row, Combat > Guard Shape (`styles::Kind::GuardShape`, ini `guard_shape`, KH1 by default as every row): KH1, each of KH2's Keyblade guard windows (the guard press 173, its repel 42, Guard Break) is a KH1 guard object made by KH1's row maker from KH1's own guard row's data (Sora's row 0x3D, data 0x4DA8: bone 0x30, so KH1's own builder places it along KH1's Keyblade each frame; clash type 2; Checked (files) and (decomp)), KH2's window's ATKP arc on it, always live while KH2's window is open (`combat::Strikes::blade_guard`): nothing of it placed by us. KH2, KH2's guard shapes placed each frame on KH2's rig as before (t861). The repel (KH2's guard reaction, `guard_repel`) follows KH1's meeting either way (`keyblade_guard_meeting`). Body guards (weapon 0) unchanged.
+  - **Assumption**: KH1's builder places a guard object of bone 0x30 on the blade as it does KH1's own guard's (KH1's guard row uses that data).
+  - Not checked in game; `cargo test` not run for `kh1-hook` here (no crate registry reachable). docs/kh1-roll-guard-native.md §9.
+
+### 2026-10-29: Stage 903 (testing branch: Guard Animation row: KH1's own guard on the guard press)
+- The owner (same request).
+  - New Config row, Combat > Guard Animation (`styles::Kind::GuardAnim`, ini `guard_anim`, KH1 by default as every row): KH1, the guard press (Square standing, Dodge Roll KH2, KH2's Guard equipped: `combomods::guard_press`) starts KH1's own guard as KH1's Square handler does (`0x1402A7B30`'s guard branch, Checked (decomp)): turned toward KH1's target (`0x1402A3B00`), KH1's guard row 0x3D (`0x1402A3980`: request 0xD4, KH1's guard animation and KH1's guard object), the idle queued, KH1's count 1 (`combomods::kh1_guard`; first bytes checked, Checked (exe)). KH2, KH2's guard press (motion 173 on our request) as before. With KH1's guard, KH1 decides the block (KH1's own meeting); KH2's repel and Counterguard come with KH2's guard only.
+  - Not checked in game; `cargo test` not run for `kh1-hook` here. docs/kh1-roll-guard-native.md §9.
+
+### 2026-10-29: Stage 902 (testing branch: the spell scripts' enemies from KH1's own enemy walk)
+- The owner (same go-ahead).
+  - Before: the KH2 spell scripts' world (`reflect::world_now`, used by `formmagic` and Reflect) listed the enemies from our hit state's look (`Strikes::target_actors`: the hittable ones within reach of him with body parts).
+  - Now: KH1's own enemy walk (`combomods::kh1_foes`: `0x140291AB0`, live, another team, not hidden, Checked (decomp); first bytes checked, Checked (exe)); our hit state's list only where that call isn't the expected code. Far enemies are in the scripts' world too now, as in KH2's (the scripts measure their own ranges).
+  - **Assumption**: no KH2 spell script expects only nearby enemies in its world.
+  - Not checked in game; `cargo test` not run for `kh1-hook` here. docs/kh1-drive-forms-native.md §7.4.2.
+
+### 2026-10-29: Stage 901 (testing branch: our KH2 controller object deleted)
+- The owner (chat: "go ahead with whats still open").
+  - Before: `takeover`'s driver (a `Character` copy of KH2's controller with its rig, input state, last frame, hit state, menu work and form state) still existed for the hit sweeps, the spell scripts' world and the trace.
+  - Now: deleted. The hit state (`combat::Strikes`: KH1's enemies' bodies, guards and shots as our hit records see them, Reflect's barriers, the spells' attack objects) is its own (`takeover::STRIKES`); `kh2_hits` poses KH2's rig from base Sora's moveset (`kh2.character`, only read); `Strikes::strike_as` / `guard_step` take no controller (`Option<&mut Character>`, `None` on KH1's states: the controller's own wall / hit counters and clash had no effect there; KH2's reaction numbers from KH2's data). The trace's KH2 columns stay empty (no KH2 frames). `release` logs as before without the driver's counters.
+  - Not checked in game; `cargo test` not run for `kh1-hook` here (no crate registry reachable). docs/kh1-drive-forms-native.md §7.4.2.
+
+### 2026-10-29: Stage 900 (testing branch: the ability menu's own work on its own)
+- The owner (same go-ahead).
+  - Before: `menu::Growth` (KH2's abilities given in KH1's lists, their boxes and menu names) lived in our KH2 controller object and wrote Sora's abilities into its `Character`.
+  - Now: `menu::growth_frame` runs it from a static of its own (`GROWTH`), each frame of Sora's on KH1's states; `Growth::update` writes nothing into a controller (what reads abilities reads KH1's lists itself, `kh1_abilities_now`, t893).
+  - Not checked in game; `cargo test` not run for `kh1-hook` here. docs/kh1-drive-forms-native.md §7.4.2.
+
+### 2026-10-29: Stage 899 (testing branch: the Drive Form's state on its own)
+- The owner (same go-ahead).
+  - Before: the Drive Form's state on KH1's states (`form::Drive`: the change, the form, its MP drain) lived in our KH2 controller object, and the arrival / revert swapped that object's `Character` for the form's (only read by what is native now) and kept Sora's and the form's abilities in it (`form::abilities`).
+  - Now: `form::DRIVE`, its own; `native_frame` takes no controller; the arrival takes Sora's abilities from KH1's lists (`combomods::abilities_now`), the form's by KH2's rule as `abilities_now` gives them in the form; `form::battle` by the form now (`native_form`). The old controller's `swap` / `revert` / `abilities` / `native_data` removed.
+  - Not checked in game; `cargo test` not run for `kh1-hook` here. docs/kh1-drive-forms-native.md §7.4.2.
+
 ### 2026-10-29: Stage 898 (testing branch: KH2's movement numbers from the moveset's records, written only when they change)
 - The owner (chat: "go ahead", item 2 of what was left: the movement numbers off our KH2 controller object).
   - Before: `takeover::refresh_kh2_numbers` read the walk, run, jump, gravity, air and ground inertia numbers and High Jump's height from our KH2 controller object every frame and wrote them for KH2's physics on KH1's states.

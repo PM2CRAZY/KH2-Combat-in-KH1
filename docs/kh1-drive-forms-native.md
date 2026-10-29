@@ -727,6 +727,12 @@ wisdom can behave correctly without overwriting kh1's vanilla logic". Step 1:
   3. Done in t894: the Square moves, Counterguard, Retaliating Slash and Valor's row 11 on KH1's
      state too (`HostPress::square` / `forced`); his abilities read from KH1's lists at the press
      (t893).
+  4. Done in t899 .. t901: the form's state (`form::DRIVE`), the ability menu's work
+     (`menu::growth_frame`) and the hit state (`takeover::STRIKES`) are their own; our KH2
+     controller object (`takeover`'s driver) is deleted.
+  5. Done in t902: the spell scripts' world takes its enemies from KH1's own enemy walk.
+  6. Left: the Keyblade's and body's guard windows are KH1 guard objects placed each frame on
+     KH2's rig posed by us (`Strikes::guard_step`).
 
 #### 7.4.3 The Drive and the arrival in the air
 

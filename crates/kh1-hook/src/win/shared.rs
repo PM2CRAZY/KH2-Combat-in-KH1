@@ -35,8 +35,7 @@
 
 use super::styles::{self, Kind};
 use super::takeover;
-use character_core::StateName;
-use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 /// Base Sora is KH1's own states' (always, t877: the ini's `shared` and the old KH2 controller it
 /// switched to are deleted; Drive Forms run on them too, `form::native_now`).
@@ -371,7 +370,6 @@ pub fn control(s: &Seen) -> u32 {
                 s.state
             );
         }
-        borrow = NONE;
     }
     let mut hide = 0;
     // On the ground: Square is KH2's with the Dodge Roll style at KH2 (KH2's roll, guard and

@@ -25,7 +25,7 @@
 
 use super::addr::Rva;
 use super::{combat, hook, log, menu, pose};
-use character_core::{Button, Character, Env, EventKind, Input, Output, StateName, TargetInfo};
+use character_core::{Output, StateName};
 use glam::Mat4;
 use kh2_rig::RigAnim;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicU8, AtomicUsize, Ordering};
@@ -150,7 +150,6 @@ static HANDOFF_SEEN_MS: AtomicU64 = AtomicU64::new(0);
 /// aerial combo went to KH1's moves, KH2 having been counted gone after 150 ms of pause).
 static FRAME_KIND: AtomicU8 = AtomicU8::new(0);
 static HANDOFF_FRAME: AtomicBool = AtomicBool::new(false);
-static FRESH: AtomicBool = AtomicBool::new(false);
 /// KH2 cut one of KH1's moves short: until KH1's motion slot is a plain one again (0..7), its
 /// leftover isn't taken for an action of KH1's own.
 static CUT_LEFT: AtomicBool = AtomicBool::new(false);
@@ -220,29 +219,10 @@ pub fn active() -> bool {
     a != 0 && now_ms().saturating_sub(a) < 150
 }
 
-struct Driver {
-    character: Character,
-    anim: RigAnim,
-    held: (bool, bool),
-    grounded: bool,
-    last_state: Option<StateName>,
-    logged: u32,
-    strikes: combat::Strikes,
-    /// Last attack (for `BATTLE_LINGER`).
-    fought: Option<Instant>,
-    /// KH2's last frame (dodge-roll invulnerability, guard), for `hurt`.
-    last_out: Option<Output>,
-    growth: menu::Growth,
-    /// The KH2 attack motion playing and its frame (`swing_fx`).
-    swing: Option<u16>,
-    swing_frame: u32,
-    /// Standing on top of something above the map floor (a box): its height (KH2 y-up).
-    on_top: Option<f32>,
-    /// A Drive Form (`form`): the change, the form, its gauge.
-    drive: super::form::Drive,
-}
-
-static DRIVER: Mutex<Option<Driver>> = Mutex::new(None);
+/// KH2's hit state on KH1's own states (`combat::Strikes`: KH1's enemies' bodies, guards and
+/// shots as our hit records see them, Reflect's barriers, the spells' attack objects), its own
+/// since t901 (it was part of our KH2 controller object, deleted then).
+static STRIKES: Mutex<Option<combat::Strikes>> = Mutex::new(None);
 /// KH2's pose this frame (KH2 model space): Sora's bones and the Keyblade's (its keychain drives
 /// KH1's, `kh1_data::secondary`), for `pose` to draw.
 pub static POSE: Mutex<Option<(Vec<Mat4>, Vec<Mat4>, Instant)>> = Mutex::new(None);
@@ -392,28 +372,6 @@ unsafe fn trace_frame(actor: usize, start: [f32; 4]) {
     }
     let base = BASE.load(Ordering::Relaxed);
     let p = rd::<[f32; 4]>(actor + 0x10);
-    // (KH2's side only on KH2's own frames: on KH1's its last move stays in the controller.)
-    // (t354: and only while the trace records KH2's state.)
-    let kh2_frame = FRAME_KIND.load(Ordering::Relaxed) == 1 && super::trace::wants(super::trace::cat::KH2_STATE);
-    let kh2 = DRIVER.try_lock().ok().filter(|_| kh2_frame).and_then(|g| {
-        let kh2 = g.as_ref().map(|d| {
-            let o = d.last_out.as_ref();
-            super::trace::Kh2 {
-                state: format!("{:?}", d.character.state_name()),
-                motion: o.map_or(0, |o| o.motion),
-                frame: o.map_or(0, |o| o.clip_frame),
-                air: d.character.airborne(),
-                grounded: d.grounded,
-                on_top: d.on_top,
-                facing: o.map_or(f32::NAN, |o| o.facing),
-                combo: o.map_or(0, |o| o.combo_count),
-                lock: o.and_then(|o| o.locked),
-                invulnerable: o.is_some_and(|o| o.invulnerable),
-                guarding: o.is_some_and(|o| o.guarding),
-            }
-        });
-        kh2
-    });
     let sticks = RAW_STICKS.load(Ordering::Relaxed).to_le_bytes();
     super::trace::frame(super::trace::Row {
         frame: GAME_FRAME.load(Ordering::Relaxed),
@@ -449,7 +407,6 @@ unsafe fn trace_frame(actor: usize, start: [f32; 4]) {
         velocity: rd::<[f32; 4]>(actor + 0x3C0),
         arc: rd::<[f32; 4]>(actor + 0x3B0),
         push: rd::<[f32; 3]>(actor + 0x120),
-        kh2,
         form: if super::trace::wants(super::trace::cat::FORM) { super::form::current().map(|k| format!("{k:?}")) } else { None },
         buttons: RAW_BUTTONS.load(Ordering::Relaxed) as u16,
         kh1_buttons: rd::<u32>(base + BUTTONS_RVA + 4),
@@ -1000,27 +957,14 @@ fn release(why: &str) {
     KH2_AIR.store(false, Ordering::Relaxed);
     unsafe { set_sparkle(false) };
     drop_pose();
-    if let Ok(mut d) = DRIVER.try_lock() {
-        if let Some(dr) = d.as_mut() {
-            // Also a new reason while KH1 already has him (the user, s155: after a spell's
-            // handoff KH1's fall played on and the log never said why KH2 didn't take him).
-            // (A new reason always (at most 4 a second): past the 400 lines the log never said why
-            // KH1 kept him, the user: KH1's animations from a boss's end on.)
-            if dr.last_state.is_some() || changed {
-                static LAST_MS: AtomicU64 = AtomicU64::new(0);
-                let now = now_ms();
-                if changed && now.saturating_sub(LAST_MS.swap(now, Ordering::Relaxed)) >= 250 || dr.logged < 400 {
-                    dr.logged = dr.logged.saturating_add(1);
-                    log!(Takeover, "KH1 has Sora ({why})");
-                }
-            }
-            if dr.last_state.is_some() {
-                // When KH2 has him again, its controller starts over (standing): whatever KH1
-                // did meanwhile, KH2's jump or blow from before is over.
-                FRESH.store(true, Ordering::Relaxed);
-            }
-            dr.last_state = None;
-            dr.held = (true, true);
+    // A new reason (at most 4 a second, or the first 400): the log says why KH1 has him (the
+    // user, s155; past the 400 lines the log never said why, KH1's animations from a boss's end on).
+    if changed {
+        static LAST_MS: AtomicU64 = AtomicU64::new(0);
+        static LOGGED: AtomicU32 = AtomicU32::new(0);
+        let now = now_ms();
+        if now.saturating_sub(LAST_MS.swap(now, Ordering::Relaxed)) >= 250 || LOGGED.fetch_add(1, Ordering::Relaxed) < 400 {
+            log!(Takeover, "KH1 has Sora ({why})");
         }
     }
 }
@@ -1115,41 +1059,23 @@ unsafe fn room_watch(actor: usize, kh2: bool) {
 static FROZEN_NOW: AtomicBool = AtomicBool::new(false);
 static RIDE_UNTIL: AtomicU64 = AtomicU64::new(0);
 
-/// KH2's controller for Sora. Its abilities: `menu` (the ini's `abilities`: testing MAX, or KH1's
-/// menu and level).
-fn new_driver(kh2: &pose::Kh2) -> Driver {
-    let character = kh2.character.clone();
-    log!(Takeover, "KH2's controller ready for Sora");
-    let mut anim = RigAnim::new(kh2.rig.clone());
-    // KH2 snaps a finished action straight into idle; softened (the user: smoother out of a
-    // combo).
-    anim.queued_blend = 14.0;
-    Driver { character, anim, held: (true, true), grounded: true, last_state: None, logged: 0, strikes: combat::Strikes::default(), fought: None, last_out: None, growth: menu::Growth::new(), swing: None, swing_frame: 0, on_top: None, drive: Default::default() }
-}
-
-/// A Drive Form on KH1's own states (`form::native_frame`): each physics frame of Sora's while
-/// KH1's states have him, with KH2's controller's data (only read: the form's rows and growth).
+/// A Drive Form on KH1's own states (`form::native_frame`, its state its own since t899): each
+/// physics frame of Sora's while KH1's states have him.
 unsafe fn form_native_frame(base: usize, actor: usize) {
     if !super::form::native_running() {
         return;
     }
     let Some(kh2) = pose::kh2() else { return };
-    let Ok(mut g) = DRIVER.try_lock() else { return };
-    let d = g.get_or_insert_with(|| new_driver(kh2));
     let battle = rd::<u32>(base + BATTLE_RVA) & 1 != 0;
-    super::form::native_frame(&mut d.drive, &mut d.character, kh2, actor, battle, steps());
+    super::form::native_frame(kh2, actor, battle, steps());
 }
 
 /// The ability menu's own work each frame (`menu::Growth::update`: KH2's abilities given in KH1's
 /// lists, their boxes and menu names; it looks at the lists once a second), then KH2's movement
 /// numbers on KH1's states (`kh2_numbers`).
 unsafe fn refresh_kh2_numbers(base: usize) {
-    if let Some(kh2) = pose::kh2() {
-        if let Ok(mut g) = DRIVER.try_lock() {
-            let d = g.get_or_insert_with(|| new_driver(kh2));
-            d.growth.update(base, &mut d.character);
-            super::form::abilities(&mut d.drive, &mut d.character);
-        }
+    if pose::kh2().is_some() {
+        menu::growth_frame(base);
     }
     kh2_numbers();
 }
@@ -1203,30 +1129,6 @@ fn kh2_numbers() {
     }
 }
 
-/// KH1's lock-on (R1) as KH2's lock: while it holds a target (`0x142DB3F10` its state, the
-/// target's handle at `0x142DB3F18`, which the command menu aims every command at), KH2 locks the
-/// same enemy, so its swings home in on and turn toward it. KH1 locks a point of the target
-/// (`0x142DB3F1C`, an index into its collision record's lock points; `docs/kh1-lockon.md`): KH2
-/// homes in on that point (the user: locked on Darkside's hand, Sora went for his body), wherever
-/// the actor's root is; `targets` gets it.
-unsafe fn kh1_lock(base: usize, targets: &mut Vec<TargetInfo>) -> Option<u32> {
-    let locked = if rd::<u32>(base + LOCK_STATE_RVA) != 0 { pose::ptr(rd::<u32>(base + LOCK_TARGET_RVA)) } else { 0 };
-    if locked > 0x10000 {
-        let point: unsafe extern "system" fn(usize, i32, *mut [f32; 4]) -> f32 = std::mem::transmute(base + LOCK_POINT_RVA);
-        let mut v = [0.0f32; 4];
-        let r = point(locked, rd::<i32>(base + LOCK_TARGET_RVA + 4).max(0), &mut v);
-        if v[..3].iter().all(|x| x.is_finite()) && r.is_finite() && r >= 0.0 {
-            let r = r.min(500.0);
-            // Its point and size as KH2's target shape (as `combat::bodies` has every target).
-            let t = TargetInfo { id: locked as u32, pos: [v[0], -v[1], v[2]], radius: r.max(10.0), height: r.max(10.0) };
-            match targets.iter_mut().find(|x| x.id == t.id) {
-                Some(x) => *x = t,
-                None => targets.push(t),
-            }
-        }
-    }
-    (locked > 0x10000).then(|| locked as u32).filter(|id| targets.iter().any(|t| t.id == *id))
-}
 
 
 /// The stick now as KH2 reads it for base Sora (the world direction times its tilt, KH2's x / z;
@@ -1289,11 +1191,12 @@ pub unsafe fn native_spells(actor: usize) {
         }
         *l = Some((m, t));
     }
-    let Ok(mut dg) = DRIVER.try_lock() else { return };
-    let d = dg.get_or_insert_with(|| new_driver(kh2));
-    let base = BASE.load(Ordering::Relaxed);
-    let mut targets = d.strikes.look(actor);
-    let lock = kh1_lock(base, &mut targets);
+    let Ok(mut sg) = STRIKES.try_lock() else { return };
+    let strikes = sg.get_or_insert_with(combat::Strikes::default);
+    // (Our hit state's view of KH1's enemies, for the spells' own fallbacks and Reflect's barrier;
+    // the scripts' lock-on is KH1's own, read when a script asks, `reflect::KhWorld::locked`, t909.)
+    let _ = strikes.look(actor);
+    let lock = kh1_locked().map(|(a, _)| a as u32);
     let air = matches!(rd::<i32>(actor + 0x70), 1 | 2 | 8);
     let yaw = rd::<f32>(actor + 0x3C);
     let (motion, t) = playing.unwrap_or((u16::MAX, 0.0));
@@ -1313,10 +1216,10 @@ pub unsafe fn native_spells(actor: usize) {
         combo_live: false,
         events,
     };
-    let battle = super::form::battle(&d.drive, kh2).clone();
-    super::formmagic::shots_step(actor, &out, air, &mut d.strikes, &battle, lock);
+    let battle = super::form::battle(kh2).clone();
+    super::formmagic::shots_step(actor, &out, air, strikes, &battle, lock);
     if reflect {
-        super::reflect::native_step(actor, &out, air, &mut d.strikes, &battle, lock);
+        super::reflect::native_step(actor, &out, air, strikes, &battle, lock);
     }
 }
 
@@ -1403,15 +1306,19 @@ pub unsafe fn kh2_hits(actor: usize) {
     if open.is_empty() && guards.is_empty() && !n.live {
         return;
     }
-    let Ok(mut dg) = DRIVER.try_lock() else { return };
-    let d = dg.get_or_insert_with(|| new_driver(kh2));
+    let Ok(mut sg) = STRIKES.try_lock() else { return };
+    let strikes = sg.get_or_insert_with(combat::Strikes::default);
     let air = matches!(rd::<i32>(actor + 0x70), 1 | 2);
     let p = rd::<[f32; 3]>(actor + 0x10);
     let yaw = rd::<f32>(actor + 0x3C);
-    if (!open.is_empty() || !guards.is_empty()) && !n.anim.pose_at(&d.character, motion, t, yaw, [p[0], -p[1], p[2]]) {
+    // (KH2's rig at the clip's frame: base Sora's moveset, `kh2.character`; t901, no controller.)
+    // (Only when a window needs KH2's shapes on KH2's rig, t909: KH1's own blade and the body
+    // guards KH1's pass places, `combat::guard_needs_pose`, need none.)
+    let need_pose = !open.is_empty() || guards.iter().any(|&(_, _, group, weapon)| combat::guard_needs_pose(group, weapon));
+    if need_pose && !n.anim.pose_at(&kh2.character, motion, t, yaw, [p[0], -p[1], p[2]]) {
         return;
     }
-    let _ = d.strikes.look(actor);
+    let _ = strikes.look(actor);
     // (Our swing ids: the play and the window, marked apart from KH2's controller's own.)
     let hitboxes = open.iter().map(|&(i, attack, group)| character_core::ActiveHitbox { swing: (1 << 63) | (n.play << 8) | i as u64, attack, group, weapon: 0 }).collect();
     let out = Output {
@@ -1430,8 +1337,8 @@ pub unsafe fn kh2_hits(actor: usize) {
         combo_live: false,
         events: Vec::new(),
     };
-    let battle = super::form::battle(&d.drive, kh2).clone();
-    let landed = d.strikes.strike_as(actor, &out, &n.anim, &mut d.character, &battle, air, steps() as f32, true);
+    let battle = super::form::battle(kh2).clone();
+    let landed = strikes.strike_as(actor, &out, &n.anim, None, &battle, air, steps() as f32, true);
     n.live = !open.is_empty() || !guards.is_empty();
     if landed > 0 {
         let info = pose::ptr(rd::<u32>(actor + 0x14C));
@@ -1864,8 +1771,8 @@ pub fn sora_actor() -> usize {
 /// KH2's hit state (`combat::Strikes`) when nothing else holds it (a spell script's call, made
 /// from KH1's script machine after the frame's actor update, t825).
 pub fn with_strikes<R>(f: impl FnOnce(&mut combat::Strikes) -> R) -> Option<R> {
-    let mut g = DRIVER.try_lock().ok()?;
-    g.as_mut().map(|d| f(&mut d.strikes))
+    let mut g = STRIKES.try_lock().ok()?;
+    g.as_mut().map(f)
 }
 
 /// KH1's lock-on target now (`0x142DB3F10` set, `0x142DB3F18` its actor) and the lock point it is

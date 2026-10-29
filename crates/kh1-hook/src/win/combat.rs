@@ -867,7 +867,7 @@ pub struct Strikes {
     guard_objs: HashMap<(u64, usize), (usize, u32)>,
     /// Our copies of a swing's attack data for them, one a guard arc (KH2's reflect range and
     /// angle, `guard_data`), on one page: its address and the copies made (range, angle, handle).
-    guard_mem: Option<(usize, Vec<(u8, i8, u32)>)>,
+    guard_mem: Option<(usize, Vec<(u8, i8, bool, u32)>)>,
 }
 
 /// KH1's point along an actor's bone `(actor, bone, t, out)` (`0x14029C990`): for bone 0x30 (the
@@ -1182,6 +1182,11 @@ fn clashes(guard: u32, swing: u32) -> bool {
 const ATTACK_POOL_RVA: Rva = Rva(0x2DB5110);
 const ATTACK_SLOTS: usize = 0x40;
 const GUARD_PRIORITY: i32 = 100;
+/// KH2's body shape kinds a guard window switches on (`kh2_rig::attack_shapes`: attack and guard).
+const BODY_ATTACK_KIND: u8 = 6;
+const BODY_GUARD_KIND: u8 = 13;
+/// KH1's guard row in Sora's attack table (its Square handler's, `0x1402A7B30`, Checked (decomp)).
+const KH1_GUARD_ROW: i32 = 0x3D;
 /// Guard objects: the most shapes per window, and the frames between re-arms (an attack met is
 /// met again after that, as KH1's interval objects are).
 const GUARD_SHAPES: usize = 4;
@@ -1371,6 +1376,13 @@ impl Strikes {
     /// no reaction), up to 16 on one page, made once each. Before (t489): cos 0 (90 degrees each
     /// side) on the Keyblade, -1 on his body.
     unsafe fn guard_data(&mut self, range: u8, angle: i8) -> Option<u32> {
+        self.guard_data_of(range, angle, false, 0)
+    }
+
+    /// `guard_data`, from KH1's own guard row's data when `blade` (Guard Shape KH1, t903: Sora's
+    /// row 0x3D's, `sora`'s table: KH1's guard on its Keyblade, bone 0x30, clash type 2, priority
+    /// 100, no power; Checked (files)), its arc KH2's window's.
+    unsafe fn guard_data_of(&mut self, range: u8, angle: i8, blade: bool, sora: usize) -> Option<u32> {
         let base = BASE.load(Ordering::Relaxed);
         if self.guard_mem.is_none() {
             let mem = super::sys::VirtualAlloc(std::ptr::null_mut(), 0x1000, 0x3000, 0x04) as usize;
@@ -1381,14 +1393,14 @@ impl Strikes {
         }
         let rows = self.rows?;
         let (mem, made) = self.guard_mem.as_mut()?;
-        if let Some(&(_, _, h)) = made.iter().find(|m| m.0 == range && m.1 == angle) {
+        if let Some(&(_, _, _, h)) = made.iter().find(|m| m.0 == range && m.1 == angle && m.2 == blade) {
             return Some(h);
         }
         if made.len() >= 0x1000 / 0x100 {
             return None;
         }
         let d = *mem + made.len() * 0x100;
-        let src = base + ATTACK_DATA_RVA + rows[0].data as usize;
+        let src = if blade { base + ATTACK_DATA_RVA + row_info(sora, KH1_GUARD_ROW)?.data as usize } else { base + ATTACK_DATA_RVA + rows[0].data as usize };
         std::ptr::copy_nonoverlapping(src as *const u8, d as *mut u8, 0x70);
         wr(d + 8, 0u32);
         let cos = if range == 0 { -1.0f32 } else { (range as f32).to_radians().cos() };
@@ -1400,9 +1412,82 @@ impl Strikes {
             log!(Combat, "guards: our attack data's handle doesn't resolve ({h:#x}): no guard object for range {range}");
             return None;
         }
-        made.push((range, angle, h));
-        log!(Combat, "guards: KH1 guard data for KH2's reflect range {range} / angle {angle} (arc cosine {cos:.3})");
+        made.push((range, angle, blade, h));
+        log!(Combat, "guards: KH1 guard data for KH2's reflect range {range} / angle {angle} (arc cosine {cos:.3}){}", if blade { ", from KH1's own guard row (KH1's blade)" } else { "" });
         Some(h)
+    }
+
+    /// One of KH2's Keyblade guard windows on KH1's own blade (Guard Shape KH1; the owner, t903,
+    /// answer "(a)"): a KH1 guard object made by KH1's row maker from KH1's own guard row's data
+    /// (`guard_data_of` with `blade`: bone 0x30, so KH1's own builder places it along KH1's
+    /// Keyblade every frame, as KH1's guard and swings are; clash type 2, KH1's guard), the arc the
+    /// window's ATKP's, always live while KH2's window is open (activity 3; freed when it closes,
+    /// `guard_step`). Nothing of it is placed by us. KH1's meeting notes the enemy attacks it meets
+    /// (`keyblade_guard_meeting`), and KH2's guard reaction follows, as for KH2's shapes.
+    #[allow(clippy::too_many_arguments)]
+    unsafe fn blade_guard(&mut self, sora: usize, key: (u64, usize), weapon: u8, attack: u16, battle: &Battle, motion: u16, character: Option<&mut Character>) {
+        static N: AtomicU32 = AtomicU32::new(0);
+        let base = BASE.load(Ordering::Relaxed);
+        let ours = |o: usize| {
+            let f = rd::<u32>(o);
+            f & 0x800 != 0 && f & 0x0020_0000 == 0 && pose::ptr(rd::<u32>(o + 0x34)) == sora
+        };
+        let (range, angle) = battle.attack_for_level(attack, 0, 0).map_or((90, 0), |a| (a.reflect_range, a.reflect_angle));
+        let o = match self.guard_objs.get(&key).copied() {
+            Some((o, _)) if ours(o) => o,
+            stale => {
+                if let Some((old, _)) = stale {
+                    keyblade_guard_forget(old);
+                }
+                let Some(data) = self.guard_data_of(range, angle, true, sora) else { return };
+                let free_bit: unsafe extern "system" fn() -> u32 = std::mem::transmute(base + FREE_BIT_RVA);
+                let new_attack: unsafe extern "system" fn(usize, u32, usize) -> usize = std::mem::transmute(base + NEW_ATTACK_RVA);
+                // (KH1's maker clears his combat info's "connected" flag for a new swing: this isn't one.)
+                let info = pose::ptr(rd::<u32>(sora + 0x14C));
+                let connected = if info > 0x10000 { rd::<u32>(info + 0x50) } else { 0 };
+                let o = new_attack(sora, free_bit(), pose::ptr(data));
+                if info > 0x10000 {
+                    wr(info + 0x50, rd::<u32>(info + 0x50) | connected);
+                }
+                if o < 0x10000 {
+                    return;
+                }
+                // Always live while KH2's window is open (activity 3): its own motion's events aren't
+                // KH1's guard motion's. Its place, shape, clash type and priority as KH1's maker set them
+                // from KH1's guard data.
+                wr(o, (rd::<u32>(o) & !0xC) | 0xC);
+                wr(o + 0x68, GUARD_PRIORITY);
+                wr(o + 0x50, GUARD_REARM);
+                if super::log_on(super::LogCat::Combat) && N.fetch_add(1, Ordering::Relaxed) < 60 {
+                    log!(Combat, "guard: motion {motion}'s Keyblade window (ATKP {attack}, reflect range {range}) as KH1's own guard object {o:#x} on KH1's blade (Guard Shape KH1)");
+                }
+                self.guard_objs.insert(key, (o, 0));
+                o
+            }
+        };
+        let _ = weapon;
+        keyblade_guard_keep(o);
+        let met = keyblade_guard_met(o);
+        let Some(&(at, priority)) = met.first() else { return };
+        let refact = battle.attack_for_level(attack, 0, 0).map_or(2, |a| a.refact_self);
+        let me = rd::<[f32; 3]>(sora + 0x10);
+        let toward = glam::Vec2::new(at[0] - me[0], at[2] - me[2]).normalize_or_zero();
+        let toward = if toward == glam::Vec2::ZERO {
+            let f = rd::<[f32; 4]>(sora + 0x30);
+            glam::Vec2::new(f[0], f[2])
+        } else {
+            toward
+        };
+        if super::shared::active() {
+            super::combomods::guard_repel(sora, toward.to_array(), refact, Some(priority));
+        } else if refact != 2 {
+            if let Some(c) = character {
+                c.clash(refact, 0, toward.to_array());
+            }
+        }
+        if super::log_on(super::LogCat::Combat) && N.fetch_add(1, Ordering::Relaxed) < 60 {
+            log!(Combat, "guard: motion {motion}'s Keyblade guard on KH1's blade (ATKP {attack}) met {} enemy attack(s) (refact self {refact})", met.len());
+        }
     }
 
     /// KH2's guard windows as KH2 has them: every live `Guard` window of Sora's move (the guard
@@ -1422,7 +1507,7 @@ impl Strikes {
     ///   each frame, freed when its window closes.
     /// - An attack it stops: the window's ATKP "refact self" as KH2's guard reaction
     ///   (`Character::clash`: 1 the guard repel, 2 nothing), logged.
-    unsafe fn guard_step(&mut self, sora: usize, out: &Output, anim: &RigAnim, character: &mut Character, battle: &Battle) {
+    unsafe fn guard_step(&mut self, sora: usize, out: &Output, anim: &RigAnim, mut character: Option<&mut Character>, battle: &Battle) {
         static N: AtomicU32 = AtomicU32::new(0);
         let base = BASE.load(Ordering::Relaxed);
         let free: unsafe extern "system" fn(usize) = std::mem::transmute(base + FREE_ATTACK_RVA);
@@ -1430,11 +1515,34 @@ impl Strikes {
             let f = rd::<u32>(o);
             f & 0x800 != 0 && f & 0x0020_0000 == 0 && pose::ptr(rd::<u32>(o + 0x34)) == sora
         };
-        let mut live: Vec<((u64, usize), Shape, u8, u16)> = Vec::new();
+        // (t861) The Keyblade's guards on KH2's own shapes through KH1's entry builder, as Reflect's
+        // barrier (`keyblade_guard_native`); else one sphere a shape, as before.
+        let kb_native = keyblade_guard_native();
+        // (Guard Shape KH1, t903: the Keyblade's guard on KH1's own blade.)
+        let kh1_blade = kb_native && super::styles::kh1_now(super::styles::Kind::GuardShape);
+        // Each window's objects: KH1's own blade (one a window, nothing placed by us); on his body,
+        // with KH1's pass in (`bodyhits::native`), KH2's body shapes placed by KH1's pass from KH1's
+        // state (t909, `bodyhits::body_guard_keep`); else KH2's shapes on KH2's rig posed by us.
+        let body_native = super::bodyhits::native();
+        let kh2 = pose::kh2();
+        let mut live: Vec<((u64, usize), Option<Shape>, Option<kh2_data::sora::BoneShape>, u8, u16)> = Vec::new();
         // (Recoil KH1: no guard windows in his attacks, `recoil::guard_window_on`.)
         for g in out.guard_boxes.iter().filter(|g| super::recoil::guard_window_on(out.motion, g.weapon)) {
+            if kh1_blade && g.weapon > 0 {
+                live.push(((g.swing, 0), None, None, g.weapon, g.attack));
+                continue;
+            }
+            if body_native && g.weapon == 0 {
+                let shapes: Vec<kh2_data::sora::BoneShape> = kh2.map_or(Vec::new(), |k| k.rig.body_shapes.iter().filter(|s| s.group == g.group && (s.kind == BODY_ATTACK_KIND || s.kind == BODY_GUARD_KIND) && s.shape != 2).take(GUARD_SHAPES).copied().collect());
+                if !shapes.is_empty() && shapes.iter().all(super::bodyhits::body_shape_ok) {
+                    for (i, bs) in shapes.into_iter().enumerate() {
+                        live.push(((g.swing, i), None, Some(bs), 0, g.attack));
+                    }
+                    continue;
+                }
+            }
             for (i, sh) in anim.attack_shapes(g.group, g.weapon).into_iter().take(GUARD_SHAPES).enumerate() {
-                live.push(((g.swing, i), sh, g.weapon, g.attack));
+                live.push(((g.swing, i), Some(sh), None, g.weapon, g.attack));
             }
         }
         // Windows closed: their objects freed.
@@ -1443,6 +1551,7 @@ impl Strikes {
         for k in gone {
             if let Some((o, _)) = self.guard_objs.remove(&k) {
                 keyblade_guard_forget(o);
+                super::bodyhits::body_guard_forget(o);
                 if ours(o) {
                     free(o);
                 }
@@ -1451,17 +1560,26 @@ impl Strikes {
         if live.is_empty() {
             return;
         }
-        // (t861) The Keyblade's guards on KH2's own shapes through KH1's entry builder, as Reflect's
-        // barrier (`keyblade_guard_native`); else one sphere a shape, as before.
-        let kb_native = keyblade_guard_native();
-        for (key, sh, weapon, attack) in live {
-            let native = kb_native && weapon > 0;
+        for (key, posed, body, weapon, attack) in live {
+            if kh1_blade && weapon > 0 {
+                self.blade_guard(sora, key, weapon, attack, battle, out.motion, character.as_deref_mut());
+                continue;
+            }
+            let native = kb_native && weapon > 0 && posed.is_some();
+            // (Where it stands now: KH2's posed shape, or his place for a body shape KH1's pass
+            // places itself each pass, `bodyhits::body_guard_entries`.)
+            let (c, r) = match (&posed, &body) {
+                (Some(sh), _) => ([sh.center[0], -sh.center[1], sh.center[2], 1.0f32], sh.radius.max(sh.height).clamp(10.0, 150.0)),
+                (None, Some(bs)) => {
+                    let p = rd::<[f32; 3]>(sora + 0x10);
+                    ([p[0], p[1], p[2], 1.0f32], bs.radius.max(bs.height).clamp(10.0, 150.0))
+                }
+                (None, None) => continue,
+            };
             // (Its arc: the window's ATKP reflect range and angle, KH2's guard test, `guard_data`;
             // an ATKP not found: in front on the Keyblade, all round on his body, as before.)
             let (range, angle) = battle.attack_for_level(attack, 0, 0).map_or(if weapon == 0 { (0, 0) } else { (90, 0) }, |a| (a.reflect_range, a.reflect_angle));
             let Some(data) = self.guard_data(range, angle) else { continue };
-            let c = [sh.center[0], -sh.center[1], sh.center[2], 1.0f32];
-            let r = sh.radius.max(sh.height).clamp(10.0, 150.0);
             let (o, last) = match self.guard_objs.get(&key).copied() {
                 Some((o, m)) if ours(o) => (o, m),
                 stale => {
@@ -1505,20 +1623,30 @@ impl Strikes {
                     (o, 0)
                 }
             };
-            // On its shape now (swept from last frame's).
-            wr(o + 0x70, rd::<[f32; 4]>(o + 0x10));
-            wr(o + 0x80, rd::<[f32; 4]>(o + 0x40));
-            wr(o + 0x10, c);
-            wr(o + 0x40, c);
-            wr(o + 0xC, r);
-            wr(o + 0x3C, r);
-            wr(o, rd::<u32>(o) | 0x1_0000);
+            if let Some(bs) = body.as_ref() {
+                // (Placed by KH1's pass from KH1's state: its size only, nothing placed here.)
+                super::bodyhits::body_guard_keep(o, bs);
+                wr(o + 0xC, r);
+                wr(o + 0x3C, r);
+                wr(o, rd::<u32>(o) | 0x1_0000);
+            } else {
+                // On its shape now (swept from last frame's).
+                wr(o + 0x70, rd::<[f32; 4]>(o + 0x10));
+                wr(o + 0x80, rd::<[f32; 4]>(o + 0x40));
+                wr(o + 0x10, c);
+                wr(o + 0x40, c);
+                wr(o + 0xC, r);
+                wr(o + 0x3C, r);
+                wr(o, rd::<u32>(o) | 0x1_0000);
+            }
             let refact = battle.attack_for_level(attack, 0, 0).map_or(2, |a| a.refact_self);
             let me = rd::<[f32; 3]>(sora + 0x10);
             if native {
                 // KH2's shape for KH1's builder this frame, and the object known to KH1's meeting
                 // (`keyblade_guard_meeting`).
-                super::bodyhits::guard_shapes(o, std::slice::from_ref(&sh));
+                if let Some(sh) = posed.as_ref() {
+                    super::bodyhits::guard_shapes(o, std::slice::from_ref(sh));
+                }
                 keyblade_guard_keep(o);
                 // The enemy attacks it met since last frame (KH1's meeting, its two directional
                 // tests passed with the window's ATKP arc): KH2's guard reaction by its refact
@@ -1536,7 +1664,9 @@ impl Strikes {
                 if super::shared::active() {
                     super::combomods::guard_repel(sora, toward.to_array(), refact, Some(priority));
                 } else if refact != 2 {
-                    character.clash(refact, 0, toward.to_array());
+                    if let Some(c) = character.as_deref_mut() {
+                        c.clash(refact, 0, toward.to_array());
+                    }
                 }
                 if super::log_on(super::LogCat::Combat) && N.fetch_add(1, Ordering::Relaxed) < 60 {
                     log!(Combat, "guard: motion {}'s Keyblade guard (ATKP {attack}, KH2's shape through KH1's builder) met {} enemy attack(s) (refact self {refact})", out.motion, met.len());
@@ -1563,7 +1693,9 @@ impl Strikes {
                 let priority = (0..ATTACK_SLOTS).map(|k| base + ATTACK_POOL_RVA + k * 0xC0).find(|&a| rd::<u32>(a) & 0x800 != 0 && rd::<u32>(a + 0x54) & new != 0).map(|a| rd::<i32>(a + 0x68));
                 super::combomods::guard_repel(sora, toward.to_array(), refact, priority);
             } else if refact != 2 {
-                character.clash(refact, 0, toward.to_array());
+                if let Some(c) = character.as_deref_mut() {
+                    c.clash(refact, 0, toward.to_array());
+                }
             }
             if super::log_on(super::LogCat::Combat) && N.fetch_add(1, Ordering::Relaxed) < 60 {
                 log!(Combat, "guard: motion {}'s guard (ATKP {attack}) stopped an attack of {:#x?} (refact self {refact})", out.motion, from.map(|f| f.0));
@@ -1580,7 +1712,7 @@ impl Strikes {
     /// `native`: KH1's own states have Sora (`takeover::kh2_hits`), not KH2's controller: a guard
     /// that stops a swing puts KH1's own clash on him (his recoil is KH1's hit pass's, `recoil`).
     #[allow(clippy::too_many_arguments)]
-    pub unsafe fn strike_as(&mut self, sora: usize, out: &Output, anim: &RigAnim, character: &mut Character, battle: &Battle, air: bool, ticks: f32, native: bool) -> u32 {
+    pub unsafe fn strike_as(&mut self, sora: usize, out: &Output, anim: &RigAnim, mut character: Option<&mut Character>, battle: &Battle, air: bool, ticks: f32, native: bool) -> u32 {
         let mut landed = 0u32;
         if !self.rows_tried {
             self.rows_tried = true;
@@ -1594,7 +1726,7 @@ impl Strikes {
         self.met_shots.retain(|(sw, _)| keys.iter().any(|k| k.0 == *sw));
         // KH2's guard windows as KH1 guard objects (the Aerial Dodge's, Aerial Recovery's, the
         // guard's).
-        self.guard_step(sora, out, anim, character, battle);
+        self.guard_step(sora, out, anim, character.as_deref_mut(), battle);
         // KH1's Keyblade as drawn, this frame and last (the user: "can you align clanks with
         // soras kh1 keyblade, it should align with the length of the keyblade as well so smaller
         // keyblades are harder to clank while longer ones clank much more easy"): the right
@@ -1638,7 +1770,7 @@ impl Strikes {
             if !super::settings::get().wall_clink {
             } else if let Some(at) = wall {
                 self.repelled.insert(h.swing);
-                let bounced = character.register_wall_hit();
+                let bounced = character.as_deref_mut().is_some_and(|c| c.register_wall_hit());
                 clang(at);
                 note(|| format!("KH2 attack {} struck a wall at {at:.0?} (bounced: {bounced})", h.attack));
                 continue;
@@ -1704,7 +1836,7 @@ impl Strikes {
                     note(|| format!("KH2 attack {} (refact self 2) met the guard of actor {owner:#x}: not stopped, that actor immune to this swing (KH2's rules)", h.attack));
                 } else {
                     self.repelled.insert(h.swing);
-                    let bounced = character.register_wall_hit();
+                    let bounced = character.as_deref_mut().is_some_and(|c| c.register_wall_hit());
                     clang(guards[gi].at);
                     let g = guards[gi];
                     // On KH1's states KH2's controller doesn't drive him (`register_wall_hit` plays
@@ -1749,7 +1881,9 @@ impl Strikes {
                     self.met_shots.insert((h.swing, shot.obj));
                     let (back, ours) = meet_shot(sora, shot, &clash_shapes[ai], rows[(air as usize) * 2], holds);
                     if back {
-                        character.register_hit();
+                        if let Some(c) = character.as_deref_mut() {
+                            c.register_hit();
+                        }
                     }
                     static MET: AtomicU32 = AtomicU32::new(0);
                     if super::log_on(super::LogCat::Combat) && MET.fetch_add(1, Ordering::Relaxed) < 200 {
@@ -1786,7 +1920,9 @@ impl Strikes {
                 if !adm.effective {
                     continue;
                 }
-                character.register_hit();
+                if let Some(c) = character.as_deref_mut() {
+                    c.register_hit();
+                }
                 // Every KH2 blow (reaction group 4) is a launch: KH1's finisher row (its kind-5
                 // record) with KH2's starting speeds (the tester, kh2-knockback-on-enemies: the
                 // "holding blow" rule for small numbers is gone; Aerial Finish's spins and Guard
@@ -1800,7 +1936,7 @@ impl Strikes {
                 // (Not for the big and the immovable: KH1's own reaction stays, the user: Magnet
                 // Burst and Aerial Finish moved Dragon Maleficent.)
                 if let Ok(mut p) = PENDING.lock() {
-                    *p = (finisher && !b.fixed).then(|| Launch::kh2(row.knockback_1, row.knockback_2, &character.reaction));
+                    *p = (finisher && !b.fixed).then(|| Launch::kh2(row.knockback_1, row.knockback_2, &character.as_deref().map_or_else(|| pose::kh2().map(|k| k.character.reaction.clone()).unwrap_or_default(), |c| c.reaction.clone())));
                 }
                 // (Every hit lands as it is: s179's silent multi-hit ticks were taken out again in
                 // s193, the user: "revert this back to before we asked to make any revenge value
@@ -2098,6 +2234,45 @@ static KEY_GUARDS: std::sync::Mutex<Vec<(usize, Vec<([f32; 3], i32)>)>> = std::s
 /// barrier (`barrier_native`).
 pub fn keyblade_guard_native() -> bool {
     barrier_native()
+}
+
+/// Whether one of KH2's guard windows (`group` on `weapon`: 0 his body, 1.. a Keyblade) needs KH2's
+/// rig posed by us this frame (`takeover::kh2_hits`, t909): not on KH1's own blade (Guard Shape KH1),
+/// not on his body where KH1's pass places KH2's body shapes itself (`bodyhits::body_guard_keep`).
+pub fn guard_needs_pose(group: u8, weapon: u8) -> bool {
+    if weapon > 0 {
+        return !(keyblade_guard_native() && super::styles::kh1_now(super::styles::Kind::GuardShape));
+    }
+    if !super::bodyhits::native() {
+        return true;
+    }
+    let Some(k) = pose::kh2() else { return true };
+    let shapes: Vec<&kh2_data::sora::BoneShape> = k.rig.body_shapes.iter().filter(|s| s.group == group && (s.kind == BODY_ATTACK_KIND || s.kind == BODY_GUARD_KIND) && s.shape != 2).take(GUARD_SHAPES).collect();
+    shapes.is_empty() || !shapes.iter().all(|s| super::bodyhits::body_shape_ok(s))
+}
+
+/// KH1's own guard object of Sora's now (Guard Animation KH1, `combomods::kh1_guard_frame`, t906):
+/// a live attack object of his in KH1's pool (`+0` bit 0x800, not dead `0x200000`, owner `+0x34`)
+/// on the data of his guard row 0x3D (`+0x5C`, Sora's table's row data; Checked (files) and
+/// (decomp)), if KH1 made one.
+pub unsafe fn kh1_guard_object(sora: usize) -> Option<usize> {
+    let base = BASE.load(Ordering::Relaxed);
+    let data = base + ATTACK_DATA_RVA + row_info(sora, KH1_GUARD_ROW)?.data as usize;
+    (0..ATTACK_SLOTS).map(|k| base + ATTACK_POOL_RVA + k * 0xC0).find(|&o| {
+        let f = rd::<u32>(o);
+        f & 0x800 != 0 && f & 0x0020_0000 == 0 && pose::ptr(rd::<u32>(o + 0x34)) == sora && pose::ptr(rd::<u32>(o + 0x5C)) == data
+    })
+}
+
+/// KH1's own guard object `o` known to KH1's meeting as one of ours (`keyblade_guard_meeting`), and
+/// the enemy attacks it met since last asked; `forget` when it is gone.
+pub fn kh1_guard_met(o: usize) -> Vec<([f32; 3], i32)> {
+    keyblade_guard_keep(o);
+    keyblade_guard_met(o)
+}
+
+pub fn kh1_guard_forget(o: usize) {
+    keyblade_guard_forget(o);
 }
 
 /// Our Keyblade guard object `o` stands this frame.
