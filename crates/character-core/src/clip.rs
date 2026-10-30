@@ -49,6 +49,12 @@ pub enum WindowKind {
     /// command areas open this way).
     EnableGroup(u8),
     DisableGroup(u8),
+    /// One of KH2's script ranges (range ids 16 / 17 / 18 as 1 / 2 / 3): an object script asks
+    /// whether it is open (`trap_obj_motion_check_range(obj, n)`, `0x14042D1E0`, bit n − 1 of the
+    /// object's `+0x2AC`; the range step `0x14040D810` sets bits 0 / 1 / 2 of its motion block's
+    /// `+0x154`, Steam KH2, Checked (decomp)). Limit Form's Sonic Rave opens 1 and 2 in its Rave
+    /// (K401) for its follow-ups (`P_EX100_KH1F.mset`, Checked (files)).
+    ScriptRange(u8),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]

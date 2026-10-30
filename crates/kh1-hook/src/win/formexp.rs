@@ -126,11 +126,12 @@ pub fn growth(kind: Kind) -> u8 {
 
 /// Base Sora's own growth levels from the forms' levels (KH2's `0x1403E8380`: one under the
 /// form's growth level, `formlevel::sora_growth`), for `growth::Kh1Sora::form_growth`: Valor's
-/// High Jump, Wisdom's Quick Run, Final's Glide. All 0 without the table or the save.
+/// High Jump, Wisdom's Quick Run, Limit's Dodge Roll (t975), Final's Glide. All 0 without the
+/// table or the save.
 pub fn base_growth() -> crate::growth::FormGrowth {
     let Some(t) = table() else { return Default::default() };
     let g = |kind: Kind| formlevel::sora_growth(t, kh2_form(kind), unsafe { record(kind) }.level);
-    crate::growth::FormGrowth { high_jump: g(Kind::Valor), quick_run: g(Kind::Wisdom), glide: g(Kind::Final) }
+    crate::growth::FormGrowth { high_jump: g(Kind::Valor), quick_run: g(Kind::Wisdom), glide: g(Kind::Final), dodge_roll: g(Kind::Limit) }
 }
 
 /// The fmlv abilities the forms' levels have reached and Sora hasn't been given yet (KH2 gives

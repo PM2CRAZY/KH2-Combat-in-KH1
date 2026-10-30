@@ -67,9 +67,61 @@ pub fn form_changed(in_form: bool) {
     unsafe { apply() };
 }
 
-/// Whether a limit command is refused now (in a form, the toggle on KH2).
+/// KH1's Trinity Limit command (`docs/kh1-kh2-limits.md` §3: the offer's pair 15 / 0x52).
+const TRINITY: u8 = 0x52;
+/// Its bit in KH1's equipped-limit bits (`0x14299C240`, by the pairs' index: Trinity's is 4).
+const TRINITY_BIT: u32 = 1 << 4;
+const EQUIPPED_RVA: usize = 0x299C240;
+/// KH1's recount of the equipped-limit bits from Sora's abilities (`0x14028D550`).
+const RECOUNT_RVA: usize = 0x28D550;
+const RECOUNT_BYTES: [u8; 10] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x74, 0x24, 0x10];
+/// KH1's bits are masked to Trinity's (`frame`).
+static MASKED: AtomicBool = AtomicBool::new(false);
+
+/// In Limit Form with Config > Drive > Limit > Trinity Limit on (t977): KH1's own offer stays, for
+/// Trinity Limit alone.
+fn trinity_only() -> bool {
+    IN_FORM.load(Ordering::Relaxed) && super::form::in_limit() && super::limitform::trinity()
+}
+
+/// Whether a limit command is refused now (in a form, the toggle on KH2; Trinity Limit not in
+/// Limit Form with its row on).
 pub fn refused(id: u8) -> bool {
-    crate::formcmds::limit(id) && IN_FORM.load(Ordering::Relaxed) && kh2() && BASE.load(Ordering::Relaxed) != 0
+    crate::formcmds::limit(id) && IN_FORM.load(Ordering::Relaxed) && kh2() && BASE.load(Ordering::Relaxed) != 0 && !(id == TRINITY && trinity_only())
+}
+
+/// The Trinity row changed (`limitform`): the offer follows.
+pub fn refresh() {
+    unsafe { apply() };
+}
+
+/// The form's frame (`form::native_frame`): with Trinity alone allowed, KH1's equipped-limit bits
+/// kept to Trinity's (KH1 recounts them from Sora's abilities, `0x14028D550`), so KH1's own offer
+/// (`0x14028D0F0`) puts only Trinity Limit on Triangle, by KH1's own conditions (its data loaded,
+/// both partners able within 500, a target, its MP). Out of it, KH1's recount puts them back.
+pub unsafe fn frame() {
+    let base = BASE.load(Ordering::Relaxed);
+    if base == 0 {
+        return;
+    }
+    if kh2() && trinity_only() {
+        let at = base + EQUIPPED_RVA;
+        let v = std::ptr::read_unaligned(at as *const u32);
+        if v & !TRINITY_BIT != 0 {
+            std::ptr::write_unaligned(at as *mut u32, v & TRINITY_BIT);
+        }
+        MASKED.store(true, Ordering::Relaxed);
+    } else {
+        unmask(base);
+    }
+}
+
+/// KH1's equipped-limit bits from Sora's abilities again (KH1's own recount).
+unsafe fn unmask(base: usize) {
+    if MASKED.swap(false, Ordering::Relaxed) && super::hook::prologue_is(base + RECOUNT_RVA, &RECOUNT_BYTES) {
+        let f: unsafe extern "system" fn() = std::mem::transmute(base + RECOUNT_RVA);
+        f();
+    }
 }
 
 /// KH1's offer off in a form with the toggle on KH2, else KH1's.
@@ -78,8 +130,11 @@ unsafe fn apply() {
     if base == 0 {
         return;
     }
+    if !trinity_only() {
+        unmask(base);
+    }
     let at = base + OFFER_RVA;
-    let want_off = IN_FORM.load(Ordering::Relaxed) && kh2();
+    let want_off = IN_FORM.load(Ordering::Relaxed) && kh2() && !trinity_only();
     if want_off == OFF.load(Ordering::Relaxed) {
         return;
     }

@@ -153,6 +153,38 @@ pub unsafe fn pay(sora: usize, spell: u8) -> Option<i32> {
     Some(u)
 }
 
+/// A KH2 limit's cost, `percent` of KH2's 100 (Sonic Rave 60, t979): paid as a spell's share when
+/// Sora has it, else every unit he has (KH2: `0x1403D88E0` leaves a limit usable with MP under
+/// its cost, state 2, and its payment `0x1403D3CF0` going below 0 sets MP to 0, Steam KH2, Checked
+/// (decomp); the owner's round 12 answer 4 (a): "give it the ability to use limit even if its
+/// below its requirement", MP Charge not built yet). None with no MP at all (KH2 has none only
+/// while MP Charge runs, which greys the limit). Returns the units paid.
+pub unsafe fn pay_limit(sora: usize, percent: u8) -> Option<i32> {
+    let (n, max, y) = mp(sora)?;
+    let before = (n, max, y);
+    let cost = Cost::Part(percent);
+    let paid = match units_of(cost, n, max, y) {
+        Some(u) => {
+            if HOOKED.load(Ordering::Relaxed) {
+                super::reflect::pay_mp(sora, encode(cost));
+            } else {
+                pay_units(sora, u);
+            }
+            u
+        }
+        None => {
+            let total = (1..=n.max(0)).map(|k| k * UNITS_PER_INDEX).sum::<i32>() + y.max(0);
+            if total <= 0 {
+                return None;
+            }
+            pay_units(sora, total);
+            total
+        }
+    };
+    super::log!(Magic, "KH2 limit cost {percent} of 100: {paid} of KH1's units paid, MP {before:?} -> {:?}", mp(sora));
+    Some(paid)
+}
+
 /// A KH2 cost as a KH1 cost of its kind.
 pub fn encode(cost: Cost) -> i32 {
     match cost {

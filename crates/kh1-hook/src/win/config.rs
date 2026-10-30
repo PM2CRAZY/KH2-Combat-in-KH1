@@ -279,6 +279,8 @@ enum Row {
     FormLimits,
     /// Drive > Limit > Cost (KH2 | 3 Bars, `limitform::three_bars`, t972).
     LimitCost,
+    /// Drive > Limit > Trinity Limit (Off | On, `limitform::trinity`, t977).
+    LimitTrinity,
 }
 
 /// A row of one of our lists: a setting (label, left value, right value, help, what it switches),
@@ -473,8 +475,10 @@ const DRIVE: [Item; 6] = [
     Item::Open(0x7F00_0256, 0x7F00_0257, List::Limit),
 ];
 // (Cost: round 12 answer 2 (c), KH2's 4 bars by default, the owner's 3 behind this row.)
-const LIMIT: [Item; 2] = [
+// (Trinity Limit: round 12 answer 1, "make a toggle for limit to be able to used the 5th kh1 trinity"; off by default; t977.)
+const LIMIT: [Item; 3] = [
     Item::Set([0x7F00_0258, 0x7F00_0003, 0x7F00_0259, 0x7F00_025A], Row::LimitCost),
+    Item::Set([0x7F00_025B, 0x7F00_011D, 0x7F00_011E, 0x7F00_025C], Row::LimitTrinity),
     Item::Set([0x7F00_0254, 0x7F00_0002, 0x7F00_0003, 0x7F00_0255], Row::FormLimits),
 ];
 // (QoL: the user, t704: "make a qol (Quality of life) section in the config menu, put gummi skip in
@@ -599,7 +603,7 @@ const BUTTON_HELP: u32 = 0x7F00_0202;
 /// Misc's help, and the same without the debug menu (its row isn't there without the debug tools).
 const MISC_HELP: u32 = 0x7F00_020C;
 const MISC_HELP_NO_DEBUG: &str = "Battle quotes.";
-const STRINGS: [(u32, &str); 168] = [
+const STRINGS: [(u32, &str); 170] = [
     (0x7F00_0201, "KH1 in KH2"),
     (0x7F00_0202, "Choose KH1's or KH2's camera, combat, movement and more."),
     (0x7F00_0203, "Camera"),
@@ -689,6 +693,8 @@ const STRINGS: [(u32, &str); 168] = [
     (0x7F00_0256, "Limit"),
     (0x7F00_0257, "Limit Form's settings: its cost, and KH1's limits in a form."),
     (0x7F00_0258, "Cost"),
+    (0x7F00_025B, "Trinity Limit"),
+    (0x7F00_025C, "On: KH1's Trinity Limit can be used in Limit Form, on Triangle as KH1\noffers it (with both partners). Off: Limit Form's four only, as in KH2."),
     (0x7F00_0259, "3 Bars"),
     (0x7F00_025A, "KH2: Limit Form costs 4 Drive bars, as in KH2. 3 Bars: the cost from the\nmain branch. (Form Cost on the Drive gauge only.)"),
     (0x7F00_0255, "KH2: no KH1 limit (Sonic Blade, Ars Arcanum, ...) in a Drive Form, as in\nKH2. KH1: KH1 offers them as it does (Valor still refuses them)."),
@@ -809,6 +815,7 @@ fn value(what: Row) -> bool {
         Row::PartyRequired => super::driveparty::required(),
         Row::FormLimits => super::formlimits::kh2(),
         Row::LimitCost => super::limitform::three_bars(),
+        Row::LimitTrinity => super::limitform::trinity(),
     }
 }
 
@@ -861,6 +868,7 @@ fn set(what: Row, v: bool) {
         Row::PartyRequired => super::driveparty::set_required(v),
         Row::FormLimits => super::formlimits::set_kh2(v),
         Row::LimitCost => super::limitform::set_three_bars(v),
+        Row::LimitTrinity => super::limitform::set_trinity(v),
     }
 }
 

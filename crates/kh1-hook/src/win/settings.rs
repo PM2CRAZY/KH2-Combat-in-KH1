@@ -169,6 +169,8 @@ drive_party = kh2\r\n\
 drive_limits = kh2\r\n\
 ; limit_cost: kh2 = Limit Form costs 4 Drive bars, as in KH2; 3 = the main branch's 3 bars (Config: Drive > Limit > Cost)\r\n\
 limit_cost = kh2\r\n\
+; limit_trinity: on = KH1's Trinity Limit can be used in Limit Form (on Triangle, as KH1 offers it); off = Limit Form's four (Config: Drive > Limit > Trinity Limit)\r\n\
+limit_trinity = off\r\n\
 ; drive_recovery_sources: on = Drive Recovery and High Drive Recovery are sold in KH1's item shops once a\r\n\
 ;   Drive Form is open (and later dropped and found); off = nowhere (Config: Progression > Drive Recovery)\r\n\
 drive_recovery_sources = on\r\n\
@@ -570,6 +572,9 @@ pub struct Settings {
     /// Limit Form for 3 bars (`limit_cost = 3`; `kh2`, 4 bars, by default); Config: Drive > Limit >
     /// Cost, t972; `limitform::three_bars`.
     pub limit_cost_three: bool,
+    /// KH1's Trinity Limit in Limit Form (`limit_trinity = on`; off by default); Config: Drive >
+    /// Limit > Trinity Limit, t977; `limitform::trinity`.
+    pub limit_trinity: bool,
     /// Where Drive Recovery items come from (`drive_recovery_sources = on`, the default; main's design);
     /// Config: Progression > Drive Recovery, t950; `driveitems::sources`.
     pub drive_recovery_sources: bool,
@@ -852,6 +857,7 @@ fn load(first: bool) -> Option<Settings> {
         drive_party: on(&text, "drive_party", "kh2", true),
         drive_limits: on(&text, "drive_limits", "kh2", true),
         limit_cost_three: on(&text, "limit_cost", "3", false),
+        limit_trinity: on(&text, "limit_trinity", "on", false),
         drive_recovery_sources: on(&text, "drive_recovery_sources", "on", true),
         valor_left_blade: on(&text, "valor_left_blade", "on", true),
         styles: {

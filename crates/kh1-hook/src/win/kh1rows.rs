@@ -213,7 +213,7 @@ pub const NO_ROW: u8 = u8::MAX;
 /// his body, `P_EX100.mset`, Checked (files)) and Valor's arrival 53 (6 frames, guard and
 /// invulnerable all through, `P_EX100_BTLF.mset`, Checked (files)), their requests only, on KH1's
 /// ground swing as template (its sounds left out: KH2's own play, `kh2slots::tick`).
-pub const OURS: [Ours; 41] = [
+pub const OURS: [Ours; 44] = [
     Ours { name: "Upper Slash", kh2_row: 12, motion: 161, kind: Kind::Swing, rises: false, guard_break: false, attack: true, next_finisher: false, frames: None, own_sounds: false, combo: false, template: None, valor: false },
     Ours { name: "Finishing Leap", kh2_row: 37, motion: 167, kind: Kind::AirFinisher, rises: true, guard_break: false, attack: true, next_finisher: false, frames: None, own_sounds: false, combo: false, template: None, valor: false },
     Ours { name: "Horizontal Slash", kh2_row: 38, motion: 193, kind: Kind::AirSwing, rises: false, guard_break: false, attack: true, next_finisher: false, frames: None, own_sounds: false, combo: false, template: None, valor: false },
@@ -267,7 +267,20 @@ pub const OURS: [Ours; 41] = [
     // `P_EX100_BTLF` B010 15 frames at 30 fps, `P_EX100_MAGF` C010 20, both free (range id 2) all
     // through; Checked (files).)
     Ours { name: "Form stance", kh2_row: NO_ROW, motion: STANCE_MOTION, kind: Kind::Swing, rises: false, guard_break: false, attack: false, next_finisher: false, frames: None, own_sounds: true, combo: false, template: None, valor: true },
+    // (Limit Form's Sonic Rave, t978: its start K400, its Rave K401 and its Finish K402, motions
+    // 211 / 212 / 213 of `P_EX100_KH1F.mset` (Checked (files): entries 844 / 848 / 852), the
+    // moves KH2's limit script `limi` starts and queues (`trap_sysobj_motion_start` / `_push`).
+    // Built only from a moveset that has them (Limit Form's). Their hits are its Keyblade's
+    // (the weapon motions the moveset's `wmst` rows name), their invulnerability range 27, the
+    // Rave's follow-up windows its script ranges 1 / 2 (`WindowKind::ScriptRange`). KH2's own
+    // sounds and voices only.)
+    Ours { name: "Sonic Rave", kh2_row: NO_ROW, motion: SONIC_RAVE_MOTIONS[0], kind: Kind::Swing, rises: false, guard_break: false, attack: true, next_finisher: false, frames: None, own_sounds: true, combo: false, template: None, valor: true },
+    Ours { name: "Sonic Rave (Rave)", kh2_row: NO_ROW, motion: SONIC_RAVE_MOTIONS[1], kind: Kind::Swing, rises: false, guard_break: false, attack: true, next_finisher: false, frames: None, own_sounds: true, combo: false, template: None, valor: true },
+    Ours { name: "Sonic Rave (Finish)", kh2_row: NO_ROW, motion: SONIC_RAVE_MOTIONS[2], kind: Kind::Swing, rises: false, guard_break: false, attack: true, next_finisher: false, frames: None, own_sounds: true, combo: false, template: None, valor: true },
 ];
+
+/// Sonic Rave's motions in Limit Form's moveset: start, Rave, Finish (`OURS`, t978).
+pub const SONIC_RAVE_MOTIONS: [u16; 3] = [211, 212, 213];
 
 /// Sora's Drive motion and a form's arrival (`OURS`; `form::DRIVE_MOTION` / `ARRIVE_MOTION`).
 pub const DRIVE_MOTION: u16 = 52;
@@ -545,6 +558,12 @@ unsafe fn make(base: usize, index: u16, kh1: usize) -> Option<Table> {
         wr(r, if o.attack { request(n) as i16 } else { -1i16 });
         wr(r + 4, off as i32);
         wr(r + 8, 0.0f32);
+        // (A row of ours with KH2's own sounds only, Sonic Rave's (t979): no effect on him (`+3`)
+        // or voice (`+0xF`) from the template's row; KH2's play from its slot.)
+        if o.own_sounds && o.attack {
+            wr(r + 3, -1i8);
+            wr(r + 0xF, -1i8);
+        }
         DATA_AT[n].store(d, Ordering::Relaxed);
         ATKP_OF[n].store(atkp.map_or(u32::MAX, |a| a as u32), Ordering::Relaxed);
         made.push(format!(
@@ -689,6 +708,39 @@ pub unsafe fn run_as(row: i32, n: usize, f: impl FnOnce()) -> bool {
     wr(at, now);
     f();
     wr(at, was);
+    true
+}
+
+/// KH1's row start and motion queue (Steam; Checked (exe): `mov [rsp+8], rbx; mov [rsp+10h],
+/// rbp; mov [rsp+18h], rsi; push rdi` and `mov [rsp+8], rbx; push rdi; sub rsp, 20h`).
+const ROW_START_STEAM: usize = 0x2A3980;
+const ROW_START_BYTES: [u8; 16] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x6C, 0x24, 0x10, 0x48, 0x89, 0x74, 0x24, 0x18, 0x57];
+const QUEUE_STEAM: usize = 0x29FA30;
+const QUEUE_BYTES: [u8; 10] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x57, 0x48, 0x83, 0xEC, 0x20];
+
+/// Our row `n` started on `actor` by KH1's own row start (`0x1402A3980 (actor, row)`, Steam,
+/// Checked (decomp): its request with KH1's action flag, its attack object from its data, its
+/// trail, effect and voice bytes), then KH1's idle queued after it as KH1's row runner
+/// `0x1402A68F0` queues it for a row not its own (`0x14029FA30 (actor, 0x40000000, 0)`). Not the
+/// runner itself: its press tally (`0x14028C660 (0x13)`) and its facing from the stick are an
+/// Attack press's, not a command's (Sonic Rave's start, t979, `limitform`). False (nothing
+/// started) when our table isn't on his character or a first-byte check fails.
+pub unsafe fn start_row(actor: usize, n: usize) -> bool {
+    let Some((index, ours)) = TABLE.try_lock().ok().and_then(|g| g.as_ref().filter(|t| t.ours != t.kh1).map(|t| (t.index, t.ours))) else {
+        return false;
+    };
+    let base = super::takeover::game_base();
+    if base == 0 || actor < 0x10000 || n >= OURS.len() || rd::<u64>(base + ROWS_RVA + index as usize * 8) as usize != ours {
+        return false;
+    }
+    if super::addr::Build::current() != super::addr::Build::Steam || !super::hook::prologue_is(base + ROW_START_STEAM, &ROW_START_BYTES) || !super::hook::prologue_is(base + QUEUE_STEAM, &QUEUE_BYTES) {
+        log!(Combat, "KH1's attack rows: KH1's row start or motion queue isn't as expected: row {} not started", row(n));
+        return false;
+    }
+    let start: unsafe extern "system" fn(usize, i32) -> usize = std::mem::transmute(base + ROW_START_STEAM);
+    let queue: unsafe extern "system" fn(usize, u32, f32) -> usize = std::mem::transmute(base + QUEUE_STEAM);
+    start(actor, row(n));
+    queue(actor, 0x4000_0000, 0.0);
     true
 }
 

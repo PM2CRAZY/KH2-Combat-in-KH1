@@ -53,7 +53,10 @@ static BASE: AtomicUsize = AtomicUsize::new(0);
 static ON: AtomicBool = AtomicBool::new(false);
 /// The names: Drive, the forms, Revert, and KH2's "?" (command 0x68's name, the Drive slot with no
 /// form owned).
-static NAMES: OnceLock<(usize, Vec<usize>, usize, usize)> = OnceLock::new();
+/// (t976: then Limit Form's limits, and its top row's "Limit".)
+static NAMES: OnceLock<(usize, Vec<usize>, usize, usize, Vec<usize>, usize)> = OnceLock::new();
+/// Magic's word (record 2's, `btltbl.bin`, Checked (files)): the top row Limit Form names "Limit".
+const MAGIC_WORD: i32 = 2;
 /// A form or Revert was just chosen: confirm is KH1's again only once let go (the user: still
 /// holding it after a revert opened the Drive list again).
 static SWALLOW_CONFIRM: AtomicBool = AtomicBool::new(false);
@@ -183,9 +186,10 @@ pub unsafe fn fill(actor: usize, _flags: usize) {
     // valor form magic command menu should be unselectable"). KH1 keeps the same bit (1) set
     // when Sora has no spell, so the list doesn't open; Drive's row 4 is drawn from the magic
     // list's own bit (`drive_row4`), page 2's from the forms (`cmdmenu`), so Revert stays usable.
-    // (Limit Form too, t969: KH2 puts its Limit list in Magic's place, `0x1403F29E0`; until that list
-    // is ours, Magic is blocked as in Valor.)
-    if super::form::in_valor() || super::form::in_limit() {
+    // (Limit Form, t976: its Limit list in Magic's place, `limit_list`.)
+    if super::form::in_limit() && ensure_limit_records(base) {
+        limit_list(base);
+    } else if super::form::in_valor() || super::form::in_limit() {
         let top = base + MENU_RVA;
         if rd::<u8>(top + 0x14 + 1) == 2 {
             for off in [4usize, 8] {
@@ -201,6 +205,55 @@ pub unsafe fn fill(actor: usize, _flags: usize) {
         return;
     }
     forms_list(base, actor);
+}
+
+/// Our records for Limit Form's limits (`limitform::LIMITS`), as the forms'.
+unsafe fn ensure_limit_records(base: usize) -> bool {
+    let record: unsafe extern "system" fn(u32) -> usize = std::mem::transmute(base + RECORD_RVA);
+    for (k, &(id, word, _, _, _)) in super::limitform::LIMITS.iter().enumerate() {
+        let r = record(id as u32);
+        if r < 0x10000 {
+            return false;
+        }
+        let want: [u8; 16] = [0x02, 0x00, 0xFF, 0x00, word as u8, (word >> 8) as u8, 0x02, super::limitform::LIMIT_ARG + k as u8, 0x00, 0xFF, 0x01, 0x02, 0, 0, 0, 0];
+        let have = rd::<[u8; 16]>(r);
+        if have != want {
+            if have != [0u8; 16] && have[4..8] != want[4..8] {
+                static ONCE: AtomicBool = AtomicBool::new(false);
+                if !ONCE.swap(true, Ordering::Relaxed) {
+                    log!(Forms, "Limit list: command record {id:#x} is in use ({have:02x?}): no list");
+                }
+                return false;
+            }
+            wr(r, want);
+        }
+    }
+    true
+}
+
+/// Limit Form's Limit list in Magic's place (t976, KH2's `0x1403F29E0`): the magic list (menu 1)
+/// holds the four limits (KH1's spells and Reflect taken out, KH2's form 3 having no Magic), none
+/// greyed (the owner, round 12 answer 4 (a): usable under its MP cost; greyed while one runs comes
+/// with the limits), and the top's Magic row usable. Drive's row 4 then appends its entry after
+/// them as before (`drive_row4`).
+unsafe fn limit_list(base: usize) {
+    let magic = base + MAGIC_MENU_RVA;
+    let n = super::limitform::LIMITS.len();
+    for (k, l) in super::limitform::LIMITS.iter().enumerate() {
+        wr(magic + 0x14 + k, l.0);
+    }
+    wr(magic + 0x10, n as i32);
+    for off in [4usize, 8] {
+        wr(magic + off, 0u32);
+    }
+    if rd::<i32>(magic + 0xC) >= n as i32 {
+        wr(magic + 0xC, 0i32);
+    }
+    let top = base + MENU_RVA;
+    wr(top + 0x14 + 1, 2u8);
+    for off in [4usize, 8] {
+        wr(top + off, rd::<u32>(top + off) & !2);
+    }
 }
 
 /// Drive as KH1's row 4: the magic list's hidden last entry (Summon's command, named "Drive").
@@ -281,7 +334,14 @@ pub fn word(index: i32) -> Option<usize> {
     if !on() {
         return None;
     }
-    let (drive, forms, revert, question) = NAMES.get()?;
+    let (drive, forms, revert, question, limits, limit_row) = NAMES.get()?;
+    // (Limit Form, t976: its top row "Limit", and its limits' names.)
+    if index == MAGIC_WORD && super::form::in_limit() {
+        return Some(*limit_row);
+    }
+    if let Some(k) = super::limitform::LIMITS.iter().position(|l| l.1 as i32 == index) {
+        return limits.get(k).copied();
+    }
     if index == SUMMON as i32 && super::cmdmenu::drive_shown() {
         // (In the form the row is KH2's Revert; with no form owned KH2's "?", command 0x68: its
         // 03system `cmd` row's message 0x8503 is "?" in `msg/us/sys.bar`, Checked (files), and
@@ -509,6 +569,8 @@ pub unsafe fn install() {
         FORMS.iter().map(|f| Box::leak(super::menu::encode(f.2).into_boxed_slice()).as_ptr() as usize).collect(),
         Box::leak(super::menu::encode("Revert").into_boxed_slice()).as_ptr() as usize,
         Box::leak(super::menu::encode("?").into_boxed_slice()).as_ptr() as usize,
+        super::limitform::LIMITS.iter().map(|l| Box::leak(super::menu::encode(l.2).into_boxed_slice()).as_ptr() as usize).collect(),
+        Box::leak(super::menu::encode(super::limitform::ROW_NAME).into_boxed_slice()).as_ptr() as usize,
     ));
     if !super::shortcuts::step_hooked()
         && hook::install(base + super::shortcuts::STEP_RVA, &super::shortcuts::STEP_PROLOGUE, step as *const () as usize, &ORIG_STEP, "command step (Drive)").is_none()

@@ -567,6 +567,11 @@ unsafe fn command_step(actor: usize, dir: usize) {
         super::drive::chosen(actor, (arg - super::drive::FORM_ARG) as usize);
         return;
     }
+    // (Limit Form's Limit list, t976: a limit chosen, `limitform`.)
+    if actor == sora && kind == 2 && super::drive::on() && (super::limitform::LIMIT_ARG..super::limitform::LIMIT_ARG + super::limitform::LIMITS.len() as u8).contains(&arg) {
+        super::limitform::chosen(base, (arg - super::limitform::LIMIT_ARG) as usize);
+        return;
+    }
     // Reflect where KH1's own cast state couldn't take it (above): KH1 has no spell 7 to run, so
     // KH1's "can't" (t875: its old wait for KH2's controller, `reflect::chosen`, is deleted).
     if actor == sora && kind == 2 && ((full >> 8) & 0xFF) as u8 == super::reflect::SPELL {

@@ -855,6 +855,8 @@ pub unsafe fn native_frame(kh2: &pose::Kh2, actor: usize, battle: bool, steps: u
     }
     // (Row 21, t965: KH2's blur waits 30 frames into the change and fades over 20 after it.)
     super::drivedim::frame(steps);
+    // (Limit Form's Trinity Limit row, t977: KH1's offer kept to Trinity.)
+    super::formlimits::frame();
     let Ok(mut g) = DRIVE.try_lock() else { return };
     let d = g.get_or_insert_with(Drive::default);
     let knocked = REQUEST.load(Ordering::Relaxed) == 3 && REQUEST.swap(0, Ordering::Relaxed) == 3;

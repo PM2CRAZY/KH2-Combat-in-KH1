@@ -436,8 +436,9 @@ pub fn row(id: u8) -> Option<Row> {
 // with Sora's own level or with bosses any more. An ability he has is LV1; Valor's, Wisdom's and
 // Final's levels raise High Jump, Quick Run and Glide (`FormGrowth`, KH2's `0x1403E8380`). KH1's
 // own High Jump and Glide count as KH2's LV1 once KH1 has given them (Assumption taken for the
-// tester: their question 3 wasn't answered). Dodge Roll and Aerial Dodge stay LV1: in KH2 they
-// grow only with Limit and Master, which aren't on KH1's states here.
+// tester: their question 3 wasn't answered). Dodge Roll grows with Limit Form's level (t975, Limit
+// on KH1's states); Aerial Dodge stays LV1: in KH2 it grows only with Master, not on KH1's states
+// here yet.
 
 /// Quick Run's name in the menu and the level-up box ("Quick Run LV2", "Quick Run MAX").
 pub fn quick_run_name(l: u8) -> String {
@@ -588,13 +589,14 @@ pub fn ours_byte(b: u8) -> bool {
 
 /// Base Sora's growth levels from the Drive Forms' levels (KH2's form level-up, Steam KH2
 /// `0x1403E8380`, `formlevel::sora_growth`, Checked (decomp)): Valor's High Jump, Wisdom's Quick
-/// Run, Final's Glide (0: none). KH2 has no other source of them, and neither has the mod now:
+/// Run, Limit's Dodge Roll (t975), Final's Glide (0: none). KH2 has no other source of them, and neither has the mod now:
 /// Sora's own level and bosses give none (the tester, after m16, answer 6 (b)).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct FormGrowth {
     pub high_jump: u8,
     pub quick_run: u8,
     pub glide: u8,
+    pub dodge_roll: u8,
 }
 
 /// KH2's fmlv abilities (Steam KH2 `00battle.bin` fmlv, Checked (files)) as KH1's own (the
@@ -749,7 +751,7 @@ impl Kh1Sora {
                 out.guard = true;
                 push(out, kh2::GUARD);
             }
-            Effect::DodgeRoll => out.dodge_roll = out.dodge_roll.max(1),
+            Effect::DodgeRoll => out.dodge_roll = out.dodge_roll.max(self.dodge_roll_now()),
             Effect::ComboPlus => out.combo_plus = out.combo_plus.saturating_add(copies),
             Effect::AirComboPlus => out.air_combo_plus = out.air_combo_plus.saturating_add(copies),
             Effect::ComboMaster => out.combo_master = true,
@@ -766,6 +768,11 @@ impl Kh1Sora {
     /// High Jump's level once he has it: LV1, or what Valor's form level gives (`FormGrowth`).
     pub fn high_jump_now(&self) -> u8 {
         self.form_growth.high_jump.max(1)
+    }
+
+    /// Dodge Roll's level once he has it: LV1, or Limit's (t975).
+    pub fn dodge_roll_now(&self) -> u8 {
+        self.form_growth.dodge_roll.max(1)
     }
 
     /// Quick Run's level once he has it: LV1, or Wisdom's.
@@ -1086,12 +1093,12 @@ mod tests {
         let mut s = sora(99, &[ours::QUICK_RUN, kh1::DODGE_ROLL, ours::AERIAL_DODGE], &[kh1::HIGH_JUMP, kh1::GLIDE]);
         let a = s.kh2();
         assert_eq!((a.high_jump, a.quick_run, a.glide, a.dodge_roll, a.aerial_dodge), (1, 1, 1, 1, 1));
-        s.form_growth = FormGrowth { high_jump: 2, quick_run: 3, glide: 1 };
+        s.form_growth = FormGrowth { high_jump: 2, quick_run: 3, glide: 1, dodge_roll: 2 };
         let a = s.kh2();
-        assert_eq!((a.high_jump, a.quick_run, a.glide), (2, 3, 1));
+        assert_eq!((a.high_jump, a.quick_run, a.glide, a.dodge_roll), (2, 3, 1, 2));
         // A form's level without KH1's High Jump gives none (KH1's list stays vanilla).
         let mut bare = sora(5, &[], &[]);
-        bare.form_growth = FormGrowth { high_jump: 3, quick_run: 0, glide: 0 };
+        bare.form_growth = FormGrowth { high_jump: 3, quick_run: 0, glide: 0, dodge_roll: 0 };
         assert_eq!(bare.kh2().high_jump, 0);
         assert!(bare.grants().iter().all(|a| a.list == List::Kh2));
     }

@@ -2619,3 +2619,44 @@ the task with its own quad buffer `0x142866960` (→ inside slot 0's draw with K
 - t967: `win/valorslot.rs`, KH1's free count less the slot's copy (not during a Valor pick).
 - t968: `win/valorslot.rs`, KH1's compare box `0x1403050D0` with Valor's "now" during a Valor pick.
 - Open: the sell list in game; KH2's own list for an empty form slot (what KH2 shows there).
+
+## 23. Limit Form's limits on KH1's limit path (main-port round 12, answer 1 (a), 2026-10-30)
+
+Full research: `docs/kh1-forms-research-r12.md`. Tags as elsewhere.
+
+### 23.1 KH2 (Steam KH2, Checked (decomp) and (files))
+- Limit Form's four limits are one script, `limi` (BAR type 3 of `obj/P_EX100_KH1F.mdlx`), not the limit bars (those hold
+  only the combo/gauge art, used by party limits alone). Trigger 0x16 sets the limit up, 0x17 takes each follow-up command.
+- The start (`0x1403D8B40`): the limit object (`0x142A24CC0`, one at a time), the MP paid at the start (`0x1403D3CF0`, below 0
+  = MP 0 and MP Charge), the player put in state 0 and a thread on his own script.
+- Sonic Rave plays 211 (K400 start, invulnerable all through), 212 (K401 Rave, invulnerable 0..12, script ranges 1 / 2 at
+  16..46 for the Rave / Finish follow-ups, ids 16 / 17) and 213 (K402 Finish, invulnerable 0..48). Its hits are its
+  Keyblade's: ATKP 1878 (Rave) and 1879 (Finish), 5 HP drained a hit. The light: (64, 64, 80) over 16 frames.
+- Range ids 16 / 17 / 18 set bits 0 / 1 / 2 of the motion block's `+0x154` (`0x14040D810`); the script's
+  `trap_obj_motion_check_range` reads the object's `+0x2AC` bit n − 1 (`0x14042D1E0`): the same byte if the block is the
+  object's `+0x158`, as trap 1:11 passes it (Assumption: no direct write found).
+
+### 23.2 KH1 (Steam KH1, Checked (decomp) and (exe))
+- A limit's start `0x14028D800`: bit 16 of `0x142867364` set (23 cleared), the module started (`0x140397A50`: its effect
+  data at `0x142EFB0E0`), MP paid (`0x1402A5B60`). Each module: `0x140397990 (colour)` (running flag `0x142EFB0D0` = 1, a
+  type-1 light `0x14029D880 (1, 9, 0)` at `0x142EFB0E8`, faded in over 30 ticks), then `0x140397970` adds the end task
+  `0x1403979E0` (priority 52000).
+- The end task waits while `0x1402AE0C0 (data)` finds a live element of the limit's data (table `0x142D678B0`, 256 × 0x3C),
+  then fades the light back over 30 ticks, frees it and clears the running flag; KH1's limit step `0x14028D620` sets bit 23
+  and clears 16 / 23 the frame after.
+- Bit 16's readers: the battle flag (`0x1402A2F50`), the music (`0x1401A1A10` / `0x1401A4D00`), an action check
+  (`0x1402A5FC0`), the load reset (`0x14028D4A0`), KH1's limit offer.
+
+### 23.3 Built
+- t978: Sonic Rave's motions as Limit Form rows of ours (`kh1rows`, `SONIC_RAVE_MOTIONS`), `WindowKind::ScriptRange`.
+- t979: Sonic Rave started from the Limit list on KH1's limit path (`win/limitform.rs`): KH1's bit 16, running flag and
+  limit light (KH2's colour and 16 ticks), KH1's end task added as its modules add it, our mark in KH1's limit data, and KH1's
+  element check `0x1402AE0C0` hooked to answer for the mark: alive while Sonic Rave's moves play. KH1 ends it and fades the
+  light back itself. The first move on its row by KH1's row start `0x1402A3980` (its attack object), KH1's idle queued after.
+  MP: KH2's 60 of 100 as a share of KH1's maximum (`mpcost::pay_limit`), or all of it when short (answer 4 (a)); refused at
+  0 MP (KH2 greys a limit only while MP Charge runs, which is when its MP is 0). Rows of ours with KH2's own sounds lose the
+  template's voice and effect bytes.
+- Open: the Rave / Finish follow-ups, the script (`limi` as a KH1 process, t980..), the HP drain, the list greyed while a
+  limit runs (refused with KH1's "can't" for now), the revert during a limit (KH2 waits), KH2's light fade-out time (KH1's 30
+  ticks used), limits in the air (refused: Assumption).
+
