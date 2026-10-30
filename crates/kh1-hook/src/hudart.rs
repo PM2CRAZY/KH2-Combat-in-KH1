@@ -6,7 +6,10 @@
 //! - **The source** (Checked (files)): KH2's field HUD `field2d/<lang>/zz0field.2dd` is a BAR of
 //!   images (type 24) and sequences (type 25) `fiel`, `gaug`, `mapj`, `miss`; the Drive gauge is the
 //!   `gaug` sequence (SEQD: its sprites, parts, groups and animations) on the second image, whose HD
-//!   picture is the second remastered PNG (`US_zz0field_2dd1.png`, 1024 × 512, 8-bit RGBA).
+//!   picture is the second remastered PNG (`US_zz0field_2dd1.png`, 1024 × 512, 8-bit RGBA). The
+//!   image entry (IMGD) gives the PS2 picture's size at `+0x1C` (u16 width, u16 height: 512 × 256
+//!   for `gaug`, Checked (files)), the size the sequence's texture rectangles are in; KH1's HUD
+//!   textures are made with their PS2 size too (`0x140274060` from the TIM2's, Checked (decomp)).
 //! - **The cache** (`kh2-hud-gauge.bin` in `kh1-kh2-cache`, the slot cache's file layout): a manifest
 //!   (this format, the mod's version, the game build, the source's PKG entry and the picture's size)
 //!   and two blocks, the `gaug` SEQD as it is and the picture as B8G8R8A8 pixels, ready for KH1's
@@ -20,7 +23,7 @@ use crate::slotcache::{self, Block, Manifest};
 use std::path::{Path, PathBuf};
 
 /// Bump when the cache's output changes for the same inputs without the mod's version changing.
-pub const ART_FORMAT: u32 = 1;
+pub const ART_FORMAT: u32 = 2;
 pub const FILE_NAME: &str = "kh2-hud-gauge.bin";
 /// The BAR entry types.
 const BAR_IMAGE: u16 = 24;
@@ -48,6 +51,20 @@ pub fn bar_entries(b: &[u8]) -> Result<Vec<(u16, String, &[u8])>, String> {
     Ok(out)
 }
 
+/// The `gaug` image's PS2 size (its IMGD's `+0x1C`: width, height).
+pub fn image_size(bar: &[u8]) -> Result<(u16, u16), String> {
+    let entries = bar_entries(bar)?;
+    let img = entries.iter().find(|e| e.0 == BAR_IMAGE && e.1 == "gaug").ok_or("no gaug image")?.2;
+    if img.len() < 0x20 || &img[..4] != b"IMGD" {
+        return Err("the gaug image isn't an IMGD".into());
+    }
+    let (w, h) = (u16::from_le_bytes([img[0x1C], img[0x1D]]), u16::from_le_bytes([img[0x1E], img[0x1F]]));
+    if w == 0 || h == 0 {
+        return Err("the gaug image has no size".into());
+    }
+    Ok((w, h))
+}
+
 /// The `gaug` sequence's bytes and its image's index among the BAR's images (the remastered PNGs'
 /// order), or why not.
 pub fn gauge_sequence(bar: &[u8]) -> Result<(&[u8], usize), String> {
@@ -68,39 +85,59 @@ pub struct Desc {
 }
 
 impl Desc {
-    fn manifest(&self, w: u32, h: u32) -> Manifest {
+    fn manifest(&self, w: u32, h: u32, ps2: (u16, u16)) -> Manifest {
         let mut m = Manifest::default();
         m.set("hud art format", ART_FORMAT.to_string());
         m.set("mod version", crate::VERSION.to_string());
         m.set("game build", self.build.clone());
         m.set("zz0field.2dd entry", self.source.clone());
         m.set("picture size", format!("{w}x{h}"));
+        m.set("ps2 size", format!("{}x{}", ps2.0, ps2.1));
         m
     }
 }
 
-/// The art: the `gaug` SEQD and the picture (B8G8R8A8, `w` × `h`).
+/// The art: the `gaug` SEQD and the picture (B8G8R8A8, `w` × `h`), and the PS2 picture's size
+/// (`ps2`, what the sequence's texture rectangles are in).
 pub struct Art {
     pub seqd: Block,
     pub pixels: Block,
     pub w: u32,
     pub h: u32,
+    pub ps2: (u16, u16),
+}
+
+/// What `build` makes.
+pub struct Built {
+    pub seqd: Vec<u8>,
+    pub pixels: Vec<u8>,
+    pub w: u32,
+    pub h: u32,
+    pub ps2: (u16, u16),
 }
 
 /// Builds the art from the BAR and the PNG.
-pub fn build(bar: &[u8], png: &[u8]) -> Result<(Vec<u8>, Vec<u8>, u32, u32), String> {
+pub fn build(bar: &[u8], png: &[u8]) -> Result<Built, String> {
     let (seqd, _) = gauge_sequence(bar)?;
     if seqd.len() < 4 || &seqd[..4] != b"SEQD" {
         return Err("the gaug entry isn't a SEQD".into());
     }
+    let ps2 = image_size(bar)?;
     let (w, h, mut px) = png_rgba(png)?;
     rgba_to_bgra(&mut px);
-    Ok((seqd.to_vec(), px, w, h))
+    Ok(Built { seqd: seqd.to_vec(), pixels: px, w, h, ps2 })
 }
 
 /// Writes the art into `dir`.
-pub fn store(dir: &Path, d: &Desc, seqd: &[u8], pixels: &[u8], w: u32, h: u32) -> std::io::Result<PathBuf> {
-    slotcache::write_named_blocks(dir, FILE_NAME, &d.manifest(w, h), &[(0u128, seqd), (1u128, pixels)])
+pub fn store(dir: &Path, d: &Desc, b: &Built) -> std::io::Result<PathBuf> {
+    slotcache::write_named_blocks(dir, FILE_NAME, &d.manifest(b.w, b.h, b.ps2), &[(0u128, &b.seqd[..]), (1u128, &b.pixels[..])])
+}
+
+/// "WxH" as numbers.
+fn size_of(m: &Manifest, key: &str) -> Option<(u32, u32)> {
+    let v = m.text().lines().find_map(|l| l.strip_prefix(key).and_then(|r| r.strip_prefix(" = ")).map(str::to_string))?;
+    let (a, b) = v.split_once('x')?;
+    Some((a.parse().ok()?, b.parse().ok()?))
 }
 
 /// The art in `dir` if it was made from these sources (`None`: missing, damaged or changed; the
@@ -108,9 +145,10 @@ pub fn store(dir: &Path, d: &Desc, seqd: &[u8], pixels: &[u8], w: u32, h: u32) -
 pub fn load(dir: &Path, d: &Desc) -> Result<Art, String> {
     let b = std::fs::read(dir.join(FILE_NAME)).map_err(|_| "none yet".to_string())?;
     let (m, mut blocks) = slotcache::decode_shared(b)?;
-    let size = m.text().lines().find_map(|l| l.strip_prefix("picture size = ").map(str::to_string)).ok_or("no picture size")?;
-    let (w, h) = size.split_once('x').and_then(|(a, b)| Some((a.parse::<u32>().ok()?, b.parse::<u32>().ok()?))).ok_or("bad picture size")?;
-    let differ = d.manifest(w, h).differences(&m);
+    let (w, h) = size_of(&m, "picture size").ok_or("no picture size")?;
+    let ps2 = size_of(&m, "ps2 size").filter(|s| s.0 > 0 && s.1 > 0 && s.0 < 0x10000 && s.1 < 0x10000).ok_or("no ps2 size")?;
+    let ps2 = (ps2.0 as u16, ps2.1 as u16);
+    let differ = d.manifest(w, h, ps2).differences(&m);
     if !differ.is_empty() {
         return Err(format!("changed: {}", differ.join(", ")));
     }
@@ -119,7 +157,37 @@ pub fn load(dir: &Path, d: &Desc) -> Result<Art, String> {
     }
     let pixels = blocks.pop().unwrap().1;
     let seqd = blocks.pop().unwrap().1;
-    Ok(Art { seqd, pixels, w, h })
+    Ok(Art { seqd, pixels, w, h, ps2 })
+}
+
+/// A DDS header (128 bytes) for `w` × `h` B8G8R8A8 pixels, one level: the uncompressed layout
+/// KH1's DDS loader takes as `DXGI_FORMAT_B8G8R8A8_UNORM` (0x57; pixel format size 0x20, flags 0x41,
+/// 32 bits, masks R 0xFF0000, G 0xFF00, B 0xFF, A 0xFF000000; the data at +0x80; no mip levels
+/// without flag 0x20000; Steam `0x1400FA160`, the entry texture's maker, Checked
+/// (decomp)).
+pub fn dds_header(w: u32, h: u32) -> [u8; 128] {
+    let mut d = [0u32; 32];
+    d[0] = 0x2053_4444;
+    d[1] = 124;
+    // (Caps, height, width, pitch, pixel format.)
+    d[2] = 0x1 | 0x2 | 0x4 | 0x8 | 0x1000;
+    d[3] = h;
+    d[4] = w;
+    d[5] = w * 4;
+    d[7] = 1;
+    d[0x13] = 0x20;
+    d[0x14] = 0x41;
+    d[0x16] = 32;
+    d[0x17] = 0x00FF_0000;
+    d[0x18] = 0x0000_FF00;
+    d[0x19] = 0x0000_00FF;
+    d[0x1A] = 0xFF00_0000;
+    d[0x1B] = 0x1000;
+    let mut out = [0u8; 128];
+    for (i, v) in d.iter().enumerate() {
+        out[i * 4..i * 4 + 4].copy_from_slice(&v.to_le_bytes());
+    }
+    out
 }
 
 fn rgba_to_bgra(px: &mut [u8]) {
@@ -407,12 +475,24 @@ mod tests {
     }
 
     #[test]
+    fn dds_header_is_kh1s_bgra() {
+        let h = dds_header(1024, 512);
+        let w = |i: usize| u32::from_le_bytes(h[i * 4..i * 4 + 4].try_into().unwrap());
+        assert_eq!((w(0), w(1), w(3), w(4)), (0x2053_4444, 124, 512, 1024));
+        assert_eq!((w(0x13), w(0x14), w(0x15), w(0x16)), (0x20, 0x41, 0, 32));
+        assert_eq!((w(0x17), w(0x18), w(0x19), w(0x1A)), (0xFF_0000, 0xFF00, 0xFF, 0xFF00_0000));
+        assert_eq!(w(2) & 0x20000, 0);
+    }
+
+    #[test]
     fn bar_and_cache_round_trip() {
         let mut bar = b"BAR\x01".to_vec();
         bar.extend_from_slice(&2u32.to_le_bytes());
         bar.extend_from_slice(&[0; 8]);
         let seqd = b"SEQD\0\0\0\0".to_vec();
-        let img = vec![9u8; 8];
+        let mut img = vec![9u8; 0x20];
+        img[..4].copy_from_slice(b"IMGD");
+        img[0x1C..0x20].copy_from_slice(&[0, 2, 0, 1]);
         let off0 = 16 + 32;
         for (ty, name, off, len) in [(24u16, *b"gaug", off0, img.len()), (25u16, *b"gaug", off0 + img.len(), seqd.len())] {
             bar.extend_from_slice(&ty.to_le_bytes());
@@ -425,15 +505,16 @@ mod tests {
         bar.extend_from_slice(&seqd);
         let (s, i) = gauge_sequence(&bar).unwrap();
         assert_eq!((s, i), (&seqd[..], 0));
-        let (sq, px, w, h) = build(&bar, &TEST_PNG).unwrap();
-        assert_eq!(px, vec![0, 0, 255, 255, 0, 255, 0, 255]);
+        let b = build(&bar, &TEST_PNG).unwrap();
+        assert_eq!(b.pixels, vec![0, 0, 255, 255, 0, 255, 0, 255]);
+        assert_eq!(b.ps2, (512, 256));
         let dir = std::env::temp_dir().join(format!("kh1kh2-hudart-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let d = Desc { build: "Steam".into(), source: "kh2_first @10 1/2 pkg 3 4".into() };
         assert!(load(&dir, &d).is_err());
-        store(&dir, &d, &sq, &px, w, h).unwrap();
+        store(&dir, &d, &b).unwrap();
         let a = load(&dir, &d).unwrap();
-        assert_eq!((&*a.seqd, &*a.pixels, a.w, a.h), (&sq[..], &px[..], 2, 1));
+        assert_eq!((&*a.seqd, &*a.pixels, a.w, a.h, a.ps2), (&b.seqd[..], &b.pixels[..], 2, 1, (512, 256)));
         assert!(load(&dir, &Desc { source: "kh2_first @20 1/2 pkg 3 4".into(), ..d }).is_err());
         let _ = std::fs::remove_dir_all(&dir);
     }

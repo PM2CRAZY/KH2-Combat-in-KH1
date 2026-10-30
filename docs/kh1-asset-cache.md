@@ -391,3 +391,16 @@ The owner: the first room's entry frame lagged (132 to 186 ms in the t783 logs) 
 manifest: the art format, the mod's version, the game build, `zz0field.2dd`'s PKG entry (`stamp_any`) and the
 picture's size; a match means nothing of KH2's is read at start. Built on a thread at start (`win/kh2hud.rs`),
 only with Drive on. Not checked in game.
+
+**t937, the first start's failure fixed.** The player's log (t936): "Drive gauge art: not made (not a PNG)". The cause:
+the KH2 archive reader (`kh2-formats` `egs.rs`) read the HD assets back to back at their header lengths, but in the
+`.pkg` an encrypted stream is padded to 16 bytes (Checked (files): `zz0field.2dd`'s four HD PNGs end 2, 8, 13 and 14
+bytes before their 16-aligned sizes in the player's extracted copy, and its `.hed` entry's stored size, 827 872, is
+the 0xD0-byte header plus the original stream (62 160) plus the four padded PNGs, exactly). So the second PNG was
+read starting 2 bytes early. `pkg_span` now skips the padding after the original stream and after each encrypted
+asset, in both `read_remastered` and `read_remastered_all`. The effects' HD textures (DDS, already multiples of 16)
+read the same as before. Assumption: a plain stream (-2) is not padded (none seen yet).
+
+**t938**: the cache also keeps the PS2 picture's size (the `gaug` IMGD's `+0x1C`, 512 × 256), format 2
+(older files are rebuilt once). The pixels are handed to KH1 as a DDS for its texture (`win/kh2hud.rs`) and
+not kept.

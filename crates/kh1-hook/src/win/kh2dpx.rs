@@ -428,8 +428,8 @@ const DROP_FILE_RVA: Rva = Rva(0xE2DF0);
 /// width, height)`: the file holding the pixels, its HD entry by their offset, the texture made
 /// from it once and kept in the entry) and its texture list (Steam `*0x1422C8FA8`), as KH1's DPD
 /// texture set-up calls it (`0x14031EC10`).
-const TEXTURE_OF_STEAM: usize = 0x10C050;
-const TEXTURES_STEAM: usize = 0x22C8FA8;
+pub(super) const TEXTURE_OF_STEAM: usize = 0x10C050;
+pub(super) const TEXTURES_STEAM: usize = 0x22C8FA8;
 /// KH1's DPD texture set-up (Steam `0x14031EC10 (dpd, 0, 0)`, called by its effect draw
 /// `0x1401ECF30` on every draw, done once: it runs only while the DPD's first texture record's `+4`
 /// isn't negative): each TBP's first record looked up (`0x14010C050`) and its texture handed to every
@@ -1526,7 +1526,7 @@ unsafe fn wr<T: Copy>(p: usize, v: T) {
 /// What entering a file in KH1's loaded-file list takes: the list, KH1's own vtables (a resource
 /// entry's, its HD-entry list's, and the commonest HD entry's), and the game's CRT allocators
 /// (KH1 frees what it is given with them: `delete`, `_aligned_free`).
-struct Kh1Files {
+pub(super) struct Kh1Files {
     list: usize,
     res_vt: usize,
     list_vt: usize,
@@ -1535,7 +1535,7 @@ struct Kh1Files {
     aligned: unsafe extern "C" fn(usize, usize) -> usize,
 }
 
-unsafe fn kh1_files(base: usize) -> Result<Kh1Files, String> {
+pub(super) unsafe fn kh1_files(base: usize) -> Result<Kh1Files, String> {
     use super::sys::{GetModuleHandleA, GetProcAddress};
     let f = base + FILE_OF_RVA;
     if rd::<[u8; 3]>(f) != [0x4C, 0x8B, 0x1D] {
@@ -1583,7 +1583,7 @@ unsafe fn kh1_files(base: usize) -> Result<Kh1Files, String> {
 
 /// A resource entry for our bytes `at..at + len` named `name`, appended to KH1's loaded-file list
 /// as `0x1400E2F60` does (0x688 bytes, as `0x1400E1680` makes them), without HD entries yet.
-unsafe fn new_file(k: &Kh1Files, name: &str, at: usize, len: usize, md5: [u8; 16]) -> Result<usize, String> {
+pub(super) unsafe fn new_file(k: &Kh1Files, name: &str, at: usize, len: usize, md5: [u8; 16]) -> Result<usize, String> {
     let rec = (k.malloc)(0x688);
     if rec == 0 {
         return Err("out of memory".into());
@@ -1622,7 +1622,7 @@ unsafe fn new_file(k: &Kh1Files, name: &str, at: usize, len: usize, md5: [u8; 16
 /// An HD entry (0x78 bytes, as `0x1400E1680` makes them) for the texture data at `offset` in
 /// file `rec`: with a copy of `dds` (KH1 makes the texture from it on first use and owns it), or
 /// with KH1's `texture` already made (KH1's lookup then hands that over, `0x14010BAF0`).
-unsafe fn add_hd(k: &Kh1Files, rec: usize, offset: u32, dds: Option<&[u8]>, texture: usize) -> Result<usize, String> {
+pub(super) unsafe fn add_hd(k: &Kh1Files, rec: usize, offset: u32, dds: Option<&[u8]>, texture: usize) -> Result<usize, String> {
     let e = (k.malloc)(0x78);
     if e == 0 {
         return Err("out of memory".into());

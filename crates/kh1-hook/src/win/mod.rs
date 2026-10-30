@@ -26,6 +26,7 @@ mod formown;
 mod frameadv;
 mod formmagic;
 mod gates;
+mod gaugehud;
 mod glide;
 mod fx12;
 mod hook;
@@ -481,6 +482,7 @@ pub unsafe extern "system" fn DllMain(_inst: *mut c_void, reason: u32, _reserved
         loadscreen::install();
         kh2sound::start();
         kh2hud::start();
+        gaugehud::install(base);
         kh2dpx::start();
         pose::load_kh2();
         model::load();

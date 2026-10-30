@@ -607,6 +607,8 @@ impl Growth {
     pub unsafe fn update(&mut self, base: usize) {
         self.frames = self.frames.wrapping_add(1);
         ensure_table(base);
+        // (t938) The Drive gauge's KH1 texture, made once the art is ready (`kh2hud`).
+        super::kh2hud::texture_now(base);
         if !self.applied {
             self.applied = true;
             match self.mode {

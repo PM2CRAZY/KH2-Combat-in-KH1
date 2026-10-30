@@ -527,6 +527,12 @@ struct InForm {
 /// The form's state (`Drive`), its own since t899.
 static DRIVE: std::sync::Mutex<Option<Drive>> = std::sync::Mutex::new(None);
 
+/// The form gauge now (ticks left, full) when the form was entered on the Drive gauge (the Drive
+/// gauge HUD, `gaugehud`, t939).
+pub fn form_gauge() -> Option<(f32, f32)> {
+    DRIVE.try_lock().ok()?.as_ref()?.form.as_ref()?.gauge
+}
+
 /// The battle data (ATKP) of the moveset now: a Drive Form's on KH1's states, else Sora's.
 pub fn battle(kh2: &pose::Kh2) -> &Arc<Battle> {
     match native_form().and_then(|k| k.data(kh2)) {

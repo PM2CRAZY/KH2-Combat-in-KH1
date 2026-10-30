@@ -2163,3 +2163,27 @@ the task with its own quad buffer `0x142866960` (→ inside slot 0's draw with K
   into `kh1-kh2-cache\kh2-hud-gauge.bin` from the player's own `zz0field.2dd` (keyed by its PKG entry), on a
   thread at start; our own PNG decoder (its pixels equal Python's zlib decode of the real picture, Checked
   (files)). Nothing drawn yet.
+
+- **t937**: the art's first start failed on the player's files ("not a PNG"): the KH2 archive reader didn't skip the
+  16-byte padding after each encrypted HD asset, so `zz0field.2dd`'s second PNG was read 2 bytes early. Fixed in
+  `kh2-formats` (`pkg_span`); notes in `docs/kh1-asset-cache.md`.
+
+- **t938**: the gauge's KH1 texture. The picture as a DDS (B8G8R8A8, the uncompressed layout KH1's
+  maker `0x1400FA160` takes) in an HD entry of a small file of ours in KH1's loaded files; KH1's lookup
+  `0x14010C050` makes the texture with the PS2 size 512 × 256 (the IMGD's, as the HUD loader
+  `0x140274060` does with a TIM2's), kept for good as the HUD loader keeps its own, mapped with
+  `0x14010DC50` at a free TBP (0x3800 first, PSMCT32) so KH1's map lookup `0x14010D720` finds it by
+  our TEX0 (`kh2hud::tex0`). Made once, on the game's thread, from Sora's frames; checked once a
+  second that KH1's map still has it (Checked (decomp) for KH1's calls; nothing drawn yet).
+
+- **t939**: the draw. `seqplay.rs` plays KH2's `gaug` sequence as KH2's player does (Steam KH2 `0x140192130`,
+  `0x140192050`, `0x140192250`, `0x1401969A0`, `0x140196400`, `0x140196570`, `0x14018FD20`; float arguments read
+  from the assembly). KH2's fill mask (`0x14017E580`, `0x1401816C0`, `0x14016D600`): a 50 × 120 box centred
+  (−25, −60) from a pivot at (50, 100) on the bar, turned by points × 0.0040143 rad (× 200 full; in a form 23° /
+  ticks per bar × ticks into the bar); it writes depth only, hiding the fill under it, so the fill is drawn as
+  its part outside the box. `win/gaugehud.rs` hooks KH1's gauge body `0x14026CF90` and, after Sora's, draws bar
+  23 / 51, fill 25 / 49, MAX 20, number 28 + n / 54 + n through KH1's `0x14027D470` / `0x1402764B0` with our
+  texture, KH2's blends by KH1's ALPHA write; KH1's MP HP label's sprites sized 0 while it shows. Placed by main's
+  measured rule (portrait + 6, the label's middle − 13.5 KH2 units + 0.3 × the portrait's radius + 1.3; 384 / 448
+  × 1.34). Not yet: KH2's animations on a gain, MAX's and the gain's sounds, the form change ring and the revert
+  flash (t940), the MP bar's bottom edge under the hidden label.

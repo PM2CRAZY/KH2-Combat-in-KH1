@@ -243,6 +243,19 @@ impl Archive {
     }
 }
 
+/// The bytes a stream of `n` takes in the `.pkg`: an encrypted one (`comp > -2`, the 16-byte
+/// cipher's) is padded to 16 there while its header gives the real length (Checked (files), t937:
+/// `zz0field.2dd`'s HD PNGs end 2, 8, 13 and 14 bytes before their 16-aligned sizes, and its `.hed`
+/// entry's stored size is the header plus every stream padded to 16; the second PNG was read 2
+/// bytes early without this). A plain one (-2) is taken as unpadded (Assumption: none seen).
+pub fn pkg_span(n: i64, comp: i32) -> i64 {
+    if comp > -2 {
+        (n + 15) & !15
+    } else {
+        n
+    }
+}
+
 impl Archive {
     /// Reads one of `name`'s remastered (HD) assets, the first whose name starts with `asset`
     /// (e.g. `-1c1` for `-1c1.dds`). They follow the original data in header order, each
@@ -265,7 +278,7 @@ impl Archive {
         let mut heads = vec![0u8; remastered as usize * 0x30];
         f.read_exact(&mut heads)?;
         // Past the original data to the first asset.
-        let len = if compressed >= 0 { compressed } else { decompressed } as i64;
+        let len = pkg_span(if compressed >= 0 { compressed } else { decompressed } as i64, compressed);
         f.seek(SeekFrom::Current(len))?;
         for head in heads.chunks_exact(0x30) {
             let end = head[..0x20].iter().position(|&b| b == 0).unwrap_or(0x20);
@@ -278,7 +291,7 @@ impl Archive {
                 return bad(format!("{name}: asset {asset_name} has an implausible length"));
             }
             if !asset_name.starts_with(asset) {
-                f.seek(SeekFrom::Current(n as i64))?;
+                f.seek(SeekFrom::Current(pkg_span(n as i64, comp)))?;
                 continue;
             }
             let mut data = vec![0u8; n as usize];
@@ -318,7 +331,7 @@ impl Archive {
         }
         let mut heads = vec![0u8; remastered as usize * 0x30];
         f.read_exact(&mut heads)?;
-        let len = if compressed >= 0 { compressed } else { decompressed } as i64;
+        let len = pkg_span(if compressed >= 0 { compressed } else { decompressed } as i64, compressed);
         f.seek(SeekFrom::Current(len))?;
         let mut out = Vec::new();
         for head in heads.chunks_exact(0x30) {
@@ -335,6 +348,7 @@ impl Archive {
             }
             let mut data = vec![0u8; n as usize];
             f.read_exact(&mut data)?;
+            f.seek(SeekFrom::Current(pkg_span(n as i64, comp) - n as i64))?;
             if comp > -2 {
                 keys.decrypt_head(&seed, &mut data);
             }
@@ -433,6 +447,14 @@ mod tests {
     }
 
     use super::*;
+
+    #[test]
+    fn encrypted_streams_are_padded_to_16() {
+        assert_eq!(pkg_span(607902, -1), 607904);
+        assert_eq!(pkg_span(108216, 5000), 108224);
+        assert_eq!(pkg_span(32304, -1), 32304);
+        assert_eq!(pkg_span(17059, -2), 17059);
+    }
 
     #[test]
     fn name_hash_is_md5() {
