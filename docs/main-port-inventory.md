@@ -487,3 +487,187 @@ Drive > Gauge Refill (Off | KH2): KH2's refill and revert on a world left in a f
 Gauge Growth (the six fights; off: 9). Notes: `docs/kh1-drive-forms-native.md` §13.10. Still open: bonus
 levels (the owner, later); KH1's boss signal for the normal-enemy factor; the gauge on the HUD (row 2);
 KH2's other refill kinds (Continue, map jumps); Form Boost and Damage Drive (row 5); the Anti / Final rolls.
+
+### Round 3: the Drive gauge on KH1's HUD (row 2), 2026-10-29
+
+Full notes: `docs/kh1-drive-forms-native.md` §14. Base t935.
+
+**Testing now.** The gauge's data and rules (t931–t935) and nothing that draws it; the log shows it.
+
+**Main and the owner.** s319–s324, s326: KH2's own art left of / below Sora's portrait inside KH1's HP/MP
+gauge task; s321 "I dont need the animation of the drive gauge rising up"; s322 "This should be the right
+size and positioning of the gauge" (KH2's unit × 1.34, 6 HUD units right, 1.3 lower); s320 / s322 the "MP HP"
+label removed; s323 hidden until the first form; s324 the bars' outlines kept; s326 "only showing when the
+character is actively controlling sora". Main decoded the art at every start (deprecated) and used the deleted
+controller's signal for visibility.
+
+**What KH2 does** (Checked (decomp), Steam KH2; the groups Checked (files)): the gauge is part of the player's
+gauge object (`0x140ABD248`, made by `0x14016C3A0`), its pieces off the HP ring (`+0x1D40`); setup
+`0x14017F9B0`, the update `0x140181270`, the per-mode logic `0x1401816C0`, the form change `0x140180900`.
+Normal: the bar 21 slides in once, then 23 (26 while MP charges), the fill 25, MAX 20; in a form 50 / 51,
+fill 49; summons 140 / 141 / 139; locked 18 / 19; digit groups 28–37, 54–63, 144–153. The fill isn't scaled:
+a mask turns over it (about 23° a bar, twice that full). A bar gained plays 22 and system sound 0x20, MAX 20
+and sound 0x21; a form change the sparkle ring 130 on the portrait, the revert 53 on the bar. No form-owned
+rule: it shows whenever the player's gauge object is built, and hides with the whole HUD in events and menus
+(`0x140168B50` / `0x140168B70`). The `gaug` sheet is image 2 of 4 in `zz0field.2dd`; its HD image is
+`US_zz0field_2dd1.png`, 1024×512 (2× the PS2 size; the others are 4×).
+
+**How KH1 does it** (Checked (decomp) / (exe)): Sora's HP/MP task `0x14026DB00` loops over 5 slots (records
+`0x142811A00 + n × 0xDF0`, slot 0 Sora); with the event bit (`0x142867364 & 8`) it skips the gauges and the
+party's alpha drops; per slot the body `0x14026CF90`, then the portrait `0x14027F470`; `0x14026D990` is the
+slot's place. KH1's sprite draw is `0x14026CE90 (sprite, texture, x, y, packet, alpha, keep)`; textures are
+TIM2, found and mapped through `0x140274060` / `0x14010BDF0` / `0x1400E2B20` / `0x14010DC50`, the same loaded-
+file path `kh2dpx` uses for KH2's effect textures. The "MP HP" label comes from a layout file (its record:
+not identified yet). First bytes of the 17 functions involved are in §14.
+
+**1:1 checked.** KH2's pieces, groups, sounds and when they play; that KH2 has no form-owned rule. Not
+checked: KH2's digit tables, mask factor and animation clock (data the C export lacks: the Steam KH2 exe would
+show them).
+
+**Missing from main.** The mask sweep; sounds 0x20 / 0x21; the revert flash 53; mode 0 (no gauge) and mode 4
+(locked); MP Charge's bar 26; the summon pieces.
+
+**Deprecated in main's version, and the replacement.** The art decoded at every start → built once into the mod
+folder (`kh1-kh2-cache`, as `dpxcache` / `tintcache`); the controller's "has Sora" signal → KH1's own gauge
+visibility (its event bit, slot and alpha); the per-frame label swap → a one-time data change.
+
+**What KH1 lacks, the ability to add.** A Drive gauge piece on its HUD: one hook on `0x14026CF90` for slot 0,
+drawing with KH1's own sprite call, slot 0's alpha and place; the art as a KH1 texture in KH1's loaded files.
+Per frame: only while KH1 draws Sora's gauge, about 5 animation players and 6–20 quads (Assumption: not
+measured).
+
+**Plan, one version each.**
+1. **t936** the art cache (pure, unit tested): BAR/SEQD/PNG reading in our own code, the cache file,
+   built at the loading screen; log only.
+2. **t937** the texture in KH1: the cached image entered in KH1's loaded files and mapped at its own GS
+   address through KH1's `0x140274060` / `0x14010DC50`; log only.
+3. **t938** the draw: the `0x14026CF90` hook, KH2's steady pieces (bar 23 / FORM 51, fill 25 / 49 with
+   KH2's mask sweep, number, MAX 20), Drive > the HUD row.
+4. **t939** KH2's animations: bar gained 22 + sound 0x20, MAX + 0x21, form change 130, revert 53.
+5. **t940** KH1's MP HP label (after the answer).
+6. **t941** the KH1-pieces fallback (only if chosen).
+
+## 5. Questions (only what changes what gets built)
+
+1. **Art**: (a) KH2's art only, built once; without it no gauge and a log line; (b) KH2's art with a
+   KH1-pieces fallback; (c) a Config choice KH2 art | KH1 pieces. Recommend (a): KH2's files are
+   already needed for KH2 Sora, so a missing gauge sheet means a broken install, and a second look is
+   a second system to keep 1:1.
+2. **Place and size**: (a) KH2's own layout: the bar at KH2's offset from its portrait (−79, +24 KH2
+   units) scaled by KH1's portrait to KH2's, the number on the ring; (b) main's numbers: s322 "KH2_UNIT
+   × 1.34, the gauge 6 HUD units right and 1.3 lower" on s321's "KH2 units are 1.2× larger ... the
+   bar's middle sits 0.3 of the portrait's radius below the MP HP label's middle" (the owner, s322:
+   "This should be the right size and positioning of the gauge"); (c) (a) with Config nudge rows.
+   Recommend (b): it is the owner's measured choice, and KH2's own offset is computed from a portrait
+   of a different size; (a) is the 1:1 alternative if you'd rather.
+3. **The slide-in** (KH2's bar rises in when the HUD is made, groups 21 / 50): (a) left out (the owner,
+   s321: "I dont need the animation of the drive gauge rising up"); (b) KH2's; (c) a row. Recommend (a).
+4. **KH1's MP HP label**: (a) hidden while the gauge shows (s320 / s322 "remove it"), done once as data
+   (the label's records given a size of 0 or KH1's plain plate, so the MP bar's bottom edge stays, the
+   s324 problem) instead of main's per-frame swap; (b) kept, the gauge placed under it; (c) a row.
+   Recommend (a). First the label's record has to be identified in game (a one-time log of Sora's
+   frame sprites), since the layout comes from a file.
+5. **When it shows**: KH2 has no form-owned rule (1.5). (a) whenever KH1's gauge shows (KH2's rule);
+   (b) only once a form is owned (s323 "don't show the drive gauge until the first drive form is
+   unlocked", read from the owned byte `+0x881`); (c) (b) only with Progression > Story Unlocks on.
+   Recommend (b): with Story Unlocks off every form is owned from the start, so it plays as (a); on, it
+   keeps s323.
+6. **Beyond KH1's own HUD rules** (s326: "only showing when the character is actively controlling
+   sora"): KH1 already hides its gauge in cutscenes and off the field. (a) follow KH1's gauge only,
+   then check in game what's left (talks, scripted walks, the pause menu); (b) also hide while KH1's
+   event-running word `0x14298C9A0` is set (one read a frame); (c) main's whole list. Recommend (a):
+   native, no per-frame guess; anything left gets its own small version with a KH1 signal.
+7. **Config rows** (testing's Drive submenu): (a) one row, Gauge HUD On | Off (On by default; the label
+   follows it); (b) also a label row; (c) none (always on). Recommend (a). Main's ini keys
+   `drive_gauge_art`, `drive_gauge`, `drive_gauge_scale`, `hide_hp_label`, `drive_gauge_debug` are not
+   carried over.
+8. **KH2's sounds 0x20 / 0x21** (missing from main): (a) KH2's, from KH2's system bank through the
+   sound cache (KH1 has no sound for these, the owner's rule for menus); (b) none. Recommend (a)
+   (whether the sound cache holds KH2's system bank: Assumption, to check).
+
+Write "go ahead" with the answers.
+
+## 6. Owner decisions already given (quoted from main AGENTS.md)
+
+- s318 "lets incorporate the drive gauge"; "For the drive orbs, I want them to run through KH1's
+  engine, not an overlay".
+- s319 "I dont see the drive gauge at all" (then a mockup: KH2's gauge under KH1's HP circle).
+- s320 "the drive gauge should be here instead ... remove [the HP/MP labels] from the hud if possible
+  ... use ghidra if you have to on KH2 to get the exact graphics, the animation while the gauge is
+  charging, when its being drained, and all the animations that the hud element has".
+- s321 "I dont need the animation of the drive gauge rising up. Also the drive gauge is off from where
+  it should be. its also kinda small".
+- s322 "it could be a bit bigger just slightly. Also, the bottom black line of the MP bar (right above
+  the drive gauge) is cut off. also, the "HP" text is still there, remove it", then "This should be
+  the right size and positioning of the gauge".
+- s323 "don't show the drive gauge until the first drive form is unlocked. By default, the drive gauge
+  should be full."
+- s324 "remove the numbers in the drive menu ... the outline of the MP and HP bars look like they've
+  been cut off".
+- s326 "make sure the drive gauge is only showing when the character is actively controlling sora"
+  (main's code note adds: "Dont show it on the world map, in the menu, in the gummi ship routes,
+  during cutscenes, etc").
+- Testing round 2, Q5 (a): the gauge runs before any form is owned (the HUD's hiding is this row's).
+
+**Questions.**
+1. **Art**: (a) KH2's art only, built once; without it no gauge and a log line; (b) KH2's art with a
+   KH1-pieces fallback; (c) a Config choice KH2 art | KH1 pieces. Recommend (a): KH2's files are
+   already needed for KH2 Sora, so a missing gauge sheet means a broken install, and a second look is
+   a second system to keep 1:1.
+2. **Place and size**: (a) KH2's own layout: the bar at KH2's offset from its portrait (−79, +24 KH2
+   units) scaled by KH1's portrait to KH2's, the number on the ring; (b) main's numbers: s322 "KH2_UNIT
+   × 1.34, the gauge 6 HUD units right and 1.3 lower" on s321's "KH2 units are 1.2× larger ... the
+   bar's middle sits 0.3 of the portrait's radius below the MP HP label's middle" (the owner, s322:
+   "This should be the right size and positioning of the gauge"); (c) (a) with Config nudge rows.
+   Recommend (b): it is the owner's measured choice, and KH2's own offset is computed from a portrait
+   of a different size; (a) is the 1:1 alternative if you'd rather.
+3. **The slide-in** (KH2's bar rises in when the HUD is made, groups 21 / 50): (a) left out (the owner,
+   s321: "I dont need the animation of the drive gauge rising up"); (b) KH2's; (c) a row. Recommend (a).
+4. **KH1's MP HP label**: (a) hidden while the gauge shows (s320 / s322 "remove it"), done once as data
+   (the label's records given a size of 0 or KH1's plain plate, so the MP bar's bottom edge stays, the
+   s324 problem) instead of main's per-frame swap; (b) kept, the gauge placed under it; (c) a row.
+   Recommend (a). First the label's record has to be identified in game (a one-time log of Sora's
+   frame sprites), since the layout comes from a file.
+5. **When it shows**: KH2 has no form-owned rule (1.5). (a) whenever KH1's gauge shows (KH2's rule);
+   (b) only once a form is owned (s323 "don't show the drive gauge until the first drive form is
+   unlocked", read from the owned byte `+0x881`); (c) (b) only with Progression > Story Unlocks on.
+   Recommend (b): with Story Unlocks off every form is owned from the start, so it plays as (a); on, it
+   keeps s323.
+6. **Beyond KH1's own HUD rules** (s326: "only showing when the character is actively controlling
+   sora"): KH1 already hides its gauge in cutscenes and off the field. (a) follow KH1's gauge only,
+   then check in game what's left (talks, scripted walks, the pause menu); (b) also hide while KH1's
+   event-running word `0x14298C9A0` is set (one read a frame); (c) main's whole list. Recommend (a):
+   native, no per-frame guess; anything left gets its own small version with a KH1 signal.
+7. **Config rows** (testing's Drive submenu): (a) one row, Gauge HUD On | Off (On by default; the label
+   follows it); (b) also a label row; (c) none (always on). Recommend (a). Main's ini keys
+   `drive_gauge_art`, `drive_gauge`, `drive_gauge_scale`, `hide_hp_label`, `drive_gauge_debug` are not
+   carried over.
+8. **KH2's sounds 0x20 / 0x21** (missing from main): (a) KH2's, from KH2's system bank through the
+   sound cache (KH1 has no sound for these, the owner's rule for menus); (b) none. Recommend (a)
+   (whether the sound cache holds KH2's system bank: Assumption, to check).
+
+Write "go ahead" with the answers.
+
+**The owner's answers (2026-10-29):** 1: asked what "KH2's art" means (below). 2 (b) main's s322 place and
+size. 3: **the slide-in comes later** (the owner: "take a note, we'll add this later"). 4 (a), **and it needs
+more work**: KH1's "MP HP" label must come back whenever the gauge isn't shown, e.g. with Form Cost on MP (the
+owner: "it should appear when a setting disables the drive form though e.g: drives cost mp not drive gauge").
+5 (b). 6 (a). 7: no row of its own; the gauge follows the Drive settings (the owner: "this gets enabled when
+you set drive forms On then the drive gauge gets disabled if drive forms are set to drive gauge or mp";
+restated to confirm below). 8 (a).
+
+**Question 1, restated.** The gauge is always drawn with KH2's own art when it can be: the `gaug` sheet from
+the player's own `zz0field.2dd` and its HD image, converted once into the mod folder. The question is only what
+happens if that can't be built (KH2's files missing or unreadable): (a) no gauge, and a log line saying why;
+(b) a plainer gauge drawn from KH1's own HUD pieces instead. Recommend (a).
+
+**Question 7, restated to confirm.** The gauge shows when Drive is on (the second command page with Drive,
+ini `drive`) and Drive > Form Cost is Drive Gauge; with Form Cost on MP (or Drive off) it isn't drawn and KH1's
+"MP HP" label is back.
+
+**Answer 1 (2026-10-29):** (a), KH2's art only (the owner wrote "7. (a)" under question 1's clarification;
+taken as question 1's (a), and question 7 as confirmed: the gauge follows Drive and Form Cost). "go ahead".
+
+**Built:** t936 KH2's gauge art built once into the mod folder (`hudart`, `kh2hud`). Next: t937 the texture in
+KH1, t938 the draw (with the "MP HP" label hidden while the gauge shows, back with Form Cost MP), t939 KH2's
+animations and sounds; the slide-in later (the owner).

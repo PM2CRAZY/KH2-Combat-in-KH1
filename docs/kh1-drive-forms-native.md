@@ -1860,3 +1860,306 @@ costs 4 in KH2; main's Limit 3 (s331) is the owner's balance rule.
 Still open: bonus levels (later, the owner); KH1's boss signal; KH2's Continue and map-jump refills; Form
 Boost, Damage Drive (row 5); the gauge on the HUD (row 2); the Anti and Final rolls (with Anti). Nothing
 checked in game.
+
+## 14. The Drive gauge on KH1's HUD (main-port round 3, 2026-10-29)
+
+Research for `docs/main-port-inventory.md` row 2 (round 3 there has the plan and the questions). Base t935.
+
+### 14.0 What testing has now (Checked (code))
+
+- The gauge's data and rules (t931–t935): `crates/kh1-hook/src/drivegauge.rs` (pure), `win/drivegauge.rs`
+  `get()` (bars at save `+0x37`, points `+0xAB`, max derived), the form gauge in `win/form.rs`
+  `InForm.gauge: Option<(left, full)>` in ticks. Nothing draws any of it.
+- Testing has no HUD module. The built-once model to copy is `slotcache.rs` (manifest + block + check
+  hash, temp file renamed), `tintcache.rs` (pixels ready for KH1's texture creator, lazy on a thread),
+  `dpxcache.rs` (images entered in KH1's loaded files), `docs/kh1-asset-cache.md`.
+- The Config menu's Drive submenu has Form Cost, Gauge Refill, MP Refill (`win/config.rs` 643–657);
+  Progression has Story Unlocks and Drive Gauge Growth.
+
+### 14.1. KH2's own Drive gauge HUD (Steam KH2)
+
+#### 14.1.1 Where it lives (Checked (decomp))
+- The field HUD is made by `0x14016C3A0`: a sprite image object `0x140ABD240`, the **player's gauge
+  object** `0x140ABD248` (0x45E0 bytes, set up by `0x14017F270`), two partner gauges `0x140ABD250 /
+  58` (`0x140181D20`) and the enemy gauge `0x140ABD260` (`dk::GAUGE_ENEMY`). Torn down by `0x14016C2B0`.
+- The Drive gauge is part of the **player's** gauge object, as pieces (each a sprite player, 0x200
+  bytes) all parented to the HP ring's root piece `+0x1D40` (group 136 / 0x88, the portrait ring):
+  - `+0x3540` the bar, `+0x3740` the fill, `+0x3940` the number (placed at the bar group's attach point,
+    `0x14016B2A0` with `0x140192E40/60`), `+0x370` MAX (group 20, parented to the bar), `+0x3B40 /
+    +0x3B60` the fill's mask (`0x14017E580`; its box set by `0x140160CD0(mask, 0x32, 100)`, 50 × 100),
+    effect pools `+0xB50` (bar gained), `+0x1330` (revert flash), `+0xF40` (form/summon change ring),
+    `+0x760` and `+0x1720` (summon start/end).
+  - HP / MP pieces beside it: `+0x2D40 .. +0x3340` MP (groups 0x6D–0x78), `+0x2140 / +0x2740` HP
+    damage (0x7E / 0x7F).
+- Set up once by `0x14017F9B0` (called from `0x14017F270`); updated every frame by **`0x140181270`**
+  (HP, MP, then `0x140181AF0` MP-charge look, then the Drive part by mode); the per-mode draw-state
+  is **`0x1401816C0`**; `0x140180490` counts the number shown and flags a gain; `0x140180560` picks
+  the number's group; `0x140180640` the bar's steady group; `0x1401806B0` the fill's group;
+  `0x140180900` runs when the party's player object changes (a form change replaces the player
+  object in KH2); `0x140180B00` the return to the plain gauge (revert, summon end); `0x14017F100`
+  shows / hides pieces by mode.
+
+#### 14.1.2 The record it reads (Checked (decomp), §13.1.1 of kh1-drive-forms-native.md)
+Player `+0x5C0` → status: `+0x1AF` mode (0 none, 1 Drive bars, 2 form, 3 summon, 4 locked), `+0x1B0`
+points, `+0x1B1` bars, `+0x1B2` max, `+0x1B3` form bars, `+0x1B4 / +0x1B8` form gauge left / full.
+`0x1403C1D10(status)` = MP Charge running.
+
+#### 14.1.3 Pieces and groups by mode (Checked (decomp) for the numbers, Checked (files) for what they are)
+| Piece | Mode 1 (Drive) | Mode 2 (form) | Mode 3 (summon) | Mode 4 (locked) |
+|---|---|---|---|---|
+| Bar, first appearance (slide-in) | 21 | 50 | 140 | 18 |
+| Bar, steady | 23 (26 while MP Charge) | 51 | 141 | 19 |
+| Fill | 25 | 49 | 139 | hidden |
+| Number | table `0x14071B108`[n] | table `0x14071B130`[n] | table `0x14071B0E0`[n] | hidden |
+| MAX | 20 when bars ≥ max | hidden | hidden | hidden |
+Mode 0: bar, fill and number all hidden (`0x14017F100`). The tables' values are data the export
+doesn't hold; the file has the digits 0–9 as groups **28–37** (DRIVE), **54–63** (FORM), **144–153**
+(SUMMON) (their sprites run left to right through the digit strip, Checked (files)), which matches
+main's "28 + n", "54 + n" (Assumption that the tables are exactly base + n).
+
+#### 14.1.4 What plays when (Checked (decomp))
+- **Fill** (`0x1401816C0`): KH2 doesn't scale the fill, it turns a mask over it. Mode 1: angle =
+  points × k, and **200 × k when points = 100** (the full gauge); k = float `0x14071B158` (value not
+  in the export; main's 0.0040 rad = 23°/100, which matches the form rule below: Assumption). Forms:
+  angle = 23° × (ticks into the current bar / ticks per bar), the whole bar's 23° when full.
+- **Number**: mode 1 = full bars (`+0x1B1`); in a form = ticks left / ticks per bar, i.e. the bar now
+  draining (bars − 1 when full) (`0x140180490`). A change re-plays the number's group (its pop-in).
+- **Bar gained** (number up, mode 1 only): system sound **0x20** (unless MAX is reached that frame)
+  and group **22** spawned on the bar (`+0xB50` pool; the fill flashing white with streaks).
+- **MAX**: when bars ≥ max, group **20** shown, with system sound **0x21** the first time after a
+  gain; hidden below max and in forms. (Sounds through `0x1401DD170` → `0x1401DF790(2, id, ...)`, bank 2.)
+- **Form change** (`0x140180900`, a new player object): if the bar's steady group changes, group
+  **130** (a ring of sparkles) on the HP root `+0x1D40`, and the bar goes straight to its steady
+  group (no slide-in): FORM bar 51 + fill 49 in; on the way back, `0x140180B00` sets bar 23 + fill 25
+  and spawns group **53** on the bar (`+0x1330` pool).
+- **Summons**: start: 130 on the root and the SUMMON bar, then (player flag `+0x6C8` bit 22) groups
+  154 / 155 (`0x14017F210` → `0x140180E00`); end: group 156 and `0x140180B00`.
+- **Lock** (mode 4, area bit 18 of `0x142A11400` at player creation, `0x140405000`): chains (18 / 19),
+  fill and number hidden.
+- **Slide-in**: only at the HUD's creation (`0x14017F9B0`: bar 21, steady 23 kept at `+0x3718`).
+- **No Anti-specific piece**: the HUD only tests modes 0..4 and MP Charge, never a form id
+  (Checked (decomp), every function above).
+
+#### 14.1.5 When it shows (Checked (decomp) unless marked)
+- KH2 has **no form-owned test** for the gauge: the player object's constructor `0x140405000` sets mode
+  1 (3 if a summon is out, 4 in a locked area) whenever `0x14039A850()` is true, else leaves 0 (the
+  whole Drive gauge hidden). `0x14039A850` is false only when `0x1409AB580` bit 23 is set and
+  `0x1409AB594` bit 10 is clear (what those bits are: Assumption, likely the Roxas/prologue mode;
+  its twin `0x14039A7E0` hides the MP pieces via status `+0x25C` bit 2).
+- In events and menus the gauge goes with the **whole HUD**: `0x140168B50` (hides layers 3–6: player,
+  partners, enemy) / `0x140168B70` (shows them), called from 0x140391F50, 0x140392E70, 0x140398810,
+  0x140398BD0 and 0x1403AC280..0x1403AD2D0 (event / menu code; which event is which: Assumption);
+  status `+0x25C` bit 0 also hides it (`0x1403C1C20` → `0x14016C1F0`). The gauge has no visibility
+  rule of its own beyond mode 0.
+- Where: the HP root (group 136) sits at (455, 355) in KH2's screen units; the bar group is at
+  (−79, +24) from it, its quads spanning x −39..64, y −22..1 around that, so the DRIVE bar sits left
+  of the portrait, its top a little below the portrait's centre; the number at the bar's attach point
+  (52, −2) (the bar's right end, against the ring); MAX at (21, −10) on the bar (Checked (files)).
+- Animation clock: KH2's sprite player `0x140192130` advances by `0x140717484` × the piece's speed each
+  run (the global's value isn't in the export; Assumption: one frame per 60 Hz frame).
+
+#### 14.1.6 The `gaug` sequence in zz0field.2dd (Checked (files))
+- `field2d/us/zz0field.2dd` is a BAR of 8 entries: images (type 24) and sequences (type 25) `fiel`,
+  `gaug`, `mapj`, `miss`. `gaug`'s IMGD is 512 × 256 (PS2); its HD image is the **second** PNG,
+  `US_zz0field_2dd1.png`, **1024 × 512** (×2; the others are ×4: `fiel` 256² → 1024², so the scale must
+  come from each image, not a constant).
+- `gaug` SEQD: 172 sprites, 253 parts, 124 part groups, 1178 animations, 157 animation groups.
+- The image holds: DRIVE bar (PS2 u 1–104, v 36–59), the grey fill (105–154, 36–59), MAX plate,
+  "mp"/"HP" labels, FORM and SUMMON labels, the chains, the digit strip (u 258–435, v 2–25), HP/MP
+  rings, and the bonus words (GET BONUS!, LEVEL UP!, ...).
+- Drive groups (frames are the group's length; "once" = plays once):
+  | Group | What | Length / loop |
+  |---|---|---|
+  | 18 / 19 | locked bar (with chains) appear / steady | 110 once / 150, loop 30 |
+  | 20 | MAX (scales in, spins, colour cycle) | 120, loop 81 |
+  | 21 / 23 | DRIVE bar appear (hidden 0–69, rises 50 units 70–110) / steady (a white flash 0–30) | 110 once / 30 |
+  | 22 | bar gained (fill flashing, streaks) | 100 once |
+  | 24 | DRIVE bar, short one-off | 20 once |
+  | 25 | fill | 40 |
+  | 26 | DRIVE bar pulsing white (MP Charge) | 120, loop 40–119 |
+  | 27 | an effect with streaks | 175, loop 40–119 |
+  | 28–37 | digits 0–9 (pop-in: turned −0.86 rad, half size, faded in over 20 frames; 1–7 add sparkles) | 300–1000 |
+  | 38–40 | a thin bar and its ends (used by another gauge: Assumption) | |
+  | 49 | FORM fill (pulsing) | 59 |
+  | 50 / 51 / 52 | FORM bar appear / steady (pulsing) / short one-off | 110 once / 239, loop 120 / 20 once |
+  | 53 | sparkles over the fill (the revert flash) | 132 once |
+  | 54–63 | form digits 0–9 | 100–300 |
+  | 130 / 131 | ring of sparkles (mode change) | 160 once / 140 once |
+  | 136 | HP ring root (the parent) | 50 once |
+  | 139 / 140 / 141 / 142 | SUMMON fill / bar appear / steady / one-off | |
+  | 144–153 | summon digits | |
+  | 154 / 155 / 156 | summon start / hold / end | 16 / 60 / 16 |
+
+#### 14.1.7 Missing from main (KH2 has it, main lacked it)
+1. **The fill's mask sweep** (`0x1401816C0`: a rotating mask, 200 × k when full); main cut the quad.
+2. **Sounds 0x20 (bar gained) and 0x21 (MAX)**: main's code plays none.
+3. **The revert flash, group 53 on the bar** (`0x140180B00`); main played only 130.
+4. **Mode 0** (no gauge at all where `0x14039A850` is false) and **mode 4** (locked, chains 18/19,
+   fill and number hidden): no KH1 equivalent yet (testing lacks mode 4, round 2 note).
+5. **MP Charge's bar 26**: KH1 has no MP Charge (note only).
+6. **Summon pieces** (139–156): KH1's summons stay on MP (note only).
+7. The gauge's visibility is the whole HUD's (KH2 has no "only while controlling" rule, and no
+   form-owned rule): main's s323 / s326 rules are the owner's.
+8. The form-change ring is placed on the HP ring root (portrait), the revert flash on the bar; main put
+   130 on "Sora's gauge" (same idea, Assumption it matched).
+
+### 14.2. KH1's HUD (Steam KH1)
+
+#### 14.2.1 Sora's HP/MP gauge task `0x14026DB00` (Checked (decomp))
+- Registered by pointer at `0x140268F82` (priority 170001 group, `docs/kh1-frame-advance.md`).
+- Five slots: bound flags `0x1428119E0` (u32 × 5), records `0x142811A00 + n × 0xDF0`. Bound by
+  `0x14026E630(slot, actor)`, which writes record `+0` = the slot number (so Sora's slot 0 has kind 0)
+  and `+0xA98` = 1; unbound by `0x140268A90`.
+- **Event bit**: `0x142867364 & 8`. While set, the task draws **no gauge at all** (the slot loop is
+  skipped); when it sets, the three party slots' alpha `+0xA9C` goes to 0; when it clears, alpha
+  1.0 and `0x14026E080(0..2)`. Set by KH1's event player (`0x14023FBB0`, `0x1402417E0`), cleared at
+  its end (`0x14023FA30`, `0x1402417E0`), per event by `0x140213150`.
+- For each bound slot: kinds 0–2 → **`0x14026CF90(record)`** (the gauge body), then for kinds 0–2
+  **`0x14027F470(record+8, frame, record+0xF0, alpha)`** (the **portrait**: uploads the face strip to
+  GS page 0x3A00 and draws it as one sprite, frame `+0xAAC` for Sora); kind 3 / 4 have their own paths.
+- Record fields seen: `+0` kind, `+8` portrait image, `+0x10` sprite list (6 records, count `+0x48`),
+  `+0x50` list (4, count `+0x70`), `+0x78` (2, `+0x88`), `+0x90` (8, `+0xD0`), `+0xD8` texture
+  descriptor `0x1427F14C0`, `+0xE0` `0x1427F1520` (its `+0x18` = TEX0 `0x1427F1538`, the HUD image at
+  TBP 0x3600), `+0xF0` portrait place, `+0x108` place index, `+0x110` an offset sprite, `+0xA98` flag,
+  `+0xA9C` **alpha**, `+0xAAC` portrait frame, `+0xDE0` "HD texture" flag. Lists filled by
+  `0x14026E6D0` from index tables `0x1405270E0` (4..9), `0x140527138` (0..3), `0x140527168`,
+  `0x140527180` into the sprite record block `0x142815FC0` (0xC0 each; the records come from a HUD
+  layout file KH1 loads, so their rectangles aren't in the exe) (Checked (decomp + exe)).
+
+#### 14.2.2 The gauge helper `0x14026D990(record, &pivot, &place)` (Checked (decomp))
+Not a "gauge record helper" in general: it gives a slot's **pivot and place**. Kind 0: pivot from
+`0x1405272B0` = (443, 316) (Checked (exe)), place = table `0x140527300`[record `+0x108`] + the wide
+screen's shift `0x14232DCCC`, plus the rectangle of the sprite at `+0x110` (`0x14027E430`). 16 callers:
+every gauge draw places from it.
+
+#### 14.2.3 KH1's sprite path (Checked (decomp))
+- **`0x14026CE90(sprite, texture descriptor, x, y, packet, alpha, keep)`**: KH1's HUD sprite draw.
+  Builds the quad (`0x14027D470(sprite, quad 0x142821BD0, descriptor)`, which takes TEX0 from
+  descriptor `+0x18`), moves its four corners by (x, y) × 16, scales the corner alphas by `alpha`,
+  submits with `0x1402764B0(quad, 1, packet)`, returns the packet. 26 call sites, every HUD gauge
+  piece. This is the call our pieces should use.
+- Sprite record (0xC0): `+0` rect `x y w h` (animated when `+0x60 & 0x14 == 0x14`, keyframes
+  `0x14027E430`), `+0x10` texture rect, `+0x20 + i × 0x10` corner colours (0x80 = as is), `+0x60` flags.
+- Binding a texture before the draws, as `0x14026CF90` does: `0x140386660(&tex0, 0)` (sends TEX0),
+  `0x14010D720(&tex0)` (KH1's texture map: entry for that TEX0), `0x140108910(entry)` (binds it).
+- `0x140269190(record, packet)`: the gauge's frame (lists `+0x50` with texture `0x1427F14F0`, and
+  `+0x10` with `+0xD8`); for kind 0 it **skips list `+0x10` index 5 when `+0xA98` is 0** (KH1's own
+  per-piece hide; what `+0xA98` means: Assumption, perhaps "MP shown"). Then the HP / MP bars
+  (`0x1402698C0`, `0x140269F50`).
+
+#### 14.2.4 How KH1 loads 2D art (Checked (decomp))
+- HUD images are **TIM2** blocks in a packed HUD file (`0x14280B640`), copied out and given a GS
+  address (`0x140274030(img, tbp, cbp)`), then **`0x140274060(tim2)`** makes the texture entry:
+  `0x14010BDF0(texture manager 0x1422C8FA8, pixels, w, h)` finds **the loaded file that holds the
+  pixels** (`0x1400E2B20`) and that file's **HD entry** whose `+0x54` matches the pixels' place
+  (list at file `+0x670`), and returns it; `0x14010DC50(tbp, 0, entry, psm, cbp)` maps it at that GS
+  address (a map keyed by tbp/psm/cbp). The PC port draws the HD image, never the PS2 pixels.
+- That is the same path `kh2dpx` already uses for KH2's effect textures (a buffer entered in KH1's
+  loaded files with an HD entry per texture, `win/kh2dpx.rs` 42–52, Checked (code)). So KH2's `gaug`
+  image, built once as a TIM2 header + its HD image, entered the same way, becomes a KH1 HUD texture
+  through KH1's own `0x140274060` / `0x14010DC50`, at a GS address of its own (Assumption: a TBP past
+  PS2 VRAM, as main s328's prize art did, can't clash).
+- The other route: KH1's texture creator `0x1400F9DE0` (Steam; what `tint` uses through Epic
+  `0xF9F80`), then pointing an entry at it (main swapped the HUD entry's `+0x70` around each quad).
+
+#### 14.2.5 How KH1 hides its HUD (Checked (decomp) unless marked)
+- Cutscenes / events: the event bit (2.1) skips every gauge draw; slot alpha 0 → 1 around it.
+- Off the field: only bound slots draw; the world map / Gummi set the HUD up with no slot bound
+  (main's notes, Assumption).
+- Fades: `0x140268E30(slot, mode)` 0 fade out, 1 fade in, 2 shown, 3 hidden (main's notes for the
+  mode meanings, Assumption; the function and its `× 0xDF0` record are Checked (exe)).
+- Menus / pause: not checked whether the task draws under KH1's pause menu (Assumption either way;
+  the frame-advance doc says HUD tasks run while the world is held).
+- So a piece drawn **inside slot 0's draw, with slot 0's alpha**, follows every KH1 rule above with
+  no visibility code of ours.
+
+#### 14.2.6 KH1's "MP HP" label
+One (or two) of Sora's frame sprites drawn by `0x140269190` through `0x14026CE90`. Main found them by
+rectangle (MP [441,316,471,331], HP [463,316,486,331]) in lists `+0x50` / `+0x10` (Assumption: the
+rectangles come from KH1's HUD layout file, not in the exe, and the index isn't known). Main hid them
+by zeroing the record's size around every draw (per frame) and drew a black line for the MP bar's
+bottom edge the plate had drawn (s322, s324).
+
+#### 14.2.7 Hook points and first bytes (Checked (exe))
+| Address | What | First bytes |
+|---|---|---|
+| `0x14026DB00` | HP/MP gauge task | `48 89 5C 24 18 55 56 57 41 56 41 57` |
+| `0x14026CF90` | a party slot's gauge body (only caller: the task) | `48 89 5C 24 10 57 48 83 EC 60` |
+| `0x140269190` | the gauge frame sprites | `48 8B C4 56 41 56 48 81 EC 88 00 00 00` |
+| `0x14027F470` | the portrait | `40 55 56 41 56 48 83 EC 60` |
+| `0x14026CE90` | sprite draw (to call) | `48 89 5C 24 08 57 48 83 EC 20 41 8B D8` |
+| `0x14026D990` | slot place (to call) | `40 53 48 83 EC 40 48 8B 05 EB 70 2E 00` |
+| `0x14027D470` | sprite → quad | `40 53 48 83 EC 20 4D 8B 40 18` |
+| `0x1402764B0` | quad submit | `40 53 48 83 EC 20 45 33 D2 49 8B D8` |
+| `0x140274060` | TIM2 → texture entry | `40 53 48 83 EC 20 41 B8 04 00 00 00` |
+| `0x14010BDF0` | HD entry of a loaded file's pixels | `40 53 55 56 57 41 54 41 55 41 56 41 57` |
+| `0x14010DC50` | map an entry at a GS address | `48 8B C4 56 57 41 56 48 83 EC 70` |
+| `0x14010D720` | texture map lookup | `40 57 48 83 EC 30 48 C7 44 24 20 FE FF FF FF` |
+| `0x140386660` | send TEX0 | `48 89 5C 24 08 57 48 83 EC 20 48 8B 01` |
+| `0x140108910` | bind entry | `40 53 48 83 EC 20 48 8B D9` |
+| `0x1400F9DE0` | GX texture creator | `40 55 53 56 57 41 54 41 55 41 56 41 57` |
+| `0x14026E630` | bind a slot | `48 89 5C 24 08 48 89 74 24 10 57` |
+| `0x1400E2B20` | loaded file of a pointer | `4C 8B 1D F9 84 0C 02` (RIP-relative: compare the opcode bytes only) |
+
+### 14.3. Native design
+
+**Draw.** One new hook: `0x14026CF90` (only the task calls it, once per bound party slot per HUD
+frame). After KH1's own body draw, when the record is slot 0 (`0x142811A00`, kind 0) and the HUD
+row is on: read the gauge (`win/drivegauge::get()`, the form's `InForm.gauge`), step our few sequence
+players, bind our TEX0 the way the body draw does (`0x140386660` / `0x14010D720` / `0x140108910`), and
+draw each quad with KH1's `0x14026CE90` from one sprite record of ours (rect, texture rect and corner
+colours set from the frame; corners rotated/scaled for KH2's keys), with slot 0's alpha `+0xA9C`,
+at slot 0's place (`0x14026D990`). The portrait (`0x14027F470`) is drawn after, as in KH2 where the ring
+overlaps the bar's end. Nothing else runs per frame: no visibility code (KH1's event bit, slot binding
+and alpha already decide), no label juggling (section 4 Q4), no logging.
+
+**Per-frame cost.** Only while KH1 draws Sora's gauge: 3 save bytes + the form record read, ~5 sequence
+players stepped (a table walk each), and 6–20 quads through KH1's own draw (bar 2, fill 1, number 1–7,
+MAX up to 8; effects up to ~14 for a second). KH1's own Sora gauge draws about the same number of
+sprites. Zero when the HUD isn't drawn (events, world map, unbound). Assumption: under 0.05 ms a frame
+(not measured; a timer line in the loadprof style can measure it in the first version).
+
+**Clock.** KH1's HUD animations step by `0x14233FBE0` (the half frame scale, `docs/kh1-frame-advance.md`
+§HUD, Checked (doc)); stepping ours by KH1's HUD clock keeps it in step with KH1's pause / frame advance.
+KH2's step `0x140717484` value is unknown (Assumption: 1 per 60 Hz frame; to confirm).
+
+**Art built once.** `kh1-kh2-cache\kh2-hud-gauge.bin` (slot cache layout): manifest (format, mod
+version, game build, `zz0field.2dd`'s hash and size, the HD PNG's hash, where they came from), then the
+`gaug` SEQD bytes (188 KB) and the HD image as ready B8G8R8A8 pixels (1024 × 512 = 2 MB) with a TIM2
+header for KH1's loader. Built from the player's own KH2 install (live or the Mods Manager backup, the
+`kh2_data::Install` the slot cache already uses) at the loading screen, or lazily on a thread the first
+time the gauge shows (tint's way). At start: one file read + check hash; the PNG is never decoded
+again. Then entered in KH1's loaded files the `kh2dpx` way so KH1's own `0x140274060` makes the
+texture (fallback: KH1's creator `0x1400F9DE0`).
+
+**Fallback.** When the art isn't built (no KH2 file, a damaged cache), either no gauge and a log line,
+or KH1 pieces: KH1's own HUD sprites (bar segments from its HUD image, coloured by corner colours) in
+KH2's shapes through the same `0x14026CE90` path (main s319's look). Question 1.
+
+### 14.7. Deprecated in main's version
+
+KH2 art decoded at every start [DECODE] (→ built once); `takeover::script_has_sora`, `GAME_FRAME`
+stall counting and the 0.2 s fade [CTRL]/[STEER] (→ KH1's own slot draw and alpha); the label's size
+zeroed and restored around every draw (→ a data change once); KH1's HUD texture entry's `+0x70`
+swapped around each quad (→ our own texture entry mapped at its own GS address); the gauge drawn after
+the task with its own quad buffer `0x142866960` (→ inside slot 0's draw with KH1's).
+
+### 14.8. Not found, and where I looked
+
+- The values of KH2's number tables `0x14071B108 / 30 / E0`, the mask factor `0x14071B158`, the HUD
+  root table `0x14071AFE0`, and the sprite clock `0x140717484`: data, not in the C export (no KH2 exe
+  staged). Please stage the Steam KH2 exe if you want these read.
+- What `0x1409AB580` bit 23 / `0x1409AB594` bit 10 (KH2's no-gauge mode) mean.
+- Which event/menu callers of `0x140168B50 / 70` are which.
+- KH1's "MP HP" label record and its rectangle (from the HUD layout file, not in the exe; the file
+  wasn't searched).
+- Whether KH1 draws the gauge task under its pause menu and in talks.
+- KH1's portrait radius in HUD units (for Q2 (a)); main measured its sprites in game.
+- Nothing checked in game; no traces this round.
+
+### 14.9 Built
+
+- **t936** `hudart.rs` (pure, tested) and `win/kh2hud.rs`: the `gaug` sequence and its HD picture built once
+  into `kh1-kh2-cache\kh2-hud-gauge.bin` from the player's own `zz0field.2dd` (keyed by its PKG entry), on a
+  thread at start; our own PNG decoder (its pixels equal Python's zlib decode of the real picture, Checked
+  (files)). Nothing drawn yet.

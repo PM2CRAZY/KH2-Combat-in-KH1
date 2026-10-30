@@ -34,6 +34,7 @@ mod hurt;
 mod recoil;
 mod rehit;
 mod kh2fx;
+mod kh2hud;
 mod kh2script;
 mod kh2dpx;
 mod kh2ppp;
@@ -479,6 +480,7 @@ pub unsafe extern "system" fn DllMain(_inst: *mut c_void, reason: u32, _reserved
         }
         loadscreen::install();
         kh2sound::start();
+        kh2hud::start();
         kh2dpx::start();
         pose::load_kh2();
         model::load();

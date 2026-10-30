@@ -383,3 +383,11 @@ The owner: the first room's entry frame lagged (132 to 186 ms in the t783 logs) 
 - **Placing**: the cached motions (207, 35 MB) were copied into fresh 16-aligned memory of their own on that frame (`kh2slots::place`), each page new to Windows. Assumption (the PDB names no private function): the allocation time seen there is this. Now each motion is copied into that memory when it is built, on the loader thread (`kh2slots::stage`, a Loading line gives the time), and the cache's buffer is freed then. The first room only writes KH1's handles into them.
 - **Binding**: for each of ~250 moves the slot KH1's set holds was identified (`pose::file_slot_of_motion`), each check asking Windows twice whether the memory reads: a third of the frame. Now one query per memory region for the set (`crash::Reach`), also in `read_set` and `is_sora`.
 - Unchanged: what is bound, which slots are replaced, the memory used (35 MB, from the start now).
+
+## KH2's Drive gauge art (t936)
+
+`kh2-hud-gauge.bin`: KH2's `gaug` sequence (SEQD, as it is in `field2d/<lang>/zz0field.2dd`) and its HD picture
+(the second remastered PNG, 1024 × 512) as B8G8R8A8 pixels, in the slot cache's layout (`crate::hudart`). Its
+manifest: the art format, the mod's version, the game build, `zz0field.2dd`'s PKG entry (`stamp_any`) and the
+picture's size; a match means nothing of KH2's is read at start. Built on a thread at start (`win/kh2hud.rs`),
+only with Drive on. Not checked in game.
