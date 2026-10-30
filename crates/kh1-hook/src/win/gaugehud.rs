@@ -27,6 +27,14 @@
 //! full; in a form 23° / ticks per bar × ticks into the bar. KH2's clock: 1 a 60 Hz frame; KH1's
 //! frame scale `0x14233FBDC` (60 Hz frames since the last pass, 0 on a held frame) steps it.
 //!
+//! **KH2's one-off pieces** (t940; `0x1401816C0`, `0x140180900`, `0x140180B00`, Checked (decomp)): a bar
+//! gained (the count up, out of a form) plays group 22 on the bar; going into or out of a form plays
+//! the ring 130 on the gauge centre and puts the other bar and fill on at once; out of it the bar also
+//! flashes (53) and the number plays in again. MAX plays in when the bars first reach the maximum,
+//! is hidden in a form and comes back after without playing in again. One of each at a time, as
+//! KH2's pools keep them. (t942) KH2's system sounds with them: 0x20 a bar gained, 0x21 MAX reached
+//! by a gain (`kh2sound::system`).
+//!
 //! **When** (the owner, round 3 answers 5, 7): Drive on, Form Cost on the Drive gauge, and a form
 //! owned (`formown::owned`); else not drawn and KH1's MP HP label is back.
 //!
@@ -89,6 +97,10 @@ const FORM_NUMBER: usize = 54;
 /// The group whose attach point the number is placed at (KH2 reads it at the HUD's making, with the
 /// bar on its slide-in group 21, `0x14017F9B0`).
 const NUMBER_ATTACH: usize = 21;
+/// (t940) KH2's one-off pieces (§14.1.4).
+const GAINED: usize = 22;
+const REVERT: usize = 53;
+const CHANGE: usize = 130;
 /// KH2's fill mask (`0x14017E580` / `0x1401816C0`): 50 × 120, centred (−25, −60) from its pivot,
 /// the pivot (50, 100) from the bar.
 const MASK_SIZE: [f32; 2] = [50.0, 120.0];
@@ -259,6 +271,15 @@ struct Pieces {
     max: Player,
     number: Player,
     value: i32,
+    /// (t940) KH2's one-off pieces, one of each at a time (KH2's two-slot pools: a new one ends the
+    /// one playing, `0x1401668D0`): a bar gained (22, on the bar, pool `+0xB50`), the revert flash
+    /// (53, on the bar, `+0x1330`), the mode change ring (130, on the gauge centre, `+0xF40`).
+    gained: Player,
+    revert: Player,
+    change: Player,
+    /// MAX shown (KH2's `+0x45D9`): set when the bars reach the maximum, cleared below it; in a form
+    /// MAX is hidden and this kept, so after the revert it shows again without playing in.
+    max_on: bool,
 }
 
 static PIECES: Mutex<Option<Pieces>> = Mutex::new(None);
@@ -275,7 +296,7 @@ unsafe fn view() -> Option<View> {
 }
 
 /// The quads this frame (KH2 units × 16 around KH2's gauge centre), the fill's in its own list.
-fn step(p: &mut Pieces, v: &View, dt: f32) -> Option<(Vec<Quad>, Vec<[seqplay::Vert; 3]>, Vec<Quad>)> {
+fn step(p: &mut Pieces, v: &View, dt: f32, sounds: &mut Vec<u32>) -> Option<(Vec<Quad>, Vec<[seqplay::Vert; 3]>, Vec<Quad>)> {
     let seq = p.seq.as_ref()?;
     let form = v.form.is_some();
     // Form numbers (`0x140180490`) and the mask's angle (`0x1401816C0`).
@@ -294,26 +315,71 @@ fn step(p: &mut Pieces, v: &View, dt: f32) -> Option<(Vec<Quad>, Vec<[seqplay::V
         None => (v.gauge.bars as i32, if v.gauge.points >= 100 { ANGLE_PER_POINT * 200.0 } else { v.gauge.points as f32 * ANGLE_PER_POINT }),
     };
     let number = number.clamp(0, 9);
-    if p.form != Some(form) {
-        p.form = Some(form);
-        p.bar.restart(seq, if form { FORM_BAR } else { BAR });
-        p.fill.restart(seq, if form { FORM_FILL } else { FILL });
-        p.number.restart(seq, if form { FORM_NUMBER } else { NUMBER } + number as usize);
-        p.value = number;
-        p.max.hide();
+    let mut gain = false;
+    match p.form {
+        // (The gauge's first frame: its pieces as they stand, no gain and no ring.)
+        None => {
+            p.form = Some(form);
+            p.bar.restart(seq, if form { FORM_BAR } else { BAR });
+            p.fill.restart(seq, if form { FORM_FILL } else { FILL });
+            p.number.restart(seq, if form { FORM_NUMBER } else { NUMBER } + number as usize);
+            p.value = number;
+        }
+        // (t940) Into or out of a form (KH2's new player object, `0x140180900`): the ring on the gauge
+        // centre, the other bar and fill at once (no slide-in); out of it `0x140180B00` also flashes
+        // the bar (53) and shows the number again.
+        Some(was) if was != form => {
+            p.form = Some(form);
+            p.change.restart(seq, CHANGE);
+            p.bar.restart(seq, if form { FORM_BAR } else { BAR });
+            p.fill.restart(seq, if form { FORM_FILL } else { FILL });
+            if !form {
+                p.revert.restart(seq, REVERT);
+            }
+            p.value = number;
+            p.number.restart(seq, if form { FORM_NUMBER } else { NUMBER } + number as usize);
+        }
+        _ => {
+            if number != p.value {
+                // (A higher count is a gain, `0x140180490`'s `+0x45D8`; KH2 acts on it only out of a
+                // form, `0x1401816C0`.)
+                gain = number > p.value && !form;
+                p.value = number;
+                p.number.restart(seq, if form { FORM_NUMBER } else { NUMBER } + number as usize);
+            }
+        }
     }
-    if number != p.value {
-        p.value = number;
-        p.number.restart(seq, if form { FORM_NUMBER } else { NUMBER } + number as usize);
+    // MAX (`0x1401816C0`, out of a form): below the maximum hidden and cleared; at it, played in
+    // once (KH2's `0x14016B270(MAX, 20)`), then shown.
+    if !form {
+        if v.gauge.bars < v.gauge.max {
+            p.max_on = false;
+        } else if !p.max_on {
+            p.max_on = true;
+            p.max.restart(seq, MAX);
+            // (t942) MAX's sound when a gain reached it (KH2 also skips it while `0x1409BA928` is
+            // set: Assumption, not set in play).
+            if gain {
+                sounds.push(super::kh2sound::DRIVE_MAX);
+            }
+        }
     }
-    let full = !form && v.gauge.bars >= v.gauge.max;
-    match (full, p.max.group.is_some()) {
-        (true, false) => p.max.restart(seq, MAX),
-        (false, true) => p.max.hide(),
-        _ => {}
+    // (t940) A bar gained: KH2's group 22 on the bar (`0x1401816C0`, with MAX reached or not).
+    if gain {
+        p.gained.restart(seq, GAINED);
+        // (t942) The gain's sound, unless MAX was reached (its own sound instead).
+        if !p.max_on {
+            sounds.push(super::kh2sound::DRIVE_GAINED);
+        }
     }
-    for pl in [&mut p.bar, &mut p.fill, &mut p.max, &mut p.number] {
+    for pl in [&mut p.bar, &mut p.fill, &mut p.max, &mut p.number, &mut p.gained, &mut p.revert, &mut p.change] {
         pl.step(dt);
+    }
+    // (One-off pieces end on their last frame, which shows nothing: KH2 lets the piece go.)
+    for pl in [&mut p.gained, &mut p.revert, &mut p.change] {
+        if pl.state == 3 {
+            pl.hide();
+        }
     }
     let mut under = Vec::new();
     p.bar.draw(seq, [0, 0], &mut under);
@@ -323,9 +389,14 @@ fn step(p: &mut Pieces, v: &View, dt: f32) -> Option<(Vec<Quad>, Vec<[seqplay::V
     let mask = seqplay::mask_corners([(b[0] + MASK_PIVOT[0]) as f32, (b[1] + MASK_PIVOT[1]) as f32], angle, MASK_SIZE[0], MASK_SIZE[1], MASK_OFF);
     let tris: Vec<[seqplay::Vert; 3]> = fill.iter().flat_map(|q| seqplay::outside(q, &mask)).collect();
     let mut over = Vec::new();
-    p.max.draw(seq, b, &mut over);
+    if !form && p.max_on {
+        p.max.draw(seq, b, &mut over);
+    }
     let at = seq.groups.get(NUMBER_ATTACH).map_or([0, 0], |g| g.attach);
     p.number.draw(seq, [b[0] + at[0], b[1] + at[1]], &mut over);
+    p.gained.draw(seq, b, &mut over);
+    p.revert.draw(seq, b, &mut over);
+    p.change.draw(seq, [0, 0], &mut over);
     Some((under, tris, over))
 }
 
@@ -367,7 +438,7 @@ impl Kh1 {
         wr(self.base + PACKET_RVA, end);
     }
 
-    /// One quad: KH1's order top left, bottom left, top right, bottom right; positions in KH2
+    /// One quad: KH1's order top left, bottom left, top right, bottom right; positions in KH1 HUD
     /// units, texture coordinates × 16, colours r g b a (0x80 = 1).
     unsafe fn quad(&mut self, pos: [[f32; 2]; 4], uv: [[f32; 2]; 4], col: [[f32; 4]; 4], blend: u32) {
         self.blend(blend);
@@ -385,7 +456,7 @@ impl Kh1 {
             wr(q + 0x20 + i * 0x10, [uv[i][0].round() as i32, uv[i][1].round() as i32]);
             let c = col[i];
             wr(q + 0x60 + i * 0x10, [c[0].round() as i32, c[1].round() as i32, c[2].round() as i32, (c[3] * self.alpha).round() as i32]);
-            let (x, y) = (self.ox + pos[i][0] * self.k, self.oy + pos[i][1] * self.k);
+            let [x, y] = pos[i];
             wr(q + 0xA0 + i * 0x10, [((x + 0x700 as f32) * 16.0).round() as i32, ((y + 0x740 as f32) * 16.0).round() as i32]);
         }
         let submit: unsafe extern "system" fn(usize, u32, usize) -> usize = std::mem::transmute(self.base + SUBMIT_RVA);
@@ -393,8 +464,13 @@ impl Kh1 {
         wr(self.base + PACKET_RVA, p);
     }
 
+    /// KH2 units around KH2's gauge centre to KH1 HUD units.
+    fn kh1_at(&self, x: f32, y: f32) -> [f32; 2] {
+        [self.ox + x * self.k, self.oy + y * self.k]
+    }
+
     unsafe fn kh2(&mut self, q: &Quad) {
-        let f = |i: usize| [q.at[i][0] as f32 / 16.0, q.at[i][1] as f32 / 16.0];
+        let f = |i: usize| self.kh1_at(q.at[i][0] as f32 / 16.0, q.at[i][1] as f32 / 16.0);
         let u = |i: usize| [q.uv[i][0] as f32, q.uv[i][1] as f32];
         let c = |i: usize| rgba(q.colours[i]);
         // (KH2's top left, top right, bottom left, bottom right to KH1's TL, BL, TR, BR.)
@@ -402,10 +478,36 @@ impl Kh1 {
     }
 
     unsafe fn tri(&mut self, t: &[seqplay::Vert; 3]) {
-        let p = |v: &seqplay::Vert| [v.x, v.y];
+        let p = |v: &seqplay::Vert| self.kh1_at(v.x, v.y);
         let u = |v: &seqplay::Vert| [v.u, v.v];
         self.quad([p(&t[0]), p(&t[1]), p(&t[2]), p(&t[2])], [u(&t[0]), u(&t[1]), u(&t[2]), u(&t[2])], [t[0].c, t[1].c, t[2].c, t[2].c], 0);
     }
+}
+
+/// (t943) The MP and HP bars' black bottom edge, which KH1's MP HP label drew (the owner, main s324:
+/// "the outline of the MP and HP bars look like they've been cut off"; round 3 answer 4 "this needs
+/// work"): while the label is hidden, a black line 2 units high at the portrait's top from 0.57 of
+/// the portrait's width left of it (the MP bar's end) to the label's right end, main's measured
+/// place (Assumption: measured on main's screenshots, not checked on testing). Drawn from an opaque
+/// black texel block of our picture (PS2 texels 87..90 × 37..40 of the `gaug` image, the bar's
+/// outline, Checked (files): every HD pixel there is black with full alpha).
+unsafe fn edge(kh1: &mut Kh1) {
+    let Some((p, right)) = LAYOUT.lock().ok().and_then(|g| {
+        let l = g.as_ref()?;
+        if !l.hidden || l.label.is_empty() {
+            return None;
+        }
+        let p = l.portrait?;
+        let right = l.label.iter().map(|x| x.1[2]).max()?.max(p[0] + 4);
+        Some((p, right))
+    }) else {
+        return;
+    };
+    let left = (p[0] - ((p[2] - p[0]) as f32 * 0.57).round() as i32) as f32;
+    let (right, top, bottom) = ((right + 1) as f32, p[1] as f32, (p[1] + 2) as f32);
+    let uv = [88.5 * 16.0, 38.5 * 16.0];
+    let black = [0.0, 0.0, 0.0, 128.0];
+    kh1.quad([[left, top], [left, bottom], [right, top], [right, bottom]], [uv; 4], [black; 4], 0);
 }
 
 fn rgba(c: u32) -> [f32; 4] {
@@ -432,7 +534,11 @@ unsafe fn draw(base: usize, record: usize) {
         }
     }
     let dt = rd::<f32>(base + FRAME_SCALE_RVA).clamp(0.0, 5.0);
-    let Some((under, tris, over)) = step(p, &v, dt) else { return };
+    let mut sounds = Vec::new();
+    let Some((under, tris, over)) = step(p, &v, dt, &mut sounds) else { return };
+    for id in sounds {
+        super::kh2sound::system(id, if id == super::kh2sound::DRIVE_MAX { "the Drive gauge's MAX" } else { "a Drive gauge bar gained" });
+    }
     let alpha = rd::<f32>(record + 0xA9C).clamp(0.0, 1.0);
     if alpha <= 0.0 {
         return;
@@ -456,6 +562,7 @@ unsafe fn draw(base: usize, record: usize) {
         kh1.kh2(q);
     }
     kh1.blend(0);
+    edge(&mut kh1);
     // KH1's HUD texture back, for what KH1 draws next.
     let desc = rd::<usize>(record + 0xE0);
     if desc >= 0x10000 {

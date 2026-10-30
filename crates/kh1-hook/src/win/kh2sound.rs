@@ -490,8 +490,25 @@ fn vtbl(bar: &[u8]) -> Vec<(u8, u8, u8, Vec<(i8, i8)>)> {
 /// to page 2"). Assumption: bank 2's sound 0x14 is se000's id record 20, the numbering KH2's effect
 /// sound ids use (169 = se000's 169); se000's 20 is a one-track sound of 997 ms (Checked (files)).
 pub const PAGE_FLIP: u32 = 20;
+/// (t942) KH2's Drive gauge HUD sounds (`gaugehud`): KH2's player gauge `0x1401816C0` plays system
+/// sound 0x20 when a bar is gained (unless MAX is reached that frame) and 0x21 when a gain reaches
+/// MAX, through `0x1401DD170` (bank 2, `se/se000.win32.scd`, loaded by `0x1401DC770`, Checked
+/// (decomp)). Assumption: ids 32 and 33 of se000, the numbering the page flip's 20 has.
+pub const DRIVE_GAINED: u32 = 0x20;
+pub const DRIVE_MAX: u32 = 0x21;
 /// KH2's menu sounds loaded with the others.
-const MENU_SOUNDS: [u32; 1] = [PAGE_FLIP];
+const MENU_SOUNDS: [u32; 3] = [PAGE_FLIP, DRIVE_GAINED, DRIVE_MAX];
+
+/// (t942) One of KH2's system sounds above through KH1's effect queue (`gaugehud`), as the page flip
+/// is: `false` when it isn't loaded (yet) or KH1 can't take it now.
+pub unsafe fn system(id: u32, what: &str) -> bool {
+    let Ok(g) = LOADED.try_lock() else { return false };
+    let Some(s) = g.as_ref().and_then(|l| l.sounds.get(&id)).copied() else { return false };
+    drop(g);
+    let ok = super::kh1bank::play(s.kh1, s.ms);
+    note_play(|| format!("{what} (KH2 system sound {id:#x}){}", if ok { "" } else { ": KH1 couldn't take it" }));
+    ok
+}
 
 /// KH2's page flip sound through KH1's effect queue (`cmdmenu`): `false` when it isn't loaded (yet)
 /// or KH1 can't take it now.

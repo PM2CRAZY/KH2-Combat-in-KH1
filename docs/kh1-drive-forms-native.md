@@ -2187,3 +2187,88 @@ the task with its own quad buffer `0x142866960` (→ inside slot 0's draw with K
   measured rule (portrait + 6, the label's middle − 13.5 KH2 units + 0.3 × the portrait's radius + 1.3; 384 / 448
   × 1.34). Not yet: KH2's animations on a gain, MAX's and the gain's sounds, the form change ring and the revert
   flash (t940), the MP bar's bottom edge under the hidden label.
+
+- **t940**: KH2's one-off pieces. A bar gained (out of a form) plays 22 on the bar; into or out of a form the ring
+  130 on the gauge centre and the other bar and fill at once; out of it the flash 53 on the bar and the number
+  played in again; MAX plays in on first reaching the maximum, hides in a form and comes back after without
+  playing in (`0x1401816C0`, `0x140180900`, `0x140180B00`, `0x1401668D0`, Checked (decomp)). Sounds 0x20 / 0x21
+  still to come.
+
+- **t941**: the art's and the texture's outcome are always in the log (`log_line`, whatever the Loading category).
+- **t942**: KH2's sounds: 0x20 a bar gained, 0x21 MAX reached by a gain (system bank 2, `se/se000.win32.scd`,
+  `0x1401816C0` / `0x1401DD170`), cut with the other KH2 sounds and played through KH1's effect queue
+  (`kh2sound::system`). Assumption: se000's id records 32 / 33.
+- **t943**: the MP and HP bars' black bottom edge, which the hidden label drew: a 2-unit black line at the
+  portrait's top from 0.57 of its width left of it to the label's right end (main's measured place, Assumption),
+  drawn through KH1's sprite draw from an opaque black block of our picture.
+
+## 15. Drive orbs as KH1 prizes (main-port round 4, row 3, 2026-10-30)
+
+### 15.1 KH2 (Steam KH2, Checked (decomp) and (exe))
+- **Prize kinds** (spawn table `0x1405C7390`, 9 × 0x10: kind, size, two ids): 0 / 1 HP small / big, 2 / 3 / 4
+  munny big / middle / small, 5 / 6 MP small / big, **7 / 8 Drive small / big**.
+- **Pickup** (`0x1403DCA50`, reward table `0x1405C7420`, 8 bytes a kind: a float, HP, MP, Drive, munny): Drive
+  small **1**, big **3** (Checked (exe)), handed as a float to `0x1403A9CF0`: out of a form (mode 1) KH2's add of
+  `(int)(value × the world factor)` points (× MP Charge's factor while it runs); in a form (modes 2 / 3) the
+  form gauge + value × sstm `+0x70` (**12.0**, Checked (files)) ticks (not in Anti, `+0xDE0` = 12). Then
+  `0x1403E8760(value)`: **Master Form gets the value as form EXP** (`+0xDE0` = 4, `0x1403E8380`).
+- **Enemy drop** (`0x1403DC170`): the enemy's `przt` row (00battle; bsearch by id, row 0x48 if none), 0x18
+  bytes: `+2..+0xA` nine counts by kind, `+0xC` three (item, chance) pairs. Each count is `ceil(count × (1 +
+  the party's Jackpot share, +0x68))` (`0x1403ECEF0`, `0x1403ABA40`); munny (kinds 2..4) is split by the
+  party's Drive Converter share (`+0x74`) into Drive orbs by `0x1405C7978` = [7, 8, 8, 8, 7, 7, 8, 7, 8]
+  (munny big and middle → big orbs, small → small). A player flag (`+0x6C8` bit 25, `0x140415840`) turns every
+  kind into its Drive orb (what sets it: not found).
+
+### 15.2 KH1 (Steam KH1, Checked (decomp))
+- Types 0..6 only: make `0x1402AB2A0`, enemy drop `0x1402ABC40 (counts[7], position, mode)`, pickup
+  `0x1402AC080` (rewards for 0..6), row table `0x140528BE0` (7 × 0x14: height, pull, sound, ..., munny shown)
+  read at seven places (`0x1402AC080` × 4, `0x1402AC4D0` × 2, `0x1402AC830`); the word after it
+  (`0x140528C6C`) is in use, so rows 7 / 8 need a copy of the table the seven reads point at.
+- KH1's own Jackpot applies its count factor in its drop functions: Drive orbs made through KH1's drop get
+  KH1's Jackpot as KH2's get KH2's.
+- The orbs' look: KH1's prize program `pppRyjMegaBirthPrize` (per-type sprite entries) not reread on Steam
+  yet (main's notes were Epic): the first version's research.
+
+### 15.3 Built
+- **t944**: types 7 / 8 in a copy of KH1's prize row table (MP's rows) with KH1's six reads pointed at it; the
+  prize program's entries 7 / 8 set from MP's orbs in KH2's gold before each draw.
+- **t945**: after KH1's enemy drop, a roll of KH2's 94 normal-enemy `przt` rows (Checked (files)) makes the
+  Drive orbs through KH1's own prize make, each count × KH1's Jackpot factor.
+- **t946**: after KH1's pickup, a Drive orb gives KH2's 1 / 3: points to the bars, or 12 ticks a point to the
+  form gauge in a form. Still to come: KH2's own orb art (`obj/PRIZE.mdlx`, answer 3 (a)); Master Form's orb EXP
+  when Master is built.
+
+### 15.4 KH2's orb art: how KH1 draws a prize's shape (research, 2026-10-30; Steam KH1, Checked (decomp))
+- The prize program's draw `0x140340D10` takes each type's entry `shape` as an index into KH1's **global shape
+  table** (`*(0x142E9D428 + 0x28)` = `0x142687E80`, 16 bytes a slot: the shape's animation, a word), and draws
+  its current frame with `0x14031E210`. The table is filled when an effect DPD is entered (`0x1401EBA70`): each
+  of the DPD's shapes (and textures, the 0x38-byte table at `0x142686280`) goes to the slot its own record's
+  first short names, for the DPD's slots marked in use (bitmask at `+0xC0` / `+0xD0` of its entry).
+- So KH2's Drive orb can be drawn by KH1's own prize program if its shape is in that table: a KH1 DPX built
+  once from KH2's prize package (`obj/PRIZE.mdlx`'s effect package: kinds 7 / 8 its Drive orbs) by the same
+  builder the effects use (`kh2_formats::kh1dpx`), entered in KH1's loaded files as `kh2dpx` enters its
+  packages, with its shape in a slot KH1's own DPDs don't use; entries 7 / 8 then name that slot.
+- Not found yet: how KH1 picks a DPD's slots (the shape record's first short vs. the in-use bits: whether a
+  slot can be chosen freely and which slots KH1's own DPDs take); KH2's prize package's layout (which shape is
+  the Drive orb, its frames). Next research step before the art version.
+
+### 15.5 KH2's orb art: found and built (t947, t948)
+- **Found** (Checked (files), the player's extracted `prize.dpx` and `obj/PRIZE.mdlx`): each shape's slot id is
+  its record's first short, and KH1's prize DPD's are 0..3, the same as their places in its list; the in-use
+  bits (`+0xC0` shapes, `+0xB0` textures) are by place. So a shape appended as the fifth, with id 4 and bit 4
+  set, takes slot 4 (Assumption, to see in game: the global table has room for slot 4; KH1's effect DPDs
+  already enter more shapes than that). Both games' prize particle data run program 203, its data at the
+  program file `+0x48` (a word, then 12 bytes a kind: shape slot, RGBA, scale). KH2's kinds 7 / 8 are shape 3
+  (24 frames) on texture record `0x36C0` (TBP `0x3000`, CBP `0x3E00`, 64 × 32 at 0, 0), colour `80808080`,
+  scale 0.9 / 1.7. KH2's HD image of TBP `0x3000` is keyed by its first record's pixels (as KH1's `-320`).
+- **Built**: t947 `kh2_formats::kh1dpx::prize_with_kh2` (KH1's file with KH2's shape and record appended at TBP
+  `0x3860` / CBP `0x3D54`, still one slot of each; entries 7 / 8 KH2's); t948 `crate::prizeart` (the art and
+  its HD images built once into `kh1-kh2-cache\kh2-prize-orbs.bin`) and `win/driveorbs.rs` (the prize
+  effect's make, the call at `0x1402AE77B`, handed our file: copied into our handle region, entered in KH1's
+  loaded files with the four HD images, relocated by KH1's `0x1401E0080`). MP's orbs in gold stay as the
+  fallback.
+- **Scale** (Assumption, to compare in game): KH2's numbers are used as they are, as the effects port keeps
+  KH2's particle sizes. KH1 draws its MP orb at 0.4 × 16 = 6.4; KH2 its MP orb at 0.5 × 20 = 10 and its Drive
+  orb at 0.9 × 24 = 21.6. So in KH1 the small Drive orb is 3.4 × KH1's small MP orb, where in KH2 it is 2.2 ×
+  KH2's. If it looks too big next to KH1's orbs, the fix is one factor on entries 7 / 8.
+

@@ -46,6 +46,34 @@ pub fn cost(form: u8) -> u8 {
     }
 }
 
+/// (t944) KH2's Drive orbs (its prize kinds 7 / 8): their pickup value (the reward table
+/// `0x1405C7420`, byte `+6`, Checked (exe)): small 1, big 3.
+pub const SMALL_ORB: u8 = 1;
+pub const BIG_ORB: u8 = 3;
+/// (t946) In a form a Drive orb's value fills the form gauge by this many ticks a point (sstm
+/// `+0x70`, Checked (files); `0x1403A9CF0` mode 2).
+pub const ORB_TICKS: f32 = 12.0;
+
+/// (t945) The Drive orbs a KH1 enemy drops (the owner, round 4 answer 1 (c): main's rule, KH2's
+/// normal enemies' drop rows, the weights read again from KH2's own file): each of KH2's 94 `przt`
+/// rows with an item drop (00battle, Checked (files)) is one weight, by its (small, big) Drive orb
+/// counts: 69 none, 10 four small, 10 two big, 2 five and five, 1 three and one, 1 six and two, 1
+/// twelve and one.
+pub const DROPS: [(u32, u8, u8); 7] = [(69, 0, 0), (10, 4, 0), (10, 0, 2), (2, 5, 5), (1, 3, 1), (1, 6, 2), (1, 12, 1)];
+
+/// The drop for a roll `r` (any u32): (small, big).
+pub fn drop_for(r: u32) -> (u8, u8) {
+    let total: u32 = DROPS.iter().map(|d| d.0).sum();
+    let mut at = r % total;
+    for (w, s, b) in DROPS {
+        if at < w {
+            return (s, b);
+        }
+        at -= w;
+    }
+    (0, 0)
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Gauge {
     pub bars: u8,
@@ -158,6 +186,17 @@ pub fn pack(g: &Gauge) -> (u8, u8) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn drops_cover_every_roll() {
+        let total: u32 = DROPS.iter().map(|d| d.0).sum();
+        assert_eq!(total, 94);
+        assert_eq!(drop_for(0), (0, 0));
+        assert_eq!(drop_for(69), (4, 0));
+        assert_eq!(drop_for(79), (0, 2));
+        assert_eq!(drop_for(93), (12, 1));
+        assert_eq!(drop_for(94), (0, 0));
+    }
 
     #[test]
     fn add_carries_and_holds_at_the_max() {

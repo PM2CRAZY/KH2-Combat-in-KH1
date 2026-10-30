@@ -724,6 +724,198 @@ fn assemble(p: &Pax, pax: &[u8], common: &[u8], groups: &[Vec<Item>]) -> Result<
     Ok(Kh1Dpx { bytes, md5, textures, own_dpd_at, common_dpd_at, effects: nums, types, programs, skipped, report: report.join(" ") })
 }
 
+/// KH1's and KH2's prize program (`pppPrize`-like, type 203: KH1's prize particle data runs it,
+/// and so does KH2's, both Checked (files)): its data (the program record's `+8`, from the program
+/// file) is a word, then 12 bytes per prize kind: the shape's slot id (`0xFFFF` none), the colour
+/// (RGBA, 0x80 = 1.0) and the scale (f32); KH1's draw `0x140340D10` reads the kind's entry (Steam,
+/// Checked (decomp)).
+pub const PRIZE_PROGRAM: u32 = 203;
+
+/// KH1's prize DPX with some of KH2's prize kinds' art added ([`prize_with_kh2`]).
+pub struct PrizeArt {
+    /// The DPX: KH1's header as it is, its one DPD with KH2's textures and shapes appended.
+    pub bytes: Vec<u8>,
+    pub md5: [u8; 16],
+    /// Each of KH1's own texture records: its HD key in KH1's file (the offset of its pixels in
+    /// the file, `record + 0x20`) and in `bytes`.
+    pub kh1_keys: Vec<(u32, u32)>,
+    /// Each KH2 texture record copied in: its HD key in `bytes`, then the keys (offsets of the
+    /// pixels in the PAX) KH2's HD image of it can have: its own first, then the other records' of
+    /// its TBP in the DPD's order (KH2's HD image of a picture is keyed by its TBP's first record,
+    /// as KH1's are, Checked (files)).
+    pub kh2_keys: Vec<(u32, Vec<u32>)>,
+    /// The kinds set: (kind, slot id, colour, scale).
+    pub kinds: Vec<(usize, u32, u32, f32)>,
+    pub report: String,
+}
+
+/// The data of program [`PRIZE_PROGRAM`] in a particle data: its offset in `pd`.
+fn prize_data(pd: &[u8]) -> Result<usize> {
+    let pf = 0x110;
+    let types_at = pf + u32_at(pd, pf + 8)? as usize;
+    let types = types_at..types_at + 4 + 4 * i32_at(pd, types_at)?.clamp(0, 256) as usize;
+    for (at, ty) in program_types(pd)? {
+        // (The emitters' records: type, ..., `+8` the data's offset from the program file. The
+        // type list's words have no data.)
+        if ty == PRIZE_PROGRAM && !types.contains(&at) {
+            let d = pf + u32_at(pd, at + 8)? as usize;
+            return Ok(d);
+        }
+    }
+    bad("kh1dpx: no prize program in the particle data")
+}
+
+/// KH1's prize file `kh1` (`prize.dpx`: one entry, one DPD) with prize kinds `kinds` drawn as KH2
+/// draws them: KH2's shape for each kind (from `kh2_pax`, the `priz` PAX of KH2's
+/// `obj/PRIZE.mdlx`), the texture records it draws with copied in at TBP / CBP right after KH1's
+/// own (the DPD's VRAM range grown to cover them), the shape given the next slot id, the particle
+/// data's texture and shape masks set for them, and the kind's prize program entry set to KH2's
+/// (slot, colour, scale). KH1's own records, shapes and entries are kept as they are and in their
+/// order (the DPD is laid out again, so their offsets move: [`PrizeArt::kh1_keys`]). A kind KH1
+/// already draws is an error.
+pub fn prize_with_kh2(kh1: &[u8], kh2_pax: &[u8], kinds: &[usize]) -> Result<PrizeArt> {
+    if i32_at(kh1, 0)? != DPX_VERSION || i32_at(kh1, 12)? != 1 {
+        return bad("kh1dpx: KH1's prize file isn't a DPX of one entry");
+    }
+    let list = 16 + 32;
+    if i32_at(kh1, list)? != 1 {
+        return bad("kh1dpx: KH1's prize file has more than one DPD");
+    }
+    let dpd_at = u32_at(kh1, list + 4)? as usize;
+    if u32_at(kh1, 16)? as usize != dpd_at || dpd_at % 16 != 0 || dpd_at < list + 8 {
+        return bad("kh1dpx: KH1's prize entry isn't in its DPD");
+    }
+    let mut out = split(kh1.get(dpd_at..).ok_or_else(|| crate::Error::Format("kh1dpx: DPD out of range".into()))?)?;
+    let pd_i = u32_at(kh1, 20)? as usize;
+    if pd_i >= out.lists[0].len() {
+        return bad("kh1dpx: KH1's prize particle data out of range");
+    }
+    let p = Pax::read(kh2_pax)?;
+    let e2 = p.entries.first().ok_or_else(|| crate::Error::Format("kh1dpx: KH2's prize PAX has no effect".into()))?;
+    let dpd2_off = u32_at(e2, 0)? as usize;
+    let src = split(p.dpd(dpd2_off)?)?;
+    let pd2 = src.lists[0].get(u32_at(e2, 4)? as usize).ok_or_else(|| crate::Error::Format("kh1dpx: KH2's prize particle data out of range".into()))?;
+    let d2 = prize_data(pd2)?;
+    let d1 = prize_data(&out.lists[0][pd_i])?;
+    let key = |t: &[u8]| (i16_at(t, 0).unwrap_or(-1) as i32, i16_at(t, 2).unwrap_or(-1) as i32);
+    let (n_tex, n_shape) = (out.lists[1].len(), out.lists[2].len());
+    if n_tex + 8 > 128 || n_shape + 8 > 128 {
+        return bad("kh1dpx: KH1's prize DPD has too many textures or shapes");
+    }
+    let (mut tcur, mut ccur) = (out.vram[1], out.vram[3]);
+    let mut tmap: Vec<(i32, i32)> = Vec::new();
+    let mut cmap: Vec<(i32, i32)> = Vec::new();
+    // KH2 shape index -> its new slot id; KH2 record offset -> its index in our list.
+    let mut shapes: Vec<(usize, u32)> = Vec::new();
+    let mut recs: Vec<usize> = Vec::new();
+    let mut set = Vec::new();
+    let mut report = Vec::new();
+    for &kind in kinds {
+        let e = d2 + 4 + 12 * kind;
+        let (id, rgba, scale) = (u32_at(pd2, e)?, u32_at(pd2, e + 4)?, f32::from_bits(u32_at(pd2, e + 8)?));
+        if id == 0xFFFF {
+            return bad(format!("kh1dpx: KH2 draws no prize kind {kind}"));
+        }
+        let mine = d1 + 4 + 12 * kind;
+        if u32_at(&out.lists[0][pd_i], mine)? != 0xFFFF {
+            return bad(format!("kh1dpx: KH1 already draws prize kind {kind}"));
+        }
+        let si = src.lists[2].iter().position(|s| u16_at(s, 0).ok() == Some(id as u16)).ok_or_else(|| crate::Error::Format(format!("kh1dpx: KH2's prize shape {id} not found")))?;
+        let slot = match shapes.iter().find(|s| s.0 == si) {
+            Some(s) => s.1,
+            None => {
+                let slot = (n_shape + shapes.len()) as u32;
+                let mut shape = src.lists[2][si].clone();
+                for w in shape_tex0(&shape)? {
+                    let x = u64_at(&shape, w)?;
+                    let (t, c) = (tbp(x), cbp(x));
+                    let ri = src.lists[1].iter().position(|r| key(r) == (t, c)).ok_or_else(|| crate::Error::Format(format!("kh1dpx: no KH2 prize texture for {t:#x}/{c:#x}")))?;
+                    if !recs.contains(&ri) {
+                        let r = &src.lists[1][ri];
+                        let nt = match tmap.iter().find(|m| m.0 == t) {
+                            Some(m) => m.1,
+                            None => {
+                                // (The space of the largest of its TBP's records, as KH2 lays them.)
+                                let blocks = src.lists[1].iter().filter(|o| key(o).0 == t).map(|o| texture_blocks(o)).collect::<Result<Vec<_>>>()?.into_iter().max().unwrap_or(0);
+                                let nt = tcur;
+                                tcur += (blocks + 0x1f) & !0x1f;
+                                tmap.push((t, nt));
+                                nt
+                            }
+                        };
+                        let nc = match cmap.iter().find(|m| m.0 == c) {
+                            Some(m) => m.1,
+                            None => {
+                                let nc = ccur;
+                                ccur += 4;
+                                cmap.push((c, nc));
+                                nc
+                            }
+                        };
+                        let mut copy = r.clone();
+                        put_u16(&mut copy, 0, nt as u16);
+                        put_u16(&mut copy, 2, nc as u16);
+                        let t0 = u64_at(&copy, 0x10)?;
+                        put_u64(&mut copy, 0x10, with(t0, nt, nc));
+                        report.push(format!("KH2 texture {t:#x}/{c:#x} -> {nt:#x}/{nc:#x}"));
+                        out.lists[1].push(copy);
+                        recs.push(ri);
+                    }
+                    let nt = tmap.iter().find(|m| m.0 == t).unwrap().1;
+                    let nc = cmap.iter().find(|m| m.0 == c).unwrap().1;
+                    put_u64(&mut shape, w, with(x, nt, nc));
+                }
+                put_u16(&mut shape, 0, slot as u16);
+                report.push(format!("KH2 shape {id} as slot {slot}"));
+                out.lists[2].push(shape);
+                shapes.push((si, slot));
+                slot
+            }
+        };
+        let pd = &mut out.lists[0][pd_i];
+        put_u32(pd, mine, slot);
+        put_u32(pd, mine + 4, rgba);
+        put_u32(pd, mine + 8, scale.to_bits());
+        report.push(format!("kind {kind}: slot {slot}, colour {rgba:08x}, scale {scale}"));
+        set.push((kind, slot, rgba, scale));
+    }
+    let tslots = (tcur - 0x3781) >> 7;
+    let cslots = (ccur - 0x3d21) >> 5;
+    if tslots > KH1_TBP_SLOTS || cslots > KH1_CBP_SLOTS {
+        return bad(format!("kh1dpx: the prize DPD would need {tslots} TBP / {cslots} CBP slots, KH1 has {KH1_TBP_SLOTS} / {KH1_CBP_SLOTS}"));
+    }
+    out.vram[1] = tcur;
+    out.vram[3] = ccur;
+    {
+        let (nt, ns) = (out.lists[1].len(), out.lists[2].len());
+        let pd = &mut out.lists[0][pd_i];
+        for i in n_tex..nt {
+            pd[0xB0 + i / 8] |= 1 << (i % 8);
+        }
+        for i in n_shape..ns {
+            pd[0xC0 + i / 8] |= 1 << (i % 8);
+        }
+    }
+    let (dpd, offs) = join(&out);
+    let mut bytes = kh1[..dpd_at].to_vec();
+    bytes.extend_from_slice(&dpd);
+    let kh1_keys = out.offs[1].iter().zip(&offs[1]).map(|(&o, &n)| ((dpd_at + o + 0x20) as u32, (dpd_at + n as usize + 0x20) as u32)).collect();
+    let base = p.dpx_at + dpd2_off;
+    let kh2_keys = recs
+        .iter()
+        .enumerate()
+        .map(|(k, &ri)| {
+            let t = key(&src.lists[1][ri]).0;
+            let mut ks = vec![(base + src.offs[1][ri] + 0x20) as u32];
+            ks.extend(src.lists[1].iter().zip(&src.offs[1]).filter(|(r, &o)| key(r).0 == t && o != src.offs[1][ri]).map(|(_, &o)| (base + o + 0x20) as u32));
+            ((dpd_at + offs[1][n_tex + k] as usize + 0x20) as u32, ks)
+        })
+        .collect();
+    report.insert(0, format!("vram {:#x}..{tcur:#x} / {:#x}..{ccur:#x} ({tslots} TBP, {cslots} CBP slots)", out.vram[0], out.vram[2]));
+    let md5 = md5(&bytes);
+    Ok(PrizeArt { bytes, md5, kh1_keys, kh2_keys, kinds: set, report: report.join("; ") })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

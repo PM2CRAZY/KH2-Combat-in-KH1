@@ -28,6 +28,15 @@
 //! Nothing is drawn yet (t939).
 
 use super::log;
+
+/// (t941) The art's and the texture's outcome, written whatever the Loading category says (the
+/// owner: the art's line was missing from the log with `log_loading` off at start; the gauge's
+/// failures must show in any log).
+macro_rules! always {
+    ($($t:tt)*) => {
+        super::log_line(super::LogCat::Loading, &format!($($t)*))
+    };
+}
 use std::sync::atomic::{AtomicU64, AtomicU8, Ordering};
 use std::sync::{Mutex, OnceLock};
 
@@ -63,13 +72,13 @@ pub fn start() {
         let t = std::time::Instant::now();
         match load() {
             Ok((b, how)) => {
-                log!(Loading, "Drive gauge art: {how} in {:.0} ms ({}x{}, PS2 {}x{}, its sequence {} bytes)", t.elapsed().as_secs_f32() * 1000.0, b.w, b.h, b.ps2.0, b.ps2.1, b.seqd.len());
+                always!("Drive gauge art: {how} in {:.0} ms ({}x{}, PS2 {}x{}, its sequence {} bytes)", t.elapsed().as_secs_f32() * 1000.0, b.w, b.h, b.ps2.0, b.ps2.1, b.seqd.len());
                 if let Ok(mut g) = PIXELS.lock() {
                     *g = Some((b.pixels, b.w, b.h));
                 }
                 let _ = ART.set(Art { seqd: b.seqd, ps2: b.ps2 });
             }
-            Err(e) => log!(Loading, "Drive gauge art: not made ({e}); no Drive gauge on the HUD"),
+            Err(e) => always!("Drive gauge art: not made ({e}); no Drive gauge on the HUD"),
         }
     });
 }
@@ -169,7 +178,7 @@ unsafe fn map(base: usize, tex0: u64, texture: usize) {
 
 fn fail(why: &str) {
     STATE.store(2, Ordering::Relaxed);
-    log!(Loading, "Drive gauge texture: not made ({why}); no Drive gauge on the HUD");
+    always!("Drive gauge texture: not made ({why}); no Drive gauge on the HUD");
 }
 
 /// From Sora's frames (`menu::Growth::update`, the game's thread): makes the texture once the art is
@@ -249,8 +258,7 @@ pub unsafe fn texture_now(base: usize) {
     TEXTURE.store(tex as u64, Ordering::Relaxed);
     TEX0.store(t0, Ordering::Relaxed);
     STATE.store(1, Ordering::Relaxed);
-    log!(
-        Loading,
+    always!(
         "Drive gauge texture: KH1 texture {tex:#x} made from the {w}x{h} picture ({len} bytes as DDS, file {rec:#x}), PS2 size {}x{}, mapped at TBP {tbp:#x} (TEX0 {t0:#x}); KH1's map lookup gives {back:#x}{}",
         art.ps2.0,
         art.ps2.1,

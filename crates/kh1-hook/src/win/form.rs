@@ -310,6 +310,19 @@ unsafe fn can_pay(sora: usize, kind: Kind) -> Result<(), String> {
 /// A hit's form gauge loss waiting for the form's next step (hundredths of a tick; `hit_drain`
 /// runs at KH1's contact, outside the form's step).
 static HIT_LOSS: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+/// (t946) Drive orbs picked up in a form on the Drive gauge, in 1/100 ticks (`orb`).
+static ORB_GAIN: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
+/// (t946) A Drive orb of `value` picked up in a form (`driveorbs`): KH2 fills the form gauge by value ×
+/// sstm `+0x70` (12) ticks (`0x1403A9CF0` mode 2, Checked (decomp)), taken on the form's next step.
+/// False out of a form on the Drive gauge (the bars get it instead).
+pub fn orb(value: u8) -> bool {
+    if !in_form() || form_gauge().is_none() {
+        return false;
+    }
+    ORB_GAIN.fetch_add((value as f32 * crate::drivegauge::ORB_TICKS * 100.0) as u32, Ordering::Relaxed);
+    true
+}
 
 /// Drive > Gauge Refill: 0 not read yet, 1 off, 2 KH2's.
 static GAUGE_REFILL: AtomicU8 = AtomicU8::new(0);
@@ -611,7 +624,8 @@ unsafe fn drain_step(d: &mut Drive, actor: usize, battle: bool) {
     // the hits' losses; empty: the revert (`0x140404A40`, the bars untouched). No MP drain.)
     if let Some((left, full)) = f.gauge.as_mut() {
         let hits = HIT_LOSS.swap(0, Ordering::Relaxed) as f32 / 100.0;
-        *left = (*left - crate::drivegauge::drain(battle) - hits).clamp(0.0, *full);
+        let orbs = ORB_GAIN.swap(0, Ordering::Relaxed) as f32 / 100.0;
+        *left = (*left - crate::drivegauge::drain(battle) - hits + orbs).clamp(0.0, *full);
         if *left <= 0.0 && !d.revert {
             d.revert = true;
             log!(Forms, "{}: the form gauge is out", f.kind.name());
@@ -946,6 +960,7 @@ unsafe fn native_arrive(d: &mut Drive, kh2: &pose::Kh2, actor: usize) {
         (full, full)
     });
     HIT_LOSS.store(0, Ordering::Relaxed);
+    ORB_GAIN.store(0, Ordering::Relaxed);
     FORM_WORLD.store(super::takeover::current_world(), Ordering::Relaxed);
     d.form = Some(InForm { kind, gauge, left: 0, logged_s: 0 });
     if let Some((_, full)) = gauge {

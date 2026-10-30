@@ -612,6 +612,17 @@ impl Pages {
     }
 }
 
+/// A copy of `bytes` in our handle region's own pages, kept for the game's life (KH1 relocates a
+/// DPX's pointers into handles of the region it lies in, `0x14038AD90`): KH1's prize file with
+/// KH2's Drive orbs (`driveorbs`, t948). Its address, or `None` without memory.
+pub(super) fn keep(bytes: &[u8]) -> Option<usize> {
+    let pages = Pages::new(bytes.len())?;
+    unsafe { std::ptr::copy_nonoverlapping(bytes.as_ptr(), pages.at as *mut u8, bytes.len()) };
+    let at = pages.at;
+    std::mem::forget(pages);
+    Some(at)
+}
+
 impl Drop for Pages {
     fn drop(&mut self) {
         unsafe { super::sys::VirtualFree(self.at as _, self.len, MEM_DECOMMIT) };

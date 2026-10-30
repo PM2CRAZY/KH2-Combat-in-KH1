@@ -90,6 +90,29 @@ impl Kh1Install {
         Err(Error::NotFound(name.to_string()))
     }
 
+    /// Where [`Kh1Install::read`] reads `name` from, as a short text that changes whenever what it
+    /// reads (or the file's remastered assets, in the same entry) can have: the package (and
+    /// whether it is the backup's), the file's index entry (its place, stored and real sizes) and
+    /// the `.pkg`'s size and modification time; `"missing"` when no package has it. As
+    /// `kh2_data::Install::stamp_any`, for caches built from the file without reading it.
+    pub fn stamp(&self, source: Source, name: &str) -> String {
+        for part in ARCHIVES {
+            let hed = self.hed(source, part);
+            if !hed.is_file() {
+                continue;
+            }
+            let Ok(archive) = Archive::open_cached(&hed) else { continue };
+            if let Some(e) = archive.find(name) {
+                let backup = hed.parent().and_then(|d| d.file_name()).is_some_and(|d| d.eq_ignore_ascii_case("BackupImage"));
+                let (len, time) = std::fs::metadata(&archive.pkg_path).map_or((0, 0), |m| {
+                    (m.len(), m.modified().ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map_or(0, |d| d.as_nanos()))
+                });
+                return format!("{part}{} @{:x} {}/{} pkg {len} {time}", if backup { " (backup)" } else { "" }, e.offset, e.stored_len, e.real_len);
+            }
+        }
+        "missing".to_string()
+    }
+
     /// Reads a file by its original name from whichever package holds it.
     pub fn read(&self, source: Source, name: &str) -> Result<Vec<u8>> {
         let keys = self.key_table()?;

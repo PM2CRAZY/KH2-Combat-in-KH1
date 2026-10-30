@@ -17,6 +17,7 @@ mod debugfont;
 mod debugmenu;
 mod drive;
 mod drivegauge;
+mod driveorbs;
 mod equipmenu;
 mod fapanel;
 mod feet;
@@ -255,7 +256,8 @@ pub fn set_log_cats(bits: u32, on: bool) {
 /// Writes a line to `kh1-kh2.log` next to the game, with the game frame it was written on
 /// (`[f123]`, Sora's physics frames: `takeover::GAME_FRAME`, the trace's `frame`), and keeps it
 /// for that frame's trace row (`trace`: KH1's sound calls as its Sounds category, the rest as its
-/// Log Lines). Called by `log!` once the category is on; nothing else calls it.
+/// Log Lines). Called by `log!` once the category is on, and by `kh2hud`'s
+/// outcome lines whatever their category says (t941).
 pub fn log_line(c: LogCat, line: &str) {
     if let Ok(mut g) = LOG.lock() {
         if let Some(f) = g.as_mut() {
@@ -483,6 +485,7 @@ pub unsafe extern "system" fn DllMain(_inst: *mut c_void, reason: u32, _reserved
         kh2sound::start();
         kh2hud::start();
         gaugehud::install(base);
+        driveorbs::install(base);
         kh2dpx::start();
         pose::load_kh2();
         model::load();
