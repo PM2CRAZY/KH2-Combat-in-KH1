@@ -163,6 +163,10 @@ unsafe fn blade_data(motion: u16, window: usize, air: bool, channel: u8, a: &kh2
         wr(d + 0x10, BLADE_BONE);
     }
     wr(d + 0x34, (rd::<u32>(d + 0x34) & !3) | channel as u32);
+    // A KH2 Magic-based window: KH1's own magic stat (`kh1rows::kh1_magic`, Ripple Drive's).
+    if a.stat_source == 1 {
+        super::kh1rows::kh1_magic_row(d);
+    }
     let (t1, p1) = (rd::<u32>(d + 0x38) & 7, rd::<i32>(d + 0x3C));
     let (t, p) = if super::recoil::kh2() { super::kh1rows::kh2_clash(Some(a), t1, p1) } else { (t1, p1) };
     // (The data's own "spent" bit 16 kept: KH1's wall test as for the right Keyblade.)

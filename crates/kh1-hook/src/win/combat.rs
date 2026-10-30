@@ -1526,6 +1526,8 @@ impl Strikes {
         let body_native = super::bodyhits::native();
         let kh2 = pose::kh2();
         let mut live: Vec<((u64, usize), Option<Shape>, Option<kh2_data::sora::BoneShape>, u8, u16)> = Vec::new();
+        // (Keyblade shapes on KH1's grip this frame, by key, `GRIP_CAL`.)
+        let mut grip: Vec<((u64, usize), super::bodyhits::GripShape)> = Vec::new();
         // (Recoil KH1: no guard windows in his attacks, `recoil::guard_window_on`.)
         for g in out.guard_boxes.iter().filter(|g| super::recoil::guard_window_on(out.motion, g.weapon)) {
             if kh1_blade && g.weapon > 0 {
@@ -1541,6 +1543,39 @@ impl Strikes {
                     continue;
                 }
             }
+            // (Guard Shape KH2, t911: KH2's Keyblade shapes measured onto KH1's grip on the window's first
+            // frame, then carried by KH1's grip, placed by KH1's pass.)
+            if kb_native && g.weapon > 0 {
+                let cal: Vec<((u64, usize), super::bodyhits::GripShape)> = GRIP_CAL.try_lock().map(|c| c.iter().filter(|(k, _)| k.0 == g.swing).copied().collect()).unwrap_or_default();
+                if !cal.is_empty() {
+                    for (k, gs) in cal {
+                        grip.push((k, gs));
+                        live.push((k, None, None, g.weapon, g.attack));
+                    }
+                    continue;
+                }
+                let posed_now: Vec<Shape> = anim.attack_shapes(g.group, g.weapon).into_iter().take(GUARD_SHAPES).collect();
+                let measured: Vec<Option<super::bodyhits::GripShape>> = posed_now.iter().map(|sh| super::bodyhits::grip_local(sora, sh)).collect();
+                if !posed_now.is_empty() && measured.iter().all(|m| m.is_some()) {
+                    if let Ok(mut c) = GRIP_CAL.try_lock() {
+                        for (i, m) in measured.iter().enumerate() {
+                            c.push(((g.swing, i), m.unwrap()));
+                        }
+                    }
+                    if super::log_on(super::LogCat::Combat) && N.fetch_add(1, Ordering::Relaxed) < 60 {
+                        log!(Combat, "guard: motion {}'s Keyblade window (ATKP {}): {} KH2 shape(s) measured onto KH1's grip (Guard Shape KH2): {:?}", out.motion, g.attack, measured.len(), measured.iter().map(|m| m.map(|m| m.offset)).collect::<Vec<_>>());
+                    }
+                    for (i, m) in measured.into_iter().enumerate() {
+                        grip.push(((g.swing, i), m.unwrap()));
+                        live.push(((g.swing, i), None, None, g.weapon, g.attack));
+                    }
+                    continue;
+                }
+                for (i, sh) in posed_now.into_iter().enumerate() {
+                    live.push(((g.swing, i), Some(sh), None, g.weapon, g.attack));
+                }
+                continue;
+            }
             for (i, sh) in anim.attack_shapes(g.group, g.weapon).into_iter().take(GUARD_SHAPES).enumerate() {
                 live.push(((g.swing, i), Some(sh), None, g.weapon, g.attack));
             }
@@ -1548,6 +1583,10 @@ impl Strikes {
         // Windows closed: their objects freed.
         let keys: HashSet<(u64, usize)> = live.iter().map(|l| l.0).collect();
         let gone: Vec<(u64, usize)> = self.guard_objs.keys().filter(|k| !keys.contains(k)).copied().collect();
+        // (Windows closed: their grip shapes go too.)
+        if let Ok(mut c) = GRIP_CAL.try_lock() {
+            c.retain(|(k, _)| keys.contains(k));
+        }
         for k in gone {
             if let Some((o, _)) = self.guard_objs.remove(&k) {
                 keyblade_guard_forget(o);
@@ -1565,16 +1604,21 @@ impl Strikes {
                 self.blade_guard(sora, key, weapon, attack, battle, out.motion, character.as_deref_mut());
                 continue;
             }
-            let native = kb_native && weapon > 0 && posed.is_some();
-            // (Where it stands now: KH2's posed shape, or his place for a body shape KH1's pass
-            // places itself each pass, `bodyhits::body_guard_entries`.)
-            let (c, r) = match (&posed, &body) {
-                (Some(sh), _) => ([sh.center[0], -sh.center[1], sh.center[2], 1.0f32], sh.radius.max(sh.height).clamp(10.0, 150.0)),
-                (None, Some(bs)) => {
+            let on_grip = grip.iter().find(|(k, _)| *k == key).map(|(_, g)| *g);
+            let native = kb_native && weapon > 0 && (posed.is_some() || on_grip.is_some());
+            // (Where it stands now: KH2's posed shape, or his place for a shape KH1's pass places
+            // itself each pass, `bodyhits::body_guard_entries`: on his body, or on KH1's grip.)
+            let (c, r) = match (&posed, &body, &on_grip) {
+                (Some(sh), _, _) => ([sh.center[0], -sh.center[1], sh.center[2], 1.0f32], sh.radius.max(sh.height).clamp(10.0, 150.0)),
+                (None, Some(bs), _) => {
                     let p = rd::<[f32; 3]>(sora + 0x10);
                     ([p[0], p[1], p[2], 1.0f32], bs.radius.max(bs.height).clamp(10.0, 150.0))
                 }
-                (None, None) => continue,
+                (None, None, Some(gs)) => {
+                    let p = rd::<[f32; 3]>(sora + 0x10);
+                    ([p[0], p[1], p[2], 1.0f32], gs.radius.max(gs.height).clamp(10.0, 150.0))
+                }
+                (None, None, None) => continue,
             };
             // (Its arc: the window's ATKP reflect range and angle, KH2's guard test, `guard_data`;
             // an ATKP not found: in front on the Keyblade, all round on his body, as before.)
@@ -1623,9 +1667,14 @@ impl Strikes {
                     (o, 0)
                 }
             };
-            if let Some(bs) = body.as_ref() {
+            if body.is_some() || on_grip.is_some() {
                 // (Placed by KH1's pass from KH1's state: its size only, nothing placed here.)
-                super::bodyhits::body_guard_keep(o, bs);
+                if let Some(bs) = body.as_ref() {
+                    super::bodyhits::body_guard_keep(o, bs);
+                }
+                if let Some(gs) = on_grip.as_ref() {
+                    super::bodyhits::grip_guard_keep(o, gs);
+                }
                 wr(o + 0xC, r);
                 wr(o + 0x3C, r);
                 wr(o, rd::<u32>(o) | 0x1_0000);
@@ -1680,7 +1729,12 @@ impl Strikes {
             if new == 0 {
                 continue;
             }
-            let from = self.shots.iter().find(|s| rd::<u32>(s.obj + 0x54) & new != 0).map(|s| (s.owner, rd::<[f32; 3]>(s.obj + 0x10)));
+            // (The attack it stopped, from KH1's own pool: the object whose hit bit the mask gained,
+            // its owner and place; t912, before our hit state's shot list, `Strikes::look`.)
+            let from = (0..ATTACK_SLOTS)
+                .map(|k| base + ATTACK_POOL_RVA + k * 0xC0)
+                .find(|&a| rd::<u32>(a) & 0x800 != 0 && rd::<u32>(a + 0x54) & new != 0)
+                .map(|a| (pose::ptr(rd::<u32>(a + 0x34)), rd::<[f32; 3]>(a + 0x10)));
             let toward = from.map(|(_, p)| glam::Vec2::new(p[0] - me[0], p[2] - me[2]).normalize_or_zero()).filter(|v| *v != glam::Vec2::ZERO).unwrap_or_else(|| {
                 let f = rd::<[f32; 4]>(sora + 0x30);
                 glam::Vec2::new(f[0], f[2])
@@ -1942,6 +1996,9 @@ impl Strikes {
                 // s193, the user: "revert this back to before we asked to make any revenge value
                 // changes".)
                 MAGIC.store(row.stat_source == 1, Ordering::Relaxed);
+                // A KH2 Magic-based hit (Explosion's, Magnet Burst's): the KH1 row's data with KH1's
+                // own magic stat (`magic_row`: Ripple Drive's max MP source and power), not Strength.
+                let kh1 = if row.stat_source == 1 { magic_row(kh1) } else { kh1 };
                 // (The move this hit belongs to: its action, `swing`'s high bits.)
                 let info = format!(
                     "KH2 swing {:?} ATKP {} sub {} (kind {} element {} reaction {} effect_on_hit {} damage_effect {} random_effect {} hit_sound {} flags {:#x}) -> KH1 row idx {} ({}{})",
@@ -2047,7 +2104,11 @@ impl Strikes {
                     Some(off) => (Row { data: off, fx: [0; 3], ..rows[knock as usize] }, true),
                     None => (rows[knock as usize], false),
                 };
-                MAGIC.store(!spell_data && r.stat_source == 1, Ordering::Relaxed);
+                MAGIC.store(r.stat_source == 1, Ordering::Relaxed);
+                // A Magic-based attack on the swing's data: KH1's own magic stat (`magic_row`,
+                // Ripple Drive's). A KH1 spell's data keeps its own (t920: KH1's own magic formula;
+                // `kh2damage` counts KH2's power against KH2's normal cast).
+                let kh1 = if !spell_data && r.stat_source == 1 { magic_row(kh1) } else { kh1 };
                 let info = format!(
                     "KH2 spell ATKP {} sub {} (kind {} element {} reaction {} effect_on_hit {} damage_effect {} random_effect {} hit_sound {} flags {:#x}) -> KH1 row idx {} ({})",
                     a.atk, a.sub, r.kind, r.element, r.enemy_reaction, r.effect_on_hit, r.damage_effect, r.random_effect, r.hit_sound, r.flags,
@@ -2236,12 +2297,27 @@ pub fn keyblade_guard_native() -> bool {
     barrier_native()
 }
 
-/// Whether one of KH2's guard windows (`group` on `weapon`: 0 his body, 1.. a Keyblade) needs KH2's
-/// rig posed by us this frame (`takeover::kh2_hits`, t909): not on KH1's own blade (Guard Shape KH1),
-/// not on his body where KH1's pass places KH2's body shapes itself (`bodyhits::body_guard_keep`).
-pub fn guard_needs_pose(group: u8, weapon: u8) -> bool {
+/// KH2's Keyblade guard shapes measured onto KH1's grip (Guard Shape KH2, t911): by (window, shape),
+/// the shape in the grip's axes (`bodyhits::grip_local`), measured on the window's first frame from
+/// KH2's rig posed then, and kept until the window closes.
+static GRIP_CAL: std::sync::Mutex<Vec<((u64, usize), super::bodyhits::GripShape)>> = std::sync::Mutex::new(Vec::new());
+
+/// The window `swing`'s shapes are on KH1's grip already (`GRIP_CAL`).
+fn grip_calibrated(swing: u64) -> bool {
+    GRIP_CAL.try_lock().is_ok_and(|g| g.iter().any(|(k, _)| k.0 == swing))
+}
+
+/// Whether one of KH2's guard windows (`swing`, `group` on `weapon`: 0 his body, 1.. a Keyblade) needs
+/// KH2's rig posed by us this frame (`takeover::kh2_hits`, t909): not on KH1's own blade (Guard Shape
+/// KH1), not on his body where KH1's pass places KH2's body shapes itself (`bodyhits::body_guard_keep`),
+/// not on the Keyblade once its shapes are on KH1's grip (Guard Shape KH2, t911: only the window's
+/// first frame poses KH2's rig, to measure them).
+pub fn guard_needs_pose(swing: u64, group: u8, weapon: u8) -> bool {
     if weapon > 0 {
-        return !(keyblade_guard_native() && super::styles::kh1_now(super::styles::Kind::GuardShape));
+        if !keyblade_guard_native() {
+            return true;
+        }
+        return !super::styles::kh1_now(super::styles::Kind::GuardShape) && !grip_calibrated(swing);
     }
     if !super::bodyhits::native() {
         return true;
@@ -2519,6 +2595,8 @@ impl Strikes {
 
     /// The barriers standing this frame (`keep`); every other barrier's guard object freed.
     pub unsafe fn barrier_guards_keep(&mut self, keep: &[u64]) {
+        // (The stopped-shot check each frame of Reflect's step, now that `look` may not run, t912.)
+        self.stopped_check();
         let Ok(mut g) = BARRIERS.try_lock() else { return };
         if g.is_empty() {
             return;
@@ -2544,6 +2622,12 @@ impl Strikes {
     /// switched it back on) is logged, so a shot that flies on after the barrier shows.
     fn stopped_check(&mut self) {
         if self.stopped.is_empty() {
+            return;
+        }
+        // (Once a game frame: `look` and Reflect's step may both call it, t912.)
+        static LAST: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(u64::MAX);
+        let frame = super::takeover::GAME_FRAME.load(Ordering::Relaxed);
+        if LAST.swap(frame, Ordering::Relaxed) == frame {
             return;
         }
         for s in &mut self.stopped {
@@ -2614,14 +2698,6 @@ unsafe fn stop_shot(base: usize, sora: usize, g: usize) -> (bool, bool, bool) {
 pub fn landing() -> Option<(u32, bool)> {
     let p = POWER.load(Ordering::Relaxed);
     (p != 0).then(|| (p, MAGIC.load(Ordering::Relaxed)))
-}
-
-/// KH2's Magic-based hits (ATKP stat source 1): KH1 has no Magic stat, so Sora's max MP stands
-/// in, +10% a point (at most 30), times the ini's `magic_scale` (`scale_record`, `kh2damage`).
-pub fn magic_factor() -> f32 {
-    let base = BASE.load(Ordering::Relaxed);
-    let mp = unsafe { super::menu::save_block(base).map_or(0, |s| rd::<u8>(s + 8)) } as f32;
-    (1.0 + 0.1 * mp.min(30.0)) * super::settings::get().magic_scale
 }
 
 /// Damage of the last landed hit (set by `probe::hit` from the record).
@@ -2720,6 +2796,29 @@ unsafe fn hit_data(base: usize, data: i32, group: i32) -> Option<usize> {
     wr(d + DATA_HIT_GROUP, group);
     Some(d)
 }
+
+/// KH1's attack row `row` with KH1's own magic stat on its data (t917, the owner: a KH2 Magic-based
+/// hit goes through how KH1 works out magic damage, no bonus on top): a copy of its data (in
+/// `HIT_DATA`, refilled on every use) with Ripple Drive's stat source, power and min / max
+/// (`kh1rows::kh1_magic`), so KH1's constructor and damage function add max MP × 3 where the swing
+/// adds Strength. The row as it is when no copy can be made.
+unsafe fn magic_row(row: Row) -> Row {
+    let base = BASE.load(Ordering::Relaxed);
+    let Some(d) = hit_data(base, row.data, MAGIC_COPY) else { return row };
+    let src = (base + ATTACK_DATA_RVA).wrapping_add(row.data as isize as usize);
+    wr(d + DATA_HIT_GROUP, rd::<i32>(src + DATA_HIT_GROUP));
+    if !super::kh1rows::kh1_magic_row(d) {
+        return row;
+    }
+    let off = d as isize - (base + ATTACK_DATA_RVA) as isize;
+    if off < i32::MIN as isize || off > i32::MAX as isize {
+        return row;
+    }
+    Row { data: off as i32, ..row }
+}
+
+/// `HIT_DATA`'s key for `magic_row`'s copies (no hit-effect group is this).
+const MAGIC_COPY: i32 = i32::MIN;
 
 /// KH2's group for a hit (`0x1403d1b40`, Steam KH2, Checked (decomp)): effect_on_hit - 1, plus a
 /// random step 0..random_effect-1 when the row has one (KH2's own generator, `x *= 0x10DCD`; ours
@@ -3027,13 +3126,9 @@ pub unsafe fn scale_record(rec: usize, attack: usize, target: usize) {
     // 6-damage swing were floored from 1.5 to 1, a third of the burst lost).
     let d = rd::<i32>(rec + 8);
     let set = super::settings::get();
-    let mut factor = set.damage_scale;
-    // KH2's Magic-based hits (ATKP stat source 1: Explosion's, Magnet Burst's; the user: they
-    // scale with magic): KH1 has no Magic stat, so Sora's max MP stands in, +10% a point, times
-    // the ini's `magic_scale`.
-    if own.as_ref().map_or(MAGIC.load(Ordering::Relaxed), |a| a.stat_source == 1) {
-        factor *= magic_factor();
-    }
+    // (KH2's Magic-based hits are on KH1's own magic stat, the data's max MP source (t917,
+    // `magic_row`, `kh1rows::kh1_magic`): no max MP bonus on top.)
+    let factor = set.damage_scale;
     let scale = (factor * 100.0).round().max(1.0) as i64;
     let target = if own.is_some() { target } else { TARGET.load(Ordering::Relaxed) };
     let mut carry = CARRY.lock().ok();

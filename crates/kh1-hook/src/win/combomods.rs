@@ -604,6 +604,12 @@ impl Kh1Press {
     /// KH2's line ahead for row 1 (on the ground: the floor gives out along the selector's
     /// direction, `drop_ahead`), tested now for this press.
     pub unsafe fn test_drop_ahead(&mut self, actor: usize) {
+        // (Ledge Hop Off, base Sora: no line ahead, so row 1 is never marked and the press takes
+        // the next row that fits; Drive Forms keep KH2's, `drop_hop`.)
+        if !drop_hop() && !super::form::in_form() && !super::form::native_running() {
+            self.drop_ahead = false;
+            return;
+        }
         if !self.air && rd::<i32>(actor + 0x70) == 0 {
             let aim = self.with(|p| p.aim());
             self.drop_ahead = drop_ahead(actor, aim);
@@ -1794,6 +1800,31 @@ const MOVER_STEAM: usize = 0x195180;
 const MOVER_BYTES: [u8; 10] = [0x40, 0x55, 0x53, 0x57, 0x41, 0x54, 0x48, 0x8D, 0xAC, 0x24];
 const NORMAL_STEAM: usize = 0x1907F0;
 const NORMAL_BYTES: [u8; 11] = [0xF3, 0x0F, 0x10, 0x15, 0xC4, 0x27, 0x25, 0x00, 0x48, 0x63, 0xC1];
+
+/// The Config row Combat > Ledge Hop (the owner, t914: "make sora's drop ahead hop a toggle in
+/// the config menu under combat"): 0 not read yet, else 1 + on. On (the default): KH2's line ahead
+/// marks row 1 at a drop ahead (its hop off the ledge, 181). Off: base Sora's press never marks
+/// it; Drive Forms keep KH2's.
+static DROP_HOP: AtomicU8 = AtomicU8::new(0);
+
+/// Whether base Sora's ground press tests KH2's line ahead (`drop_ahead`, row 1).
+pub fn drop_hop() -> bool {
+    match DROP_HOP.load(Ordering::Relaxed) {
+        0 => {
+            let on = super::settings::get().drop_hop;
+            DROP_HOP.store(1 + on as u8, Ordering::Relaxed);
+            on
+        }
+        v => v == 2,
+    }
+}
+
+/// The Config row (Combat > Ledge Hop): live, kept in the ini (`drop_hop`).
+pub fn set_drop_hop(on: bool) {
+    DROP_HOP.store(1 + on as u8, Ordering::Relaxed);
+    super::settings::save("drop_hop", if on { "on" } else { "off" });
+    log!(Combat, "Config menu: Ledge Hop {}", if on { "On" } else { "Off" });
+}
 
 /// KH2's line ahead at an attack press on the ground (the tester: "add that"; Steam KH2
 /// `0x140402D20`, Checked (decomp)): `aim` (KH2's selector's direction, to the primary target or

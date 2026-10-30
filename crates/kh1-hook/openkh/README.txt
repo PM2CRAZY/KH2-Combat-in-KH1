@@ -87,7 +87,6 @@ Each line in the file explains itself. The ones you are most likely to want:
   camera = kh2 / kh1          which camera
   glide = square / jump       which button glides
   damage_scale = 1.0          multiplies the damage of your KH2 attacks
-  magic_scale = 1.0           extra multiplier for Explosion / Magnet Burst
   kh2_effects = off           turns KH2's visual effects off
   kh2_sounds = off            turns KH2's sound effects off
   shortcuts = 3               back to KH1's three shortcuts

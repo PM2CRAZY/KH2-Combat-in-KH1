@@ -19,7 +19,7 @@ No decompiled code here: plain-language notes only.
   reaction category) and, for Guard Break, the priority (`+0x3C`) changed. After KH1 builds the
   hit record, `combat::scale_record` (called from `probe::hit`, our hook on KH1's "attack touched
   an actor") multiplies the record's damage (`+8`) by the KH2 window's ATKP power / 100, the ini's
-  `damage_scale`, and for Magic-sourced ATKP by (1 + 0.1 × max MP) × `magic_scale`; the fraction
+  `damage_scale` (Magic-sourced ATKP: KH1's own magic stat on the data since t917, §10); the fraction
   is carried per foe (`CARRY`). KH2 launches ride on KH1's launch reaction (`LAUNCHES`).
 - **Borrowed and form moves** (`combat::land_hit`): our own hit test, then KH1's contact code on a
   temporary attack object made from a KH1 row's data (or a KH1 spell's data, `kh1_spell_data`),
@@ -126,7 +126,7 @@ KH2's damage routine is **0x1403C12F0** (Steam KH2; callers 0x1403CE740, 0x1403C
 | KH2 ATKP | KH1 data / record | Native route |
 |---|---|---|
 | power % on (stat − Def) | additive power on the curve | the damage function (§5) |
-| stat source 0 / 1 | stat source 0 Strength / 1 max MP | direct (max MP stands in for Magic, as now) |
+| stat source 0 / 1 | stat source 0 Strength / 1 max MP | KH2's Magic → KH1's own magic stat, Ripple Drive's data (§10) |
 | element 0..6 | element 1 physical, 2 fire, 3 blizzard, 4 thunder, ... | map 0→1, 1→2, 2→3, 3→4 (**Assumption**: KH2's order physical, fire, blizzard, thunder, dark, neutral, general, from OpenKH); KH2 dark / neutral have no known KH1 element |
 | enemy reaction | reaction kind `+0xC` (3 flinch, 4 knock-back, 5 launch) | by `reaction::category` (as `kh1rows` does) |
 | knockback | none in KH1's data (`docs/kh1-launch.md`) | our launch hook, as now |
@@ -180,8 +180,8 @@ in it feeling like kh2"; criticals a Config row; KH1's MP charge kept (a).
   Checked (exe)). `win/kh2damage.rs` hooks the function (first 15 bytes
   `48 89 5C 24 08 48 89 6C 24 10 48 89 74 24 18`, Checked (exe)); for an attack of Sora's whose
   KH2 ATKP is known it points that global at a copy of the curve with every value × KH2's power
-  / 100 × `damage_scale` (× the Magic stand-in, (1 + 0.1 × max MP) × `magic_scale`, for stat
-  source 1), rounded up, for the one call, then puts KH1's pointer back. KH1's function runs
+  / 100 × `damage_scale` (stat source 1: KH1's own magic stat on the data, §10; no multiplier),
+  rounded up, for the one call, then puts KH1's pointer back. KH1's function runs
   whole: its critical and tally 8, the data's min / max, the target's floor / cap, resistance,
   Aero, mode 2, Second Chance, at least 1; the record builder and everything after it (MP
   charge, enemy scripts, the hit pass) are untouched. Only the game's thread calls it
@@ -196,7 +196,7 @@ in it feeling like kh2"; criticals a Config row; KH1's MP charge kept (a).
   fractions while this is in (on the Epic build the hook isn't made and the old after-the-fact
   way stays). KH2 Damage Off (§9) is KH1's damage exactly. KH1's row power stays in the curve's
   index (it is (a) as asked): KH1's finisher rows add 4 or 6 points before KH2's finisher power
-  is applied. Dropping it would be question 1's (c).
+  is applied. Dropping it would be question 1's (c). (Dropped in t918, §11.)
 - **Not done (still the plan's steps 1 and 3):** KH2's element and reaction on the native swings'
   KH1 data (they keep KH1's row's: physical, flinch, finisher launch, which agree with KH2's for
   Sora's plain combo), and KH2's own hit effect.
@@ -237,5 +237,125 @@ Config > Combat > KH2 Damage: Off / On (the tester, 3 (a); ini `kh2_damage`, def
 On: §7. Off: KH1's damage exactly, for every hit of Sora's: the damage hook leaves KH1's curve as it
 is and `combat::scale_record` no longer rewrites the record's damage after the hit (before, ini
 `kh2_damage = off` meant the old after-the-fact KH1 × KH2 power way; that way now runs only where
-the hook couldn't be made, the Epic build). `damage_scale` and `magic_scale` act only with it On.
+the hook couldn't be made, the Epic build). `damage_scale` acts only with it On (`magic_scale` is
+gone since t917, §10).
 Reactions, launches and the criticals rows don't depend on it.
+
+## 10. Implemented: KH2's Magic-based hits on KH1's own magic stat (t917)
+
+The owner: a KH2 move tied to Sora's Magic stat goes through how KH1 works out magic damage, with
+no KH2 bonus on top; KH1's Ripple Drive as the model (answer (a)).
+
+- **Before.** A Magic-based KH2 hit (ATKP stat source 1: Explosion, Magnet Burst) landed on a KH1
+  swing row's data (stat source 0, Strength) and was then multiplied by (1 + 0.1 × max MP, at most
+  30) × `magic_scale`: Strength damage with an MP bonus on top, neither KH2's nor KH1's way.
+- **KH2 (Checked (decomp), `0x1403C12F0`).** The ATKP's stat source picks the stat the damage is
+  made from, Strength or Magic; power is a percentage of it. No bonus on top.
+- **KH1 (Checked (decomp), `0x1402B2DC0` / `0x1402BFA80`).** The data's stat source (`+0`) picks
+  the attack's stat term: 0 Strength, 1 max MP, 3 / 4 / 5 max MP × 2 / 3 / 5. It is added to the
+  data's power before the curve. KH1 has no Magic stat; its magic grows from max MP.
+- **Now.** Every data copy a Magic-based KH2 hit lands with takes KH1's Ripple Drive data's
+  damage fields (`kh1rows::kh1_magic`): stat source (`+0`), power (`+0x14`, `+0x48`) and min / max
+  (`+0x20` / `+0x24`, `+0x4C` / `+0x50`). Ripple Drive is Sora's KH1 row 7 (`combomods::RIPPLE_DRIVE`),
+  data `0x4E88`: stat source 4 (max MP × 3), power 10, Checked (files). Read from KH1's table at
+  run time, refused (left on Strength, logged) if its stat source isn't a max MP one. KH1's own
+  constructor then makes the stat term from max MP, and KH2's power % applies on KH1's curve as
+  for every KH2 hit (§7). Where: our rows (`kh1rows::make`, by the row's first window's ATKP),
+  KH2's body windows (`bodyhits::data_for`), the left Keyblade's windows (`lefthits::blade_data`),
+  KH2 spell attacks on the swing's data (`bodyhits`, spell objects without KH1 spell data), and
+  `combat::land_hit`'s swing and spell fallbacks (`combat::magic_row`, a copy in `HIT_DATA`).
+  KH2 spells with KH1 spell data keep that data's own stat source, as before.
+- **Removed.** `combat::magic_factor` and the ini's `magic_scale` (an old ini's line is ignored).
+- **Left.** A Magic-based window on KH1's own swing row (a native swing, `kh1rows::native_atkp`):
+  that data is KH1's own, shared with vanilla swings, so it stays Strength (logged once). No KH2
+  plain combo window is Magic-based as far as seen (**Assumption**). A row of ours takes its first
+  window's stat source for the whole row (**Assumption**: a move's windows share it). Element and
+  reaction stay the swing's (physical; KH2's reaction as before).
+- **Not checked.** How Sora's Strength and max MP compare across KH1's levels in play (how big the
+  change feels). KH1 Keyblades add nothing to max MP (**Assumption**; KH2's Keyblades add Magic).
+
+## 11. Implemented: no KH1 finisher points on KH2 hits (t918)
+
+The owner: "the bonus on top should not be in the game but work through kh1's systems".
+
+- **Before.** KH2 hits on a KH1 finisher row's data (ours made from rows 8 / 16, KH2's blows on
+  body windows, a native finisher swing) kept KH1's finisher power (4 or 6 points on the curve's
+  index, about × 2 to × 2.8, Checked (files) and §2.3) and then KH2's finisher power % on top.
+- **Now (`kh2damage::damage`).** For the one damage call of a KH2 hit whose curve was scaled, if
+  the attack's data is Strength-based (stat source 0) and its element reads the curve (not 8, 9,
+  11, 12), its power vs enemies (`+0x48`) is a plain swing's (Sora's KH1 row 13's data, 0 in
+  `btltbl.bin`) and put back after the call, as the curve pointer is. KH2's own power % is then the
+  finisher's whole strength, through KH1's curve. KH1's own hits (Base Combo KH1, KH1's ability
+  finishers) are untouched; Magic-based hits keep Ripple Drive's power (§10). The log's "KH2
+  damage" line shows "KH1 row power 6 -> 0" when it applies.
+- **Assumptions.** KH1's damage function reads `+0x48` through the attack's data handle at the call
+  (Checked (decomp) for the read, §2.3); only the game's thread calls it (as §7). KH1's critical
+  bonus (Criticals On) still adds its points before KH2's power.
+
+## 12. Implemented: KH2's spells on KH1's magic stat (t919)
+
+The owner: KH2 Blizzard did 90 a hit; one KH1 magic base for every Magic-based KH2 attack, KH2's
+power % the only multiplier ("(b) go ahead").
+
+- **What the log showed (t918).** Blizzard level 3 (ATKP 248 sub 4, sub 5 the combo's finisher)
+  on a copy of KH1's Blizzaga data: 90 a hit, 132 the finisher. KH1's curve has 24 at index 14:
+  24 × 3.75 = 90, 24 × 5.5 = 132. So KH1's Blizzaga (34 power points + max MP, Checked (files))
+  made the hit and KH2's 375% / 550% multiplied it: KH1's spell-over-swing gap with KH2's on top.
+- **KH2's spell powers (Checked (files), `00battle.bin` ATKP).** A cast's total per target:
+  250 / 300 / 375% at levels 1 / 2 / 3, the combo finisher 375 / 450 / 550%. Blizzard (248) in
+  one shard; Fire (502) in 50% ticks and a last hit (level 3: 50 × 4 + 175, its finisher
+  50 × 4 + 350); Thunder's column (249) and burst (250) each with those numbers (whether both land
+  on one target: not checked). Drive Form subs (10..35) have their own rows. Costs (03system,
+  `mpcost.rs`): Fire 12, Blizzard 15, Thunder 18 of 100; the same power at each level, so in KH2
+  the cost buys the shape, not more damage.
+- **KH1's spells (Checked (files), `btltbl.bin`).** Power vs enemies Fire 20 / 28 / 36, Blizzard
+  22 / 27 / 34 (stat source 1, max MP), Thunder 16 / 20 / 26 (source 3, max MP × 2); MP cost
+  (`+0x30`) Fire and Blizzard 30 units, Thunder 100 (one bar). The spell level is KH1's own
+  (`reflect::kh1_spell_level`: the magic slot, else the save), Checked (code).
+- **Now.** Every KH2 spell hit (ATKP stat source 1) lands with KH1's magic stat on its data
+  (`kh1rows::kh1_magic`, as Explosion's since t917, §10): Ripple Drive's stat source (max MP × 3),
+  power 10 and min / max, on a KH1 spell's data too, whose element (the target's resistance),
+  reactions and MP charge stay. KH2's power % is then the spell's whole strength on KH1's curve,
+  as for every KH2 hit (§7). Where: `bodyhits`' spell objects, `combat`'s spell path
+  (`magic_row`; `magic_source` keeps the KH1 spell's effect list for the hit's spark).
+- **KH1's enemies (Checked (exe), Steam `0x1402A58E0`, reached from a script call at
+  `0x1402BBDF0`).** An enemy's stats come from a record its script hands over: `+0` HP, `+4` a
+  Strength level, `+8` a Defense level (each looked up in `btltbl.bin` at `0xC8A8`, two bytes a
+  level: Strength, Defense; levels 0..20 give Defense 2, 5, 6, 8, 9, 10, 11, 13, 14, 15, 17, 18,
+  19, 20, 21, 23, 24, 27, 30, 34, 46, Checked (files)), `+0xC` the damage floor, `+0x10` the cap,
+  `+0x28..+0x64` resistances (percent). The boss records of `he06.ard` have this shape (Checked
+  (files)); the regular enemies' records weren't found.
+- **The swings in that log hit KH1's damage floor.** Each foe took the same damage from every hit
+  whatever its power (100%, 125%, Explosion's 25%: 8 on one foe, 7 and 5 on others; criticals
+  above it), so those foes' floors were 5..8 and the swings' own damage below. On such foes KH2's
+  power differences between swings don't show (KH1's own clamp).
+- **Assumptions.** World 0xB is Olympus Coliseum (the exe's world code list's order). Those foes'
+  Defense about 27 (from Blizzaga's index 14 with max MP 7). KH1's 10 + max MP × 3 keeps pace with
+  Sora's Strength across KH1's levels as KH2's Magic does with Strength (not measured).
+
+## 13. Implemented: KH2's spells deal KH1's own spell hit (t920)
+
+The owner, after t919 (KH2 Blizzard felt like a worse KH1 Blizzard): KH1's own magic formula,
+KH2 setting only the proportions; Magic-based Keyblade moves stay on Ripple Drive's base (§10).
+
+- **Why t919's base was weak.** Sora's growth (Checked (exe) `0x1402B51B0` / `0x1402B5660`, Checked
+  (files) `btltbl.bin` `0x3AC0`): one level table whatever the Dive's choice (that picks the EXP
+  curve `+0x48D` and the ability order `+0x48C`); by level 100 Strength +44, max MP +5; Keyblades
+  (`0x94F8`) Strength +0..+14, max MP −2..+3. With Assumptions for the start (Strength 2) and max
+  MP (3 / 5 / 7 / 8 / 10 / 12 at levels 10 / 20 / 30 / 45 / 60 / 100), Ripple Drive's 10 + max MP × 3
+  is at or a little over Strength until late (19 vs 11, 31 vs 24, 40 vs 38, 46 vs 60), so t919 gave
+  KH2's ratio (a Blizzaga about 3.75 swings). KH1's own spells sit 10..18 points over Strength
+  (Blizzaga 34 + max MP), about 6..20 swings on KH1's curve: KH1's magic is far stronger against
+  its swings than KH2's.
+- **Now (`kh2damage`).** A KH2 spell hit whose data is a KH1 spell's (KH1's entry, or our copy with
+  its stat source, element and power: `kh1_spell_level`) keeps KH1's power points and max MP, and
+  KH2's power counts against KH2's normal cast at that level (`normal_cast`: KH2 Blizzard's ATKP
+  248 subs 0 / 2 / 4 from the user's KH2 data, 250 / 300 / 375; every KH2 spell's normal cast
+  totals that per target, §12) instead of 100. A normal cast is KH1's own spell hit; the combo
+  finisher 375 / 450 / 550 of it; Firaga's 50% ticks 50 / 375 each and its last hit 175 / 375.
+  Thunder's column (249) and burst (250) each count against the cast (each a whole KH1 Thundaga
+  hit if both land on one target, as KH2's two hits).
+- **Unchanged.** Explosion, Magnet Burst and the other Magic-based hits without KH1 spell data
+  keep Ripple Drive's base (§10); t918's finisher points (Strength-based data only).
+- **Left.** KH2's cost per cast (`mpcost.rs`) against KH1's: KH1's spell damage at KH2's price;
+  KH2's MP Charge isn't in yet (its own thread).

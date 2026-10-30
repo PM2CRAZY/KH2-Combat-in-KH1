@@ -273,7 +273,31 @@ then two rows, one for the animation and one for the shape.
   (`bodyhits::body_guard_entries`, the body hits' `centre`). KH2's rig isn't posed for them
   (`combat::guard_needs_pose`). A window with a shape KH1 can't place (a cube, another bone) keeps
   the old way.
-- Left: Guard Shape KH2 (KH2's Keyblade guard shapes) is still placed by us on KH2's posed rig: KH2's
-  Keyblade shapes are on KH2's weapon skeleton, and the frame of KH2's weapon root against KH1's grip
-  (bone 280) isn't checked yet (Assumption needed: how KH2's Keyblade bones line up with KH1's grip;
-  `pose`'s `keyblade_teeth_up` turns KH1's grip half round, so they don't match as they are).
+- Left at t909: Guard Shape KH2's Keyblade shapes on KH2's posed rig (§11 does them, t911).
+
+## 11. Built: Guard Shape KH2 on KH1's grip (t911), and our enemy list only for fallbacks (t912)
+
+- **Guard Shape KH2 (t911)**: on the first frame of a Keyblade guard window, KH2's rig is posed once
+  (as before) and each of the window's KH2 shapes is measured into the axes of KH1's grip bone (280,
+  KH1's drawn matrix and bone point, the same frame KH1's own Keyblade hits use;
+  `bodyhits::grip_local`). From then until the window closes, each shape is a KH1 guard object
+  (clash type 3, as t861) that KH1's own collision pass places from KH1's grip each pass
+  (`bodyhits::grip_guard_keep` / `body_guard_entries`), its result word held at "clashed" as t861's
+  Keyblade guards were. KH2's rig isn't posed again for that window (`combat::guard_needs_pose`).
+  The Combat log line "measured onto KH1's grip" lists each shape's offset in the grip's axes.
+  - **Assumption**: KH2's guard shape keeps its place on the blade through the window (KH2's
+    Keyblade has no bone moving under the grip), so measuring once and letting KH1's grip carry it
+    gives the same place as KH2's rig would. Not checked against a KH2 trace frame by frame. If a
+    window's shapes drift from the blade over its frames, this is the place to look.
+  - A shape KH1 can't place (a KH2 cube, never met in KH2's files) or no grip matrix keeps the old
+    way (placed by us on KH2's posed rig every frame).
+- **Our hit state's enemy list (t912)**: `combat::Strikes::look` (our list of KH1's bodies, guards
+  and shots) now runs only where something of ours still sweeps against it: KH2's posed rig
+  (`takeover::kh2_hits`, only when a window needs the pose), and the spells' fallbacks
+  (`takeover::native_spells`, only when KH1's pass, KH1's barrier meeting or KH1's calls aren't all
+  available). On Steam with all of those, nothing runs it every frame.
+  - The guard's repel direction now reads the stopped attack straight from KH1's attack pool (the
+    object whose hit mask gained the bit: its owner and place) instead of our shot list.
+  - Reflect's barrier shapes are given by the spell's script each frame, the same as spell attacks
+    (`bodyhits::guard_entries`); KH1's pass places and meets them. The stopped-shot log check runs
+    from Reflect's step now (once a frame).

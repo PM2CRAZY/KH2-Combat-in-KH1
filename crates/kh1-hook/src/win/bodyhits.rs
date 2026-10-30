@@ -211,7 +211,83 @@ static GUARDS: Mutex<Vec<GuardShapes>> = Mutex::new(Vec::new());
 /// the body hits' are: his root, facing and KH1's bone, `centre`) and last frame's centre for KH2's
 /// sweep. `combat::Strikes::guard_step` makes and frees them with the window; nothing of ours poses
 /// KH2's rig for them.
-static BODY_GUARDS: Mutex<Vec<(usize, BodyShape, Option<([f32; 3], u64)>)>> = Mutex::new(Vec::new());
+/// (t911) Also KH2's Keyblade guard shapes on KH1's grip (`grip_guard_keep`): `true` holds the
+/// object's result word at "clashed" each pass, as the Keyblade guards of clash type 3 need (t861).
+static BODY_GUARDS: Mutex<Vec<(usize, BodyShape, Option<([f32; 3], u64)>, bool)>> = Mutex::new(Vec::new());
+
+/// KH1 Sora's grip bone (the Keyblade's, `kh1_data::retarget::GRIP_BONE`).
+const GRIP_BONE: u32 = 280;
+
+/// One of KH2's Keyblade guard shapes on KH1's grip (Guard Shape KH2, t911): its KH1 shape type,
+/// size and its centre in the grip's own axes (KH1's drawn matrix of bone 280), measured once from
+/// KH2's shape on KH2's posed rig (`grip_local`) and carried by KH1's grip after that.
+#[derive(Clone, Copy, Debug)]
+pub struct GripShape {
+    pub kh1_type: u32,
+    pub radius: f32,
+    pub height: f32,
+    pub offset: [f32; 3],
+}
+
+/// KH1's bone `b` of `owner` now: its place (KH1's bone point, `0x14029EB20`'s raw `0x4000 | b`) and
+/// the axes of its drawn matrix (`+0x15C` → `+0x1B4`, row vectors), KH1 world.
+unsafe fn kh1_bone_frame(owner: usize, b: u32) -> Option<([f32; 3], [[f32; 3]; 3])> {
+    let base = BASE.load(Ordering::Relaxed);
+    let point: unsafe extern "system" fn(usize, u32, f32, *mut [f32; 4]) = std::mem::transmute(base + BONE_POINT_RVA);
+    let mut out = [0.0f32; 4];
+    point(owner, 0x4000 | b, 1.0, &mut out);
+    let inst = pose::ptr(rd::<u32>(owner + 0x15C));
+    let mats = if inst > 0x10000 { pose::ptr(rd::<u32>(inst + 0x1B4)) } else { 0 };
+    if mats < 0x10000 {
+        return None;
+    }
+    let m = rd::<[f32; 16]>(mats + b as usize * 0x40);
+    let axes = [[m[0], m[1], m[2]], [m[4], m[5], m[6]], [m[8], m[9], m[10]]];
+    let p = [out[0], out[1], out[2]];
+    (p.iter().all(|v| v.is_finite()) && axes.iter().flatten().all(|v| v.is_finite())).then_some((p, axes))
+}
+
+/// KH2's Keyblade shape `s` (KH2 world, y up, on KH2's rig posed at KH1's time) as a shape on KH1's
+/// grip now (`GripShape`): its centre in the grip's axes. `None`: a KH2 cube (never met in KH2), or
+/// no grip matrix. **Assumption**: the KH2 shape keeps its place on the blade, so the grip carries
+/// it as the blade turns and moves (KH2's Keyblade has no bone of its own moving under the grip).
+pub unsafe fn grip_local(owner: usize, s: &combat_core::Shape) -> Option<GripShape> {
+    use combat_core::ShapeKind;
+    let kh1_type = match s.kind {
+        ShapeKind::Ellipsoid | ShapeKind::Sphere => 1u32,
+        ShapeKind::Column => 2,
+        ShapeKind::Cube => return None,
+    };
+    let (p, axes) = kh1_bone_frame(owner, GRIP_BONE)?;
+    let d = [s.center[0] - p[0], -s.center[1] - p[1], s.center[2] - p[2]];
+    let mut offset = [0.0f32; 3];
+    for (k, a) in axes.iter().enumerate() {
+        let l2 = a[0] * a[0] + a[1] * a[1] + a[2] * a[2];
+        if !(l2 > 1e-8) {
+            return None;
+        }
+        offset[k] = (d[0] * a[0] + d[1] * a[1] + d[2] * a[2]) / l2;
+    }
+    Some(GripShape { kh1_type, radius: s.radius, height: s.height, offset })
+}
+
+/// The Keyblade guard object `obj` stands on `g` on KH1's grip (`grip_local`), placed by KH1's own
+/// pass from the grip each pass (`body_guard_entries`), its result word held at "clashed".
+pub fn grip_guard_keep(obj: usize, g: &GripShape) -> bool {
+    if !ON.load(Ordering::Relaxed) || !TEST_OK.load(Ordering::Relaxed) {
+        return false;
+    }
+    let shape = BodyShape { kh1_type: g.kh1_type, radius: g.radius, height: g.height, bone: Some(GRIP_BONE), offset: g.offset, lift: 0.0 };
+    let Ok(mut l) = BODY_GUARDS.try_lock() else { return false };
+    match l.iter_mut().find(|x| x.0 == obj) {
+        Some(x) => {
+            x.1 = shape;
+            x.3 = true;
+        }
+        None => l.push((obj, shape, None, true)),
+    }
+    true
+}
 
 /// The guard object `obj` stands on KH2's body shape `s` (`BODY_GUARDS`): false where the shape can't
 /// be placed by KH1's state (a KH2 cube, never met in KH2; a KH2 bone with no KH1 bone of the same
@@ -236,7 +312,7 @@ pub fn body_guard_keep(obj: usize, s: &kh2_data::sora::BoneShape) -> bool {
     let Ok(mut g) = BODY_GUARDS.try_lock() else { return false };
     match g.iter_mut().find(|x| x.0 == obj) {
         Some(x) => x.1 = shape,
-        None => g.push((obj, shape, None)),
+        None => g.push((obj, shape, None, false)),
     }
     true
 }
@@ -270,6 +346,7 @@ unsafe fn body_guard_entries(obj: usize, list: usize, count: i32) -> Option<i32>
     let Some(c) = centre(owner, &e.1) else { return Some(count) };
     let frame = super::takeover::GAME_FRAME.load(Ordering::Relaxed);
     let shape = e.1;
+    let hold = e.3;
     let r = shape.radius;
     let mut centres: [[f32; 3]; SPELL_SHAPES] = [[0.0; 3]; SPELL_SHAPES];
     let mut n = 1usize;
@@ -297,6 +374,12 @@ unsafe fn body_guard_entries(obj: usize, list: usize, count: i32) -> Option<i32>
     let c4 = [c[0], c[1], c[2], 1.0f32];
     wr(obj + 0x10, c4);
     wr(obj + 0x40, c4);
+    if hold {
+        // (A Keyblade guard of clash type 3: its result word held at "clashed" so it never strikes
+        // a body, as `guard_entries` holds the Keyblade's and the barrier's, t813 / t861.)
+        wr(obj + 4, 0x10u32);
+        wr(obj, rd::<u32>(obj) & !0x0010_0080);
+    }
     let bit = rd::<u32>(obj + 0x54);
     let mut count = count;
     for q in &centres[..n] {
@@ -671,6 +754,11 @@ unsafe fn data_for(g: &mut State, base: usize, motion: u16, window: usize, air: 
     wr(d + 0x54, 0.0f32);
     wr(d + 0x58, 0.0f32);
     wr(d + 0x5C, radius.round() as i32);
+    // A KH2 Magic-based window (Explosion's, Magnet Burst's): KH1's own magic stat on the data
+    // (`kh1rows::kh1_magic`, Ripple Drive's), not the swing's Strength.
+    if a.stat_source == 1 {
+        super::kh1rows::kh1_magic_row(d);
+    }
     let (t1, p1) = (rd::<u32>(d + 0x38) & 7, rd::<i32>(d + 0x3C));
     let (t, p) = if super::recoil::kh2() { super::kh1rows::kh2_clash(Some(a), t1, p1) } else { (t1, p1) };
     // (Bit 16: "spent", no wall test.)
@@ -803,6 +891,13 @@ unsafe fn place(sora: usize, attacks: &[super::combat::SpellAttack], row: &dyn F
         let key = 1u64 << 63 | (a.atk as u64) << 32 | (a.sub as u64) << 24 | ((spark.map_or(-1, |s| s.1) + 1) as u64 & 0xFF) << 16 | (a.kh1_data.map_or(0xFFFF, |o| (o as u64 >> 3) & 0xFFFF)) | (knock as u64) << 40;
         let Some(d) = data_slot(&mut g, base, key) else { continue };
         std::ptr::copy_nonoverlapping(src as *const u8, d as *mut u8, DATA);
+        // A Magic-based KH2 attack on the swing's data (no KH1 spell of its own): KH1's own magic
+        // stat (`kh1rows::kh1_magic`, Ripple Drive's). A KH1 spell's data keeps its own (t920: its
+        // power points and max MP, KH1's own magic formula; `kh2damage` counts KH2's power
+        // against KH2's normal cast).
+        if a.kh1_data.is_none() && first.stat_source == 1 {
+            super::kh1rows::kh1_magic_row(d);
+        }
         wr(d + 0x10, -1i32);
         let r0 = a.shapes.first().map_or(10.0, |s| s.radius);
         wr(d + 0x5C, r0.round() as i32);

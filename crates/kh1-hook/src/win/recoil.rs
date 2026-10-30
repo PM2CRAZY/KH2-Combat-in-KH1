@@ -355,6 +355,11 @@ pub fn set_clash_count(kh2: bool) {
     log!(Combat, "Config menu: Clash Combo {}", if kh2 { "KH2" } else { "KH1" });
 }
 
+/// Read again from the settings on the next call (`experimental` switched in the ini, t922).
+pub fn forget_clash_count() {
+    CLASH_COUNT.store(0, Ordering::Relaxed);
+}
+
 unsafe fn combat_info(actor: usize) -> usize {
     if actor < 0x10000 {
         return 0;

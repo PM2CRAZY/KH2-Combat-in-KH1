@@ -150,7 +150,7 @@ impl Kind {
     pub fn label(self) -> &'static str {
         match self {
             Kind::GroundCombo => "Base Combo",
-            Kind::AirCombo => "Aerial Base Combo",
+            Kind::AirCombo => "Air Base Combo",
             Kind::Magic => "Magic",
             Kind::AirMagic => "Aerial Magic",
             Kind::Jump => "Jump",
@@ -237,7 +237,7 @@ pub fn note_abilities(a: &character_core::Abilities) {
             .collect::<Vec<_>>()
             .join(", ");
         super::log!(Menus,
-            "move style: a combo ability only KH2 has is {} ({}): it follows the settings (Base Combo {}, Aerial Base Combo {}; at KH1 on KH1's own combo)",
+            "move style: a combo ability only KH2 has is {} ({}): it follows the settings (Base Combo {}, Air Base Combo {}; at KH1 on KH1's own combo)",
             if on { "equipped" } else { "no longer equipped" },
             if on { which.as_str() } else { "none" },
             if setting(Kind::GroundCombo) { "KH2" } else { "KH1" },
@@ -257,4 +257,10 @@ pub fn set(kind: Kind, kh2: bool) {
     kind.cell().store(kh2, Ordering::Relaxed);
     super::settings::save(kind.key(), if kh2 { "kh2" } else { "kh1" });
     super::log!(Menus, "move style: {} {}", kind.label(), if kh2 { "KH2" } else { "KH1" });
+}
+
+/// `kind` as the ini has it now, not written back (`experimental` switched in the ini, t922).
+pub fn reload(kind: Kind, kh2: bool) {
+    init();
+    kind.cell().store(kh2, Ordering::Relaxed);
 }

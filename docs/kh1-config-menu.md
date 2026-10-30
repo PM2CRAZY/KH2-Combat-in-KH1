@@ -492,3 +492,53 @@ Our lists' window defs now take their row count from the list each time one is m
 three-value change that adds or takes away a row makes the list again in its place, the cursor on the same
 row (`config::rebuild`, as `open` does; not when KH1's window pool is short, then at the next opening).
 Not checked in game.
+## 7. Experimental settings, Tweaks moves and long texts (t921..t923)
+
+**t921 (the owner: "put guard animation and ledge hop in tweaks", "change aerial base combo to air
+base combo").** Combat is Physics, Base Combo, Air Base Combo, Guard Shape, Magic, Tweaks. Tweaks is
+KH1 Ability Chance, Enemy Weight, Cast from Glide, Clash Combo, Ledge Hop, Guard Animation, Hit
+Reactions, Knock-back Numbers, Medium Hits, KH2 Damage, Criticals, Party Criticals, Recoil. Each row
+keeps its setting, ini key and help. "Aerial Base Combo" reads "Air Base Combo" (the ini key is still
+`air_combo`).
+
+**t922 (the owner: an ini setting that enables the experimental settings in the Config menu, their
+lines at the bottom of the ini once enabled, back to the defaults when disabled).** Ini key
+`experimental` (off by default).
+
+| Setting | ini key | Value with `experimental = off` (and the block's default) |
+| --- | --- | --- |
+| Enemy Weight | `enemy_weight` | on |
+| Clash Combo | `clash_count` | kh2 |
+| Knock-back Numbers | `knockback_numbers` | scaled |
+| Medium Hits | `medium_hits` | blow |
+| KH2 Damage | `kh2_damage` | off |
+| Recoil | `recoil` | kh1 |
+| Guard Shape | `guard_shape` | kh1 |
+
+- Off: those rows aren't in Combat / Tweaks (Tweaks has 7 rows, KH1's full size; Combat 5), each
+  setting has its value above whatever the ini says, and the ini loses the block and any of those keys
+  elsewhere (with the comment lines above a key from its `; <key>:` line; inis from before t922 have
+  them in their body).
+- On: the block (`; ==== experimental settings ... ====` to `; ==== end of experimental settings ====`)
+  is put at the bottom of the ini with the defaults above, once; then it stays as it is (the rows write
+  into it) and is moved back to the bottom if a later save adds a line after it.
+- The ini is read again after it is saved (half a second, `settings::get`), so switching
+  `experimental` in a running game takes effect then: the seven live values are read again and an open
+  Combat or Tweaks list is re-made with its new rows. With it on, Tweaks has 13 rows and is drawn at
+  `list_scale`'s 0.69. **Assumption** until seen: 13 rows at that scale still read.
+
+**t923 (the owner: long Config texts go off their backdrop and should be scaled down).**
+- **Checked (decomp)** KH1's panel call (Steam `0x1402F3950`, through `0x1402D7910`) draws the box
+  (`0x1402F2BE0`), then the text through `0x1402ED2E0` -> `0x1402EBCD0` at the panel text size
+  (`0x140545364` = 20; row height `0x140545360` = 26), the top at y + (26 - 20) / 2. Label calls
+  pass align 0 at x 27 in a box of x 11..153; value calls align 2 (centred) at the box's middle.
+- **Checked (decomp)** The text draw and KH1's width function (`0x1402D0E10(text, size)`: each
+  glyph's width x size / 24, summed) both read `0C nn` as "size nn from here on"; the draw reads
+  `0E lo hi` as "down that many pixels" (the width function skips it). A glyph is size x 16 tall (1/16
+  units) from the line's top.
+- `config::fit`: a label or value text of ours wider than its room (label 118 = 153 - 27 - 8; value:
+  box width - 16) is drawn from a copy that starts `0E dy 00 0C s`: the largest size `s` whose KH1
+  measure fits, moved down `(20 - s) / 2`. Worked out once per text and room (`FIT`, ids
+  `0x7F40_0000 + n` through our text lookup). KH1's own texts are left alone.
+- **Assumption:** the 8 left clear at the label box's right edge matches where KH1's own longest
+  labels end. Not checked in game.

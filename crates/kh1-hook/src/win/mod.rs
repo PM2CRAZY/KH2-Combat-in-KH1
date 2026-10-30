@@ -74,6 +74,7 @@ mod tint;
 mod trace;
 mod valor;
 mod valorstats;
+mod volmute;
 mod equip;
 mod sys;
 
@@ -458,6 +459,7 @@ pub unsafe extern "system" fn DllMain(_inst: *mut c_void, reason: u32, _reserved
         holder::install();
         cosmetics::install();
         softreset::install();
+        volmute::install();
         cutsceneskip::install();
         ingameskip::install();
         chest::install();

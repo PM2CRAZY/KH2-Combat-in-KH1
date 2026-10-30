@@ -1193,9 +1193,12 @@ pub unsafe fn native_spells(actor: usize) {
     }
     let Ok(mut sg) = STRIKES.try_lock() else { return };
     let strikes = sg.get_or_insert_with(combat::Strikes::default);
-    // (Our hit state's view of KH1's enemies, for the spells' own fallbacks and Reflect's barrier;
-    // the scripts' lock-on is KH1's own, read when a script asks, `reflect::KhWorld::locked`, t909.)
-    let _ = strikes.look(actor);
+    // (Our hit state's view of KH1's enemies only for the spells' own fallbacks: their attacks
+    // without KH1's pass, Reflect's barrier without KH1's meeting, the scripts' enemies without
+    // KH1's walk; t912. The scripts' lock-on is KH1's own, `reflect::KhWorld::locked`, t910.)
+    if !(super::bodyhits::spells_native() && combat::barrier_native() && super::combomods::kh1_calls_ok()) {
+        let _ = strikes.look(actor);
+    }
     let lock = kh1_locked().map(|(a, _)| a as u32);
     let air = matches!(rd::<i32>(actor + 0x70), 1 | 2 | 8);
     let yaw = rd::<f32>(actor + 0x3C);
@@ -1314,11 +1317,15 @@ pub unsafe fn kh2_hits(actor: usize) {
     // (KH2's rig at the clip's frame: base Sora's moveset, `kh2.character`; t901, no controller.)
     // (Only when a window needs KH2's shapes on KH2's rig, t909: KH1's own blade and the body
     // guards KH1's pass places, `combat::guard_needs_pose`, need none.)
-    let need_pose = !open.is_empty() || guards.iter().any(|&(_, _, group, weapon)| combat::guard_needs_pose(group, weapon));
+    let need_pose = !open.is_empty() || guards.iter().any(|&(i, _, group, weapon)| combat::guard_needs_pose((1 << 63) | (n.play << 8) | i as u64, group, weapon));
     if need_pose && !n.anim.pose_at(&kh2.character, motion, t, yaw, [p[0], -p[1], p[2]]) {
         return;
     }
-    let _ = strikes.look(actor);
+    // (Our hit state's view of KH1's enemies only for what KH2's posed rig is swept against: the
+    // body hit windows without KH1's pass, the guards placed on KH2's rig; t912.)
+    if need_pose {
+        let _ = strikes.look(actor);
+    }
     // (Our swing ids: the play and the window, marked apart from KH2's controller's own.)
     let hitboxes = open.iter().map(|&(i, attack, group)| character_core::ActiveHitbox { swing: (1 << 63) | (n.play << 8) | i as u64, attack, group, weapon: 0 }).collect();
     let out = Output {

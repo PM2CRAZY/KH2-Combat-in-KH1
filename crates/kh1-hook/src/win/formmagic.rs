@@ -1211,7 +1211,9 @@ unsafe fn heal(actor: usize, caster: usize, kind: u8, power: u16) -> Option<(i32
 }
 
 /// A spell attack of Sora's that deals damage, as KH1 strikes with it: Fire, Blizzard and Thunder
-/// with KH1's own data for the spell at its level (its element), Fire at KH1 Sora's size (the
+/// with KH1's own data for the spell at its level (its element, power points and max MP: KH1's
+/// own magic formula; `kh2damage` counts KH2's power against KH2's normal cast, t920), Fire at
+/// KH1 Sora's size (the
 /// tester's m20 answer 3, "(a)", as its effects since t561 and Reflect's barrier since t518).
 pub(super) unsafe fn spell_attack(actor: usize, a: &kh2_magic::MagicAttack, battle: &Battle, package: &HashMap<usize, u8>) -> Option<combat::SpellAttack> {
     if a.freed || a.owner != SORA {

@@ -1,7 +1,7 @@
 //! Our Config menu settings (the user: switch between KH1's and KH2's camera in the game's Config
 //! menu; then "toggle what sora uses for his ground and aerial moves"): Camera Style, Physics
 //! (the user: "BUG: In the config there's not a setting to switch between KH1 and KH2 physics"),
-//! Base Combo, Aerial Base Combo, Magic, Aerial Magic..., each KH1 / KH2.
+//! Base Combo, Air Base Combo (Aerial Base Combo until t921), Magic, Aerial Magic..., each KH1 / KH2.
 //! `docs/kh1-config-menu.md` has KH1's side (§6 for this layout).
 //!
 //! The Config menu rework (the tester: "package all of kh1 in kh2's settings ... into one
@@ -11,12 +11,12 @@
 //! Config rows 0..2 open their pad diagrams (KH1's window manager, sounds, cursor):
 //!
 //! - KH1 in KH2: Camera, Combat, Movement, Command Menu, QoL, Cosmetics, Misc;
-//! - Camera: Camera Style, R2 Camera Hold; Command Menu (t705, the user): L2 Stick Menu, moved from Camera; then (t751) Drive Page, D-Pad Left, Cursor Memory, Command Lock before it (`cmdmenu`); Combat: Physics, Base Combo, Aerial Base Combo, Magic, its own list, and Tweaks, its own list
+//! - Camera: Camera Style, R2 Camera Hold; Command Menu (t705, the user): L2 Stick Menu, moved from Camera; then (t751) Drive Page, D-Pad Left, Cursor Memory, Command Lock before it (`cmdmenu`); Combat: Physics, Base Combo, Air Base Combo, Guard Shape, Magic, its own list, and Tweaks, its own list
 //!   (answer 1): Fire, Blizzard, Thunder, Cure, Air Physics and Animations, its own list (Blizzard, Thunder, Cure,
 //!   Gravity, Stop, Aero: m19 of kh2-effects-in-kh1s-own-effect-system); Movement: Jump, Glide, Dodge Roll, Misc Animations (Guard Repel is part of Combat's Recoil); Misc:
 //!   Battle Quotes, Debug Menu (answer 5a); Combat > Tweaks: KH1 Ability Chance
-//!   (combo row selection m21, inside Combat m22), Enemy Weight, Cast from Glide, Clash Combo, and
-//!   (t704, the user) Hit Reactions, Knock-back Numbers, Medium Hits, KH2 Damage, Criticals, Party
+//!   (combo row selection m21, inside Combat m22), Enemy Weight, Cast from Glide, Clash Combo, Ledge
+//!   Hop and Guard Animation (moved from Combat, t921), and (t704, the user) Hit Reactions, Knock-back Numbers, Medium Hits, KH2 Damage, Criticals, Party
 //!   Criticals, Recoil, moved there from Combat; QoL (t704, the user): Gummi Routes, moved there
 //!   from Misc; Cosmetics (t704, the user): Keyblade Trail.
 //!
@@ -123,6 +123,24 @@ const POOL_STEAM: usize = 0x2E92780;
 const POOL_LEN: usize = 24;
 const WIN_SIZE: usize = 0x118;
 
+/// KH1's text width (Steam `0x1402D0E10`, Checked (decomp)): `(text, size) -> pixels`, each glyph's
+/// width x size / 24, the size code `0C nn` inside the text switching the size from there on (the
+/// same codes the draw `0x1402EBCD0` reads; there `0E lo hi` moves the line down that many pixels).
+const MEASURE_STEAM: usize = 0x2D0E10;
+/// The size KH1's menu panels draw their text at (Steam `0x140545364`, 20 with the font set up,
+/// Checked (decomp)): the panel call (`0x1402F3950`) passes it to the text draw, the text's top at
+/// the row's y + (row height 26 - it) / 2.
+const TEXT_SIZE_STEAM: usize = 0x545364;
+/// The room a label's text has (the owner, t923: "kh1 ability chance ... and knock-back numbers ...
+/// go off the backdrop and the text needs to be scaled down to fit it"): the label box spans x 11 ..
+/// 153 (`0x0B`, width `0x8E`) and its text starts at x 27 (`0x1B`, left-aligned, Checked (decomp));
+/// 8 kept clear at the right edge (Assumption: KH1's own widest labels end about there).
+const LABEL_ROOM: i32 = 0x0B + 0x8E - 0x1B - 8;
+/// A value panel's text is centred in it: its width less 8 at each side.
+const VALUE_PAD: i32 = 16;
+/// Text ids of ours drawn smaller (`fit`): `FIT_BASE + index into FIT`.
+const FIT_BASE: u32 = 0x7F40_0000;
+
 /// Window fields (Checked (decomp)).
 const WIN_PARENT: usize = 0x18;
 const WIN_CLOSING: usize = 0x68;
@@ -217,6 +235,8 @@ enum Row {
     EnemyWeight,
     /// Tweaks > Cast from Glide (Off | On, `glide::cast_out`).
     GlideCast,
+    /// Tweaks > Ledge Hop (Off | On, `combomods::drop_hop`, t914; in Combat until t921).
+    DropHop,
     /// Tweaks > Clash Combo (KH1 | KH2, `recoil::clash_count`).
     ClashCount,
     /// Cosmetics > Keyblade Trail (Normal | Always, `cosmetics::always`).
@@ -319,7 +339,14 @@ impl List {
         match self {
             List::Top => &TOP,
             List::Camera => &CAMERA,
-            List::Combat => &COMBAT,
+            // (The experimental rows only with the ini's `experimental = on`: the owner, t922.)
+            List::Combat => {
+                if super::settings::get().experimental {
+                    &COMBAT
+                } else {
+                    &COMBAT_STABLE
+                }
+            }
             List::Magic => &MAGIC,
             List::Movement => &MOVEMENT,
             // (The ram-use thread, m1 answer 3: the Debug Menu row only with the debug tools
@@ -332,7 +359,13 @@ impl List {
                 }
             }
             List::MagicAnim => &MAGIC_ANIM,
-            List::Tweaks => &TWEAKS,
+            List::Tweaks => {
+                if super::settings::get().experimental {
+                    &TWEAKS
+                } else {
+                    &TWEAKS_STABLE
+                }
+            }
             // (Chest Animation only with Chest Opening on Quick: the user, t770; it is the list's last row.
             // Commented out t771..t782 until KH2's chest motion was found, t783.)
             List::QoL => {
@@ -412,11 +445,15 @@ const COSMETICS: [Item; 1] = [Item::Set([0x7F00_0215, 0x7F00_0217, 0x7F00_0218, 
 // (Hit Reactions, Knock-back Numbers, Medium Hits, KH2 Damage, Criticals, Party Criticals and Recoil
 // moved here from Combat: the user, t704: "put recoil, critical, party critical, kh2 damage, medium
 // hits, knock back numbers, and hit reactions into the tweaks section".)
-const TWEAKS: [Item; 11] = [
+const TWEAKS: [Item; 13] = [
     Item::Set([0x7F00_0191, 0x7F00_011D, 0x7F00_011E, 0x7F00_0192], Row::AbilityChance),
     Item::Set([0x7F00_0193, 0x7F00_011D, 0x7F00_011E, 0x7F00_0194], Row::EnemyWeight),
     Item::Set([0x7F00_0197, 0x7F00_011D, 0x7F00_011E, 0x7F00_0198], Row::GlideCast),
     Item::Set(kh(0x7F00_0199, 0x7F00_019A), Row::ClashCount),
+    // (Ledge Hop and Guard Animation moved here from Combat: the owner, t921, "put guard animation
+    // and ledge hop in tweaks".)
+    Item::Set([0x7F00_023C, 0x7F00_011D, 0x7F00_011E, 0x7F00_023D], Row::DropHop),
+    Item::Set(kh(0x7F00_0238, 0x7F00_0239), Row::Style(Kind::GuardAnim)),
     Item::Set(kh(0x7F00_0140, 0x7F00_0141), Row::Style(Kind::HitReactions)),
     Item::Pick([0x7F00_0142, 0x7F00_0002, 0x7F00_0144, 0x7F00_0003, 0x7F00_0143], Pick::KnockNumbers),
     Item::Set([0x7F00_0145, 0x7F00_0147, 0x7F00_0148, 0x7F00_0146], Row::MediumHits),
@@ -425,22 +462,27 @@ const TWEAKS: [Item; 11] = [
     Item::Set([0x7F00_014B, 0x7F00_011D, 0x7F00_011E, 0x7F00_014C], Row::PartyCriticals),
     Item::Set(kh(0x7F00_0172, 0x7F00_0173), Row::Style(Kind::Recoil)),
 ];
+// (Experimental, t922, the owner: "a setting in the ini that enables experimental settings in the
+// config menu ... here is what should be disabled": Enemy Weight, Clash Combo, Knock-back Numbers,
+// Medium Hits, KH2 Damage, Recoil, and Combat's Guard Shape. Without `experimental = on` the lists
+// are these, and each of those settings keeps its default (`settings::EXPERIMENTAL_KEYS`).)
+const TWEAKS_STABLE: [Item; 7] = [TWEAKS[0], TWEAKS[2], TWEAKS[4], TWEAKS[5], TWEAKS[6], TWEAKS[10], TWEAKS[11]];
 const CAMERA: [Item; 2] = [
     Item::Set(kh(0x7F00_0001, 0x7F00_0004), Row::Camera),
     Item::Set([0x7F00_0121, 0x7F00_011D, 0x7F00_011E, 0x7F00_0122], Row::R2Hold),
 ];
 // (Tweaks inside Combat, after Magic: the tester, combo row selection m22 answer 1 (b).)
 // (Guard Animation and Guard Shape: the owner, t903, "make a toggle in combat to change the guard
-// animation (a)", two rows.)
-const COMBAT: [Item; 7] = [
+// animation (a)", two rows; Guard Animation and Ledge Hop (t914) moved to Tweaks, t921.)
+const COMBAT: [Item; 6] = [
     Item::Set(kh(0x7F00_0119, 0x7F00_011A), Row::Physics),
     Item::Set(kh(0x7F00_0101, 0x7F00_0102), Row::Style(Kind::GroundCombo)),
     Item::Set(kh(0x7F00_0103, 0x7F00_0104), Row::Style(Kind::AirCombo)),
-    Item::Set(kh(0x7F00_0238, 0x7F00_0239), Row::Style(Kind::GuardAnim)),
     Item::Set(kh(0x7F00_023A, 0x7F00_023B), Row::Style(Kind::GuardShape)),
     Item::Open(0x7F00_0207, 0x7F00_0208, List::Magic),
     Item::Open(0x7F00_020F, 0x7F00_0210, List::Tweaks),
 ];
+const COMBAT_STABLE: [Item; 5] = [COMBAT[0], COMBAT[1], COMBAT[2], COMBAT[4], COMBAT[5]];
 // (The tester, thread kh2-effects-in-kh1s-own-effect-system m19: a row per spell for what is
 // cast, "we'll remove ground magic"; each KH1 spell's animation in its own list, so both lists
 // keep KH1's full-size rows on screen.)
@@ -487,7 +529,7 @@ const BUTTON_HELP: u32 = 0x7F00_0202;
 /// Misc's help, and the same without the debug menu (its row isn't there without the debug tools).
 const MISC_HELP: u32 = 0x7F00_020C;
 const MISC_HELP_NO_DEBUG: &str = "Battle quotes.";
-const STRINGS: [(u32, &str); 137] = [
+const STRINGS: [(u32, &str); 139] = [
     (0x7F00_0201, "KH1 in KH2"),
     (0x7F00_0202, "Choose KH1's or KH2's camera, combat, movement and more."),
     (0x7F00_0203, "Camera"),
@@ -550,7 +592,7 @@ const STRINGS: [(u32, &str); 137] = [
     (0x7F00_0217, "Normal"),
     (0x7F00_0218, "Always"),
     (0x7F00_020F, "Tweaks"),
-    (0x7F00_0210, "Hit reactions, damage, recoil and small changes to how KH1's own\nrules play."),
+    (0x7F00_0210, "Ledge hop, guard animation, hit reactions, damage, recoil and small\nchanges to how KH1's own rules play."),
     (0x7F00_0191, "KH1 Ability Chance"),
     (0x7F00_0192, "On: KH1's 30 percent chance on Stun Impact, Gravity Break\nand Zantetsuken; when it fails, the next move that fits comes."),
     (0x7F00_0193, "Enemy Weight"),
@@ -568,6 +610,8 @@ const STRINGS: [(u32, &str); 137] = [
     (0x7F00_023B, "What KH2's guard blocks with: KH1's Keyblade (KH1) or\nKH2's guard shapes (KH2)."),
     (0x7F00_0234, "Chest Animation"),
     (0x7F00_0235, "The animation Sora plays when he opens a chest on Quick."),
+    (0x7F00_023C, "Ledge Hop"),
+    (0x7F00_023D, "On: an attack with the floor giving out ahead hops Sora off the\nledge in an air swing, as in KH2. Off: no hop. Drive Forms keep theirs."),
     (0x7F00_0197, "Cast from Glide"),
     (0x7F00_0198, "On: a KH2 spell ends the glide and is cast in the air, as in\nKH2. Off: no spell while gliding."),
     (0x7F00_0199, "Clash Combo"),
@@ -584,8 +628,8 @@ const STRINGS: [(u32, &str); 137] = [
     (0x7F00_011A, "Choose KH1's or KH2's physics for Sora's moves. Air casts:\nCombat > Magic > Air Physics. Drive Forms keep their own."),
     (0x7F00_0101, "Base Combo"),
     (0x7F00_0102, "Choose KH1's or KH2's ground combo for Sora.\nDrive Forms keep their own."),
-    (0x7F00_0103, "Aerial Base Combo"),
-    (0x7F00_0104, "Choose KH1's or KH2's aerial combo for Sora.\nDrive Forms keep their own."),
+    (0x7F00_0103, "Air Base Combo"),
+    (0x7F00_0104, "Choose KH1's or KH2's air combo for Sora.\nDrive Forms keep their own."),
     (0x7F00_0140, "Hit Reactions"),
     (0x7F00_0141, "Choose KH1's or KH2's animations when Sora is hit.\nDrive Forms keep their own."),
     (0x7F00_0142, "Knock-back Numbers"),
@@ -645,6 +689,7 @@ fn value(what: Row) -> bool {
         Row::AbilityChance => super::kh1picker::chance(),
         Row::EnemyWeight => super::knockback::weight(),
         Row::GlideCast => super::glide::cast_out(),
+        Row::DropHop => super::combomods::drop_hop(),
         Row::ClashCount => super::recoil::clash_count(),
         Row::TrailAlways => super::cosmetics::always(),
         Row::SoftReset => super::softreset::enabled(),
@@ -686,6 +731,7 @@ fn set(what: Row, v: bool) {
         Row::AbilityChance => super::kh1picker::set_chance(v),
         Row::EnemyWeight => super::knockback::set_weight(v),
         Row::GlideCast => super::glide::set_cast_out(v),
+        Row::DropHop => super::combomods::set_drop_hop(v),
         Row::ClashCount => super::recoil::set_clash_count(v),
         Row::TrailAlways => super::cosmetics::set_always(v),
         Row::SoftReset => super::softreset::set(v),
@@ -817,6 +863,11 @@ pub unsafe fn install() {
 /// KH1's sysmsg lookup (its own instructions, re-done here: its first one is RIP-relative, so
 /// the original can't be called), with our ids on top.
 unsafe extern "system" fn text(id: u32) -> usize {
+    if (FIT_BASE..FIT_BASE + 0x1000).contains(&id) {
+        if let Some(p) = FIT.lock().unwrap_or_else(|e| e.into_inner()).get((id - FIT_BASE) as usize).map(|f| f.2).filter(|p| *p != 0) {
+            return p;
+        }
+    }
     if let Some(t) = TEXT.get().and_then(|t| t.iter().find(|(i, _)| *i == id)) {
         return t.1;
     }
@@ -845,6 +896,69 @@ pub unsafe fn kh1_text(id: u32) -> usize {
         return EMPTY.as_ptr() as usize;
     }
     at.wrapping_add(rd::<u16>(entry) as usize)
+}
+
+/// Our texts as `fit` made them: (id, room, the smaller text, 0 when it fits as it is).
+static FIT: std::sync::Mutex<Vec<(u32, i32, usize)>> = std::sync::Mutex::new(Vec::new());
+
+/// The id a panel draws our text `id` with in `room` pixels: `id` itself while it fits at KH1's panel
+/// size, else one whose text starts with KH1's own size code (`0C nn`, the largest size that fits,
+/// measured by KH1's width function) and a move down (`0E dy 00`) of half the size it lost, so the
+/// smaller line stays centred in the row (Checked (decomp): the draw's glyphs are size x 16 tall from
+/// the line's y, and as wide as the measure has them). Worked out once per text and room; only our
+/// ids (KH1's own texts are left alone).
+unsafe fn fit(id: u32, room: i32) -> u32 {
+    if id >> 16 != 0x7F00 || Build::current() != Build::Steam || !TEXT_HOOKED.load(Ordering::Relaxed) {
+        return id;
+    }
+    let mut fits = FIT.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(i) = fits.iter().position(|f| f.0 == id && f.1 == room) {
+        return if fits[i].2 == 0 { id } else { FIT_BASE + i as u32 };
+    }
+    if fits.len() >= 0x1000 {
+        return id;
+    }
+    let base = BASE.load(Ordering::Relaxed);
+    let size = rd::<i32>(base + TEXT_SIZE_STEAM);
+    let p = text(id);
+    let mut out = 0usize;
+    if (9..=64).contains(&size) && super::crash::readable(p) {
+        let measure: unsafe extern "system" fn(usize, u32) -> i32 = std::mem::transmute(base + MEASURE_STEAM);
+        let w = measure(p, size as u32);
+        if w > room && room > 0 {
+            let mut own = Vec::new();
+            for i in 0..256 {
+                let b = rd::<u8>(p + i);
+                if b == 0 {
+                    break;
+                }
+                own.push(b);
+            }
+            let make = |s: i32| {
+                let dy = ((size - s) / 2) as i16;
+                let mut v = vec![0x0E, dy as u8, (dy >> 8) as u8, 0x0C, s as u8];
+                v.extend_from_slice(&own);
+                v.push(0);
+                v
+            };
+            // (From the size the width says, down until KH1's measure of the line fits: its glyph
+            // widths round per glyph.)
+            let mut s = (size * room / w).clamp(8, size - 1);
+            let mut v = make(s);
+            while s > 8 && measure(v.as_ptr() as usize, size as u32) > room {
+                s -= 1;
+                v = make(s);
+            }
+            out = Box::leak(v.into_boxed_slice()).as_ptr() as usize;
+            log!(Menus, "Config menu: text {id:#x} is {w} wide for {room}: drawn at size {s} of {size}");
+        }
+    }
+    fits.push((id, room, out));
+    if out == 0 {
+        id
+    } else {
+        FIT_BASE + (fits.len() - 1) as u32
+    }
 }
 
 /// The help line (KH1's, one per list): it reads its id from the Config table by the Config row;
@@ -1042,6 +1156,11 @@ unsafe extern "system" fn list_update(win: usize) {
     let Some(list) = list_of(win) else { return };
     let items = list.items();
     let cur = &CUR_ROW[list.index()];
+    // (Its rows changed while it was open: the ini's `experimental` switched, t922. Made again with
+    // the cursor kept on its row.)
+    if rd::<u16>(def_of(list) + 0x26) as usize != items.len() && free_windows() >= 2 {
+        return rebuild(win, list, cur.load(Ordering::Relaxed));
+    }
     // (A list taller than the space above the help box is drawn smaller, as page 1.)
     let scale = list_scale(base, items.len());
     if scale < 1.0 {
@@ -1168,7 +1287,7 @@ fn row_y(base: usize, row: i32) -> i32 {
 unsafe fn button(win: usize, row: i32, selected: bool, label: u32) {
     let base = BASE.load(Ordering::Relaxed);
     let panel: unsafe extern "system" fn(usize, i32, i32, i32, i32, i32, i32, i32, u32) = std::mem::transmute(base + PANEL_RVA);
-    panel(win, if selected { 1 } else { 0 }, 2, 0, 0x0B, row_y(base, row), 0x8E, 0x1B, label);
+    panel(win, if selected { 1 } else { 0 }, 2, 0, 0x0B, row_y(base, row), 0x8E, 0x1B, fit(label, LABEL_ROOM));
 }
 
 /// A setting row, drawn as KH1 draws its rows 0..5: the label (style 0xB and the four arrows
@@ -1186,12 +1305,12 @@ unsafe fn setting(win: usize, row: i32, selected: bool, ids: &[u32; 4], v: bool)
         decor(win, 0x141, y2, 6);
         decor(win, 0x1E9, y2, 0x17);
     }
-    panel(win, if selected { 0xB } else { 0 }, 2, 0, 0x0B, y, 0x8E, 0x1B, ids[0]);
+    panel(win, if selected { 0xB } else { 0 }, 2, 0, 0x0B, y, 0x8E, 0x1B, fit(ids[0], LABEL_ROOM));
     let styles = base + if selected { STYLES_SELECTED_RVA } else { STYLES_OTHER_RVA };
     let v = v as usize;
     let (left, right) = (rd::<u32>(styles + v * 8) as i32, rd::<u32>(styles + v * 8 + 4) as i32);
-    panel(win, left, 2, 2, 0x9F, y, 0xA2, 0xF0, ids[1]);
-    panel(win, right, 2, 2, 0x147, y, 0xA2, 0x198, ids[2]);
+    panel(win, left, 2, 2, 0x9F, y, 0xA2, 0xF0, fit(ids[1], 0xA2 - VALUE_PAD));
+    panel(win, right, 2, 2, 0x147, y, 0xA2, 0x198, fit(ids[2], 0xA2 - VALUE_PAD));
     if selected {
         let finger: unsafe extern "system" fn(usize, i32, i32, i32, i32, i32, i32, u32, u32, i32) = std::mem::transmute(base + FINGER_STEAM);
         let info = rd::<u64>(base + FINGER_INFO_STEAM) as usize;
@@ -1225,14 +1344,14 @@ unsafe fn picker(win: usize, row: i32, selected: bool, ids: &[u32; 5], v: usize)
         decor(win, 0x9F + 2 * PICK_W + 6, y2, 6);
         decor(win, 0x1E9, y2, 0x17);
     }
-    panel(win, if selected { 0xB } else { 0 }, 2, 0, 0x0B, y, 0x8E, 0x1B, ids[0]);
+    panel(win, if selected { 0xB } else { 0 }, 2, 0, 0x0B, y, 0x8E, 0x1B, fit(ids[0], LABEL_ROOM));
     let styles = base + if selected { STYLES_SELECTED_RVA } else { STYLES_OTHER_RVA };
     // (KH1's table: value 0's left panel is the chosen style, its right one the other.)
     let (chosen, other) = (rd::<u32>(styles) as i32, rd::<u32>(styles + 4) as i32);
     const W: i32 = PICK_W;
     let xs = [0x9F, 0x9F + W + 6, 0x9F + 2 * (W + 6)];
     for (i, &x) in xs.iter().enumerate() {
-        panel(win, if i == v { chosen } else { other }, 2, 2, x, y, W, x + W / 2, ids[1 + i]);
+        panel(win, if i == v { chosen } else { other }, 2, 2, x, y, W, x + W / 2, fit(ids[1 + i], W - VALUE_PAD));
     }
     if selected {
         let finger: unsafe extern "system" fn(usize, i32, i32, i32, i32, i32, i32, u32, u32, i32) = std::mem::transmute(base + FINGER_STEAM);

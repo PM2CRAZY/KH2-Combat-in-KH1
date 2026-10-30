@@ -44,12 +44,6 @@ kh2_sounds = abilities\r\n\
 kh2_volume = 1.0\r\n\
 ; damage_scale: times the damage of Sora's KH2 attacks (1.0 = KH1's hit x KH2's power)\r\n\
 damage_scale = 1.0\r\n\
-; magic_scale: times KH2's Magic-based attacks on top (Explosion, Magnet Burst; they also\r\n\
-;   grow with Sora's max MP, +10% a point)\r\n\
-magic_scale = 1.0\r\n\
-; kh2_damage: on = KH2's power goes into KH1's own damage function (KH1's curve x KH2's power,\r\n\
-;   rounded up per hit as KH2); off = KH1's damage exactly (the Combat list's KH2 Damage row)\r\n\
-kh2_damage = on\r\n\
 ; criticals: on = KH1's critical hits on every attack, enemies' too (Critical Plus); off = none,\r\n\
 ;   as in KH2\r\n\
 ;   (the Config menu's Combat list switches it)\r\n\
@@ -61,18 +55,13 @@ party_criticals = off\r\n\
 ;   (a failed roll picks the next move that fits); off = they come whenever they fit, as KH2's\r\n\
 ;   rows, the default (the Config menu's Combat > Tweaks list switches it)\r\n\
 kh1_ability_chance = off\r\n\
-; enemy_weight: on = KH2's knock-back on enemies (its pushes, launches and air flinches) times\r\n\
-;   KH1's own weight for each enemy (how far KH1 pushes and launches it); off = KH2's numbers for\r\n\
-;   every enemy (the Config menu's Combat > Tweaks list switches it)\r\n\
-enemy_weight = on\r\n\
 ; glide_cast: on = a KH2 spell chosen in KH2's glide ends the glide and is cast in the air, as\r\n\
 ;   KH2 does; off = refused with KH1's can't sound (the Config menu's Combat > Tweaks list switches it)\r\n\
 glide_cast = on\r\n\
-; clash_count: kh1 or kh2, how a clash or a wall bounce counts for the combo: KH2's (every\r\n\
-;   meeting of his attack counts as a connected swing, and every recoil, in the air too, takes one\r\n\
-;   swing off the count, so the next press repeats it) or KH1's own (the Config menu's Combat >\r\n\
-;   Tweaks list switches it)\r\n\
-clash_count = kh2\r\n\
+; drop_hop: on = an attack pressed on the ground with the floor giving out ahead hops base Sora\r\n\
+;   off the ledge in an air swing, as KH2 (its row 1); off = no hop, the press takes the next\r\n\
+;   attack that fits; Drive Forms keep KH2's (the Config menu's Combat > Tweaks > Ledge Hop row)\r\n\
+drop_hop = on\r\n\
 ; glide: square = Square in the air glides (as KH1's Superglide); jump = hold jump in the air\r\n\
 glide = square\r\n\
 ; air_cast_fall: how fast Sora falls while Reflect plays in the air, a share of KH1's own\r\n\
@@ -95,7 +84,7 @@ camera = kh2\r\n\
 camera_scale = 0.89\r\n\
 ; kh1_slots: on = KH2's moves that have one play as new slots in KH1's own motion table (KH1's\r\n\
 ;   clock, events, hit windows and blends; for now KH2's ground combo, 151 / 152 / 154, and air combo 183 / 184 / 181, at Base\r\n\
-;   / Aerial Base Combo KH2); a list of KH2 motions (e.g. 152) = only those; off = KH2's motions drawn over\r\n\
+;   / Air Base Combo KH2); a list of KH2 motions (e.g. 152) = only those; off = KH2's motions drawn over\r\n\
 ;   KH1's (as before)\r\n\
 kh1_slots = on\r\n\
 ; kh1_bake: on = those slots are KH2's motions baked into KH1 motions at load (KH1's own pass\r\n\
@@ -137,6 +126,12 @@ cursor_memory = kh2\r\n\
 command_lock = kh2\r\n\
 ; config_row: on = the Config menu's Camera Style row; off = no row (the ini alone switches)\r\n\
 config_row = on\r\n\
+; experimental: on = the experimental settings (Enemy Weight, Clash Combo, Knock-back Numbers,\r\n\
+;   Medium Hits, KH2 Damage, Recoil, Guard Shape) show in the Config menu and their lines show at\r\n\
+;   the bottom of this file; off = they are hidden, their lines taken out, and each keeps its\r\n\
+;   default (Enemy Weight on, Clash Combo kh2, Knock-back Numbers scaled, Medium Hits blow, KH2\r\n\
+;   Damage off, Recoil kh1, Guard Shape kh1); turning it off again puts the defaults back\r\n\
+experimental = off\r\n\
 ; shortcuts: 4 = KH2's four shortcuts (L1 + the cancel button is the fourth; set it in\r\n\
 ; Customize); 3 = KH1's three\r\n\
 shortcuts = 4\r\n\
@@ -201,26 +196,10 @@ magic_combo = kh1\r\n\
 ;   still runs the reaction: its no-damage time, voices, HUD and MP); the Config menu's Combat\r\n\
 ;   list switches it\r\n\
 hit_reactions = kh1\r\n\
-; knockback_numbers: kh2, kh1 or scaled, how far KH2's hit reactions push base Sora (hit_reactions\r\n\
-;   = kh2): KH2's 200 for every hit, KH1's own number for the hit (750 x the damage's share of\r\n\
-;   his max HP, at most 150) on KH2's curve, or KH2's 200 scaled by KH1's share of its cap\r\n\
-knockback_numbers = kh2\r\n\
-; medium_hits: blow or flinch, with KH2's hit reactions: KH1's middle hits (20..29% of his max HP)\r\n\
-;   knock base Sora away (blow) or only flinch him (flinch; 30% and up still knocks him away)\r\n\
-medium_hits = blow\r\n\
-; recoil: kh1 or kh2, the rules when base Sora's attack meets an enemy's attack or guard: KH1's\r\n\
-;   (its priorities, its recoil animations and push, 8 frames without damage) or KH2's (KH2's\r\n\
-;   attack kinds, its recoil animations, push and hop, no protection); every move, KH2's too;\r\n\
-;   also what Sora's KH2 guard does when it blocks: KH1's own block (KH1) or KH2's guard repel\r\n\
-;   (KH2: motion 42, pushed back 200, 80 frames without damage, Counterguard)\r\n\
-recoil = kh1\r\n\
 ; guard_anim: kh1 or kh2, what Sora's guard press plays (Square standing, Dodge Roll kh2): KH1's own\r\n\
 ;   guard (its motion and its guard on KH1's Keyblade) or KH2's guard (motion 173, its repel and\r\n\
 ;   Counterguard)\r\n\
 guard_anim = kh1\r\n\
-; guard_shape: kh1 or kh2, the shape of KH2's guard on the Keyblade: KH1's own blade (kh1) or KH2's\r\n\
-;   guard shapes (kh2)\r\n\
-guard_shape = kh1\r\n\
 ; jump_style / glide_style: kh1 or kh2, KH1's or KH2's jump and glide for base Sora\r\n\
 jump_style = kh2\r\n\
 glide_style = kh2\r\n\
@@ -244,6 +223,13 @@ trail_always = off\r\n\
 ; soft_reset: off = nothing; on = L1 + L2 + R1 + R2 + Start + Select held for a second returns to the\r\n\
 ; title screen, as the PS2's reset did (the Config menu's QoL > Soft Reset row switches it in game too)\r\n\
 soft_reset = off\r\n\
+; volume_mute: on = the lowest step of each of KH1's volume sliders (master, music, sound effects, voices)\r\n\
+; is silence; off = KH1's lowest step, a tenth of full volume (read at start)\r\n\
+volume_mute = on\r\n\
+; effects_after_fade: slider = after a room or event fade, the two effect channels KH1's fade sets to full\r\n\
+; (buses 5 and 6) follow the sound effects slider; vanilla = they come back\r\n\
+; at full volume after every fade, as KH1 does (read at start)\r\n\
+effects_after_fade = slider\r\n\
 ; cutscene_skip: off = nothing; seen = skip a story cutscene (the ones the pause menu lets you skip) only when you have\r\n\
 ; watched it before; all = skip every one of them, a second after it starts. Talks, shops and the dialog scenes\r\n\
 ; you confirm line by line are never skipped (the Config menu's QoL > Cutscene Skip row switches it in game too)\r\n\
@@ -332,6 +318,125 @@ debug_glide = normal\r\n\
 ; cuts them into its fall\r\n\
 debug_ledge_carry = on\r\n";
 
+/// The experimental block (the owner, t922: "a setting in the ini that enables experimental settings
+/// in the config menu and pop up at the bottom of the ini once enabled"): put at the bottom of the
+/// ini, with these defaults, when `experimental = on` and it isn't there; taken out, with any of its
+/// keys elsewhere in the file (an ini from before t922), when `experimental = off`.
+const EXPERIMENTAL_START: &str = "; ==== experimental settings (experimental = on; taken out again when it is off) ====";
+const EXPERIMENTAL_END: &str = "; ==== end of experimental settings ====";
+const EXPERIMENTAL_BLOCK: &str = "; enemy_weight: on = KH2's knock-back on enemies (its pushes, launches and air flinches) times\r\n\
+;   KH1's own weight for each enemy (how far KH1 pushes and launches it); off = KH2's numbers for\r\n\
+;   every enemy (the Config menu's Combat > Tweaks list switches it)\r\n\
+enemy_weight = on\r\n\
+; clash_count: kh1 or kh2, how a clash or a wall bounce counts for the combo: KH2's (every\r\n\
+;   meeting of his attack counts as a connected swing, and every recoil, in the air too, takes one\r\n\
+;   swing off the count, so the next press repeats it) or KH1's own (the Config menu's Combat >\r\n\
+;   Tweaks list switches it)\r\n\
+clash_count = kh2\r\n\
+; knockback_numbers: kh2, kh1 or scaled, how far KH2's hit reactions push base Sora (hit_reactions\r\n\
+;   = kh2): KH2's 200 for every hit, KH1's own number for the hit (750 x the damage's share of\r\n\
+;   his max HP, at most 150) on KH2's curve, or KH2's 200 scaled by KH1's share of its cap\r\n\
+knockback_numbers = scaled\r\n\
+; medium_hits: blow or flinch, with KH2's hit reactions: KH1's middle hits (20..29% of his max HP)\r\n\
+;   knock base Sora away (blow) or only flinch him (flinch; 30% and up still knocks him away)\r\n\
+medium_hits = blow\r\n\
+; kh2_damage: on = KH2's power goes into KH1's own damage function (KH1's curve x KH2's power,\r\n\
+;   rounded up per hit as KH2); off = KH1's damage exactly (the Combat > Tweaks list's KH2 Damage row)\r\n\
+kh2_damage = off\r\n\
+; recoil: kh1 or kh2, the rules when base Sora's attack meets an enemy's attack or guard: KH1's\r\n\
+;   (its priorities, its recoil animations and push, 8 frames without damage) or KH2's (KH2's\r\n\
+;   attack kinds, its recoil animations, push and hop, no protection); every move, KH2's too;\r\n\
+;   also what Sora's KH2 guard does when it blocks: KH1's own block (KH1) or KH2's guard repel\r\n\
+;   (KH2: motion 42, pushed back 200, 80 frames without damage, Counterguard)\r\n\
+recoil = kh1\r\n\
+; guard_shape: kh1 or kh2, the shape of KH2's guard on the Keyblade: KH1's own blade (kh1) or KH2's\r\n\
+;   guard shapes (kh2)\r\n\
+guard_shape = kh1\r\n";
+
+/// The experimental settings' ini keys and the value each keeps with `experimental = off` (the
+/// owner, t922: Enemy Weight on, Clash Combo on (KH2), Knock-back Numbers scaled, Medium Hits blow,
+/// KH2 Damage off, Recoil KH1, Guard Shape KH1); the block's defaults are the same.
+pub const EXPERIMENTAL_KEYS: [(&str, &str); 7] =
+    [("enemy_weight", "on"), ("clash_count", "kh2"), ("knockback_numbers", "scaled"), ("medium_hits", "blow"), ("kh2_damage", "off"), ("recoil", "kh1"), ("guard_shape", "kh1")];
+
+/// A setting line's key (`None` for a comment or a line without `=`).
+fn line_key(l: &str) -> Option<&str> {
+    let t = l.trim_start();
+    if t.starts_with(';') {
+        return None;
+    }
+    t.split_once('=').map(|(k, _)| k.trim())
+}
+
+/// The ini as `experimental` wants it (`None`: already so). On: the block at the bottom (kept as it
+/// is when it's there; any of its keys elsewhere taken out). Off: the block and its keys taken out.
+/// A key outside the block goes with the comment lines above it that start at `; <key>:`.
+fn experimental_ini(text: &str, on: bool) -> Option<String> {
+    let mut lines: Vec<&str> = text.lines().collect();
+    let start = lines.iter().position(|l| l.trim_start().starts_with(EXPERIMENTAL_START.split(" (").next().unwrap_or(EXPERIMENTAL_START)));
+    let mut changed = false;
+    // (The block's range: to its end line, or to the end of the file if that was deleted.)
+    let block = start.map(|s| {
+        let e = lines[s..].iter().position(|l| l.trim() == EXPERIMENTAL_END).map_or(lines.len(), |e| s + e + 1);
+        (s, e)
+    });
+    let mut kept_block: Vec<&str> = Vec::new();
+    if let Some((s, e)) = block {
+        kept_block = lines.drain(s..e).collect();
+        if !on {
+            changed = true;
+        }
+    }
+    // Its keys elsewhere.
+    let is_exp = |k: &str| EXPERIMENTAL_KEYS.iter().any(|(e, _)| e.eq_ignore_ascii_case(k));
+    let mut i = 0;
+    while i < lines.len() {
+        match line_key(lines[i]) {
+            Some(k) if is_exp(k) => {
+                let head = format!("; {}:", k.to_ascii_lowercase());
+                let mut from = i;
+                for back in 1..=8 {
+                    let Some(j) = i.checked_sub(back) else { break };
+                    if !lines[j].trim_start().starts_with(';') {
+                        break;
+                    }
+                    if lines[j].trim_start().to_ascii_lowercase().starts_with(&head) {
+                        from = j;
+                        break;
+                    }
+                }
+                let _ = lines.drain(from..=i);
+                i = from;
+                changed = true;
+            }
+            _ => i += 1,
+        }
+    }
+    let mut out: Vec<String> = lines.iter().map(|l| l.to_string()).collect();
+    while out.last().is_some_and(|l| l.trim().is_empty()) && (on || changed) {
+        out.pop();
+    }
+    if on {
+        if kept_block.is_empty() {
+            out.push(EXPERIMENTAL_START.to_string());
+            out.extend(EXPERIMENTAL_BLOCK.lines().map(str::to_string));
+            out.push(EXPERIMENTAL_END.to_string());
+            changed = true;
+        } else {
+            // (Left at the bottom: anything after it moves above it.)
+            if block.is_some_and(|(_, e)| e < text.lines().count()) {
+                changed = true;
+            }
+            out.extend(kept_block.iter().map(|l| l.to_string()));
+            if kept_block.last().map(|l| l.trim()) != Some(EXPERIMENTAL_END) {
+                out.push(EXPERIMENTAL_END.to_string());
+                changed = true;
+            }
+        }
+    }
+    changed.then(|| out.join("\r\n") + "\r\n")
+}
+
 #[derive(Debug)]
 pub struct Settings {
     pub abilities: Mode,
@@ -346,8 +451,6 @@ pub struct Settings {
     pub kh2_volume: f32,
     /// Times the damage of Sora's KH2 hits (KH1's damage x KH2's power x this).
     pub damage_scale: f32,
-    /// Times KH2's Magic-based hits on top (Explosion, Magnet Burst), which also grow with MP.
-    pub magic_scale: f32,
     /// KH2's power inside KH1's damage function (`kh2_damage = on`, the default; `kh2damage`).
     pub kh2_damage: bool,
     /// KH1's critical hits on every attack (`criticals = on`; off by default, as KH2;
@@ -369,6 +472,9 @@ pub struct Settings {
     /// KH2's rule for a clash or a wall bounce in the combo count (`clash_count = kh2`, the default;
     /// the tester, what-is-still-missing m15 answer 1; `recoil::clash_count`).
     pub clash_count: bool,
+    /// KH2's line ahead (its row 1, the hop off a ledge) for base Sora's ground press (`drop_hop =
+    /// on`, the default; the owner, t914; `combomods::drop_hop`).
+    pub drop_hop: bool,
     /// Glide on Square (`glide = square`, default) or held jump (`glide = jump`).
     pub glide_on_square: bool,
     /// Gravity's share while a KH2 cast (Reflect) plays in the air, after its fall speed was
@@ -400,6 +506,9 @@ pub struct Settings {
     /// KH2's command lock (`command_lock = kh2`, the default; `cmdmenu`).
     pub command_lock_kh2: bool,
     pub config_row: bool,
+    /// The experimental settings show in the Config menu and at the ini's bottom (`experimental = on`;
+    /// off by default, the owner, t922). Off: each keeps `EXPERIMENTAL_KEYS`' value.
+    pub experimental: bool,
     /// KH2's fourth shortcut (`shortcuts = 4`).
     pub four_shortcuts: bool,
     /// Which motions show KH2's own effects: `None` off, `Some(None)` all.
@@ -438,6 +547,10 @@ pub struct Settings {
     pub trail_always: bool,
     /// L1 + L2 + R1 + R2 + Start + Select held a second returns to the title screen (`soft_reset = on`, `softreset.rs`).
     pub soft_reset: bool,
+    /// The lowest step of every KH1 volume slider is silence (`volume_mute = on`, the default; `volmute.rs`, t915).
+    pub volume_mute: bool,
+    /// Buses 5 and 6 follow the effects slider after a fade-in (`effects_after_fade = slider`, the default; `volmute.rs`, t916).
+    pub fade_follows_effects: bool,
     /// Skips the pause menu's skippable cutscenes (`cutscene_skip = off | seen | all`: 0, 1, 2; `cutsceneskip.rs`).
     pub cutscene_skip: u8,
     /// The scenes already watched, as the mod keeps them (`cutscene_seen`).
@@ -518,7 +631,9 @@ pub fn get() -> &'static Settings {
         }
         let s = Box::into_raw(Box::new(load(true).expect("first load")));
         SETTINGS.store(s, Ordering::Release);
-        return unsafe { &*s };
+        let s = unsafe { &*s };
+        EXPERIMENTAL.store(1 + s.experimental as u8, Ordering::Relaxed);
+        return s;
     }
     if due() {
         if let Ok(_g) = RELOAD.try_lock() {
@@ -526,11 +641,33 @@ pub fn get() -> &'static Settings {
                 // (The old one is left as it is: callers may still hold it.)
                 let s = Box::into_raw(Box::new(s));
                 SETTINGS.store(s, Ordering::Release);
-                return unsafe { &*s };
+                let s = unsafe { &*s };
+                experimental_now(s);
+                return s;
             }
         }
     }
     unsafe { &*SETTINGS.load(Ordering::Acquire) }
+}
+
+/// `experimental` as last loaded: 0 not yet, else 1 + on.
+static EXPERIMENTAL: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+
+/// After a reload: when `experimental` changed, the experimental settings' live values are read
+/// again from the ini as it is now (off: the defaults; on: the block), as at start.
+fn experimental_now(s: &Settings) {
+    let now = 1 + s.experimental as u8;
+    if EXPERIMENTAL.swap(now, Ordering::Relaxed) == now {
+        return;
+    }
+    super::knockback::forget_weight();
+    super::recoil::forget_clash_count();
+    super::hitreact::forget();
+    super::kh2damage::forget_kh2_damage();
+    for k in [super::styles::Kind::Recoil, super::styles::Kind::GuardShape] {
+        super::styles::reload(k, s.styles[k as usize]);
+    }
+    log!(Menus, "settings: experimental {}: its settings read again", if s.experimental { "on" } else { "off" });
 }
 
 /// Half a second since the ini was last looked at.
@@ -561,7 +698,21 @@ fn load(first: bool) -> Option<Settings> {
             DEFAULT_INI.to_string()
         }
     };
+    // (t922) The experimental block put in or taken out as `experimental` says; the file written
+    // only when that changed it (and not read again for it).
+    let experimental = on(&text, "experimental", "on", false);
+    let text = match experimental_ini(&text, experimental) {
+        Some(t) => {
+            if std::fs::write(&path, &t).is_ok() {
+                *MTIME.lock().unwrap_or_else(|e| e.into_inner()) = std::fs::metadata(&path).and_then(|m| m.modified()).ok();
+                log!(General, "settings: the experimental settings {} the ini", if experimental { "put at the bottom of" } else { "taken out of" });
+            }
+            t
+        }
+        None => text,
+    };
     let s = Settings {
+        experimental,
         abilities: setting(&text, "abilities").and_then(|v| Mode::parse(&v)).unwrap_or(Mode::Kh1),
         hurt: on(&text, "hurt", "kh2", true),
         carry: on(&text, "carry", "on", true),
@@ -581,14 +732,15 @@ fn load(first: bool) -> Option<Settings> {
         // glide_on_square: on(&text, "glide", "square", true),
         glide_on_square: false,
         air_cast_fall: setting(&text, "air_cast_fall").and_then(|v| v.parse::<f32>().ok()).filter(|v| (0.0..=1.0).contains(v)).unwrap_or(AIR_CAST_FALL),
-        magic_scale: setting(&text, "magic_scale").and_then(|v| v.parse::<f32>().ok()).filter(|v| (0.1..=10.0).contains(v)).unwrap_or(1.0),
-        kh2_damage: on(&text, "kh2_damage", "on", true),
+        // (t922: experimental, off unless `experimental = on`; off by default.)
+        kh2_damage: experimental && on(&text, "kh2_damage", "on", false),
         criticals: on(&text, "criticals", "on", false),
         party_criticals: on(&text, "party_criticals", "on", false),
         kh1_ability_chance: on(&text, "kh1_ability_chance", "on", false),
-        enemy_weight: on(&text, "enemy_weight", "on", true),
+        enemy_weight: !experimental || on(&text, "enemy_weight", "on", true),
         glide_cast: on(&text, "glide_cast", "on", true),
-        clash_count: on(&text, "clash_count", "kh2", true),
+        clash_count: !experimental || on(&text, "clash_count", "kh2", true),
+        drop_hop: on(&text, "drop_hop", "on", true),
         kh2_voice: on(&text, "kh2_voice", "on", false),
         auto_aim: on(&text, "auto_aim", "on", false),
         wall_clink: on(&text, "wall_clink", "on", true),
@@ -675,7 +827,7 @@ fn load(first: bool) -> Option<Settings> {
                 on(&text, "battle_quotes", "kh2", on(&text, "kh2_voice", "on", false)),
                 on(&text, "magic_cure", "kh2", magic && on(&text, "cure_style", "kh2", true)),
                 on(&text, "hit_reactions", "kh2", false),
-                on(&text, "recoil", "kh2", false),
+                experimental && on(&text, "recoil", "kh2", false),
                 on(&text, "magic_fire", "kh2", magic),
                 on(&text, "magic_blizzard", "kh2", magic),
                 on(&text, "magic_thunder", "kh2", magic),
@@ -689,14 +841,20 @@ fn load(first: bool) -> Option<Settings> {
                 on(&text, "magic_air_physics", "kh2", crate::kh1phys::Rule::parse(setting(&text, "physics").as_deref()) == crate::kh1phys::Rule::Kh2),
                 on(&text, "magic_combo", "kh2", false),
                 on(&text, "guard_anim", "kh2", false),
-                on(&text, "guard_shape", "kh2", false),
+                experimental && on(&text, "guard_shape", "kh2", false),
             ]
         },
-        knockback_numbers: super::hitreact::Numbers::parse(setting(&text, "knockback_numbers").as_deref()),
-        medium_hits_flinch: on(&text, "medium_hits", "flinch", false),
+        // (t922: experimental; Scaled by default and with `experimental = off`.)
+        knockback_numbers: match setting(&text, "knockback_numbers") {
+            Some(v) if experimental => super::hitreact::Numbers::parse(Some(&v)),
+            _ => super::hitreact::Numbers::Scaled,
+        },
+        medium_hits_flinch: experimental && on(&text, "medium_hits", "flinch", false),
         gummi_skip: on(&text, "gummi", "skip", false),
         trail_always: on(&text, "trail_always", "on", false),
         soft_reset: on(&text, "soft_reset", "on", false),
+        volume_mute: on(&text, "volume_mute", "on", true),
+        fade_follows_effects: setting(&text, "effects_after_fade").as_deref() != Some("vanilla"),
         cutscene_skip: match setting(&text, "cutscene_skip").as_deref() {
             Some("seen") => 1,
             Some("all") | Some("on") => 2,

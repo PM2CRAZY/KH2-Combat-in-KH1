@@ -357,6 +357,13 @@ pub fn set_medium_flinch(f: bool) {
     log!(Combat, "Config menu: Medium Hits {}", if f { "Flinch" } else { "Blow" });
 }
 
+/// Knock-back Numbers and Medium Hits read again from the settings on their next call
+/// (`experimental` switched in the ini, t922).
+pub fn forget() {
+    NUMBERS.store(0, Ordering::Relaxed);
+    MEDIUM.store(0, Ordering::Relaxed);
+}
+
 /// Where the Medium Hits row applies (the tester, m3 question 3: "(b)", only on the ground and in
 /// normal air): the movement states (`+0x70`) for which KH1's hit pass (Steam `0x14029BBD0`) runs
 /// its ground reactions (0, 1, 0xC, 0x1C, 0x20, 0x26) or its plain air ones (any state it has no

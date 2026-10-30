@@ -25,8 +25,9 @@
 //! template's in memory of ours near the block, its offset from the block in `+4`), with KH2's
 //! reaction for the move (KH1's launch, kind 5, for a KH2 blow that throws, else a flinch, 3) and
 //! the Recoil row's clash rules (`rules`: the template's at KH1, KH2's attack kinds at KH2). The
-//! hits its attack object lands then take KH2's numbers for the move's hit window (power, Magic
-//! scaling, launch: `combat::scale_record` through `kh2_atkp`).
+//! hits its attack object lands then take KH2's numbers for the move's hit window (power and
+//! launch: `combat::scale_record` through `kh2_atkp`; a Magic-based move's data takes KH1's
+//! own magic stat at make, `kh1_magic`).
 
 use super::addr::Rva;
 use super::{log, pose};
@@ -509,6 +510,11 @@ unsafe fn make(base: usize, index: u16, kh1: usize) -> Option<Table> {
         std::ptr::copy_nonoverlapping(src as *const u8, d as *mut u8, DATA);
         let atkp = window_atkp(o.motion, None);
         let a = atkp.and_then(|id| kh2.battle.attack_for_level(id, 0, 0));
+        // A KH2 Magic-based move (Explosion, Magnet Burst): KH1's own magic stat on its data
+        // (`kh1_magic`, Ripple Drive's from KH1's row in this table).
+        if a.is_some_and(|a| a.stat_source == 1) {
+            kh1_magic(d, block.wrapping_add(rd::<i32>(kh1 + RIPPLE_DRIVE_ROW * ROW + 4) as isize as usize));
+        }
         let kind = match a {
             Some(a) if throws(a) => 5u32,
             Some(a) if character_core::reaction::category(a.enemy_reaction) == 3 => 3,
@@ -614,6 +620,51 @@ pub unsafe fn kh1_row(row: usize) -> Option<(usize, [u8; 3])> {
     let at = kh1 + row * ROW;
     let data = (base + BLOCK_RVA).wrapping_add(rd::<i32>(at + 4) as isize as usize);
     (data > 0x10000).then(|| (data, rd::<[u8; 3]>(at + 0xC)))
+}
+
+/// KH1's Ripple Drive row in Sora's table (`combomods::RIPPLE_DRIVE`): KH1's own Keyblade attack
+/// that grows with magic (its data `0x4E88`: stat source 4, max MP × 3, power 10, Checked (files)).
+pub const RIPPLE_DRIVE_ROW: usize = 7;
+
+/// KH2's Magic-based hits (ATKP stat source 1: Explosion, Magnet Burst; KH2 spells only without a
+/// KH1 spell's data of their own, t920) through KH1's own magic
+/// stat (the owner, t917: Magic moves go through how KH1 works out magic damage, no bonus on top).
+/// Our data copy `d` takes the damage fields of KH1's Ripple Drive data `ripple`: its stat source
+/// (`+0`, which KH1's attack constructor `0x1402B2DC0` turns into the attack's stat term from max
+/// MP, Checked (decomp)), its power (`+0x14` vs the player's side, `+0x48` vs enemies) and its
+/// min / max (`+0x20` / `+0x24`, `+0x4C` / `+0x50`). KH1's damage function then adds max MP × 3
+/// where a swing adds Strength, and KH2's power % applies on KH1's curve (`kh2damage`); nothing is
+/// multiplied after. False (the copy left as it is) when Ripple Drive's stat source isn't one of
+/// KH1's max MP ones (1, 3, 4, 5).
+pub unsafe fn kh1_magic(d: usize, ripple: usize) -> bool {
+    static LOGGED: AtomicU32 = AtomicU32::new(0);
+    let first = LOGGED.fetch_add(1, Ordering::Relaxed) == 0;
+    let src = rd::<u32>(ripple);
+    if !matches!(src, 1 | 3 | 4 | 5) {
+        if first {
+            log!(Combat, "KH2's Magic-based hits: KH1's Ripple Drive data {ripple:#x} has stat source {src}, not a max MP one: left on the swing's Strength");
+        }
+        return false;
+    }
+    wr(d, src);
+    for o in [0x14usize, 0x20, 0x24, 0x48, 0x4C, 0x50] {
+        wr(d + o, rd::<u32>(ripple + o));
+    }
+    if first {
+        log!(Combat,
+            "KH2's Magic-based hits: KH1's own magic stat from Ripple Drive's data {ripple:#x}: stat source {src}, power {} vs enemies (min {}, max {})",
+            rd::<i32>(ripple + 0x48), rd::<i32>(ripple + 0x4C), rd::<i32>(ripple + 0x50)
+        );
+    }
+    true
+}
+
+/// `kh1_magic` with Ripple Drive's data from Sora's KH1 table (`kh1_row`).
+pub unsafe fn kh1_magic_row(d: usize) -> bool {
+    match kh1_row(RIPPLE_DRIVE_ROW) {
+        Some((r, _)) => kh1_magic(d, r),
+        None => false,
+    }
 }
 
 /// KH1's row `row` of our table run (`f`, the row runner) with our row `n` in its place for that

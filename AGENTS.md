@@ -1,3 +1,80 @@
+### 2026-10-29: Stage 923 (testing branch: long Config menu texts drawn smaller to fit their boxes)
+- The owner (chat: "config menus texts like kh1 ability chance (leaves the backdrop on the last c in chance) and knock-back numbers (leaves in-between b and e on numbers) go off the backdrop and the text needs to be scaled down to fit it and any other long winded config text").
+  - KH1's panel call (Steam `0x1402F3950`) draws a label left-aligned from x 27 in a box spanning x 11..153, and a value centred in its box, both at KH1's panel text size (`0x140545364`, 20); KH1's text draw (`0x1402EBCD0`) and its width function (`0x1402D0E10`) both read a size code `0C nn` inside the text, and the draw a line move `0E lo hi` (Checked (decomp)).
+  - `config::fit`: each of our label and value texts is measured once with KH1's own width function at that size; one that is wider than its room (label: 118, to 8 short of the box's right edge; values: the box width less 16) gets a copy that starts with KH1's size code at the largest size that measures inside the room and a move down of half the size it lost, so it stays centred in the row (the draw's glyphs are size x 16 tall from the line's top, Checked (decomp)). The panel is handed that copy's id (`0x7F40xxxx`, through our text lookup); texts that fit and KH1's own are left alone. Log (Menus): "text ... is N wide for 118: drawn at size S of 20".
+  - Assumption: KH1's own widest labels end about 8 short of the box's edge (the room). Not checked in game. docs/kh1-config-menu.md §7.
+
+### 2026-10-29: Stage 922 (testing branch: ini `experimental`, the experimental Config rows and their ini lines)
+- The owner (chat: "a setting in the ini that enables experimental settings in the config menu and pop up at the bottom of the ini once enabled": Enemy Weight (On), Clash Combo (On), Knock-back Numbers (Scaled), Medium Hits (Blow), KH2 Damage (Off), Recoil (KH1), Guard Shape (KH1); changeable while enabled, back to those defaults when disabled again).
+  - New ini key `experimental` (off by default, after `config_row`). Off: Combat > Tweaks hides Enemy Weight, Clash Combo, Knock-back Numbers, Medium Hits, KH2 Damage and Recoil, and Combat hides Guard Shape (`config::TWEAKS_STABLE` / `COMBAT_STABLE`); `settings::load` gives each the default above whatever the ini says, and takes their lines (and the block) out of the ini, with each key's comment lines (an ini from before t922 has them in its body).
+  - On: the block "experimental settings" with those seven keys at those defaults is put at the bottom of the ini once (`settings::experimental_ini`); after that it stays there with whatever is set in it (the Config rows write into it), kept at the bottom if a later save adds a line after it.
+  - Switched while the game runs: on the reload after the ini's save the seven live values are read again (`knockback::forget_weight`, `recoil::forget_clash_count`, `hitreact::forget`, `kh2damage::forget_kh2_damage`, `styles::reload` for Recoil and Guard Shape), and an open Combat or Tweaks list is made again with its new rows.
+  - Defaults changed with it: `kh2_damage` is off and `knockback_numbers` scaled when the ini doesn't say (were on and kh2). Not checked in game. docs/kh1-config-menu.md §7.
+
+### 2026-10-29: Stage 921 (testing branch: Guard Animation and Ledge Hop in Tweaks, "Air Base Combo")
+- The owner (chat: "put guard animation and ledge hop in tweaks", "change aerial base combo to air base combo").
+  - Combat: Physics, Base Combo, Air Base Combo, Guard Shape, Magic, Tweaks. Tweaks: KH1 Ability Chance, Enemy Weight, Cast from Glide, Clash Combo, Ledge Hop, Guard Animation, Hit Reactions, Knock-back Numbers, Medium Hits, KH2 Damage, Criticals, Party Criticals, Recoil. Each row keeps its setting, ini key and help; Tweaks' help names the two.
+  - "Aerial Base Combo" is "Air Base Combo" in the Config menu (label and help), the move-style log and the ini's comment (`air_combo` keeps its key). Not checked in game. docs/kh1-config-menu.md §7.
+
+### 2026-10-29: Stage 920 (testing branch: KH2's spells deal KH1's own spell hit, KH2's power only the proportions)
+- The owner (chat: KH2 Blizzard felt like a worse KH1 Blizzard after t919; "go ahead" on KH1's own magic formula with KH2 setting only the proportions; Explosion and the other Magic-based Keyblade moves stay on Ripple Drive's base).
+  - Before (t919): KH2 Fire / Blizzard / Thunder hits took Ripple Drive's magic stat (10 + max MP x 3) x KH2's power % (Blizzaga 375%): about 15 a cast on the Coliseum foes of the log (Assumption: Defense 27, max MP 7).
+  - Now: a KH2 spell hit on KH1's own spell data keeps that data whole (KH1's power points + max MP, `bodyhits` spell objects and `combat`'s spell path as before t919; `magic_source` removed), and `kh2damage` counts KH2's power against KH2's normal cast at that KH1 level (`kh1_spell_level`: the data matched against KH1's spell entries; `normal_cast`: KH2 Blizzard ATKP 248 subs 0 / 2 / 4, 250 / 300 / 375%, Checked (files)) instead of 100. A normal cast deals KH1's own spell hit (Blizzaga 24 there), the finisher 550 / 375 of it, Firaga's ticks 50 / 375 each. Ripple Drive's base stays for Magic-based hits without KH1 spell data (Explosion, Magnet Burst, t917). Log: "KH1 spell level 3: of 375%".
+  - Not checked in game; `cargo test` not run here (no crate registry reachable). docs/kh1-kh2-attack-data.md §13.
+
+### 2026-10-29: Stage 919 (testing branch: KH2's spells on KH1's magic stat, KH2's power % their whole strength)
+- The owner (chat: KH2 Blizzard did 90 a hit; "(b) go ahead": one KH1 magic base for every Magic-based KH2 attack, KH2's % the only multiplier).
+  - Before: a KH2 Fire / Blizzard / Thunder hit landed on KH1's spell data at Sora's KH1 level (Blizzaga: power 34 + max MP on KH1's curve) and KH2's power (Blizzaga 375%, its finisher 550%, Checked (files) ATKP 248) multiplied that: KH1's spell-over-swing gap and KH2's on top (the log: 24 x 3.75 = 90, 24 x 5.5 = 132).
+  - Now: every KH2 spell hit (ATKP stat source 1) takes KH1's magic stat on its data as Explosion's do since t917 (`kh1rows::kh1_magic`: Ripple Drive's stat source, max MP x 3, power 10, min / max), on a KH1 spell's data too, whose element (resistances) and reactions stay. `bodyhits` spell objects and `combat`'s spell path (`magic_row`; `magic_source` keeps the KH1 spell's effect list). KH2's level rows (250 / 300 / 375%, finishers 375 / 450 / 550%) are the spell's strength; KH1's spell level still picks the level that plays.
+  - Assumption: KH1's 10 + max MP x 3 keeps pace with Sora's Strength as KH2's Magic does with Strength (not measured across KH1's levels). Not checked in game; `cargo test` not run here (no crate registry reachable). docs/kh1-kh2-attack-data.md §12.
+
+### 2026-10-29: Stage 918 (testing branch: no KH1 finisher points under KH2's finisher power)
+- The owner (chat: "the 'bonus on top' should not be in the game but work through kh1's systems. go ahead").
+  - Before: a KH2 hit on a KH1 finisher row's data kept KH1's finisher power (4 or 6 points on KH1's damage curve's index, about x2 to x2.8) and KH2's finisher power % was applied on top.
+  - Now (`kh2damage::damage`, Steam): for the one call of a KH2 hit whose curve is scaled, a Strength-based data (stat source 0, an element that reads the curve) has a plain swing's power (Sora's KH1 row 13's data `+0x48`, 0 in `btltbl.bin`, Checked (files)), put back after the call as the curve pointer is. KH2's power % is the finisher's whole boost. KH1's own hits, Magic-based hits (Ripple Drive's power, t917) and gravity / stop / cure / aero data untouched. Log: "KH1 row power 6 -> 0".
+  - Assumption: KH1's damage function reads `+0x48` through the attack's data handle at the call. Not checked in game; `cargo test` not run here (no crate registry reachable). docs/kh1-kh2-attack-data.md §11.
+
+### 2026-10-29: Stage 917 (testing branch: KH2's Magic-based hits on KH1's own magic stat)
+- The owner (chat: KH2 moves tied to Magic go through how KH1 works out magic damage, no bonus on top; answer (a), Ripple Drive; "go ahead").
+  - Before: Magic-based KH2 hits (ATKP stat source 1: Explosion, Magnet Burst) landed on a KH1 swing's data (Strength) and were multiplied by (1 + 0.1 x max MP) x `magic_scale`.
+  - Now: their data copies take KH1's Ripple Drive data's stat source, power and min / max (`kh1rows::kh1_magic`; Sora's KH1 row 7, data 0x4E88: max MP x 3, power 10, Checked (files); read live, refused if not a max MP source). KH1's constructor makes the stat term from max MP (Checked (decomp)); KH2's power % applies on KH1's curve as before. Our rows, body windows, left Keyblade windows, spell attacks on swing data, `land_hit`'s fallbacks (`combat::magic_row`). `combat::magic_factor` and the ini's `magic_scale` removed (also from openkh/README.txt).
+  - Left: a Magic-based window on KH1's own swing row stays Strength (KH1's shared data; logged once). Not checked in game; `cargo test` not run here (no crate registry reachable). docs/kh1-kh2-attack-data.md §10.
+
+### 2026-10-29: Stage 916 (testing branch: buses 5 and 6 follow the effects slider after a fade)
+- The owner (chat: Olympus's wind came back after a Trinity with the effects slider at its lowest; "(b) go ahead": follow the effects slider after every fade, at every step).
+  - KH1's fade (`0x1400DDD10`) sets buses 5 and 6 to the fade's own level (1.0 after a fade-in) through its two calls of the bus volume set (`0x1400547F0`, at `0x1400DDEA9` / `0x1400DDED3`), while the effects setter sets buses 4..8 to the effects step. Checked (decomp + exe). So after every room or event fade those two buses were at full, whatever the slider (vanilla too).
+  - `volmute::bus_after_fade`: with ini `effects_after_fade = slider` (the default, read at start) those two calls go through ours, and a fade-in sets buses 5 and 6 to the effects step's volume from KH1's own table (0.0 at step 1 with Volume Mute), over the fade's own time; a fade-out passes through. Only runs when KH1 fades, never per frame; the call sites and KH1's settings getter are checked first. `vanilla`: not redirected.
+  - Not checked: that the Olympus wind plays on bus 5 or 6 (Assumption, from the log: the room's sounds came back right after the Trinity's fade). Not checked in game. docs/kh1-volume.md.
+
+### 2026-10-29: Stage 915 (testing branch: the lowest step of every volume slider is silence)
+- The owner (chat: "when audio is set to the lowest setting it currently doesn't mute the game, can you make it so that the lowest setting on any of the audio sliders completely mutes that track?").
+  - KH1 turns a slider step (1..10, the lowest the menu allows is 1) into a volume through its table at Steam `0x1403D8B60` (0.0, 0.1 .. 1.0), so step 1 was 0.1; its fade (`0x1400DDD10`, buses 1..3 back to their sliders after a fade-in) and a stream's start (`0x14011CEA0`, master; Assumption: the movie player) read the step as step / 10.0 instead. Checked (decomp + exe).
+  - New `volmute.rs` (ini `volume_mute`, on by default, read at start): the table's step 1 becomes 0.0 and those four step / 10.0 reads become reads of the same table (same 19 bytes each, checked against a disassembler). All four sliders (master, bus 1, effects, voices) are silent at the lowest step; steps 2..10 unchanged. Every site's bytes are checked first, all or nothing; Steam only. Data and code KH1 runs itself, nothing per frame. Off: nothing patched.
+  - Left as vanilla: buses 5 and 6 follow KH1's fade level (1.0 after a fade-in), not the effects slider. No Config menu row yet.
+  - Not checked in game. docs/kh1-volume.md.
+
+### 2026-10-29: Stage 914 (testing branch: Combat > Ledge Hop, KH2's drop-ahead hop as a Config row)
+- The owner (chat: "lets make sora's drop ahead hop a toggle in the config menu under combat for now").
+  - New Config row Combat > Ledge Hop (Off | On, after Guard Shape; ini `drop_hop`, on by default, so nothing changes until it is switched). On: KH2's line ahead (Steam KH2 `0x140402D20`, Checked (decomp)) marks row 1 at a drop ahead, the hop off the ledge in 181, as before. Off: base Sora's ground press doesn't test the line ahead (`combomods::Kh1Press::test_drop_ahead`), so row 1 is never marked and KH2's walk takes the next row that fits; Drive Forms keep KH2's. Live (`combomods::drop_hop` / `set_drop_hop`), kept in the ini.
+  - Not checked in game. docs/kh1-anim-slots.md (the drop ahead, row 1).
+
+### 2026-10-29: Stage 913 (testing branch: t911's build error)
+- The owner (build output: `Mutex` not found, combat.rs `GRIP_CAL`).
+  - `combat::GRIP_CAL` now names `std::sync::Mutex` in full (combat.rs imports no `Mutex`). Nothing else changed; the `chest.rs` `fetch_update` deprecation warning left as it is (unrelated).
+  - `cargo test` not run for `kh1-hook` here.
+
+### 2026-10-29: Stage 912 (testing branch: our hit state's enemy list only for the posed and fallback paths)
+- The owner (chat: "do 1. and 2.", item 2).
+  - Before: `combat::Strikes::look` (our list of KH1's bodies, guards and shots) ran every frame in `takeover::kh2_hits` and `takeover::native_spells`.
+  - Now: `kh2_hits` runs it only when KH2's rig is posed (a window needs it, `combat::guard_needs_pose`); `native_spells` only when KH1's pass, KH1's barrier meeting or KH1's calls aren't all there. The guard repel's stopped attack is read from KH1's attack pool (hit mask bit, owner, place), not our shot list. Reflect's step runs the stopped-shot log check (once a game frame). Reflect's barrier shapes stay given by the spell script, as spell attacks.
+  - Not checked in game; `cargo test` not run for `kh1-hook` here. docs/kh1-roll-guard-native.md §11.
+
+### 2026-10-29: Stage 911 (testing branch: Guard Shape KH2, KH2's Keyblade guard shapes on KH1's grip)
+- The owner (same request, item 1).
+  - Before: with Guard Shape KH2, KH2's Keyblade guard shapes were KH1 guard objects we placed every frame on KH2's posed rig.
+  - Now (Steam, KH1's entry builder hooked): on the window's first frame each KH2 shape is measured into KH1's grip bone (280) axes (`bodyhits::grip_local`); after that KH1's pass places it from KH1's grip each pass (`bodyhits::grip_guard_keep`, result word held at clashed, as t861), and KH2's rig isn't posed for the window. Log line "measured onto KH1's grip" shows the offsets. Assumption: the shape keeps its place on the blade through the window.
+  - Not checked in game; `cargo test` not run for `kh1-hook` here. docs/kh1-roll-guard-native.md §11.
+
 ### 2026-10-29: Stage 910 (testing branch: the spell scripts' lock-on straight from KH1)
 - The owner (chat: "do all 3 and finish whatever is left", item 3).
   - Before: `takeover::native_spells` worked out a lock id from our hit state's targets (`kh1_lock` over `Strikes::look`) for the spell scripts' world; the world never read it (its lock-on is KH1's own, `reflect::KhWorld::locked`, `takeover::kh1_locked`).

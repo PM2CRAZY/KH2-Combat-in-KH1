@@ -1147,6 +1147,9 @@ request's own template. No new hook; nothing per frame beyond the redirect alrea
   - A detail seen in f48640 / f48888: the hop's rise starts one frame before KH2's motion does
     (KH1 starts the new request the frame after the row runs, as for every swing; the state and
     speed are set on the press), so for one frame he rises in the end of the ground swing.
+  - **Config row (t914):** Combat > Ledge Hop (ini `drop_hop`, On by default). Off: base Sora's
+    press skips the line ahead, so row 1 is never marked and the walk takes the next row that
+    fits; Drive Forms keep KH2's (`combomods::drop_hop`).
 - **The finisher tests' status bits** (the tester: "add that"; Steam KH2, Checked (decomp)):
   - `+0x194` bit 5: the count step (`0x1403D6CA0`) takes it with the press's hit as the
     finisher chain (count and finisher count up, while under the most finishers `+0x5C0` block

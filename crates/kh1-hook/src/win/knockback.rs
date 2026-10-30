@@ -54,6 +54,11 @@ pub fn set_weight(on: bool) {
     log!(Combat, "Config menu: Enemy Weight {}", if on { "On" } else { "Off" });
 }
 
+/// Read again from the settings on the next call (`experimental` switched in the ini, t922).
+pub fn forget_weight() {
+    WEIGHT_ON.store(0, Ordering::Relaxed);
+}
+
 /// KH1's weight stat of this enemy (stats `+0xC4`), if it reads as a number.
 pub unsafe fn kh1_weight(actor: usize) -> Option<f32> {
     if actor < 0x10000 {
