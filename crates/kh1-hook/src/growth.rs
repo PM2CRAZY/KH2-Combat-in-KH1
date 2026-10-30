@@ -81,6 +81,12 @@ pub mod kh2 {
     pub const AERIAL_DIVE: u16 = 178;
     pub const MAGNET_BURST: u16 = 179;
     pub const VICINITY_BREAK: u16 = 180;
+    // KH2's Drive support abilities (round 6, row 5; the item table's ability numbers, Checked
+    // (files): items 0x18C / 0x18E / 0x21C / 0x21E). Drive Boost (109) waits for MP Charge (answer 2 (a)).
+    pub const DAMAGE_DRIVE: u16 = 108;
+    pub const FORM_BOOST: u16 = 110;
+    pub const DRIVE_CONVERTER: u16 = 174;
+    pub const DAMAGE_CONTROL: u16 = 176;
 }
 
 /// Our ids for KH2's abilities (`MENU`).
@@ -111,6 +117,11 @@ pub mod ours {
     /// KH2's own Glide (t323): in the shared list in place of KH1's Glide and Superglide while
     /// the Glide style is KH2's (`glide_swap`).
     pub const GLIDE: u8 = 88;
+    /// KH2's Drive support abilities (t953).
+    pub const DAMAGE_DRIVE: u8 = 89;
+    pub const FORM_BOOST: u8 = 90;
+    pub const DAMAGE_CONTROL: u8 = 91;
+    pub const DRIVE_CONVERTER: u8 = 92;
 }
 
 /// KH1's modifiers and the KH2 one each stood for before the split (Hurricane Blast was
@@ -181,6 +192,9 @@ pub enum Effect {
     NegativeCombo,
     /// A combo modifier: its KH2 ability number in `equipped`.
     Modifier(u16),
+    /// A passive KH2 ability whose copies stack (KH2's ability block, `0x140401730`): its KH2
+    /// ability number in `equipped` once per equipped copy (`support_copies`; t953).
+    Support(u16),
 }
 
 /// What an equipped ability does on one side: while KH1's own states move Sora (the move
@@ -338,7 +352,7 @@ pub const MAX_ID: u8 = 0x7F;
 
 use Side::{Borrow, Kh1Combo};
 
-pub const MENU: [MenuAbility; 23] = [
+pub const MENU: [MenuAbility; 27] = [
     // Every one of these is simply Sora's (off until equipped, with AP) since the tester's
     // "make it all vanilla, just give the player all the custom abilities we added". AP as KH2's.
     m(66, "Quick Run", "Dash swiftly along the ground.", 2, kh1::DODGE_ROLL, Effect::QuickRun, 0, Hook),
@@ -372,7 +386,18 @@ pub const MENU: [MenuAbility; 23] = [
     // (`grants` gives none): `glide_swap` puts it in place of KH1's Glide and Superglide at the
     // Glide style KH2, and back at KH1. Its KH1 side: KH2's glide is a borrow out of KH1's air.
     MenuAbility { id: 88, name: "Glide", help: "Glide through the air. Grows with Sora.", ap: 0, list: List::Shared, template: kh1::GLIDE, effect: Effect::Kh2Glide, with: 0, on_kh1: Borrow },
+    // KH2's Drive support abilities (round 6, row 5, t953): KH2's names, help and AP (Checked
+    // (files)); KH1's own code runs their effects whoever moves Sora (`win/driveabilities.rs`).
+    m(89, "Damage Drive", "Restores the Drive Gauge every time damage is taken.", 3, kh1::MP_HASTE, Effect::Support(kh2::DAMAGE_DRIVE), 0, Kh1Own),
+    m(90, "Form Boost", "Increases the duration of each Drive Form.", 5, kh1::MP_HASTE, Effect::Support(kh2::FORM_BOOST), 0, Kh1Own),
+    m(91, "Damage Control", "Halves damage taken at critical moments.", 5, kh1::MP_HASTE, Effect::Support(kh2::DAMAGE_CONTROL), 0, Kh1Own),
+    m(92, "Drive Converter", "Increases the drop rate of drive orbs in place of munny.", 5, kh1::MP_HASTE, Effect::Support(kh2::DRIVE_CONVERTER), 0, Kh1Own),
 ];
+
+/// Equipped copies of a KH2 support ability (`Effect::Support`'s number) in `a`.
+pub fn support_copies(a: &Abilities, n: u16) -> u8 {
+    a.equipped.iter().filter(|&&x| x == n).count().min(255) as u8
+}
 
 /// Our Quick Run's ability id (`MENU`).
 pub const QUICK_RUN_ID: u8 = ours::QUICK_RUN;
@@ -734,6 +759,7 @@ impl Kh1Sora {
             Effect::FinishingPlus => out.finishing_plus = 1,
             Effect::NegativeCombo => out.negative_combo = 1,
             Effect::Modifier(n) => push(out, n),
+            Effect::Support(n) => out.equipped.extend(std::iter::repeat(n).take(copies as usize)),
         }
     }
 
@@ -1225,12 +1251,24 @@ mod tests {
     #[test]
     fn grants_are_every_kh2_ability() {
         let all: Vec<u8> = MENU.iter().filter(|a| a.list == List::Kh2).map(|a| a.id).collect();
-        assert_eq!(all.len(), 22);
+        assert_eq!(all.len(), 26);
         assert_eq!(sora(1, &[], &[]).grants().iter().map(|a| a.id).collect::<Vec<_>>(), all);
         // Already there (even unequipped): not again.
         let g = sora(1, &[66 | 0x80, 68], &[]).grants();
         assert!(!g.iter().any(|a| a.id == 66 || a.id == 68));
-        assert_eq!(g.len(), 20);
+        assert_eq!(g.len(), 24);
+    }
+
+    /// KH2's Drive support abilities (t953): one number in `equipped` a copy, none when off.
+    #[test]
+    fn support_abilities_stack() {
+        let mut s = sora(1, &[], &[]);
+        s.kh2[..4].copy_from_slice(&[ours::FORM_BOOST, ours::FORM_BOOST, ours::DAMAGE_DRIVE | 0x80, ours::DRIVE_CONVERTER]);
+        let a = s.kh2();
+        assert_eq!(support_copies(&a, kh2::FORM_BOOST), 2);
+        assert_eq!(support_copies(&a, kh2::DAMAGE_DRIVE), 0);
+        assert_eq!(support_copies(&a, kh2::DRIVE_CONVERTER), 1);
+        assert_eq!(support_copies(&a, kh2::DAMAGE_CONTROL), 0);
     }
 
     /// The KH2 list (after m18, answer 1): ours move out of Sora's 48 as they were, KH1's keep
@@ -1248,7 +1286,7 @@ mod tests {
         assert!(after.kh2().equipped.contains(&kh2::AERIAL_FINISH) && after.kh2().equipped.contains(&kh2::HORIZONTAL_SLASH));
         assert!(after.has_ours(66) && !has(&after.abilities, 66));
         assert!(!after.grants().iter().any(|a| [66, 70, 87].contains(&a.id)));
-        assert_eq!(after.grants().len(), 19);
+        assert_eq!(after.grants().len(), 23);
         // Nothing more to move.
         let again = move_to_kh2_list(&after);
         assert!(again.lines.is_empty() && again.abilities == after.abilities && again.kh2 == after.kh2);

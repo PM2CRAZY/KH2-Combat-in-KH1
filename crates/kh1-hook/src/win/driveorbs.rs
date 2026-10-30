@@ -201,10 +201,23 @@ unsafe extern "system" fn draw(program: usize, data: usize) {
 /// KH1's enemy drop, then the Drive orbs (KH2's normal enemies' rows).
 unsafe extern "system" fn drop(counts: usize, pos: usize, mode: i32) {
     let f: unsafe extern "system" fn(usize, usize, i32) = std::mem::transmute(ORIG_DROP.load(Ordering::Relaxed));
-    f(counts, pos, mode);
+    // (Drive Converter, t956: KH1 is handed a copy with KH2's munny share; the rest are orbs.)
+    let (given, conv_small, conv_big) = super::driveabilities::convert(counts);
+    f(given, pos, mode);
+    // (KH2's Drive Recovery items too, main's drops, t951.)
+    super::driveitems::drop(counts, pos, mode);
     let base = BASE.load(Ordering::Relaxed);
     if base == 0 || pos < 0x10000 || rd::<i32>(base + PRIZES_OFF_RVA) != 0 {
         return;
+    }
+    if conv_small > 0 || conv_big > 0 {
+        let factor = rd::<f32>(base + COUNT_FACTOR_RVA);
+        let make: unsafe extern "system" fn(u16, usize, i32) = std::mem::transmute(base + MAKE_RVA);
+        for (ty, n) in [(SMALL, conv_small), (BIG, conv_big)] {
+            for _ in 0..((n as f32 * factor) as i32).max(0) {
+                make(ty, pos, mode);
+            }
+        }
     }
     let (small, big) = crate::drivegauge::drop_for(roll());
     if small == 0 && big == 0 {

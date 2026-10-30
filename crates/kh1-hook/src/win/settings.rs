@@ -158,6 +158,12 @@ drive_cost = gauge\r\n\
 ; drive_refill: kh2 = leaving a world in a Drive Form refills the Drive gauge, HP and MP and reverts (KH2's\r\n\
 ;   world map); off = no refill (Config: Drive > Gauge Refill)\r\n\
 drive_refill = kh2\r\n\
+; drive_recovery_battle: on = Drive Recovery and High Drive Recovery go in the item slots and work in\r\n\
+;   battle too; off = from the menu only, as in KH2 (Config: Drive > Recovery in Battle)\r\n\
+drive_recovery_battle = off\r\n\
+; drive_recovery_sources: on = Drive Recovery and High Drive Recovery are sold in KH1's item shops once a\r\n\
+;   Drive Form is open (and later dropped and found); off = nowhere (Config: Progression > Drive Recovery)\r\n\
+drive_recovery_sources = on\r\n\
 ; valor_left_blade: on = in Valor Form, its Keyblade in Sora's left hand (KH1's own model of it);\r\n\
 ; off = nothing of it is installed (turn it off if it misbehaves)\r\n\
 valor_left_blade = on\r\n\
@@ -544,6 +550,12 @@ pub struct Settings {
     /// KH2's refill on leaving a world in a form (`drive_refill = kh2`, the default; `off`); Config:
     /// Drive > Gauge Refill, t934; `form::gauge_refill`.
     pub drive_refill: bool,
+    /// Drive Recovery items in battle too (`drive_recovery_battle = on`; off by default, KH2's menu-only
+    /// rule); Config: Drive > Recovery in Battle, t949; `driveitems::battle`.
+    pub drive_recovery_battle: bool,
+    /// Where Drive Recovery items come from (`drive_recovery_sources = on`, the default; main's design);
+    /// Config: Progression > Drive Recovery, t950; `driveitems::sources`.
+    pub drive_recovery_sources: bool,
     /// Valor's Keyblade drawn in his left hand (`valor_left_blade = on`, `leftblade`).
     pub valor_left_blade: bool,
     /// KH2's (true) or KH1's moves per `styles::Kind`, in `Kind::EVERY`'s order.
@@ -819,6 +831,8 @@ fn load(first: bool) -> Option<Settings> {
         drive_mp_refill: on(&text, "drive_mp_refill", "on", false),
         drive_cost_gauge: on(&text, "drive_cost", "gauge", true),
         drive_refill: on(&text, "drive_refill", "kh2", true),
+        drive_recovery_battle: on(&text, "drive_recovery_battle", "on", false),
+        drive_recovery_sources: on(&text, "drive_recovery_sources", "on", true),
         valor_left_blade: on(&text, "valor_left_blade", "on", true),
         styles: {
             // (The Magic / Aerial Magic rows before the per-spell rows, m19: the new rows' defaults

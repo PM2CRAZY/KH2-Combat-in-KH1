@@ -18,6 +18,8 @@ pub mod kh1script;
 pub mod kh1phys;
 pub mod dpxcache;
 pub mod drivegauge;
+pub mod driveitems;
+pub mod drivesupport;
 pub mod slotcache;
 pub mod storyforms;
 pub mod soundcache;
@@ -26,7 +28,7 @@ pub mod tintcache;
 /// The mod's version as the user sees it (the Config menu's Camera Style help line, the log):
 /// the stage of the latest `AGENTS.md` entry, bumped with every change to the source (a test
 /// checks). `t` for the testing branch (the user, from stage 300; `s` before it).
-pub const VERSION: &str = "t948";
+pub const VERSION: &str = "t957";
 
 #[cfg(all(windows, target_arch = "x86_64"))]
 mod win;

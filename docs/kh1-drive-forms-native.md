@@ -2272,3 +2272,116 @@ the task with its own quad buffer `0x142866960` (→ inside slot 0's draw with K
   orb at 0.9 × 24 = 21.6. So in KH1 the small Drive orb is 3.4 × KH1's small MP orb, where in KH2 it is 2.2 ×
   KH2's. If it looks too big next to KH1's orbs, the fix is one factor on entries 7 / 8.
 
+## 16. Drive Recovery items (main-port round 5, row 4, 2026-10-30: research)
+
+### 16.1 KH2 (Steam KH2)
+- **The items** (Checked (files), `03system.bin` `item`): id `0x112` Drive Recovery and `0x113` High Drive
+  Recovery, kind 1 (the menu-only kind, with the four Boosts `0x114..0x117`; Potion..Megalixir are kind 0), no
+  battle command (Potion's is `0x17`), buy price 0 (never sold), sell 20 / 30. Their value byte (`+4`) is 3 and 9.
+- **Using one** (Checked (decomp)): `0x1403C4B80` adds value × 100 points to the Drive gauge through the points
+  add `0x1403C0AD0` (bars carry at 100, up to the maximum, §13.1.3): +3 bars and +9 bars (in practice a full
+  gauge). In a form it adds to the bars, not to the form gauge.
+- **When it can be used** (Checked (decomp)): `0x1403C3DA0`: while the bars (`+0x1B1`) are below the maximum
+  (`+0x1B2`).
+- **Where they come from in KH2**: chests and rewards (they are never sold). Not looked up item by item.
+
+### 16.2 KH1 (Steam KH1)
+- Inventory: a count per item id at `save + 0x499 + id`; item table in `btltbl.bin` (255 records of 0x14:
+  name word, kind, help text), `docs/kh1-equipment.md`. Checked (decomp) there.
+- **Battle item use** (Checked (decomp)): an item command makes a task `0x1402C2760 (user, target, item)`, which
+  takes the item from the member's item slots (`+0x26..`) or the inventory (`0x140284CE0`), then
+  `0x1402C2880` waits out the use motion and applies it with `0x1402C2B50` → `0x140297CA0`
+  (the actor's message to the target, item | 0x10000).
+- **Pause-menu item use: not found yet.** The Items page (`0x14030C270`, from the page table `0x14052B7C0`)
+  and the functions around it are only declared in the KH1 decomp, not decompiled: the use has to be read
+  from the exe's assembly next. Also not checked yet: what KH1's item records `0x91` / `0x92` hold
+  (main used them as free ids; Assumption until read from the player's `btltbl.bin`).
+
+### 16.3 Main's design (a spec only)
+- The items at KH1 ids `0x91` / `0x92` (+3 / +9 bars, pause menu only), sold for 80 / 120 in the item shops
+  of Traverse Town and Agrabah once a form is open, dropped by enemies (3 % / 0.5 %, more from MP orbs and
+  big prize drops, × Lucky Strike) and placed in 17 chests (12 / 5). The sources are the owner's design,
+  not KH2's.
+
+### 16.4 Built (t949)
+- Answers (2026-10-30): 1 (a) main's sources behind a Progression toggle, 2 (b) battle use as a toggle, 3 (a)
+  ids `0x91` / `0x92` (new ids only if KH1 used them: it doesn't, Checked (files)).
+- KH1's use (Steam, Checked (decomp)): the per-item use test `0x1402CD3A0 (item, member) -> bits` (bit 0: it
+  would do something; the Items page enables the item and picks targets by it, `0x1402E8B20`, `0x1402E8B90`) and
+  the per-item effect `0x1402CD780 (item, target) -> bits`, run by the Items page's use `0x14030F160` (bit `b`
+  back: one taken, sound 0xE (7 from bit 4), message 0x99 + b; none: message 0xA0, "can't use") and by the
+  battle item use (`0x1402C2B50` → `0x1402CD580`). Both switch on the item id, so KH1's own items are untouched.
+- t949: records `0x91` / `0x92` take KH2's values after KH1's load (kind 12 menu only, or 0 with Drive > Recovery
+  in Battle on), KH2's names and help; the two functions hooked for our ids only (Sora, the gauge below its
+  maximum; KH2's value × 100 points). Code: `driveitems.rs`, `win/driveitems.rs`.
+- Next: where they come from (answer 1 (a), main's design behind Progression > a toggle): the shops, then the
+  enemy drops, then the chests, one version each.
+
+### 16.5 The shops (t950)
+- KH1 (Steam, Checked (decomp) and (exe)): `0x1403010A0 (mode, list, ..)` opens a shop; mode 0's list comes
+  from the table at `0x1404FEE00` (0xD4 bytes a list: a count, up to 52 ids), picked by the shop's event
+  (`0x1401CA610`); mode 2's from `0x1404FEAB0` (its lists 0..3 the weapon / accessory shops, 4.. the same item
+  lists). The item lists: 0 `1 2 3 8E`; 1 `+ 68 6C 7D 7A`; 2 and 3 more accessories; 7 `1 2 3 8E 8F`. Which
+  shop (world, story point) opens which list is in the events: not mapped (Assumption: Traverse Town's and the
+  others' item shops, as main found).
+- t950: with Progression > Drive Recovery on and a form open, a list with a Potion and a Tent is handed to KH1 as
+  a copy with `0x91`, `0x92` after KH1's. Main's design, not KH2's (KH2 never sells them).
+
+### 16.6 The drops (t951)
+- KH1 (Steam, Checked (decomp) and (exe)): the enemy drop `0x1402ABC40` makes its 7 prize counts, then rolls three
+  item drops `(chance, item)` of its own data: `random < 0x142D60FA8 × chance` (the factor 1 + 0.5 a Lucky
+  Strike), made by `0x1402BFF00 (item, position, mode)`. KH1's random is `0x14031BA30` (0..1).
+- t951: after KH1's drop, each of ours rolled the same way with main's chances (20+ prizes 15 % / 4 %, MP orbs
+  among them 5 % / 0.75 %, else 3 % / 0.5 %), the prize counts taken × KH1's count factor as KH1 makes them.
+  Main's design, not KH2's (KH2's enemies never drop them). Assumption: the dropped item's model, KH1's for the
+  record's `+3` (6, the tents'), is fine.
+
+### 16.7 The chests (t952)
+- KH1 (Steam, Checked (decomp) and (exe)): the chest's Open handler `0x1402B58E0` reads KH1's chest table
+  `0x140528D60` (a u16 a chest: bits 1..3 the kind, bits 4.. the item; `docs/kh1-chest.md`). Main's 17 chests
+  (`driveitems::CHESTS`, with their worlds and rooms) all hold the values main recorded in the Steam exe.
+- t952: those 17 values are ours (kind 0, `0x910` / `0x920`) with Progression > Drive Recovery on (from the first
+  load of KH1's item table), KH1's again when it is off. Not gated on a form being open (a chest's contents
+  shouldn't change with progress). Main's design, not KH2's.
+
+## 17. KH2's Drive support abilities (main-port round 6, row 5, 2026-10-30: research)
+
+### 17.1 KH2 (Steam KH2)
+- **The items** (Checked (files), `03system.bin` `item` and `msg/us/sys.bar`): Damage Drive `0x18C` (AP 3), Drive
+  Boost `0x18D` (3), Form Boost `0x18E` (5), Drive Converter `0x21C` (5), Damage Control `0x21E` (5). Help:
+  Damage Drive "Restores the Drive Gauge every time damage is taken. The amount restored to the Drive Gauge is
+  relative to the damage received."; Form Boost "Increases the duration of each Drive Form. Equip more to
+  increase the effect."; Drive Converter "Increases the drop rate of drive orbs in place of munny. Equip more to
+  increase the effect."; Damage Control "Halves damage taken at critical moments. Equip two to accelerate the
+  effect."
+- **The ability block** (`0x140401730`, each equipped copy, Checked (decomp)): Damage Drive `+0x58` += 50
+  (starts 0); Form Boost `+0x44` ×= 0.8 (starts 1); Drive Converter `+0x74` ×= 0.5 (starts 1); Damage Control
+  `+0x78` += sstm `+0x174` (starts 0; the value not read yet).
+- **Damage Drive** (Checked (decomp), §13.1.6): out of a form, a loss of HP gives `damage / max HP × +0x58` points
+  through the hit add (× the world factor, 1 here).
+- **Form Boost** (Checked (decomp)): the form gauge's drain each step × `+0x44` (`0x1403A92C0`).
+- **Drive Converter** (Checked (decomp), `0x1403DC170`): each munny kind's count (after Jackpot) keeps
+  `(int)(count × the party's +0x74 product)`; the rest become Drive orbs by `0x1405C7978` (big and middle munny
+  → big orbs, small → small).
+- **Damage Control** (Checked (decomp) and (files), found after the round): the end of KH2's damage `0x1403C12F0`
+  is × sstm `+0x178` (50) %, rounded up, while the target's HP ≤ max HP × `+0x78` (`+0x78` += sstm `+0x174` = 0.25 a
+  copy): half damage from a quarter of max HP with one, from half with two.
+- Drive Boost works only during MP Charge (`0x1403A9CF0`), which KH1 has no counterpart for.
+
+### 17.2 KH1 and testing
+- Testing's KH2 abilities live in the KH2 list (`kh2list`, `growth::MENU`), equipped with Sora's AP, every one
+  given from the start (the owner's rule, t718). Main's ids 78..81 are other abilities on testing; the four get
+  new ids in testing's list (settled, inventory "Save").
+- KH1's HP change `0x1402A4920 (actor, delta)` (Damage Drive's place); KH1's enemy drop `0x1402ABC40` with its 7
+  counts (munny types 0..2: 1 / 5 / 20) is already hooked by `driveorbs` (Drive Converter's place); the form
+  gauge's drain is ours (`win/form.rs`, Form Boost's place).
+
+### 17.3 Built (t953–t957)
+- Answers (2026-10-30): 1 (a) KH2's Damage Control rule (found, above), 2 (a) Drive Boost after the main build,
+  3 (a) KH2's Drive Converter numbers; "go ahead".
+- t953 the four in the KH2 list (ids 89..92, KH2's names, help and AP; `growth.rs`); t954 Damage Drive and t957
+  Damage Control on KH1's hit HP `0x1402BEEE0` (Sora's); t955 Form Boost on our form drain; t956 Drive Converter
+  on KH1's enemy drop (a copy of the drop with KH2's munny share, the rest Drive orbs). Rules: `drivesupport.rs`;
+  game side: `win/driveabilities.rs`.
+- Open: a main save's support abilities (main's ids 78..81 are Flash Step..Finishing Leap here) can't be told
+  from testing's own, so they aren't moved (inventory "Save").

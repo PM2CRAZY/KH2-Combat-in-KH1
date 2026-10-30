@@ -18,6 +18,8 @@ mod debugmenu;
 mod drive;
 mod drivegauge;
 mod driveorbs;
+mod driveitems;
+mod driveabilities;
 mod equipmenu;
 mod fapanel;
 mod feet;
@@ -486,6 +488,8 @@ pub unsafe extern "system" fn DllMain(_inst: *mut c_void, reason: u32, _reserved
         kh2hud::start();
         gaugehud::install(base);
         driveorbs::install(base);
+        driveitems::install(base);
+        driveabilities::install(base);
         kh2dpx::start();
         pose::load_kh2();
         model::load();

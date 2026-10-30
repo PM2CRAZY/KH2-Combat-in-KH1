@@ -625,7 +625,8 @@ unsafe fn drain_step(d: &mut Drive, actor: usize, battle: bool) {
     if let Some((left, full)) = f.gauge.as_mut() {
         let hits = HIT_LOSS.swap(0, Ordering::Relaxed) as f32 / 100.0;
         let orbs = ORB_GAIN.swap(0, Ordering::Relaxed) as f32 / 100.0;
-        *left = (*left - crate::drivegauge::drain(battle) - hits + orbs).clamp(0.0, *full);
+        // (Form Boost, t955: KH2's time drain × 0.8 a copy, `0x1403A92C0`; the hits' loss isn't.)
+        *left = (*left - crate::drivegauge::drain(battle) * super::driveabilities::form_boost() - hits + orbs).clamp(0.0, *full);
         if *left <= 0.0 && !d.revert {
             d.revert = true;
             log!(Forms, "{}: the form gauge is out", f.kind.name());

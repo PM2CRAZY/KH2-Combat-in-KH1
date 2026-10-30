@@ -268,6 +268,10 @@ enum Row {
     GaugeRefill,
     /// Progression > Drive Gauge Growth (Off | On, `drivegauge::growth`, t935).
     GaugeGrowth,
+    /// Drive > Recovery in Battle (Off | On, `driveitems::battle`, t949).
+    RecoveryBattle,
+    /// Progression > Drive Recovery (Off | On, `driveitems::sources`, t950).
+    RecoverySources,
 }
 
 /// A row of one of our lists: a setting (label, left value, right value, help, what it switches),
@@ -432,18 +436,23 @@ const COMMAND_MENU: [Item; 5] = [
 // (s279, s307), "a config ... with it on or off, so we can preserve the changes but work on it later";
 // off by default, answer 2 (b).)
 // (Drive Gauge Growth: round 2 answer 3 (a), its own row; t935.)
-const PROGRESSION: [Item; 2] = [
+// (Drive Recovery: round 5 answer 1 (a): main's sources behind a toggle, on by default; t950.)
+const PROGRESSION: [Item; 3] = [
     Item::Set([0x7F00_0240, 0x7F00_011D, 0x7F00_011E, 0x7F00_0241], Row::StoryUnlocks),
     Item::Set([0x7F00_024C, 0x7F00_011D, 0x7F00_011E, 0x7F00_024D], Row::GaugeGrowth),
+    Item::Set([0x7F00_0250, 0x7F00_011D, 0x7F00_011E, 0x7F00_0251], Row::RecoverySources),
 ];
 // (Drive: the owner, the main-branch port, t927. MP Refill: KH2 refills HP and MP on entering a form,
 // `0x1403C17C0`; answer 8: "(a) but make it a toggle in drive config menu"; off by default.)
 // (Form Cost: round 2 answer 1 "(b)": the Drive gauge by default, MP the other value; t933.)
 // (Gauge Refill: round 2 answer 4: "just have it be off or kh2", KH2 by default; t934.)
-const DRIVE: [Item; 3] = [
+// (Recovery in Battle: round 5 answer 2 (b): KH2's menu-only rule, battle use as a toggle; off by
+// default; t949.)
+const DRIVE: [Item; 4] = [
     Item::Set([0x7F00_0246, 0x7F00_0247, 0x7F00_0248, 0x7F00_0249], Row::FormCost),
     Item::Set([0x7F00_024A, 0x7F00_011D, 0x7F00_0003, 0x7F00_024B], Row::GaugeRefill),
     Item::Set([0x7F00_0244, 0x7F00_011D, 0x7F00_011E, 0x7F00_0245], Row::DriveMpRefill),
+    Item::Set([0x7F00_024E, 0x7F00_011D, 0x7F00_011E, 0x7F00_024F], Row::RecoveryBattle),
 ];
 // (QoL: the user, t704: "make a qol (Quality of life) section in the config menu, put gummi skip in
 // there".)
@@ -567,7 +576,7 @@ const BUTTON_HELP: u32 = 0x7F00_0202;
 /// Misc's help, and the same without the debug menu (its row isn't there without the debug tools).
 const MISC_HELP: u32 = 0x7F00_020C;
 const MISC_HELP_NO_DEBUG: &str = "Battle quotes.";
-const STRINGS: [(u32, &str); 155] = [
+const STRINGS: [(u32, &str); 159] = [
     (0x7F00_0201, "KH1 in KH2"),
     (0x7F00_0202, "Choose KH1's or KH2's camera, combat, movement and more."),
     (0x7F00_0203, "Camera"),
@@ -652,6 +661,10 @@ const STRINGS: [(u32, &str); 155] = [
     (0x7F00_0245, "On: entering a Drive Form refills Sora's MP as well as his HP,\nas in KH2. Off: HP only."),
     (0x7F00_023E, "Progression"),
     (0x7F00_023F, "The main branch's progression rules, each on or off."),
+    (0x7F00_0250, "Drive Recovery"),
+    (0x7F00_0251, "On: Drive Recovery and High Drive Recovery are sold in the item\nshops and dropped once a Drive Form is open, and found in 17 chests.\nOff: nowhere."),
+    (0x7F00_024E, "Recovery in Battle"),
+    (0x7F00_024F, "On: Drive Recovery and High Drive Recovery go in the item slots\nand work in battle too. Off: from the menu only, as in KH2."),
     (0x7F00_024C, "Drive Gauge Growth"),
     (0x7F00_024D, "On: the Drive gauge starts at 3 bars and grows by one for Sabor, Riku,\nChernabog, Sephiroth, Kurt Zisa and the Unknown. Off: 9 bars."),
     (0x7F00_0240, "Story Unlocks"),
@@ -759,6 +772,8 @@ fn value(what: Row) -> bool {
         Row::FormCost => super::form::gauge_cost(),
         Row::GaugeRefill => super::form::gauge_refill(),
         Row::GaugeGrowth => super::drivegauge::growth(),
+        Row::RecoveryBattle => super::driveitems::battle(),
+        Row::RecoverySources => super::driveitems::sources(),
     }
 }
 
@@ -806,6 +821,8 @@ fn set(what: Row, v: bool) {
         Row::FormCost => super::form::set_gauge_cost(v),
         Row::GaugeRefill => super::form::set_gauge_refill(v),
         Row::GaugeGrowth => super::drivegauge::set_growth(v),
+        Row::RecoveryBattle => super::driveitems::set_battle(v),
+        Row::RecoverySources => super::driveitems::set_sources(v),
     }
 }
 
