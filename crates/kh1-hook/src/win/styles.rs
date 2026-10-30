@@ -41,7 +41,8 @@ pub enum Kind {
     /// air (the tester, thread kh2-effects-in-kh1s-own-effect-system m19: "each magic should have
     /// its own settings of which magic you can choose, e.g fire: kh1 | kh2 and that would change
     /// what gets casted"). Cure's is `Cure`. These replace the Magic / Aerial Magic rows
-    /// (`Magic` / `AirMagic` stay as the cast slots' kind, `kh2slots`, and read the old ini keys).
+    /// (`Magic` / `AirMagic` stay as the cast slots' kind, `kh2slots`; `Magic` reads the old `magic`
+    /// key for the spell rows' defaults, `AirMagic` no key since t924: always KH1).
     Fire,
     Blizzard,
     Thunder,

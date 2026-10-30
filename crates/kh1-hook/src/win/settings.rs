@@ -17,17 +17,9 @@ abilities = kh1\r\n\
 ; hurt: kh2 = Sora takes hits KH2's way (dodge-roll invulnerability, KH2 guard, KH2\r\n\
 ; reactions); kh1 = KH1's own hit reactions\r\n\
 hurt = kh2\r\n\
-; carry: on = moving platforms carry Sora and KH1's pushes move him while KH2 has him\r\n\
-carry = on\r\n\
-; ceilings: on = ceilings stop KH2's jumps (KH1's collision), off = they don't\r\n\
-ceilings = on\r\n\
-; grabs: on = KH1's ledge grabs, vine / rope grabs and swimming take Sora from KH2's jumps\r\n\
-grabs = on\r\n\
 ; commands: on = KH1's commands other than Attack (magic, items, specials, summons) take\r\n\
 ; Sora from KH2 until KH1 has him standing again (in the air: KH1's fall from there)\r\n\
 commands = on\r\n\
-; swing_fx: on = KH2's swings play KH1's Keyblade trail, swing effect and Sora's voice\r\n\
-swing_fx = on\r\n\
 ; hit_fx_test: (test) KH2 hits write these values, in turn, into one byte of KH1's hit\r\n\
 ;   effect bytes (hit_fx_byte: 0, 1 or 2), spells too; empty = off. E.g. 0,1,2,3,5,10\r\n\
 hit_fx_test =\r\n\
@@ -62,12 +54,6 @@ glide_cast = on\r\n\
 ;   off the ledge in an air swing, as KH2 (its row 1); off = no hop, the press takes the next\r\n\
 ;   attack that fits; Drive Forms keep KH2's (the Config menu's Combat > Tweaks > Ledge Hop row)\r\n\
 drop_hop = on\r\n\
-; glide: square = Square in the air glides (as KH1's Superglide); jump = hold jump in the air\r\n\
-glide = square\r\n\
-; air_cast_fall: how fast Sora falls while Reflect plays in the air, a share of KH1's own\r\n\
-;   gravity (0 = he hangs, 1 = KH1's); his fall is stopped as the cast starts (magic_air_physics\r\n\
-;   = kh1, and Valor / Wisdom; with magic_air_physics = kh2 base Sora's air casts are KH2's own)\r\n\
-air_cast_fall = 1.0\r\n\
 ; kh2_voice: on = Sora's KH2 battle voice on those moves instead of KH1's; off = KH1's voice\r\n\
 ; (battle_quotes, below, takes its place once set)\r\n\
 kh2_voice = off\r\n\
@@ -441,11 +427,7 @@ fn experimental_ini(text: &str, on: bool) -> Option<String> {
 pub struct Settings {
     pub abilities: Mode,
     pub hurt: bool,
-    pub carry: bool,
-    pub ceilings: bool,
-    pub grabs: bool,
     pub commands: bool,
-    pub swing_fx: bool,
     /// Which motions play KH2's own sounds: `None` off, `Some(None)` all.
     pub kh2_sounds: Option<Option<Vec<u16>>>,
     pub kh2_volume: f32,
@@ -475,11 +457,9 @@ pub struct Settings {
     /// KH2's line ahead (its row 1, the hop off a ledge) for base Sora's ground press (`drop_hop =
     /// on`, the default; the owner, t914; `combomods::drop_hop`).
     pub drop_hop: bool,
-    /// Glide on Square (`glide = square`, default) or held jump (`glide = jump`).
+    /// Glide on Square: always off (held off since t319; its ini line `glide` removed, t924). The
+    /// Square glide code stays behind it for later.
     pub glide_on_square: bool,
-    /// Gravity's share while a KH2 cast (Reflect) plays in the air, after its fall speed was
-    /// stopped (`air_cast_fall`, 0..1; KH1's spells sink slowly).
-    pub air_cast_fall: f32,
     /// (Read for `battle_quotes`'s default; `styles::Kind::BattleQuotes` is what plays.)
     #[allow(dead_code)]
     pub kh2_voice: bool,
@@ -715,11 +695,7 @@ fn load(first: bool) -> Option<Settings> {
         experimental,
         abilities: setting(&text, "abilities").and_then(|v| Mode::parse(&v)).unwrap_or(Mode::Kh1),
         hurt: on(&text, "hurt", "kh2", true),
-        carry: on(&text, "carry", "on", true),
-        ceilings: on(&text, "ceilings", "on", true),
-        grabs: on(&text, "grabs", "on", true),
         commands: on(&text, "commands", "on", true),
-        swing_fx: on(&text, "swing_fx", "on", true),
         kh2_sounds: match setting(&text, "kh2_sounds").as_deref() {
             Some("off") | Some("0") | Some("no") => None,
             Some("all") => Some(None),
@@ -728,10 +704,8 @@ fn load(first: bool) -> Option<Settings> {
         kh2_volume: setting(&text, "kh2_volume").and_then(|v| v.parse().ok()).unwrap_or(1.0),
         damage_scale: setting(&text, "damage_scale").and_then(|v| v.parse::<f32>().ok()).filter(|v| (0.1..=10.0).contains(v)).unwrap_or(1.0),
         // (Glide on Square held off, t319: a glide is the jump button after the Aerial Dodge. The
-        // `glide = square` setting and the Square glide code stay, behind this flag, for later.)
-        // glide_on_square: on(&text, "glide", "square", true),
+        // Square glide code stays, behind this flag, for later; the `glide` ini line is gone, t924.)
         glide_on_square: false,
-        air_cast_fall: setting(&text, "air_cast_fall").and_then(|v| v.parse::<f32>().ok()).filter(|v| (0.0..=1.0).contains(v)).unwrap_or(AIR_CAST_FALL),
         // (t922: experimental, off unless `experimental = on`; off by default.)
         kh2_damage: experimental && on(&text, "kh2_damage", "on", false),
         criticals: on(&text, "criticals", "on", false),
@@ -818,7 +792,9 @@ fn load(first: bool) -> Option<Settings> {
                 on(&text, "ground_combo", "kh2", false),
                 on(&text, "air_combo", "kh2", false),
                 magic,
-                on(&text, "air_magic", "kh2", false),
+                // (`air_magic`, read until t923, set nothing a Config row shows: the owner,
+                // "any ini setting that does nothing in the testing branch should be removed".)
+                false,
                 on(&text, "jump_style", "kh2", false),
                 on(&text, "glide_style", "kh2", false),
                 on(&text, "roll_style", "kh2", false),
@@ -923,7 +899,3 @@ pub fn save(key: &str, value: &str) {
     let _ = std::fs::write(&path, out.join("\r\n") + "\r\n");
 }
 
-/// The default `air_cast_fall`: full gravity (the user: Reflect should stop his fall for one
-/// frame, "then after have it fall to the ground with soras normal gravity physics. Right now
-/// sora just slowly falls to the ground which is not accurate to how kh1 magic works").
-pub const AIR_CAST_FALL: f32 = 1.0;

@@ -1232,3 +1232,226 @@ Not done this round:
   carries into the landing. Now cleared by each air step. During the landing's frames 0..11 KH2 clears
   the stick target (`0x1403A89A0`; Wisdom's 5: range 2 from 12, 42 all through, Checked (files)), so
   the inertia brakes and he turns from 12, unchanged.
+
+## 12. Story flags: when each form opens (main-port round 1, 2026-10-29)
+
+Research for `docs/main-port-inventory.md` row 8 (round 1 there has the plan and the questions). Base t924.
+Tags as at the top of this file; main's own "Checked" tags count as Assumption.
+
+### 12.1 What KH2 does
+
+**Form ownership is a form item in the inventory.** Checked (decomp).
+- `0x1403C3EF0(form)` returns the form's item id from a u16 table at `0x1405C5D08` (index = form 1..6).
+  The table's values are data, not in the export.
+- `0x1403C4720(item)` = owned: the item record (`0x1403E39A0`, 0x18-byte rows of the item table at
+  `*0x142A25370`) either has flag `+3` bit 0 (then a bit in `0x1409ACF70`) or is a count in
+  `0x1409ACE30[record +0x12]`.
+- Item ids: **Final Form = 0x1D, Checked (decomp)** (`0x140421D60`, `0x140422050` test and give item
+  0x1D). Valor 0x1A, Wisdom 0x1B, Master 0x1F, Anti 0x1E, Limit 0x233: **Assumption** (community
+  tables; only 0x1D is visible in code). Whether form items are count or bit: Assumption.
+- The form item's record `+0x10` is its command; the command row (`0x1403B68B0`, 0x30-byte rows at
+  `*0x142A161E8`) has `+2` kind (4 = Drive form, 5 = Revert, 0x48 = Limit-type), `+4` the form id
+  (1 Valor, 2 Wisdom, 3 Limit, 4 Master, 5 Final, 6 Anti), `+0x1C` the cost in bars. Checked (decomp).
+
+**The Drive submenu** (`0x1403F3110`, and the same code inline in the command-menu builder
+`0x1403F29E0`). Checked (decomp):
+- Built only if none of: global lock `0x142A10504` bit 1, lock `0x142A10508`, the player's entity
+  record (`0x1404AD270(player +0xC)` `+0xC` bit 5), area flag `0x1403A3A90` (area record `+4` bit 1).
+  Interpretation (no-drive worlds / states): Assumption.
+- For form = 1..6 in order (**Valor, Wisdom, Limit, Master, Final, Anti**): if the form item is owned,
+  take its command and run the partner rule `0x1404005E0`: result 2 → **not listed**; result 1 → listed
+  **greyed** (entry state 5); 0 → listed. A form not owned is **not listed at all** (no "???" entry).
+- If at least one form was listed, the menu's "no Drive" flag (`+0x24` bit 0x20) is cleared.
+- Anti is listed only if its item is owned (Assumption: vanilla never gives it, so Anti never shows).
+- Entry state per frame (`0x140401D60`, kind 4): greyed (5) when bars `status +0x1B1` < cost
+  `cmd +0x1C`, or any of the locks above, partner rule ≠ 0, form id `+0xDE0` is 7 or 0xC, Limit
+  (form 3) while `0x1403A3A90`, or `0x142A11400` bit 18. Usable test `0x140401C80` is the same.
+- **Partner rule `0x1404005E0`** (and its twin `0x140400740`): skipped when the world factor
+  `0x1403A3990` (`*0x142A0FF68 +0x6A8`) > 1.0, and for Limit. Valor counts partners of type 3, Wisdom
+  type 2, Master/Final/Anti every partner slot. A counted slot empty → 2; a counted partner not ready
+  (`0x1403C38F0` false) → 1; nobody counted → 2. Type 3 = Goofy, type 2 = Donald: Assumption (KH2's
+  known absorption).
+- **The command menu's fourth slot** (`0x1403F29E0`): with the "no Drive" flag clear, Drive (cmd 4),
+  greyed if `+0xDE0` ≠ 0; in a form (`0x1403AA4F0`: player type 1 and `+0xDE0` 1..6) **Revert** (cmd 5),
+  greyed in Anti while `0x142A11404` ≠ 0. With the flag set (no form owned, or a lock), command **0x68**
+  takes the slot (0x68 is also put in Magic's slot when Sora has no magic: a placeholder entry, meaning
+  Assumption). In Limit Form (`+0xDE0` = 3) the Magic slot becomes the Limit list (0x2C3).
+
+**Choosing a form** (`0x140405440`, kind 4). Checked (decomp): `0x140421D60(player, form)` may turn the
+choice into Anti (6) or Final (5): Anti's counter (record 6 `+4`) +1 per Drive, Anti chance from the Anti
+parameter block `*0x142AE5760`; when Anti would happen and Final Form (item 0x1D) is not owned, story flag
+`0x4842` is set (`0x14039A980`, bits at `0x1409AB540`) and the bars cover Final's cost, a second roll
+(`pow(+0x9C, Final record +4) × +0x98`, capped `+0xA0`) **gives item 0x1D and drives into Final**
+(the counter reset). Then the bars are paid with the result form's cost (`0x1403C2780`; drive points
+`+0x1B0` zeroed if bars were full or short), `0x1403E69A0(form)` counts drives per form (`0x1409AD884
+[form]`, cap 999, plus an achievement 0x94 under a world/flag condition), `0x14040CE60` starts it.
+
+**Entry refill** `0x1403C17C0(status, form, level)` (from `0x14040CC00`, `0x14040CF20`, `0x14040D000`,
+`0x14040D4E0`). Checked (decomp): HP to max (`+4`), MP to max (`+0x184`, also clearing MP Charge
+`+0x1BC..` when `+0x1C0` > 0), `+0x1AF` = 2, form gauge `+0x1B3` = level + 3, form time `+0x1B4/+0x1B8`
+= (level + 3) × `*0x142AE5760 +0x68`; Anti's level = `+0x8C` − 2.
+
+**What happens when a form item is gained** (`0x1403C3FE0(item, n)`, the inventory add; `0x1403C3F00`
+is the checked wrapper). Checked (decomp):
+- the count / bit is added;
+- kind `+2` == 0x15 (a Drive form item): **Anti's record `+4` (the Anti counter) is set to 0**;
+- for forms 1, 4, 5 (Valor, Master, Final), if the form's record `+0` (its Keyblade) is 0, the **first
+  owned Keyblade in item-table order** (records of kind 2, not kind 0x13) is **taken out of the inventory**
+  (`0x1403C4A40`, one) and put in the record; none owned → stays 0;
+- **no popup** and no level set: nothing else in this function for kind 0x15 (the form record's level
+  is read as ≤ 1 by `0x1403E87F0` when 0).
+- Form records: `0x1403A1410(0x1409ABDA0, form)` = `+0xE04 + (form−1) × 0x38`, 10 records; `+0` Keyblade,
+  `+2` level, `+4` EXP. Checked (decomp).
+
+**How KH2 tells the player.** Checked (decomp) unless marked:
+- The bonus-level path: `0x1403EDCA0(bonus id)` (from `0x1403A41E0`, `0x1404109B0`, `0x140410AF0`) →
+  `0x1403EDF90(row, status)` for each `bons` row (`*0x142AE58F8`, 0x10 bytes: `+1` character, `+2` HP,
+  `+3` MP, `+4` Drive, `+5..+7` slots, `+8`/`+0xA` two items) gives the items with `0x1403C3F00`, adds
+  each as a line (`0x1403ED400`, message 0x8AE8 with the item's name), and shows the window
+  `0x1403EDB20` → `0x14017DD40`. So a form given as a bonus reward appears as a line in KH2's bonus
+  window. Whether vanilla KH2 gives forms through bonuses or through event scripts: **Assumption** (data,
+  not code).
+- Event/progress item lists `0x1403E4530` / `0x1403E46B0` give items with no window of their own.
+- Final's gain in battle (`0x140421D60`) has no window: the Final transformation itself is the event.
+- **"New" marks in the pause menu**: `0x140369520` sets a new-mark bit (`*0x140BF0DC0 + 200`) for each
+  owned form not yet seen (seen bits at menu data `+0x4274`). Missing from main and testing.
+
+**Every other reader of the form-owned state found.** Checked (decomp):
+- **Form level cap** = 2 + forms owned among 1..5 (Valor, Wisdom, **Limit**, Master, Final; Anti not
+  counted): `0x1403E88B0`, inline in the EXP add `0x1403E8380`, and `0x1403E8A00` (next row for the
+  status page). At the cap EXP is set to 0. (Testing's `formlevel` already follows the formula.)
+- Pause-menu form pages: `0x1402FC500` (bitmask of owned forms 1..6) and `0x1402FC880(form)` return none
+  in certain worlds (list at `0x1405BAC00` starting with world 0x0A; contents not in the export,
+  Assumption: Pride Lands and similar); callers `0x140352350`, `0x1403527A0`, `0x140353020`, the status
+  page `0x140354340` (shows each form's level `record +2`, gated by the page's bits).
+- `0x1403DE170` / `0x1403DE370` / `0x1403DE460` list owned forms among Valor, Wisdom, Master, Final
+  (Limit skipped) and pick one at random for a kind-0x48 command 0x59 (0x132 picks Valor), from
+  `0x140405440` / `0x140405A60` and the menu builders `0x1403F3230` / `0x1403F3860` (character 0xC9).
+  What this command is: not traced (Assumption: a Limit / special that uses a form's look).
+- `0x1403B6920(form)` = the form's command row (cost reads in `0x140405440`, `0x140421D60`).
+- `0x1403EDB90` draws a form's name/icon in the level-up window (form level-up `0x1403E8380`).
+
+**Drive gauge maximum.** Checked (decomp): the only gameplay writer that raises `status +0x1B2` is the
+bonus level `0x1403EDF90` (+ row `+4`, cap 9). Owning a form does **not** raise it. Other writers:
+`0x1403C1D90` (loads it from the character's save record `+0x103A`), `0x140415640` / `0x1404158C0` (set 3
+on a status they create; which object: Assumption). Main's doc claim "KH2 raises the max per form owned"
+is not supported by the decomp; per-fight bars are bonus data (Assumption which bonuses carry +1).
+
+**Other special cases:** area flag 0x400 (`0x1403A3C40`) stops form EXP; summons/other states via
+`+0xDE0` 7 / 0xC grey Drive (which states: Assumption); worlds with factor > 1.0 skip the partner rule
+(which worlds: Assumption). Timeless River / Space Paranoids: no explicit check found (the entity-flag
+and world-list paths above are the likely ones, Assumption).
+
+### 12.2 How KH1 does it
+
+KH1 has no forms. What the native version touches:
+- **Save:** block 0 at `0x142DE9360` (`0x1402CEE20(0)`; pointer `0x142868BA0`); area 1 =
+  `0x142DE9F60` = save + 0xC00. Checked (decomp). Testing's `SAVE_RVA` / `SAVE_PTR_RVA` map to these
+  (Checked (code)).
+- **Story bytes `+0x1504`:** `0x1401B6B00` returns area 1 + 0x904 = save + 0x1504 (12 bytes, caller
+  `0x14017D580`). Checked (decomp). The thresholds (0x2B, 0x32, 0x82, ...) are main's: Assumption.
+- **Journal `+0x16E3`:** event command `0x1401B5980` sets bit `id` (high bit first) at area 1 + 0xAE3 =
+  save + 0x16E3; `0x1401B6640(id)` reads it; `0x1401B61B0` too. Checked (decomp). Entry ids 0x9F etc.:
+  Assumption.
+- **Cups `+0xF36 + cup`:** no direct displacement found in the export (script variables reach them through
+  the VM); Assumption (main's).
+- **Dive choice `+0x48C`:** written only by event command `0x1401B0380` → `0x140285730`; read only by
+  the level-up `0x1402B51B0` as the index of Sora's ability-order table (`0x140528D10[choice]`).
+  `+0x48D` (EXP curve) by `0x1401B03B0` → `0x140285720`, read by `0x140284840`, `0x140284990`,
+  `0x140284FB0` (`0x140528028[curve]`). Checked (decomp). Which value is Sword / Shield / Rod:
+  Assumption. (Main's "set by 0x1402835B0" is the Epic address.)
+- **Inventory `+0x499 + id`:** `0x1400D3F00` reads and writes it. Checked (decomp).
+- **KH1's notification boxes:**
+  - Level-up prompt boxes `0x14283B390` (count per member `0x14283B380`, `0xBA0` each, 5 per member);
+    KH1's own adder `0x140272540(actor, line1, line2)` (title from message 0x127 + party id, colours
+    `0x140527A10..` / `0x140527A50..` by member), called only from the level-up `0x1402B53B0`;
+    `0x1402728A0` = any box up. Checked (decomp). Testing's `prompt()` writes the same record layout with
+    its own title (Checked (code)) instead of calling `0x140272540` (which can only use KH1's member
+    title).
+  - The event reward line `0x1401B8AE0` (Epic `0x1401B6990`): adds "obtained" lines for a reward
+    record (kind 0 item, 1 ability) to an event message window. Checked (decomp). A form would need a new
+    reward kind there.
+
+### 12.3 1:1 checked
+
+| Value / rule | KH2 (Steam) | KH1 / testing | Matches? |
+|---|---|---|---|
+| Drive list order Valor, Wisdom, Limit, Master, Final, Anti | `0x1403F3110`, `0x1403F29E0` | `drive.rs:32` Valor, Wisdom | Yes (for the two built) |
+| Listed only if the form is owned | `0x1403C4720` via `0x1403C3EF0` | always listed | **No** |
+| Not owned → not shown (no placeholder entry) | `0x1403F3110` | always shown | **No** |
+| Partner rule: missing → hidden, KO / not ready → greyed | `0x1404005E0`, `0x1403F3110` | none (row 10) | **No** |
+| Greyed when bars < cost | `0x140401D60` | greyed when MP ≤ 3 (MP cost, owner's toggle pending) | MP stands in |
+| No Keyblade needed to choose Valor | `0x140401C80` (no record read) | Valor refused without a spare Keyblade (`form.rs:340`) | **No** |
+| Form Keyblade slot filled at gain (first owned Keyblade) | `0x1403C3FE0` | `+0x488` picked at use (`valor::keyblade`) | **No** |
+| Anti counter reset at gain | `0x1403C3FE0` | no Anti | n/a |
+| Level cap 2 + owned (1..5) | `0x1403E8380`, `0x1403E88B0` | `formlevel::cap(2 + Final)` | Formula yes, input **no** |
+| HP **and MP** refilled on entry | `0x1403C17C0` | HP only (`form.rs:275`, KH1 add-HP Steam `0x1402A4920`) | **No** |
+| Max bars not raised by owning forms | `0x1403EDF90` only | no gauge | n/a |
+| Final Form item 0x1D, by the Anti roll after flag 0x4842 | `0x140421D60` | Final on hold | n/a |
+| No popup in the item add itself | `0x1403C3FE0` | — | — |
+| Story bytes save + 0x1504 | — | `0x1401B6B00`; `menu.rs:40` | Yes |
+| Journal save + 0x16E3 | — | `0x1401B5980`, `0x1401B6640` | (main's offset confirmed) |
+| Dive choice save + 0x48C | — | `0x1401B0380`, `0x1402B51B0` | offset yes, values Assumption |
+
+What I couldn't check: KH2's form item ids other than Final's; whether form items are counts or bits;
+what command 0x68 shows; the no-drive world list `0x1405BAC00`; the text of KH2's bonus line (message
+0x8AE8); in-game behavior of anything (no traces).
+
+### 12.4 Missing from main
+
+1. Ownership as stored state (KH2: an item in the save). Main derived `unlocked` from story bytes on
+   every ask (each Drive list rebuild) and only remembered the last set in memory for the box.
+2. Partner rule in the list: hidden when the partner is missing, greyed when KO'd; Master/Final need two
+   partner slots filled; skipped in world factor > 1.0 (main checked on entry only, row 10).
+3. Form level cap from forms owned (Limit counts, Anti doesn't) (main had no KH2 form levels).
+4. The form's Keyblade slot filled at gain from the first owned Keyblade (main s306 used the Dream Sword
+   default instead, an owner rule).
+5. Anti counter reset at a form gain; Final by the Anti roll after story flag 0x4842 (main used Riku 2,
+   the owner's).
+6. "New" marks in the pause menu for a form not yet seen (`0x140369520`).
+7. Drive slot replaced by a placeholder when no form is owned or a lock holds (main showed the Drive
+   list; s323 hid the gauge until the first form, an owner rule).
+8. No-drive area / entity / lock checks (`0x1403A3A90`, `0x142A10504/08`, entity flag bit 5).
+9. Per-form drive counters (`0x1403E69A0`), and its achievement.
+10. Forms hidden from the pause-menu pages in certain worlds (`0x1402FC500`).
+
+### 12.5 Missing on testing
+
+1. Form-owned state, and the Drive list built from it (row 8).
+2. Partner rule (row 10).
+3. MP refill on entry (KH2 `0x1403C17C0` refills HP and MP; testing `heal_full` HP only). Checked
+   (code + decomp).
+4. Level cap reads a fixed "Valor and Wisdom owned" (`formexp.rs:155`): should read the owned count.
+5. Valor usable without a spare Keyblade (KH2) vs testing's refusal; KH2's slot fill at gain.
+6. KH2's lock checks (areas where Drive is unavailable) beyond `shared::active()` / `busy()`.
+7. The "new" mark / any notification for a gained form (the box is the owner's replacement).
+8. Drive counters (low value; ask).
+
+### 12.6 What KH1 lacks, and the ability to add
+
+- **A form-owned field in the save.** Free bytes, checked against testing's own uses (grep of every save
+  offset in `crates/`: `+0x44`, `+0x488`, `+0x48A..B` mark, `+0x499..`, `+0x4CC..` swapped only during the
+  Abilities page, `+0x844..+0x847`, `+0x874`, `+0x882..+0x887`, `+0x1504`; config block `+0x3C0..+0x3EF`):
+  - **save `+0x881`** (one byte, between KH1's bool `+0x880` and testing's form levels): no Steam
+    instruction reads or writes `+0x881..+0x887` (Checked (exe), testing's `docs/kh1-drive-forms-native.md`
+    §9 / `formexp.rs:8-13`); unused by testing (Checked (code)). Travels with the 0x16C00-byte save.
+    Bits 0..5 Valor, Wisdom, Limit, Master, Final, Anti (KH2's form ids − 1), bit 7 = "initialised".
+  - Also free: save `+0x489` (main's Final Keyblade, unused on testing; better kept for Final's slot) and
+    the config block `+0x78..+0x3BF`, `+0x3F0..+0x3FF` (Checked (decomp) per `docs/abilities.md`).
+- **A notification for a gained form:** KH1's level-up prompt box, as testing already uses it
+  (`queue_prompt`). Nothing new needed.
+- (Option, more like KH2's item) KH1 item records for the forms in KH1's inventory (`+0x499 + id`):
+  needs unused KH1 item ids and a check that KH1's Items menu doesn't list them (Assumption).
+
+### 12.7 Not found, and where I looked
+
+- KH2 form item ids except Final (0x1D): the table `0x1405C5D08` is data; grepped every literal item id
+  passed to `0x1403C4720` / `0x1403C3FE0` / `0x1403C3F00` (only 0x17 and 0x1D).
+- KH2's on-gain notification for event-given forms: none in `0x1403C3FE0`, `0x1403C3F00`,
+  `0x1403E4530`, `0x1403E46B0`; the bonus window path exists (section 3); event scripts are data.
+- The meaning of command 0x68, of `+0xDE0` values 7 / 0xC, of the world list `0x1405BAC00`, of the world
+  factor > 1.0, of command 0x59 (`0x1403DE460`).
+- KH1 cup bytes `+0xF36..`: no displacement in the export (script VM path); not confirmed.
+- The thresholds and journal ids of main's table: not rechecked (they come from KH1's scripts and save
+  snapshots, files I don't have here).
+- Nothing was checked in game.

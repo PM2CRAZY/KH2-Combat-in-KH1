@@ -54,7 +54,7 @@ CONTROLS (what changes)
 Attack ............ KH2's combos, finishers and combo abilities
 Jump in the air ... Aerial Dodge (once you have it)
 Square ............ Dodge Roll / Quick Run while moving, Guard while standing,
-                    Glide in the air (set "glide = jump" to glide by holding jump)
+                    Glide in the air
 L1 + cancel ....... the fourth shortcut (set it in the Customize menu)
 Right stick ....... KH2's camera (turn and zoom); R3 resets it
 D-pad left ........ at the battle menu: the second page (Attack, Magic, Items,
@@ -85,7 +85,6 @@ SETTINGS (kh1-kh2.ini)
 ----------------------
 Each line in the file explains itself. The ones you are most likely to want:
   camera = kh2 / kh1          which camera
-  glide = square / jump       which button glides
   damage_scale = 1.0          multiplies the damage of your KH2 attacks
   kh2_effects = off           turns KH2's visual effects off
   kh2_sounds = off            turns KH2's sound effects off
