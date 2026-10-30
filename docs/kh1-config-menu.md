@@ -542,3 +542,17 @@ lines at the bottom of the ini once enabled, back to the defaults when disabled)
   `0x7F40_0000 + n` through our text lookup). KH1's own texts are left alone.
 - **Assumption:** the 8 left clear at the label box's right edge matches where KH1's own longest
   labels end. Not checked in game.
+
+## 8. The Drive and Progression lists (t926, t927)
+
+The owner (the main-branch port, round 1): "for the progression make a new sub menu in the main part called
+progression, same for drives". The top list is now Camera, Combat, Movement, Command Menu, Drive,
+Progression, QoL, Cosmetics, Misc (`List::Drive`, `List::Progression`, parent the top).
+
+- Drive > MP Refill (Off | On, ini `drive_mp_refill`, off): KH2's MP refill on entering a form (`form::mp_refill`).
+  The cost row (MP or Drive gauge) joins it with the gauge.
+- Progression > Story Unlocks (Off | On, ini `story_unlocks`, off): the owner's Drive Form table from the
+  main branch (`formown`, `crate::storyforms`). A "Balance Changes" row joins this list with the first
+  balance rule ported (the owner's answer (a)).
+
+Not checked in game.

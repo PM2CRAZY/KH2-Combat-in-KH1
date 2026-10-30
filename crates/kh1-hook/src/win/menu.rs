@@ -646,6 +646,8 @@ impl Growth {
         let Some(mut now) = Self::kh1(base) else { return };
         // Sora learns KH2's abilities at their levels (`kh1`), or has them taken back out.
         if let Some(save) = save_block(base) {
+            // The owned Drive Forms' byte, set up once a save (t925, `formown`).
+            super::formown::check(save);
             if self.mode == Mode::Kh1 {
                 // A save the mod's older builds changed is moved over once (the save's mark,
                 // `growth::LAYOUT_OFF`): the split (KH1's modifiers stood for KH2's before testing

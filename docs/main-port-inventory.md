@@ -1,4 +1,4 @@
-aligned with main s339 / testing t924
+aligned with main s339 / testing t930
 
 # Main → testing port inventory
 
@@ -58,10 +58,10 @@ every start; [EPIC] Epic RVAs mapped through `steam_map.in`, not re-found on Ste
 
 | Status | Rows |
 |---|---|
-| Ported (native) | 15 |
+| Ported (native) | 16 |
 | Ported (running along) | 0 |
 | Partly | 7 |
-| Missing | 19 |
+| Missing | 18 |
 | Superseded | 10 |
 | Obsolete | 10 (each needs an in-game confirm where marked) |
 
@@ -89,7 +89,7 @@ identical on both branches and unused by testing's `kh1-hook`.
 | 5 | KH2 support abilities: Damage Drive, Form Boost, Damage Control, Drive Converter | `support.rs`, `growth.rs` `MENU` 78..81 + `SUPPORT_LEVELS`, `win/hurt.rs`, `win/gauge.rs`, `win/prize.rs`; s335, s337 | Learned at Sora's level 14 / 24 / 38 / 35, AP 3 / 5 / 5 / 5, KH2 names and help. Damage Drive damage / max HP × 50 a copy outside a form; Form Boost drain × 0.8 a copy; Damage Control halves damage at ≤ 25% HP; Drive Converter munny × 0.5, the rest orbs. Berserk Charge and Drive Boost left out (no MP Charge). | s335 the list, Berserk Charge and Drive Boost left out, "At set levels"; s337 "make drive converter come at level 35" | Nothing. **Ids 78..81 are Flash Step, Aerial Sweep, Counterguard, Finishing Leap on testing** (`growth.rs:356-359`, Checked (code)). Form Boost known only as an fmlv reward that "waits for the Drive gauge" (`growth.rs:583`). | Missing | **Settled (owner):** testing's ability rule; the four get new ids in testing's KH2 list, and a main save's 78..81 are reconfigured on load (section "Save"). Still open: testing's t718 vanilla-progression rule ("just give the player all the custom abilities") vs main's set levels. Drive Boost / Berserk Charge wait on the open KH2 MP / MP Charge thread. | After the gauge and orbs: one version for the four abilities (new ids). |
 | 6 | Forced reverts (bars refilled, partners back), back to Sora in a new world | `win/form.rs` `revert(forced)`, `gauge::refill_bars`, `vanish::force_back`; s275, s308 timings, s338 | A revert outside the player's control (KO, new world, scenes, battle end, Coliseum arena) refills every bar and brings partners fully back; Revert command and gauge-out don't. | s275 "when leaving a world in a drive form ... he should be automatically reverted"; s338 "make sure the party members are fully visible, and fully refill sora's drive gauge" | Reverts only on KO / Revert / 0 MP (`form.rs:674-707`). No world, scene or battle-end revert (Assumption: none elsewhere). | Missing | None. Main's scene detection was [CTRL] (`takeover::scene_frame`, `script_has_sora`): KH1 signals needed. | One version, after rows 1 and 11. |
 | 7 | Drive Forms across Olympus Coliseum rounds | `win/cup.rs`, `win/vanish.rs`; s315, s332, s334 | Arena entry reverts; a won round keeps the form (no drain in the victory scene); partners restored before KH1's victory wait; none left invisible after a cup. | s332 "if you enter the cup in a drive form you should be reverted before the first battle, but if you defeat a round in a drive form it should carry over into the next round"; s315, s334 bug reports | Nothing for forms. Testing's `ingameskip` rewires cup event function 512 in the same flow. | Missing | Must be checked together with `ingameskip`'s 512 hook. Main's op 103 fix existed only because [CTRL]'s vanish cleared 0x8000. | One version, after rows 6 and 11. |
-| 8 | Form unlocks by the story; "New Drive Form" box | `story.rs` (pure), `win/menu.rs` `form_box`; s279, s307, s308 | First form after Guard Armor, second after Opposite Armor, third after the Pegasus Cup; order by the Dive choice (Sword: Valor, Limit, Wisdom; Shield: Limit, Wisdom, Valor; Rod: Wisdom, Valor, Limit); Master after Anti-Sora, Final after Riku 2. Read-only from the save (TT `+0x1504`, journal `+0x16E3`, cups `+0xF36..`, Dive choice `+0x48C`). | s307 the owner's table, "dont use the archipelago work just make it yourself"; s308 "the game should tell you when you get a drive form and reflect" | No gating: both forms usable whenever MP > 3 (`drive.rs:232-245`, `form.rs:316-323`). | Missing | Whether t718's "make it all vanilla" covers form unlocks: ask. Limit and Master unlocks need those forms. | Story flags + box, first in the build order. |
+| 8 | Form unlocks by the story; "New Drive Form" box | `story.rs` (pure), `win/menu.rs` `form_box`; s279, s307, s308 | First form after Guard Armor, second after Opposite Armor, third after the Pegasus Cup; order by the Dive choice (Sword: Valor, Limit, Wisdom; Shield: Limit, Wisdom, Valor; Rod: Wisdom, Valor, Limit); Master after Anti-Sora, Final after Riku 2. Read-only from the save (TT `+0x1504`, journal `+0x16E3`, cups `+0xF36..`, Dive choice `+0x48C`). | s307 the owner's table, "dont use the archipelago work just make it yourself"; s308 "the game should tell you when you get a drive form and reflect" | No gating: both forms usable whenever MP > 3 (`drive.rs:232-245`, `form.rs:316-323`). | Ported (native) (t925–t930; not checked in game) | Behind Progression > Story Unlocks (off by default). Limit and Master are stored and wait for their forms. | Done: t925 owned byte, t926 Story Unlocks, t928 Drive list, t929 box, t930 Valor's slot. |
 | 9 | Reflect levels by the story; "New Magic: Reflect" box | `story.rs`, `win/reflect.rs::level`, `win/menu.rs` `reflect_box`; s307, s308 | Reflect / Reflera / Reflega by how many of Pot Centipede, Hercules Cup, Ice Titan are won. | s307 (as row 8) | Reflect follows KH1's Aero level (`win/reflect.rs:124-136`), main's pre-s307 rule. | Missing | Testing's rule (Aero level) stands under the owner's "testing's layout is the base"; main's boss rule only if the owner asks. | With row 8, only if asked. |
 | 10 | Forms need their partners | `partners.rs`, `form::field_party`; s311 | Valor needs Goofy, Wisdom Donald, Master and Final both, Limit none; checked on entry (field party id `+0x4C`, KO bits). | s311 "make drive forms require their specific party members to cast" | Nothing (`form.rs:316-345`). | Missing | None (KH2's rule; decomp check pending). | One version. |
 | 11 | Partners vanish during the form (and their HUD entry) | `win/vanish.rs`; s312, s315, s332, s334, s338 | The form's partner disappears (actor flags, HUD slot fade `0x140266CC0` Epic) and comes back on revert, events, room change, game over. | s312 "the party member associated with the drive from also disappears (along with their hud icon)" | Nothing. | Missing | Main called `takeover::script_has_sora` [CTRL] four times; [EPIC]. | One version. |
@@ -320,3 +320,27 @@ the world list `0x1405BAC00` and the world factor > 1.0 mean; KH1's cup bytes on
    to show them.
 
 Write "go ahead" with the answers.
+
+**The owner's answers (2026-10-29):** 1 (a) toggle off: every form testing has, as today. 2 (b) off by
+default. 3: a new **Progression** submenu in the Config menu's main list for the progression toggle, and a
+new **Drive** submenu there too. 4 (a). 5 (a). 6 (a). 7 (b) KH2's placeholder. 8 (a), as a toggle in the
+Drive submenu. 9 (b) later. Then: the balance toggle (a), a row in the Progression submenu; "go ahead".
+
+**Command 0x68 checked** (question 7): its 03system `cmd` row has kind 0 and message 0x8503, which in
+`msg/us/sys.bar` is "?" (the same character ends "But what about Cerberus?", message 0x2A4). Checked
+(files). KH2's state function `0x140401D60` gives a kind-0 command state 5 (greyed), Checked (decomp). So
+with no form owned KH2's Drive slot is a greyed "?". The same rows give Valor's and Wisdom's cost 3 at
+`+0x1C` (Checked (files)).
+
+Plan with the answers (one version each): (1) the owned byte at `+0x881` and the level cap; (2) the
+Config menu's Progression submenu (Story Unlocks, off by default; off = Valor and Wisdom owned as today) and
+the owner's table on it; (3) the Drive submenu, its first row the MP refill on entry (on / off; on = KH2's
+refill); (4) the Drive list built from ownership in KH2's order, with KH2's greyed "?" when none is owned;
+(5) the "New Drive Form" box; (6) the form's Keyblade put in its slot at gain, Valor still refused without a
+spare one. Drive counters and "new" marks: later (9 (b)).
+
+**Built (go-ahead 2026-10-29, the balance row's place answered (a): a "Balance Changes" row in the
+Progression submenu, added with the first balance rule that is ported).** t925 the owned byte and the level
+cap; t926 Progression > Story Unlocks; t927 Drive > MP Refill; t928 the Drive list from the owned forms with
+KH2's greyed "?"; t929 the "New Drive Form" box; t930 Valor's Keyblade slot at gain. Notes:
+`docs/kh1-drive-forms-native.md` §12.8.

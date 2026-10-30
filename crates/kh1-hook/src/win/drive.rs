@@ -49,7 +49,9 @@ const CONFIRM_MASK_RVA: Rva = Rva(0x546390);
 
 static BASE: AtomicUsize = AtomicUsize::new(0);
 static ON: AtomicBool = AtomicBool::new(false);
-static NAMES: OnceLock<(usize, Vec<usize>, usize)> = OnceLock::new();
+/// The names: Drive, the forms, Revert, and KH2's "?" (command 0x68's name, the Drive slot with no
+/// form owned).
+static NAMES: OnceLock<(usize, Vec<usize>, usize, usize)> = OnceLock::new();
 /// A form or Revert was just chosen: confirm is KH1's again only once let go (the user: still
 /// holding it after a revert opened the Drive list again).
 static SWALLOW_CONFIRM: AtomicBool = AtomicBool::new(false);
@@ -148,9 +150,20 @@ unsafe fn ensure_records(base: usize) -> bool {
     true
 }
 
-/// Whether form `k` can be chosen now (`form`: its MP, or Revert in the form).
+/// Sora owns form `k` (`formown`, t928: KH2's Drive submenu `0x1403F3110` lists only the owned
+/// forms, Checked (decomp)). In the form its entries are Revert, so all of them stay.
+unsafe fn owned(k: usize) -> bool {
+    super::form::in_form() || super::form::Kind::ALL.get(k).is_some_and(|&kind| super::formown::owns(super::formown::form_id(kind)))
+}
+
+/// No form owned (KH2: the Drive slot is command 0x68, a greyed "?").
+unsafe fn none_owned() -> bool {
+    !(0..FORMS.len()).any(|k| owned(k))
+}
+
+/// Whether form `k` can be chosen now (`form`: its MP, or Revert in the form; owned).
 unsafe fn usable(actor: usize, k: usize) -> bool {
-    super::form::Kind::ALL.get(k).is_some_and(|&kind| super::form::usable(actor, kind))
+    owned(k) && super::form::Kind::ALL.get(k).is_some_and(|&kind| super::form::usable(actor, kind))
 }
 
 /// After KH1's battle-menu fill (and Reflect's entry): Drive's row 4 (Drive on page 1) and its
@@ -229,20 +242,30 @@ unsafe fn drive_row4(base: usize, actor: usize) -> bool {
     true
 }
 
-/// Menu 3 (KH1's summon list) as the forms.
+/// Menu 3 (KH1's summon list) as the forms: the owned ones, in KH2's order (`FORMS`: Valor, Wisdom;
+/// KH2's `0x1403F3110` goes Valor, Wisdom, Limit, Master, Final, Anti, Checked (decomp)). With none
+/// owned the list is left alone: the Drive row is a greyed "?" and doesn't open it.
 unsafe fn forms_list(base: usize, actor: usize) {
     let list = base + SUMMON_MENU_RVA;
     let mut grey = 0u32;
+    let mut n = 0usize;
     for (k, &(id, _, _)) in FORMS.iter().enumerate() {
-        wr(list + 0x14 + k, id);
-        if !usable(actor, k) {
-            grey |= 1 << k;
+        if !owned(k) {
+            continue;
         }
+        wr(list + 0x14 + n, id);
+        if !usable(actor, k) {
+            grey |= 1 << n;
+        }
+        n += 1;
     }
-    wr(list + 0x10, FORMS.len() as i32);
+    if n == 0 {
+        return;
+    }
+    wr(list + 0x10, n as i32);
     wr(list + 4, grey);
     wr(list + 8, grey);
-    if rd::<i32>(list + 0xC) >= FORMS.len() as i32 {
+    if rd::<i32>(list + 0xC) >= n as i32 {
         wr(list + 0xC, 0i32);
     }
 }
@@ -253,10 +276,18 @@ pub fn word(index: i32) -> Option<usize> {
     if !on() {
         return None;
     }
-    let (drive, forms, revert) = NAMES.get()?;
+    let (drive, forms, revert, question) = NAMES.get()?;
     if index == SUMMON as i32 && super::cmdmenu::drive_shown() {
-        // (In the form the row is KH2's Revert.)
-        return Some(if super::form::in_form() { *revert } else { *drive });
+        // (In the form the row is KH2's Revert; with no form owned KH2's "?", command 0x68: its
+        // 03system `cmd` row's message 0x8503 is "?" in `msg/us/sys.bar`, Checked (files), and
+        // KH2's state function `0x140401D60` greys a command of its kind 0, Checked (decomp).)
+        return Some(if super::form::in_form() {
+            *revert
+        } else if unsafe { none_owned() } {
+            *question
+        } else {
+            *drive
+        });
     }
     // In the form its entry is KH2's Revert.
     FORMS.iter().position(|f| f.1 as i32 == index).map(|k| if super::form::in_form() { *revert } else { forms[k] })
@@ -267,6 +298,10 @@ pub fn word(index: i32) -> Option<usize> {
 pub unsafe fn chosen(actor: usize, k: usize) {
     let name = FORMS.get(k).map_or("?", |f| f.2);
     let Some(&kind) = super::form::Kind::ALL.get(k) else { return };
+    if !owned(k) {
+        log!(Forms, "Drive: {name} refused (not owned yet)");
+        return;
+    }
     match super::form::choose(actor, kind) {
         Ok(what) => {
             SWALLOW_CONFIRM.store(true, Ordering::Relaxed);
@@ -329,7 +364,7 @@ unsafe fn drive_list_shown(base: usize, menu: usize) -> bool {
     super::cmdmenu::drive_shown()
         && menu == base + SUMMON_MENU_RVA
         && rd::<u32>(base + SUMMON_OUT_RVA) & 8 == 0
-        && rd::<u8>(menu + 0x14) == FORMS[0].0
+        && FORMS.iter().any(|f| f.0 == rd::<u8>(menu + 0x14))
 }
 
 /// A sprite record's colour without its hue: each vertex's red, green and blue as their
@@ -468,6 +503,7 @@ pub unsafe fn install() {
         Box::leak(super::menu::encode("Drive").into_boxed_slice()).as_ptr() as usize,
         FORMS.iter().map(|f| Box::leak(super::menu::encode(f.2).into_boxed_slice()).as_ptr() as usize).collect(),
         Box::leak(super::menu::encode("Revert").into_boxed_slice()).as_ptr() as usize,
+        Box::leak(super::menu::encode("?").into_boxed_slice()).as_ptr() as usize,
     ));
     if !super::shortcuts::step_hooked()
         && hook::install(base + super::shortcuts::STEP_RVA, &super::shortcuts::STEP_PROLOGUE, step as *const () as usize, &ORIG_STEP, "command step (Drive)").is_none()

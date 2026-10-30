@@ -1455,3 +1455,22 @@ what command 0x68 shows; the no-drive world list `0x1405BAC00`; the text of KH2'
 - The thresholds and journal ids of main's table: not rechecked (they come from KH1's scripts and save
   snapshots, files I don't have here).
 - Nothing was checked in game.
+
+### 12.8 Built (t925 to t930)
+
+- **t925** `win/formown.rs`: the owned forms at save `+0x881` (bits by KH2's form id − 1, bit 6 "the
+  table read", bit 7 "set up"); set up once a save in `menu::Growth::update`'s once-a-second pass; the form
+  level cap reads it (`formexp::cap`, KH2's 2 + forms 1..5 owned).
+- **t926** Config Top > Progression > Story Unlocks (ini `story_unlocks`, off): on, `crate::storyforms`
+  (the owner's table) gives forms in the save, silently on a save's first read or right after the row is
+  switched on. Off: Valor and Wisdom, as before.
+- **t927** Config Top > Drive > MP Refill (ini `drive_mp_refill`, off): KH2's MP refill on entry
+  (`0x1403C17C0`) through KH1's MP add (Steam `0x1402A4A00`, Checked (decomp), its bytes Checked (exe)).
+- **t928** the Drive list holds the owned forms only, in KH2's order; with none owned the Drive row is KH2's
+  greyed "?" (command 0x68, Checked (files)).
+- **t929** the "New Drive Form" box (KH1's prompt box) for a form gained during play.
+- **t930** Valor gained: its empty Keyblade slot (`+0x488`) gets the first spare Keyblade (KH2's
+  `0x1403C3FE0`); the refusal without one stays.
+
+Still open: Limit and Master (stored, no form yet); the partner rule (row 10); KH2's no-Drive locks; drive
+counters and the pause menu's "new" marks (later, answer 9 (b)). Nothing checked in game.

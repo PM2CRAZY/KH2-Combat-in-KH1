@@ -256,6 +256,54 @@ unsafe fn mp(sora: usize) -> i32 {
 
 /// KH1's HP change `(actor, amount)` (`0x1402A2790`: clamped to the maximum, its HUD mirror kept).
 const HP_ADD_RVA: super::addr::Rva = super::addr::Rva(0x2A2790);
+/// KH1's MP add (Steam `0x1402A4A00 (actor, n)`: stats `+0x44` + n, kept within 0 .. max `+0x48`,
+/// the HUD's copy updated; Checked (decomp)), its first whole instructions (`mov [rsp+0x10], rsi;
+/// mov [rsp+0x18], rdi; push r14`, Checked (exe)).
+const MP_ADD_STEAM: usize = 0x2A4A00;
+const MP_ADD_BYTES: [u8; 12] = [0x48, 0x89, 0x74, 0x24, 0x10, 0x48, 0x89, 0x7C, 0x24, 0x18, 0x41, 0x56];
+
+/// Drive > MP Refill: 0 not read yet, 1 off, 2 on.
+static MP_REFILL: AtomicU8 = AtomicU8::new(0);
+
+/// Drive > MP Refill (the ini's `drive_mp_refill`, off by default): entering a form refills MP as
+/// KH2's does (`0x1403C17C0`, HP and MP to full, Checked (decomp), Steam KH2).
+pub fn mp_refill() -> bool {
+    match MP_REFILL.load(Ordering::Relaxed) {
+        0 => {
+            let on = super::settings::get().drive_mp_refill;
+            MP_REFILL.store(1 + on as u8, Ordering::Relaxed);
+            on
+        }
+        v => v == 2,
+    }
+}
+
+/// Switches Drive > MP Refill (the Config menu), kept in the ini.
+pub fn set_mp_refill(on: bool) {
+    MP_REFILL.store(1 + on as u8, Ordering::Relaxed);
+    super::settings::save("drive_mp_refill", if on { "on" } else { "off" });
+    log!(Forms, "Config menu: Drive MP Refill {}", if on { "On" } else { "Off" });
+}
+
+/// MP to full through KH1's own MP add (Drive > MP Refill on; Steam only, its bytes checked).
+unsafe fn refill_mp(sora: usize) {
+    let stats = pose::ptr(rd::<u32>(sora + 0x6C));
+    if stats < 0x10000 || super::addr::Build::current() != super::addr::Build::Steam {
+        return;
+    }
+    let (now, max) = (rd::<i32>(stats + 0x44), rd::<i32>(stats + 0x48));
+    if max <= now {
+        return;
+    }
+    let at = super::takeover::game_base() + MP_ADD_STEAM;
+    if std::slice::from_raw_parts(at as *const u8, MP_ADD_BYTES.len()) != MP_ADD_BYTES {
+        log!(Forms, "Drive: KH1's MP add isn't as expected at 0x{MP_ADD_STEAM:X}: no MP refill");
+        return;
+    }
+    let add: unsafe extern "system" fn(usize, i32) -> i32 = std::mem::transmute(at);
+    add(sora, max - now);
+    log!(Forms, "Drive: MP {now} -> {} of {max} (MP Refill)", rd::<i32>(stats + 0x44));
+}
 
 /// Sora's HP back to full as a Drive starts (the user: "activating a drive form should restore
 /// soras health entirely", as KH2's does).
@@ -737,6 +785,9 @@ unsafe fn native_start(d: &mut Drive, actor: usize) {
     let before = mp(actor);
     super::reflect::pay_mp(actor, COST);
     heal_full(actor);
+    if mp_refill() {
+        refill_mp(actor);
+    }
     drive_voice(actor);
     d.change = Some(0);
     d.changing_to = Some(kind);

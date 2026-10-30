@@ -29,8 +29,8 @@
 //! - Base Sora's side (the tester, after m15, answer 6: "(c)"): his growth level from each form's
 //!   level (`base_growth`) and the fmlv rows' abilities (`rewards_due` / `rewarded`), given in
 //!   KH1's own ability lists by `menu::Growth::update`.
-//! - The cap is 2 + the forms Sora owns (KH2), here Valor and Wisdom (the Drive list's, always
-//!   his) and Final once he has entered it (its record set).
+//! - The cap is 2 + the forms Sora owns among Valor, Wisdom, Limit, Master and Final (KH2), from
+//!   the save's owned forms (`formown::owned`, t925: Valor and Wisdom, and Final once entered).
 
 use super::{form::Kind, log, pose};
 use crate::formlevel::{self, Record, Table};
@@ -143,17 +143,25 @@ pub unsafe fn rewarded(kind: Kind, level: u8) {
 }
 
 /// The form is Sora's from now (its record set at Lv1 the first time he enters it: KH2's records
-/// start there; what counts toward the cap).
+/// start there), and owned (`formown`: entering a form he didn't own, Final by the secret code,
+/// makes it his, as KH2's Anti roll gives Final's item).
 pub unsafe fn entered(kind: Kind) {
     let Some(s) = save() else { return };
     if raw(s, kind) == 0 {
         std::ptr::write_unaligned((s + FORM_LEVELS_OFF + slot(kind) * 2) as *mut u16, Record::default().pack());
     }
+    super::formown::give(super::formown::form_id(kind));
 }
 
-/// The level cap now: 2 + the forms he owns (Valor and Wisdom, and Final once entered).
+/// The form has a record (he has entered it at least once).
+pub unsafe fn has_record(kind: Kind) -> bool {
+    save().is_some_and(|s| raw(s, kind) != 0)
+}
+
+/// The level cap now: 2 + the forms he owns among KH2's forms 1..5 (`formown::owned`).
 unsafe fn cap(s: usize) -> u8 {
-    formlevel::cap(2 + u8::from(raw(s, Kind::Final) != 0))
+    let _ = s;
+    formlevel::cap(super::formown::for_cap())
 }
 
 /// KH2's add (`0x1403E8380`): `n` EXP to `kind`'s record; each level gained is logged and shown in

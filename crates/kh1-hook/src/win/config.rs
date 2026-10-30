@@ -258,6 +258,10 @@ enum Row {
     CursorMemory,
     /// Command Menu > Command Lock (KH1 | KH2, `cmdmenu::lock_kh2`).
     CommandLock,
+    /// Progression > Story Unlocks (Off | On, `formown::story_unlocks`, t926).
+    StoryUnlocks,
+    /// Drive > MP Refill (Off | On, `form::mp_refill`, t927).
+    DriveMpRefill,
 }
 
 /// A row of one of our lists: a setting (label, left value, right value, help, what it switches),
@@ -318,8 +322,15 @@ enum List {
     Cosmetics,
     /// Command Menu: options for the command menu (the user, t705).
     CommandMenu,
+    /// Progression: the owner's progression rules from the main branch, each on / off (the owner,
+    /// the main-branch port, t926: "for the progression make a new sub menu in the main part
+    /// called progression").
+    Progression,
+    /// Drive: options for the Drive Forms (the owner, the main-branch port, t927: "same for drives";
+    /// "make it a toggle in drive config menu").
+    Drive,
 }
-const LISTS: [List; 11] = [List::Top, List::Camera, List::Combat, List::Magic, List::Movement, List::Misc, List::MagicAnim, List::Tweaks, List::QoL, List::Cosmetics, List::CommandMenu];
+const LISTS: [List; 13] = [List::Top, List::Camera, List::Combat, List::Magic, List::Movement, List::Misc, List::MagicAnim, List::Tweaks, List::QoL, List::Cosmetics, List::CommandMenu, List::Progression, List::Drive];
 
 impl List {
     fn index(self) -> usize {
@@ -377,6 +388,8 @@ impl List {
             }
             List::Cosmetics => &COSMETICS,
             List::CommandMenu => &COMMAND_MENU,
+            List::Progression => &PROGRESSION,
+            List::Drive => &DRIVE,
         }
     }
 }
@@ -385,11 +398,13 @@ const KH: [u32; 2] = [0x7F00_0002, 0x7F00_0003];
 const fn kh(label: u32, help: u32) -> [u32; 4] {
     [label, KH[0], KH[1], help]
 }
-const TOP: [Item; 7] = [
+const TOP: [Item; 9] = [
     Item::Open(0x7F00_0203, 0x7F00_0204, List::Camera),
     Item::Open(0x7F00_0205, 0x7F00_0206, List::Combat),
     Item::Open(0x7F00_0209, 0x7F00_020A, List::Movement),
     Item::Open(0x7F00_0219, 0x7F00_021A, List::CommandMenu),
+    Item::Open(0x7F00_0242, 0x7F00_0243, List::Drive),
+    Item::Open(0x7F00_023E, 0x7F00_023F, List::Progression),
     Item::Open(0x7F00_0211, 0x7F00_0212, List::QoL),
     Item::Open(0x7F00_0213, 0x7F00_0214, List::Cosmetics),
     Item::Open(0x7F00_020B, 0x7F00_020C, List::Misc),
@@ -407,6 +422,13 @@ const COMMAND_MENU: [Item; 5] = [
     Item::Set(kh(0x7F00_022F, 0x7F00_0230), Row::CommandLock),
     Item::Set([0x7F00_0123, 0x7F00_011D, 0x7F00_011E, 0x7F00_0124], Row::L2Dpad),
 ];
+// (Progression: the owner, the main-branch port, t926. Story Unlocks: his table from the main branch
+// (s279, s307), "a config ... with it on or off, so we can preserve the changes but work on it later";
+// off by default, answer 2 (b).)
+const PROGRESSION: [Item; 1] = [Item::Set([0x7F00_0240, 0x7F00_011D, 0x7F00_011E, 0x7F00_0241], Row::StoryUnlocks)];
+// (Drive: the owner, the main-branch port, t927. MP Refill: KH2 refills HP and MP on entering a form,
+// `0x1403C17C0`; answer 8: "(a) but make it a toggle in drive config menu"; off by default.)
+const DRIVE: [Item; 1] = [Item::Set([0x7F00_0244, 0x7F00_011D, 0x7F00_011E, 0x7F00_0245], Row::DriveMpRefill)];
 // (QoL: the user, t704: "make a qol (Quality of life) section in the config menu, put gummi skip in
 // there".)
 // (Soft Reset: the user, t707: "in qol you can quick reset the game", then "the combo does not work in the pc
@@ -529,7 +551,7 @@ const BUTTON_HELP: u32 = 0x7F00_0202;
 /// Misc's help, and the same without the debug menu (its row isn't there without the debug tools).
 const MISC_HELP: u32 = 0x7F00_020C;
 const MISC_HELP_NO_DEBUG: &str = "Battle quotes.";
-const STRINGS: [(u32, &str); 139] = [
+const STRINGS: [(u32, &str); 147] = [
     (0x7F00_0201, "KH1 in KH2"),
     (0x7F00_0202, "Choose KH1's or KH2's camera, combat, movement and more."),
     (0x7F00_0203, "Camera"),
@@ -602,6 +624,14 @@ const STRINGS: [(u32, &str); 139] = [
     (0x7F00_0231, "Vanilla"),
     (0x7F00_0232, "Quick"),
     (0x7F00_0233, "Skip"),
+    (0x7F00_0242, "Drive"),
+    (0x7F00_0243, "Options for the Drive Forms."),
+    (0x7F00_0244, "MP Refill"),
+    (0x7F00_0245, "On: entering a Drive Form refills Sora's MP as well as his HP,\nas in KH2. Off: HP only."),
+    (0x7F00_023E, "Progression"),
+    (0x7F00_023F, "The main branch's progression rules, each on or off."),
+    (0x7F00_0240, "Story Unlocks"),
+    (0x7F00_0241, "On: the Drive Forms open by the story (Guard Armor, Opposite\nArmor, the Pegasus Cup by the Dive's choice). Off: from the start."),
     (0x7F00_0236, "Item Pickup"),
     (0x7F00_0237, "Vanilla: KH1's. Skip: picking an item up off the ground doesn't stop\nSora; the small \"Obtained\" box shows while he keeps moving."),
     (0x7F00_0238, "Guard Animation"),
@@ -700,6 +730,8 @@ fn value(what: Row) -> bool {
         Row::DpadLeft => super::cmdmenu::dpad_kh2(),
         Row::CursorMemory => super::cmdmenu::memory_kh2(),
         Row::CommandLock => super::cmdmenu::lock_kh2(),
+        Row::StoryUnlocks => super::formown::story_unlocks(),
+        Row::DriveMpRefill => super::form::mp_refill(),
     }
 }
 
@@ -742,6 +774,8 @@ fn set(what: Row, v: bool) {
         Row::DpadLeft => super::cmdmenu::set_dpad_kh2(v),
         Row::CursorMemory => super::cmdmenu::set_memory_kh2(v),
         Row::CommandLock => super::cmdmenu::set_lock_kh2(v),
+        Row::StoryUnlocks => super::formown::set_story_unlocks(v),
+        Row::DriveMpRefill => super::form::set_mp_refill(v),
     }
 }
 

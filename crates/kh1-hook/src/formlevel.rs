@@ -141,6 +141,21 @@ pub struct LevelUp {
     pub reward: u16,
 }
 
+/// Which forms Sora owns, one bit a form (KH2's form ids - 1: bit 0 Valor, 1 Wisdom, 2 Limit, 3
+/// Master, 4 Final, 5 Anti), and bit 7 once the save's byte has been set up (`win/formown.rs`).
+pub mod owned {
+    pub const SET_UP: u8 = 0x80;
+    /// The bit of KH2 form `form` (1..6).
+    pub fn bit(form: u8) -> u8 {
+        if (1..=6).contains(&form) { 1 << (form - 1) } else { 0 }
+    }
+    /// The forms counted for the level cap (KH2's `0x1403E8380`: forms 1..5 by their items, so
+    /// Limit counts and Anti doesn't).
+    pub fn for_cap(bits: u8) -> u8 {
+        (bits & 0x1F).count_ones() as u8
+    }
+}
+
 /// The level cap with `owned` forms (KH2: 2 + the forms 1..5 Sora owns).
 pub fn cap(owned: u8) -> u8 {
     (2 + owned).min(MAX_LEVEL)
@@ -189,6 +204,16 @@ pub fn kh2_final_counts(id: u32) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn owned_forms_for_the_cap() {
+        let b = owned::bit(form::VALOR) | owned::bit(form::WISDOM) | owned::bit(6) | owned::SET_UP;
+        assert_eq!(owned::for_cap(b), 2);
+        assert_eq!(cap(owned::for_cap(b)), 4);
+        assert_eq!(owned::bit(0), 0);
+        assert_eq!(owned::bit(7), 0);
+        assert_eq!(cap(owned::for_cap(0x1F)), MAX_LEVEL.min(7));
+    }
+
     use super::*;
 
     /// A made-up table shaped as KH2's (growth 1, 1, 2, 2, 3, 3, 4; rewards on even levels).

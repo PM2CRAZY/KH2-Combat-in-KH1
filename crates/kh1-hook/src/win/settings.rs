@@ -141,6 +141,13 @@ keyblade_turn = on\r\n\
 ; drive: on = D-pad left at the battle menu's top flips to a second page (Attack, Magic, Items,\r\n\
 ; Drive), Drive listing KH2's forms; off = KH1's menu only\r\n\
 drive = on\r\n\
+; story_unlocks: on = the Drive Forms open by the story (the owner's table from the main branch:\r\n\
+;   Guard Armor, Opposite Armor, the Pegasus Cup by the Dive's choice; Master after Anti-Sora,\r\n\
+;   Final after Riku 2); off = Valor and Wisdom from the start (Config: Progression > Story Unlocks)\r\n\
+story_unlocks = off\r\n\
+; drive_mp_refill: on = entering a Drive Form refills MP as well as HP, as KH2's does; off = HP only\r\n\
+;   (Config: Drive > MP Refill)\r\n\
+drive_mp_refill = off\r\n\
 ; valor_left_blade: on = in Valor Form, its Keyblade in Sora's left hand (KH1's own model of it);\r\n\
 ; off = nothing of it is installed (turn it off if it misbehaves)\r\n\
 valor_left_blade = on\r\n\
@@ -512,6 +519,12 @@ pub struct Settings {
     pub physics_rule: crate::kh1phys::Rule,
     /// The second command page with Drive (`drive = on`).
     pub drive: bool,
+    /// The Drive Forms open by the story, the owner's table (`story_unlocks = on`; off by default;
+    /// Config: Progression > Story Unlocks, t926; `formown`, `crate::storyforms`).
+    pub story_unlocks: bool,
+    /// Entering a Drive Form refills MP too (`drive_mp_refill = on`; off by default; Config: Drive >
+    /// MP Refill, t927; `form::mp_refill`).
+    pub drive_mp_refill: bool,
     /// Valor's Keyblade drawn in his left hand (`valor_left_blade = on`, `leftblade`).
     pub valor_left_blade: bool,
     /// KH2's (true) or KH1's moves per `styles::Kind`, in `Kind::EVERY`'s order.
@@ -782,6 +795,8 @@ fn load(first: bool) -> Option<Settings> {
         keyblade_turn: on(&text, "keyblade_turn", "on", true),
         physics_rule: crate::kh1phys::Rule::parse(setting(&text, "physics").as_deref()),
         drive: on(&text, "drive", "on", true),
+        story_unlocks: on(&text, "story_unlocks", "on", false),
+        drive_mp_refill: on(&text, "drive_mp_refill", "on", false),
         valor_left_blade: on(&text, "valor_left_blade", "on", true),
         styles: {
             // (The Magic / Aerial Magic rows before the per-spell rows, m19: the new rows' defaults
