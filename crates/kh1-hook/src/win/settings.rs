@@ -161,6 +161,14 @@ drive_refill = kh2\r\n\
 ; drive_recovery_battle: on = Drive Recovery and High Drive Recovery go in the item slots and work in\r\n\
 ;   battle too; off = from the menu only, as in KH2 (Config: Drive > Recovery in Battle)\r\n\
 drive_recovery_battle = off\r\n\
+; drive_party: kh2 = a Drive Form needs KH2's partners (Valor Goofy, Wisdom Donald, Master / Final / Anti\r\n\
+;   both slots filled, Limit no one); off = whoever is in the party (Config: Drive > Party Required)\r\n\
+drive_party = kh2\r\n\
+; drive_limits: kh2 = no KH1 limit (Sonic Blade, Ars Arcanum, ...) offered or used in any Drive Form, as in\r\n\
+;   KH2; kh1 = KH1's offer as it is (Valor still refuses them) (Config: Drive > Limits in Forms)\r\n\
+drive_limits = kh2\r\n\
+; limit_cost: kh2 = Limit Form costs 4 Drive bars, as in KH2; 3 = the main branch's 3 bars (Config: Drive > Limit > Cost)\r\n\
+limit_cost = kh2\r\n\
 ; drive_recovery_sources: on = Drive Recovery and High Drive Recovery are sold in KH1's item shops once a\r\n\
 ;   Drive Form is open (and later dropped and found); off = nowhere (Config: Progression > Drive Recovery)\r\n\
 drive_recovery_sources = on\r\n\
@@ -553,6 +561,15 @@ pub struct Settings {
     /// Drive Recovery items in battle too (`drive_recovery_battle = on`; off by default, KH2's menu-only
     /// rule); Config: Drive > Recovery in Battle, t949; `driveitems::battle`.
     pub drive_recovery_battle: bool,
+    /// A form needs KH2's partners (`drive_party = kh2`, the default; `off`); Config: Drive > Party
+    /// Required, t958; `driveparty::required`.
+    pub drive_party: bool,
+    /// No KH1 limit in a form (`drive_limits = kh2`, the default; `kh1`); Config: Drive > Limits in
+    /// Forms, t963; `formlimits::kh2`.
+    pub drive_limits: bool,
+    /// Limit Form for 3 bars (`limit_cost = 3`; `kh2`, 4 bars, by default); Config: Drive > Limit >
+    /// Cost, t972; `limitform::three_bars`.
+    pub limit_cost_three: bool,
     /// Where Drive Recovery items come from (`drive_recovery_sources = on`, the default; main's design);
     /// Config: Progression > Drive Recovery, t950; `driveitems::sources`.
     pub drive_recovery_sources: bool,
@@ -832,6 +849,9 @@ fn load(first: bool) -> Option<Settings> {
         drive_cost_gauge: on(&text, "drive_cost", "gauge", true),
         drive_refill: on(&text, "drive_refill", "kh2", true),
         drive_recovery_battle: on(&text, "drive_recovery_battle", "on", false),
+        drive_party: on(&text, "drive_party", "kh2", true),
+        drive_limits: on(&text, "drive_limits", "kh2", true),
+        limit_cost_three: on(&text, "limit_cost", "3", false),
         drive_recovery_sources: on(&text, "drive_recovery_sources", "on", true),
         valor_left_blade: on(&text, "valor_left_blade", "on", true),
         styles: {

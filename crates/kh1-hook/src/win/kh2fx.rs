@@ -63,14 +63,24 @@ pub const VALOR: u8 = super::form::LAST_PACKAGE + 1;
 /// Final Form's (`P_EX100_ULTF.a.us`), after Valor's.
 pub const FINAL: u8 = VALOR + 1;
 
+/// Limit Form's (`P_EX100_KH1F.a.us`, t971), after Final's.
+pub const LIMIT: u8 = FINAL + 1;
+
 /// A frame trigger 1 of Valor's or Final's motion (`takeover`, `form::takes`): its element from
 /// that form's package, on Sora; one that ends with its motion ends when the motion changes.
 pub fn form_event(motion: u16, el: i16) {
     if el < 0 || super::settings::get().kh2_effects.is_none() {
         return;
     }
-    if super::kh2dpx::form_event(super::form::in_final(), motion, el) {
-        unsafe { super::kh2sound::spell_element(if super::form::in_final() { FINAL } else { VALOR }, el as u16) };
+    let (pkg, package) = if super::form::in_final() {
+        (super::kh2dpx::Pkg::Final, FINAL)
+    } else if super::form::in_limit() {
+        (super::kh2dpx::Pkg::Limit, LIMIT)
+    } else {
+        (super::kh2dpx::Pkg::Valor, VALOR)
+    };
+    if super::kh2dpx::form_event(pkg, motion, el) {
+        unsafe { super::kh2sound::spell_element(package, el as u16) };
     }
 }
 

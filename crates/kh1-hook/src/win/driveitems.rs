@@ -112,7 +112,7 @@ pub fn set_battle(v: bool) {
     BATTLE.store(1 + v as u8, Ordering::Relaxed);
     super::settings::save("drive_recovery_battle", if v { "on" } else { "off" });
     log!(Forms, "Config menu: Recovery in Battle {}", if v { "On" } else { "Off" });
-    let base = super::sys::GetModuleHandleA(std::ptr::null()) as usize;
+    let base = unsafe { super::sys::GetModuleHandleA(std::ptr::null()) } as usize;
     unsafe { records(base) };
 }
 
@@ -135,7 +135,7 @@ pub fn set_sources(v: bool) {
     super::settings::save("drive_recovery_sources", if v { "on" } else { "off" });
     log!(Forms, "Config menu: Drive Recovery sources {}", if v { "On" } else { "Off" });
     if TAKEN.load(Ordering::Relaxed) {
-        let base = super::sys::GetModuleHandleA(std::ptr::null()) as usize;
+        let base = unsafe { super::sys::GetModuleHandleA(std::ptr::null()) } as usize;
         unsafe { chests(base, v) };
     }
 }

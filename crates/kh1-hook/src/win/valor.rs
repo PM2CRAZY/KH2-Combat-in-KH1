@@ -1,12 +1,13 @@
 //! Valor Form's second Keyblade (the user: "add the slot in menu for valor form, and
-//! automatically put a keyblade that isnt equipped into the slot. If no keyblade is eligible to
-//! be in that slot, dont let players go into valor form").
+//! automatically put a keyblade that isnt equipped into the slot"; t966, the main-branch port's
+//! round 11 answer 1 (a): an empty slot is Sora's own Keyblade, as KH2).
 //!
-//! - The slot: a Keyblade id kept in the save at `equip::VALOR_OFF` (`docs/kh1-equipment.md`).
-//! - Eligible: a Keyblade Sora owns with a copy not equipped (`equip::valor_candidates`). The
-//!   slot's Keyblade is kept while it stays eligible; otherwise the eligible one with the most
-//!   Strength is put in it (`equip::valor_keyblade`); with none, the slot is emptied and Valor
-//!   can't be chosen (`form::usable` / `form::choose`).
+//! - The slot: a Keyblade id kept in the save at `equip::VALOR_OFF` (`docs/kh1-equipment.md`),
+//!   filled when Valor is gained (`formown::valor_slot`, KH2's first spare Keyblade).
+//! - The slot's Keyblade is kept while Sora owns a copy no member has equipped
+//!   (`equip::valor_holds`); otherwise the slot is emptied, and Valor uses Sora's own Keyblade
+//!   (`equip::valor_keyblade`; KH2's `0x1403DFEB0`, case 0x23B), so Valor no longer needs a spare
+//!   Keyblade. (Before t966: the free Keyblade with the most Strength, and no Valor with none.)
 //! - In the form, its swings' second-hand hitboxes are KH2's (the rig's second weapon); its model
 //!   in his left hand: `started` / `ended`.
 
@@ -16,18 +17,18 @@ use std::sync::atomic::{AtomicU32, Ordering};
 /// The Keyblade in Valor's slot, as last decided (0 none), for the log.
 static CHOSEN: AtomicU32 = AtomicU32::new(0);
 
-/// The Keyblade Valor uses now (its item id), the slot filled or fixed as it goes; `None` when
-/// Sora owns no Keyblade with a copy free.
+/// The Keyblade Valor uses now (its item id): the slot's, else Sora's own; a slot whose Keyblade
+/// has no copy left is emptied (KH2's empty slot). `None` when Sora holds no Keyblade.
 pub unsafe fn keyblade() -> Option<u8> {
     let base = super::sys::GetModuleHandleA(std::ptr::null()) as usize;
     let save = super::menu::save_block(base)?;
-    let pick = super::equip::valor_keyblade(base);
     let slot = (save + super::equip::VALOR_OFF) as *mut u8;
-    let stored = std::ptr::read_unaligned(slot);
-    let want = pick.unwrap_or(0);
-    if stored != want {
-        std::ptr::write_unaligned(slot, want);
+    let held = super::equip::valor_holds(base).unwrap_or(0);
+    if std::ptr::read_unaligned(slot) != held {
+        std::ptr::write_unaligned(slot, held);
     }
+    let pick = super::equip::valor_keyblade(base);
+    let want = pick.unwrap_or(0);
     // While he is Valor, the slot's Keyblade in his hand, changed or not (the Equipment row, the
     // user: "when switching the second keyblade out while in valor form it doesnt swap
     // properly"; `leftblade::show` does nothing more when it's the one loaded, and asks again

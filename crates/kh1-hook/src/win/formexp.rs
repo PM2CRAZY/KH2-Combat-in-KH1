@@ -39,6 +39,14 @@ use std::sync::{Mutex, OnceLock};
 
 /// The forms' records in Sora's save (three u16, Valor, Wisdom, Final).
 pub const FORM_LEVELS_OFF: usize = 0x882;
+/// Limit Form's record (t973): save `+0x890`, in the 0x378 bytes between the save's first block
+/// (KH1's field list `0x1402CF620`, `0x142DE9360..0x142DE9BE8`, ending at `+0x888`) and its second
+/// (`0x142DE9F60`, `+0xC00`), which no field list describes; no Steam instruction reaches
+/// `+0x888..+0xC00` through KH1's save pointer (`0x142868BA0`) or by address (Checked (exe), a scan
+/// of the whole disassembly; Assumption: nothing through a computed pointer). The save's
+/// `0x16C00` bytes are copied whole (`0x1402CF7E0`), so the record travels with it. (`+0x87E..`,
+/// inside KH1's 64-bit flag word `+0x878`, `0x140285790`, isn't free.)
+pub const LIMIT_LEVEL_OFF: usize = 0x890;
 
 /// KH1's enemy scripts' EXP commands (Steam), their first whole instructions (`push rbx; sub
 /// rsp, 0x20; mov rbx, rcx` / `push rbx; sub rsp, 0x50`).
@@ -57,15 +65,25 @@ fn kh2_form(kind: Kind) -> u8 {
     match kind {
         Kind::Valor => formlevel::form::VALOR,
         Kind::Wisdom => formlevel::form::WISDOM,
+        Kind::Limit => formlevel::form::LIMIT,
         Kind::Final => formlevel::form::FINAL,
     }
 }
 
-fn slot(kind: Kind) -> usize {
+/// The form's u16 in the save (its offset): Valor, Wisdom, Final at `+0x882..`, Limit at
+/// `+0x890` (t973).
+fn slot(kind: Kind) -> Option<usize> {
     match kind {
-        Kind::Valor => 0,
-        Kind::Wisdom => 1,
-        Kind::Final => 2,
+        Kind::Valor => Some(FORM_LEVELS_OFF),
+        Kind::Wisdom => Some(FORM_LEVELS_OFF + 2),
+        Kind::Limit => Some(LIMIT_LEVEL_OFF),
+        Kind::Final => Some(FORM_LEVELS_OFF + 4),
+    }
+}
+
+unsafe fn put(save: usize, kind: Kind, v: u16) {
+    if let Some(k) = slot(kind) {
+        std::ptr::write_unaligned((save + k) as *mut u16, v);
     }
 }
 
@@ -88,11 +106,11 @@ unsafe fn save() -> Option<usize> {
     if base == 0 {
         return None;
     }
-    super::menu::save_block(base).filter(|s| super::crash::readable(s + FORM_LEVELS_OFF + 6))
+    super::menu::save_block(base).filter(|s| super::crash::readable(s + LIMIT_LEVEL_OFF + 2))
 }
 
 unsafe fn raw(save: usize, kind: Kind) -> u16 {
-    rd::<u16>(save + FORM_LEVELS_OFF + slot(kind) * 2)
+    slot(kind).map_or(0, |k| rd::<u16>(save + k))
 }
 
 /// The form's level and EXP.
@@ -120,7 +138,7 @@ pub fn base_growth() -> crate::growth::FormGrowth {
 pub fn rewards_due() -> Vec<(Kind, u8, u16)> {
     let Some(t) = table() else { return Vec::new() };
     let mut out = Vec::new();
-    for kind in [Kind::Valor, Kind::Wisdom, Kind::Final] {
+    for kind in [Kind::Valor, Kind::Wisdom, Kind::Limit, Kind::Final] {
         let rec = unsafe { record(kind) };
         out.extend(formlevel::rewards_due(t, kh2_form(kind), &rec).into_iter().map(|(l, id)| (kind, l, id)));
     }
@@ -138,7 +156,7 @@ pub unsafe fn rewarded(kind: Kind, level: u8) {
     let mut rec = Record::unpack(v);
     if level > rec.rewarded {
         rec.rewarded = level.min(rec.level);
-        std::ptr::write_unaligned((s + FORM_LEVELS_OFF + slot(kind) * 2) as *mut u16, rec.pack());
+        put(s, kind, rec.pack());
     }
 }
 
@@ -148,7 +166,7 @@ pub unsafe fn rewarded(kind: Kind, level: u8) {
 pub unsafe fn entered(kind: Kind) {
     let Some(s) = save() else { return };
     if raw(s, kind) == 0 {
-        std::ptr::write_unaligned((s + FORM_LEVELS_OFF + slot(kind) * 2) as *mut u16, Record::default().pack());
+        put(s, kind, Record::default().pack());
     }
     super::formown::give(super::formown::form_id(kind));
 }
@@ -171,7 +189,7 @@ unsafe fn add(kind: Kind, n: u32, why: &str) {
     let mut rec = Record::unpack(raw(s, kind));
     let cap = cap(s);
     let ups = formlevel::add(&mut rec, kh2_form(kind), n, cap, t);
-    std::ptr::write_unaligned((s + FORM_LEVELS_OFF + slot(kind) * 2) as *mut u16, rec.pack());
+    put(s, kind, rec.pack());
     for u in &ups {
         let growth = u.form_growth.map(|g| format!(", {} {}", kind.growth(), growth_name(g))).unwrap_or_default();
         log!(Forms, "{} LV{} ({why}, cap {cap}){growth}; Sora's own: {}{} (given by KH1's menu, abilities = kh1)", kind.name(), u.level, u.sora_growth.map(|g| format!("{} {}, ", kind.growth(), growth_name(g))).unwrap_or_default(), if u.reward != 0 { format!("KH2 ability {}", u.reward) } else { "no ability".into() });

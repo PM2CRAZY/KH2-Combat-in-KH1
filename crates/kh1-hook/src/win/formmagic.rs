@@ -224,6 +224,10 @@ pub fn element_sounds(kh2: &pose::Kh2) -> Vec<(u8, u16, i32)> {
     if let Some(a) = kh2.final_form.as_ref().and_then(|f| f.archive.as_ref()) {
         add(super::kh2fx::FINAL, a);
     }
+    // (Limit Form's, t971.)
+    if let Some(a) = kh2.limit_form.as_ref().and_then(|f| f.archive.as_ref()) {
+        add(super::kh2fx::LIMIT, a);
+    }
     // (Also for base Sora's KH2 magic, `base_kh2_spell`, which the Config menu switches in game.)
     {
         for spell in 0..4u8 {

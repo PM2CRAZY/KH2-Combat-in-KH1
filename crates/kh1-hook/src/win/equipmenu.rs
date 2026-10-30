@@ -307,6 +307,13 @@ pub unsafe fn valor_preview() -> Option<(u8, u8, u8)> {
     (now != 0).then_some((own, now, hovered))
 }
 
+/// A Valor pick's list is open (KH1's weapon list from Sora's V: row): the slot's Keyblade, the
+/// item being replaced (`valorslot`, t967 / t968).
+pub unsafe fn valor_picking() -> Option<u8> {
+    let m = mem();
+    (m != 0 && g::<i32>(STATE) == 2 && rd::<u8>(m + CELL_PICK) != 0).then(|| g::<i32>(CURRENT) as u8)
+}
+
 /// Sora's own weapon while a Valor pick's preview may hold another in his weapon byte; the
 /// guard ends once the list is closed and his byte is his own again (KH1's restore).
 unsafe fn pick_guard(save: usize) -> Option<u8> {

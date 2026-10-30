@@ -218,6 +218,9 @@ pub fn control(s: &Seen) -> u32 {
             let _ = super::combomods::valor_square(s, square_fresh);
             return KH1_ACTION_BIT | if air && !s.rising { KH1_JUMP_BITS } else { 0 };
         }
+        // (Limit Form, t969: KH2's action button finds its guard (row 11, motion 173) and Dodge Roll
+        // (its growth ability), base Sora's native paths below with its own clips and levels.)
+        Some(super::form::Kind::Limit) => {}
         Some(_) => {
             if s.state == 0 && square_fresh && s.can_act {
                 let _ = unsafe { quick_run_on_stick("Square in Wisdom Form (its growth ability)") };

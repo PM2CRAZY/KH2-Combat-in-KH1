@@ -387,7 +387,7 @@ pub struct FormSlots {
     ours: &'static [u16],
 }
 
-pub const FORM_SLOTS: [FormSlots; 2] = [
+pub const FORM_SLOTS: [FormSlots; 3] = [
     FormSlots { kind: super::form::Kind::Valor, specs: &VALOR_SPECS, ours: &[] },
     // (Wisdom's Quick Run, its growth ability: its own 203 and its stop 204 on our Quick Run rows,
     // `quickrun`; its own Reflect 71 / 72 / 73 on our Reflect rows, `reflect::native_path`.)
@@ -396,6 +396,40 @@ pub const FORM_SLOTS: [FormSlots; 2] = [
         specs: &WISDOM_SPECS,
         ours: &[super::quickrun::RUN_MOTION, super::quickrun::STOP_MOTION, super::reflect::GROUND_MOTION, super::reflect::FINISHER_MOTION, super::reflect::AIR_MOTION],
     },
+    FormSlots { kind: super::form::Kind::Limit, specs: &LIMIT_SPECS, ours: &[] },
+];
+
+/// Limit Form's motions on KH1's own requests (t969, the main-branch port's round 12 answer 1 (a):
+/// "make sure limit form uses kh2's animations, effects, hitboxes"), each the same KH1 request and
+/// template as base Sora's move of that kind, from `P_EX100_KH1F.mset` (moveset 0x42, Checked
+/// (files): motions 0..19, 40..43, 53, its combo 151..155 and 181..183, Dodge Roll 209, guard 173,
+/// its limits' 221..248). Its jump is 3 (no High Jump in its file); its Dodge Roll is its growth
+/// ability (fmlv form 3), so KH1's roll request plays its own 209. Its hits are its own ATKP rows
+/// (`form::battle`).
+const LIMIT_SPECS: [Spec; 23] = [
+    Spec { motion: 152, stands_for: 99, request: 0xC9, kind: Kind::GroundCombo },
+    Spec { motion: 151, stands_for: 98, request: 0xC8, kind: Kind::GroundCombo },
+    Spec { motion: 151, stands_for: 100, request: 0xCA, kind: Kind::GroundCombo },
+    Spec { motion: 154, stands_for: 101, request: 0xCB, kind: Kind::GroundCombo },
+    Spec { motion: 181, stands_for: 102, request: 0xCC, kind: Kind::AirCombo },
+    Spec { motion: 182, stands_for: 103, request: 0xCD, kind: Kind::AirCombo },
+    Spec { motion: 183, stands_for: 104, request: 0xCE, kind: Kind::AirCombo },
+    reaction_spec(0),
+    reaction_spec(1),
+    reaction_spec(2),
+    reaction_spec(3),
+    reaction_spec(4),
+    reaction_spec(5),
+    recoil_spec(0),
+    recoil_spec(1),
+    item_spec(0),
+    item_spec(1),
+    ROLL,
+    FALL,
+    jump_spec(0),
+    Spec { motion: character_core::motion::JUMP, stands_for: 12, request: 0x9, kind: Kind::Jump },
+    LAND,
+    CHEST,
 ];
 
 /// Wisdom Form's motions on KH1's own requests (`FORM_SLOTS`; the tester, what-is-still-missing

@@ -2385,3 +2385,237 @@ the task with its own quad buffer `0x142866960` (→ inside slot 0's draw with K
   game side: `win/driveabilities.rs`.
 - Open: a main save's support abilities (main's ids 78..81 are Flash Step..Finishing Leap here) can't be told
   from testing's own, so they aren't moved (inventory "Save").
+
+## 18. Partners leave during a form (main-port round 7, row 11, 2026-10-30: research)
+
+### 18.1 KH2 (Steam KH2, Checked (decomp))
+- The change `0x14040CE60 (player, form)` calls `0x140400B20 (form)`: for each of the two party slots (`0x1403C3270`),
+  by the member's id (`+0x4C`: 2 Donald, 3 Goofy): Valor (1) takes Goofy only, Wisdom (2) Donald only, Limit (3)
+  no one, Master, Final and Anti (4..6) **whoever is in both slots** (a world's guest too). A guest in Goofy's place
+  in Valor stays.
+- Taking one (`0x140400990 (member, 15.0)`): a 15-frame fade out (`0x1403B7810` on `+0xA08`), the member flagged out
+  (`+0x9B8` bit 4), and his id recorded (`0x142AE9788`, count `0x142AE9790`).
+- Back: at the change's end with form 0 (the revert, `0x14040CC00` → `0x140400440`), each recorded member is made
+  again near the player (`0x1403C2FC0`, offsets 100 / 200 / 300) with a 15-frame fade in, and the list cleared.
+- Not checked yet: what KH2 does with a taken member's HP and status, and during events and room changes.
+
+### 18.2 KH1 (Steam KH1, Checked (decomp))
+- Party actors at `0x142D37280` (Sora, then two); a member's id at its data `+0x4C` (via `+0x130`).
+- KH1's own "member out" script op `0x1402BB310`: actor flags `+0` |= `0x240`, a state change (`0x1402A10B0 (actor,
+  10)`), the HUD slot set hidden by KH1's slot fade `0x140268E30 (slot, 3)` (the slot from `0x140285030 (member)`),
+  then `0x14029B960`. Its counterpart (member back) and what each step does: to read next.
+- Main's design (a spec only) cleared `0x8000` / `0x1` / `0x2` and set `0x200` / `0x40` itself each frame and
+  brought them back for every scene; its scene detection is deprecated here.
+
+### 18.3 Open before building
+- Events that command a partner while he is out (main's Pegasus Cup freeze: a scene waited on Goofy): whether KH1's
+  own out/back ops handle that, or the form must end before such an event (row 6).
+
+### 18.4 Answers and built (t958)
+- Answers (2026-10-30): 1 (a) partners back for an event that commands them, taken again after it while the form
+  lasts; 2 (a) KH2's rule, guests too in Master / Final / Anti; plus "make a toggle in drives for parties being
+  required to go into drive forms"; "go ahead".
+- KH2's Drive command test (`0x140400740`, `0x1404005E0`, Checked (decomp)) uses the same slot rule as the change:
+  a needed slot empty → the form can't be chosen, a needed partner unable to act → greyed.
+- t958: Drive > Party Required (KH2 by default): KH2's test on KH1's party slots (`driveparty.rs`,
+  `win/driveparty.rs`, `win/drive.rs`). Off: whoever is in the party, as before.
+- Next (t959): the partners leaving and coming back. Still to read in KH1: the counterpart of the "member out" op
+  `0x1402BB310` (KH1's revival `0x140289520` shows the steps back: `0x140292160`, the fades, `0x140297F30`, the HUD
+  slot shown), and where KH1's events take hold of a partner (answer 1 (a)).
+
+### 18.5 Built (t959)
+- KH1 (Steam, Checked (decomp) and (exe)): KH1's flag stack (push `0x140292180`, pop `0x140292160`, 3 deep, depth
+  `+0x388`) is how its game over freezes everyone and its revival (`0x140289520`) brings them back with the model
+  fade `0x1402A0F40` and the HUD slot fade `0x140268E30 (slot, 1)`.
+- t959: a taken partner fades out (15 frames, HUD slot too), then his flags are pushed without acting, model and
+  shadow, with `0x240`; back on every revert and for a cutscene (scene flag `0x142382594` bit 0), taken again after
+  it while the form lasts; a new room's actors taken again. Code: `win/driveparty.rs`, called from `win/form.rs`.
+- Open (Assumption): his place on return (KH1's AI); whether every scene that commands a partner sets the scene flag.
+
+## 19. Forced reverts (main-port round 8, row 6, 2026-10-30: research)
+
+### 19.1 KH2 (Steam KH2, Checked (decomp))
+- **Room jumps carry a recovery kind.** KH2's map jump `0x140152990 (.., recovery)` hands it to `0x1403A5650 (kind)` when the
+  new area starts (`0x140152A90`). Kinds 2 / 10 / 12, and 1 (the world map) when a form is on, end the form at once and
+  refill the Drive bars (`0x1403A5790`: form id `0x1409ACDD4` = 0, `0x1403C2020`) and refill every member's HP and MP;
+  kinds 4 / 6 (and 5) do the revert and bar refill only while a form is on. Which jumps carry which kind is per-jump data
+  in KH2's areas.
+- **Events can revert by script**: event function `0x14042FEA0` starts the revert task (`0x14040CD40`); `0x14042FE80`
+  changes form (no callers in the decomp: both are entries of the event function table). No bar refill there.
+- **Gauge out / Revert command**: the form state `0x140405320` / `0x140404A40` (no refill, §13).
+- **Battle end**: nothing reverts a form at a battle's end (no caller found). A KO is a game over.
+
+### 19.2 KH1 and testing
+- Done: leaving a world in a form (t934, KH2's world-map kind 1: revert + bars, HP, MP); KO (`form::native_revert`).
+- KH1 has no recovery kind on its room jumps, so KH2's per-jump list has no KH1 counterpart.
+- Conflict: row 11 answer 1 (a) keeps a form through a cutscene (partners back for it); main's row 6 reverts on scenes.
+
+### 19.3 Main's design (a spec only)
+- Every revert outside the player's control (KO, new world, scenes, battle end, the Coliseum arena) refills every bar and
+  brings the partners back; the Revert command and the gauge running out don't.
+
+### 19.4 Answers and built (t961)
+- Answers (2026-10-30): 1 (a) a cutscene keeps the form; 2 (a) a battle's end doesn't revert; 3 (a) the cup's start reverts
+  with the bars full and the partners back, the rounds carry the form (row 7); 4 (b) a KO refills nothing. Row 6 is
+  done by t934 (a world left) and t959 (the partners back on any revert).
+- t961 (row 7): into a Coliseum arena room (world 0xB, rooms 2 and up) from its gates or lobby in a form: bars refilled
+  and the form reverted; no time drain while one of KH1's cutscenes runs (a round's victory scene). Code:
+  `win/driveparty.rs` (`cup_start`, `scene`), `win/form.rs`.
+
+## 20. Talking, examining and KH1's limits in a form (main-port round 9, rows 18 and 19, 2026-10-30: research)
+
+### 20.1 KH2 (Checked (files): `03system.bin` `cmd`, DisableForm byte at +44 of the 48-byte rows)
+- Talk (0xA, 0x1F, 0x279, 0x282), Examine (0xE, 0x1E, 0x102, 0x103, 0x19D, 0x25C), Open (0x20) and Save (0x37, 0x1CD)
+  have DisableForm 0: KH2 lets Sora use them in every form.
+- KH2's limit commands (execute 81: 0x4A, 0x52, 0x8B, 0xFF, 0x11A, 0x152, ...) also have DisableForm 0. KH2 has no solo
+  limits for Sora: each is a party limit with a partner (00battle `limt`), and a form takes the partners away, so in KH2
+  no limit is offered in Valor, Wisdom, Master, Final or Anti (Limit Form's moves are the form's own). Assumption: the
+  Limit command is hidden by the missing partner and not by another form check; the decomp check of the Limit entry's
+  availability is still to do.
+
+### 20.2 KH1 (Steam KH1, Checked (decomp) and (files): `btltbl.bin` command records at file +0xA58, 0x10 bytes each)
+- The context scan `0x1402948F0` offers, by the object's interaction kind (`+0x5F`): 1 Talk (command 4) on slot 0, out
+  of battle; 2 slot 3 (Examine; Assumption: command 5, the decompile drops the argument); 3 the object's own handler
+  (`0x140297CA0`); 4 slot 0. The chest handler `0x1402C5D50` offers 0x1C / 0x1D on slot 3 and 0x1E on slot 0.
+- The ground branch `0x1402A3DB0` runs them: 4 and 5 start the object's event (`0x14028DD80` mode 0 / 4); 0x1C plays the
+  open motion by the height to the object; 0x37 opens a chest (the chest table `0x140528D60`, `0x1402B58E0`); any id it
+  doesn't know turns Sora and calls the object's handler (save points and other objects; Assumption: a save point is
+  one of these).
+- KH1's limits: the offer `0x14028D0F0` puts one in the Triangle slot (slot 3) at the end of the scan; ids 0x4B Sonic
+  Blade, 0x57 Ars Arcanum, 0x5E Strike Raid, 0x5A Ragnarok, 0x52 Trinity Limit, follow-ups 0x4D / 0x4E / 0x58 / 0x59 /
+  0x5B / 0x5F / 0x60 (`docs/kh1-kh2-limits.md` §3).
+
+### 20.3 Testing now (Checked (code))
+- Valor (`combat.rs` `command_step`) refuses every command but 0 / 1 / 2 / item and `NOT_SORAS`. That refuses Talk (4),
+  Examine (5), 0x1C, chest Open (0x37) and every object command on the default path. `NOT_SORAS` lets 0x1D / 0x1E
+  through, and also the limit ids (0x4B, 0x52, 0x57..0x5B, 0x5E..0x60): a limit can start in Valor and its hits are then
+  refused by the attack row check (`combat.rs` `exec`). Assumption: this is what the player sees as "Valor refuses
+  limits"; not checked in game.
+- Wisdom refuses nothing of these: KH1's limits are offered and run in Wisdom.
+
+### 20.4 Plan (one version each, after a go-ahead)
+- Row 18: Valor's refusal keeps out only KH1's attack moves (the limit ids and their follow-ups, Counterattack 99), so
+  Talk, Examine, Open, Save and object commands run on KH1's own code in every form, as KH2.
+- Row 19: in any form KH1's limit offer `0x14028D0F0` offers nothing (one check at its start, KH1's own call; no
+  per-frame code of ours), and a limit id chosen in a form is refused as KH1 refuses an unusable command.
+
+### 20.5 Answers and built (t962, t963)
+- Answers (2026-10-30): 1 (a) talking, examining, chests and save points in every form, as KH2; 2 (b) KH1's limits in forms
+  as a Config toggle.
+- t962 (row 18): Valor's refusal is `formcmds::valor_allows`: Attack, magic, items, the commands that don't move Sora, Talk 4,
+  Examine 5, 0x1C / 0x1D / 0x1E, a chest's Open 0x37 and every object command (KH1's ids up to 0x7C its own code doesn't run;
+  0x62 kept out, Assumption). KH1's limits are now refused at the command in Valor (no start with its hits refused).
+- t963 (row 19): Drive > Limits in Forms (KH1 | KH2, ini `drive_limits`, KH2 by default). KH2: entering a form writes `ret`
+  over KH1's limit offer `0x14028D0F0` (first bytes `48 81 EC 98 00 00 00`), the revert puts it back; a limit id still chosen
+  in a form is refused (sound 4). KH1: the offer as KH1 has it (Wisdom runs them; Valor still refuses them). Code:
+  `formcmds.rs`, `win/formlimits.rs`, `win/combat.rs`, `win/form.rs`.
+- Open: the KH2 decomp check that only the missing partner hides KH2's Limit command in a form; save points' command id (seen
+  in game: a refusal would show in the log as "refused: not in Valor Form").
+
+## 21. The dim during a Drive change (main-port round 10, row 21, 2026-10-30: research)
+
+### 21.1 KH2 (Steam KH2, Checked (decomp))
+- The change task (`0x14040CAA0` starts it, its step `0x14040D000`), for forms 1..6: a scene colour entry (`0x1403F6F80(0)`,
+  colour (48, 48, 48), `0x1403F76E0`) whose strength goes 0 → 1 over 12 frames; a wait of 30 frames; it holds until the
+  change is done; then 1 → 0 over 15 frames (`0x1403F76A0`).
+- What the entry does (`0x1403F7040`'s loop, then `0x1401626F0(r, g, b)`): the scene's light colour and fog colour are
+  multiplied by colour / 128 = 0.375. It dims the lighting (map and models) to 37.5%; it is not a screen overlay. Additive
+  effects are not lit, so the change's glow stays bright (Assumption). The HUD isn't lit (Assumption).
+- With it, a second screen effect (`0x142AE7C88`, `0x1403F7850` / `0x1403F7880`: centred at PS2 (256, 208), on at once, off
+  over 20 frames at the end, `0x1403F7830`). What it draws is not looked up (Assumption: a radial blur).
+
+### 21.2 KH1 (Steam KH1, Checked (decomp) and (exe))
+- KH1's light list: 31 slots of 0x40 bytes at `0x142D5B030` (+0 type, +4 flags, +8 id, +0x30 an RGBA float colour, 1.0
+  neutral). `0x14029D880 (type, flags, id)` takes a slot, `0x14029DC20` frees it, `0x14029E0D0 (light, colour, ticks,
+  when done)` fades its colour with a task of KH1's (`0x14029E710`, the frame's tick delta `0x14233FBDC`).
+- Every type-1 colour is multiplied into the ambient each tick (`0x14029E790` → `0x14018C9E0`, the map through
+  `0x1404E3430` and `0x140198B60`'s Ambient) and into each actor's light (`0x14029E5C0`, actor `+0x430`). Flag 1 = map only,
+  2 = actors only, 8 = freed at a room change (`0x14029D8D0`), 0x10 off (Assumption, from the masks).
+- KH1 already dims its field this way: `0x1401CF800` (a type-1 light, flags 9) faded to (0.6, 0.8, 0.6) over 30 ticks by
+  `0x1401D8450`, and back by `0x1401CD1E0`; scripts have their own calls (`0x1402BC190` ...).
+- KH1's fog colour (`0x14233FE60..`, copied by `0x14018CC10`) isn't on the light list.
+- KH1's tick: the light fade counts KH1's ticks (`0x14018D1F0` sets the delta to the ticks since the last frame).
+  Assumption: 60 a second as KH2's frames; to see in game.
+
+### 21.3 Plan (one version, after a go-ahead)
+- At the change's start: a type-1 light of ours (flags 8, our id) faded to (0.375, 0.375, 0.375) over 12 ticks; when the
+  form is on and at least 30 ticks have passed, faded back to 1.0 over 15 ticks and freed by KH1 when done. KH1's own task
+  steps it; nothing of ours each frame.
+
+### 21.4 Answers and built (t964)
+- Answers (2026-10-30): 1 (a) the fog too; 2 (a) KH2's second screen effect researched for its own version.
+- KH1's fog (Checked (decomp) and (exe)): set per room (`0x140180D10`, the room's own kept at `0x14233FE20..`), copied to the
+  renderer every frame (`0x14018CC10`), and faded by KH1's own fog fade, the one its event scripts start (`0x1401B0880`; back
+  to the room's `0x1401B0A00`): block `0x142382A50` (+0 length, +4 time, +0x10.. start, +0x40.. target), on with
+  `0x142382594` bit 1, stepped by `0x1401B3840` from the field's script task `0x1401A2320`. A script's length is its frames
+  × 2 (Checked (exe)), so KH1's ticks are 60 a second if its scripts count 30 (Assumption).
+- t964: `win/drivedim.rs`. The change's start: a type-1 light of ours (flags 8, id 0x4B32) faded to 0.375 over 12 ticks, and
+  KH1's fog fade to the colour × 48 / 128 over 12. The arrival, a revert or a KO: back over 15, KH1 freeing the light, the
+  fog back to what it was (the new room's own after a room change). A script's fog fade running is left alone.
+
+### 21.5 KH2's second effect (research for its own version)
+- `0x1403F7850` / `0x1403F7880` (Checked (decomp)): KH2's full-screen feedback draw `0x14015F250` turned on: the last frame
+  drawn back over the new one as a full-screen sprite at alpha 0x70 (of 0x80), offset by (2, 2) PS2 pixels, no spin
+  (`0x14015F1A0` 0), from the change's start; its strength fades out over 20 frames when the change ends. What it looks
+  like: a trail / smear of the moving image (Assumption).
+- KH1 (Checked (decomp)): no such draw found (none of KH2's constants, no frame-copy sprite). KH1's renderer would need a new
+  pass that copies the frame and draws it back: question in chat.
+
+### 21.6 Built (t965): KH2's blur on KH1's own
+- Answer (2026-10-30): (a). KH1 has the same feedback blur (Checked (decomp) and (exe)): `0x14017B190 (mode)` → `0x140185C40`,
+  called from KH1's draw loop (`0x140170FF0`) while the mode `0x14233FBE8` is 1 or 4. It draws the last frame (prevFrameTex,
+  `0x140108300`, copied at every frame end by `0x1401030C0`) as a strip over the new one, blended (Cs − Cd)·As + Cd, colour
+  `0x14233FDE0..DEC` (0x80 = 1.0), offset `0x14233FE00` / `FE04` (PS2 pixels), spin `0x14233FDF8` over `0x14233FDFC` frames.
+  KH1's own event sets alpha 0x70 (`0x14023F900`), as KH2. So no renderer change: §21.5's "KH1 has no draw" was wrong.
+- t965 (`win/drivedim.rs`): 30 frames into the change, mode 1 with (0x80, 0x80, 0x80, 0x70), offset (2, 2), no spin; once the
+  form arrives the alpha goes down over 20 frames on the form's own frame, then mode 0. A change cut short: off at once. Left
+  alone while one of KH1's events has its own blur on.
+- Open: KH1's offset direction against KH2's; KH2's fade curve (linear assumed).
+
+## 22. The second Keyblade's slot: stats, in use, the empty slot (main-port round 11, row 20, 2026-10-30: research)
+
+### 22.1 KH2 (Steam KH2, Checked (decomp))
+- Each form keeps its own weapon in Sora's record (`0x142A252F0 + 0x16 + form × 2`, read by `0x140405190 (form)`; form 0 is
+  Sora's own at `+0x10`). The change picks it (`0x14040CAA0`, `0x140405190`), and the weapon resolver `0x1403DFEB0`, case
+  0x23B: the form's weapon if its slot holds one, **else Sora's own Keyblade**.
+- Whether a Keyblade in a form's slot is taken off the lists for Sora and the other forms: not looked up (Assumption: yes,
+  one copy per slot).
+
+### 22.2 KH1 and testing (Steam KH1, Checked (decomp) and (code))
+- Testing has the V: row (`win/equipmenu.rs`, save `+0x488`, `equip::valor_keyblade`). With the slot empty or unusable it
+  takes the free Keyblade with the most Strength, and Valor can't start when none is free (a second copy is needed).
+- KH1's free count `0x1402E8770 (item)` (Steam; Epic `0x1402E6330`): the copies owned minus those equipped across the ten
+  members. KH1 calls it from its menus and the shop's sell list (9 callers). Testing only reads it (`equip::free`), so a
+  Keyblade in the V: slot can still be sold or equipped on Sora.
+- KH1's weapon compare box `0x1403050D0` (Steam; reads the item being replaced, `0x142E9A07C`): testing doesn't hook it, so
+  during a V: pick it shows Sora's own figures (main's s262).
+- KH1's dream weapons (Dream Sword / Shield / Rod, `0x52..0x54`) and the wooden sword aren't Keyblades in testing
+  (`equip::NOT_KEYBLADES`); KH1 locks the weapon row while one is held (`0x1402E6C60`).
+
+### 22.3 Main's design (a spec only)
+- s262: the compare box shows Valor's figures during a V: pick. s286: a slotted Keyblade holds a copy (Valor first, then
+  Final), taken off `equip::free`, the other form's list, Sora's list and KH1's free count (the sell list). s306: Valor's
+  empty slot is the Dream Sword, holding no copy, offered at the top of V:'s list.
+
+### 22.4 Plan (one version each, after a go-ahead)
+- The compare box: KH1's own box, hooked at `0x1403050D0`, shows Valor's figures with the slot's Keyblade as "now" and the
+  hovered one as "new" (valorstats' rule).
+- In use: KH1's free count hooked to take the slot's copy off (Sora's list, the sell list, every KH1 caller).
+- The empty slot: by the answer below.
+
+### 22.5 Answers, KH2's in-use rule, built (t966–t968)
+- Answers (2026-10-30): 1 (a) KH2's empty slot; 2 "check with the decomp and how to implement it".
+- KH2 (Steam KH2, Checked (decomp)): save `0x1409A98B0`; form records at save `+0x32F4`, 10 of 0x38 bytes (`0x1403A1410`),
+  `+0` the Keyblade (get `0x1402FC630`, set `0x1402FC7C0`), `+2` the level; only forms 1 / 4 / 5 take one (`0x1402FC860`).
+  Equipping returns the old Keyblade to the stock (`0x1403C3F00`) and takes the new one out (`0x1403C49C0` → `0x1403C4A40`), as
+  for Sora's own weapon; the count (`0x1403C4720`) is the stock itself, so a slotted copy is gone from Sora's list and the
+  other forms'. The sell list: Assumption (the shop is the overlay `ovl_shop.rel`, not in the decomp). A form gained fills an
+  empty slot with the first Keyblade with stock in item-table order (`0x1403C3FE0`), else 0.
+- How on KH1 (native): KH1's stock counts every copy and its free count `0x1402E8770` subtracts the members' equipped copies
+  when read, so the slot's copy is subtracted there too (hooked), not taken out of KH1's stock (KH1's saves and shops count
+  equipped copies).
+- t966: `equip::valor_holds` / `valor_keyblade`: the slot's Keyblade while a copy is free of the members, else Sora's own;
+  `valor::keyblade` empties a slot with no copy; Valor no longer needs a spare Keyblade.
+- t967: `win/valorslot.rs`, KH1's free count less the slot's copy (not during a Valor pick).
+- t968: `win/valorslot.rs`, KH1's compare box `0x1403050D0` with Valor's "now" during a Valor pick.
+- Open: the sell list in game; KH2's own list for an empty form slot (what KH2 shows there).

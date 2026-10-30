@@ -166,6 +166,8 @@ pub struct Kh2 {
     pub wisdom: Option<Form>,
     /// Valor Form (`form`, stage 211): its moveset (two Keyblades' swings) and motions.
     pub valor: Option<Form>,
+    /// Limit Form (`form`, t969: `P_EX100_KH1F`, moveset 0x42, its moves on KH1's own states).
+    pub limit_form: Option<Form>,
     /// Final Form (`form`, stage 231: `P_EX100_ULTF`, its floating Keyblades).
     pub final_form: Option<Form>,
     roots: HashMap<u16, Vec<[f32; 3]>>,
@@ -706,6 +708,23 @@ pub fn load_kh2() {
             } else {
                 None
             };
+            let limit_form = if super::settings::get().drive {
+                let t = Instant::now();
+                // (Its files noted for the slot cache: Limit's moves are baked into KH1 motion slots,
+                // `kh2slots::FORM_SLOTS`, Limit Form native, t969.)
+                match load_form_noting(&install, source, kh2_data::sora::FORMS[2], rig.skeleton.len(), true) {
+                    Ok(f) => {
+                        log!(Animation, "KH2 Limit Form loaded: {} motions, {} combo rows, {} weapons, effects {}, in {:.1}s", f.rig.motions.len(), f.character.moveset.combo_rows.len(), f.rig.weapons.len(), if f.archive.is_some() { "read" } else { "missing" }, t.elapsed().as_secs_f32());
+                        Some(f)
+                    }
+                    Err(e) => {
+                        log!(Animation, "KH2 Limit Form did not load: {e}");
+                        None
+                    }
+                }
+            } else {
+                None
+            };
             let final_form = if super::settings::get().drive {
                 let t = Instant::now();
                 match load_form(&install, source, kh2_data::sora::FORMS[4], rig.skeleton.len()) {
@@ -729,7 +748,7 @@ pub fn load_kh2() {
             } else {
                 None
             };
-            Ok(Kh2 { rig, character: sora.character.clone(), battle: Arc::new(sora.combat.battle.clone()), magi: sora.magi.clone(), wisdom, valor, final_form, roots, ground })
+            Ok(Kh2 { rig, character: sora.character.clone(), battle: Arc::new(sora.combat.battle.clone()), magi: sora.magi.clone(), wisdom, valor, limit_form, final_form, roots, ground })
         })();
         if let Err(e) = &r {
             log!(Animation, "KH2 Sora did not load: {e}");

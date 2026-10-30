@@ -61,7 +61,9 @@ pub unsafe fn bonus() -> Option<(u8, i32, i32)> {
     let base = super::sys::GetModuleHandleA(std::ptr::null()) as usize;
     let save = super::menu::save_block(base)?;
     // (Final Form's: the Kingdom Key, `valor::FINAL_KEYBLADE`.)
-    let item = if super::form::in_final() { super::valor::FINAL_KEYBLADE } else { rd::<u8>(save + super::equip::VALOR_OFF) };
+    // (t966: an empty slot is Sora's own Keyblade, `equip::valor_keyblade`.)
+    let _ = save;
+    let item = if super::form::in_final() { super::valor::FINAL_KEYBLADE } else { super::equip::valor_keyblade(base)? };
     if item == 0 || !super::equip::is_keyblade(base, item) {
         return None;
     }

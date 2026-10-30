@@ -80,17 +80,20 @@ pub const MAGIC_SUB: i32 = 10;
 pub enum Kind {
     Valor,
     Wisdom,
+    /// (t969, the main-branch port's round 12: KH2's Limit Form, form 3, on KH1's own states.)
+    Limit,
     Final,
 }
 
 impl Kind {
     /// The Drive list's (Final is secret, `pad`).
-    pub const ALL: [Kind; 2] = [Kind::Valor, Kind::Wisdom];
-    const EVERY: [Kind; 3] = [Kind::Valor, Kind::Wisdom, Kind::Final];
+    pub const ALL: [Kind; 3] = [Kind::Valor, Kind::Wisdom, Kind::Limit];
+    const EVERY: [Kind; 4] = [Kind::Valor, Kind::Wisdom, Kind::Limit, Kind::Final];
     pub fn name(self) -> &'static str {
         match self {
             Kind::Valor => "Valor Form",
             Kind::Wisdom => "Wisdom Form",
+            Kind::Limit => "Limit Form",
             Kind::Final => "Final Form",
         }
     }
@@ -105,6 +108,7 @@ impl Kind {
         match self {
             Kind::Valor => kh2.valor.as_ref(),
             Kind::Wisdom => kh2.wisdom.as_ref(),
+            Kind::Limit => kh2.limit_form.as_ref(),
             Kind::Final => kh2.final_form.as_ref(),
         }
     }
@@ -118,19 +122,22 @@ impl Kind {
         match self {
             Kind::Valor => "P_EX100_BTLF",
             Kind::Wisdom => "P_EX100_MAGF",
+            Kind::Limit => "P_EX100_KH1F",
             Kind::Final => "P_EX100_ULTF",
         }
     }
     /// Runs on KH1's own states where it can (`native_ok`): its moves baked into KH1 slots
     /// (`kh2slots::FORM_SLOTS`), its numbers on KH1's states. The others can't be entered (t873: refused, no KH2 controller).
     pub fn native_capable(self) -> bool {
-        matches!(self, Kind::Valor | Kind::Wisdom)
+        matches!(self, Kind::Valor | Kind::Wisdom | Kind::Limit)
     }
-    /// Its growth ability (KH2's form growth: Valor High Jump, Wisdom Quick Run, Final Glide).
+    /// Its growth ability (KH2's form growth: Valor High Jump, Wisdom Quick Run, Limit Dodge Roll
+    /// (fmlv form 3, Checked (files)), Final Glide).
     pub fn growth(self) -> &'static str {
         match self {
             Kind::Valor => "High Jump",
             Kind::Wisdom => "Quick Run",
+            Kind::Limit => "Dodge Roll",
             Kind::Final => "Glide",
         }
     }
@@ -170,6 +177,11 @@ pub fn arriving() -> Option<Kind> {
 /// In Wisdom Form (its shots, its spells, its look).
 pub fn in_wisdom() -> bool {
     current() == Some(Kind::Wisdom)
+}
+
+/// In Limit Form (no magic: KH2 puts its Limit list in Magic's place, `0x1403F29E0`).
+pub fn in_limit() -> bool {
+    current() == Some(Kind::Limit)
 }
 
 /// In Valor Form (no magic).
@@ -293,7 +305,7 @@ pub fn set_gauge_cost(on: bool) {
 /// testing's MP (more than 3).
 unsafe fn can_pay(sora: usize, kind: Kind) -> Result<(), String> {
     if gauge_cost() {
-        let cost = crate::drivegauge::cost(super::formown::form_id(kind));
+        let cost = super::limitform::cost(super::formown::form_id(kind));
         let have = super::drivegauge::bars();
         if have < cost {
             return Err(format!("Drive gauge {have} of {cost} bars"));
@@ -478,7 +490,7 @@ pub unsafe fn possible(sora: usize) -> Vec<Kind> {
 unsafe fn own_needs(kind: Kind) -> Result<(), String> {
     match kind {
         Kind::Valor => super::valor::keyblade().map(|_| ()).ok_or_else(|| "no Keyblade for the second hand (one Sora owns that isn't equipped)".into()),
-        Kind::Wisdom | Kind::Final => Ok(()),
+        Kind::Wisdom | Kind::Limit | Kind::Final => Ok(()),
     }
 }
 
@@ -594,6 +606,7 @@ fn form_growth(a: &mut Abilities, kind: Kind) {
     match kind {
         Kind::Valor => a.high_jump = g,
         Kind::Wisdom => a.quick_run = g,
+        Kind::Limit => a.dodge_roll = g,
         Kind::Final => a.glide = g,
     }
 }
@@ -605,6 +618,8 @@ unsafe fn drain_step(d: &mut Drive, actor: usize, battle: bool) {
         d.form.as_ref().and_then(|f| match f.kind {
             Kind::Wisdom => Some(super::tint::Look::Wisdom),
             Kind::Valor => Some(super::tint::Look::Valor),
+            // (Limit's look, the owner's black outfit, t974.)
+            Kind::Limit => Some(super::tint::Look::Limit),
             Kind::Final => None,
         }),
     );
@@ -626,7 +641,9 @@ unsafe fn drain_step(d: &mut Drive, actor: usize, battle: bool) {
         let hits = HIT_LOSS.swap(0, Ordering::Relaxed) as f32 / 100.0;
         let orbs = ORB_GAIN.swap(0, Ordering::Relaxed) as f32 / 100.0;
         // (Form Boost, t955: KH2's time drain × 0.8 a copy, `0x1403A92C0`; the hits' loss isn't.)
-        *left = (*left - crate::drivegauge::drain(battle) * super::driveabilities::form_boost() - hits + orbs).clamp(0.0, *full);
+        // (t961: no time drain while one of KH1's cutscenes runs, as KH2's player step is held by an event.)
+        let held = if super::driveparty::scene() { 0.0 } else { 1.0 };
+        *left = (*left - crate::drivegauge::drain(battle) * super::driveabilities::form_boost() * held - hits + orbs).clamp(0.0, *full);
         if *left <= 0.0 && !d.revert {
             d.revert = true;
             log!(Forms, "{}: the form gauge is out", f.kind.name());
@@ -836,12 +853,18 @@ pub unsafe fn native_frame(kh2: &pose::Kh2, actor: usize, battle: bool, steps: u
     if !NATIVE.load(Ordering::Relaxed) {
         return;
     }
+    // (Row 21, t965: KH2's blur waits 30 frames into the change and fades over 20 after it.)
+    super::drivedim::frame(steps);
     let Ok(mut g) = DRIVE.try_lock() else { return };
     let d = g.get_or_insert_with(Drive::default);
     let knocked = REQUEST.load(Ordering::Relaxed) == 3 && REQUEST.swap(0, Ordering::Relaxed) == 3;
     if (d.form.is_some() || d.change.is_some()) && (knocked || hp(actor) <= 0) {
         native_revert(d, kh2, actor, "knocked out");
         return;
+    }
+    // (Row 11, t959: the partners KH2's form takes leave, and come back for a cutscene.)
+    if let Some(f) = d.form.as_ref() {
+        super::driveparty::frame(super::formown::form_id(f.kind));
     }
     match REQUEST.swap(0, Ordering::Relaxed) {
         1 if d.form.is_none() && d.change.is_none() => native_start(d, actor),
@@ -863,6 +886,13 @@ pub unsafe fn native_frame(kh2: &pose::Kh2, actor: usize, battle: bool, steps: u
             native_revert(d, kh2, actor, "a world left (KH2's refill)");
             return;
         }
+    }
+    // (Row 7, t961: the Coliseum's cup started in a form: back to Sora before the first round, the
+    // bars full, the partners back.)
+    if d.form.is_some() && super::driveparty::cup_start() {
+        super::drivegauge::refill("a Coliseum cup started in a form");
+        native_revert(d, kh2, actor, "the Coliseum's first round");
+        return;
     }
     if let Some(n) = d.change {
         let n = n + steps.max(1);
@@ -919,7 +949,7 @@ unsafe fn native_start(d: &mut Drive, actor: usize) {
     let before = mp(actor);
     // (Form Cost, t933: the Drive gauge's bars, KH2's pay `0x1403C2780`, no MP; or testing's MP.)
     if gauge_cost() {
-        if !super::drivegauge::pay(crate::drivegauge::cost(super::formown::form_id(kind))) {
+        if !super::drivegauge::pay(super::limitform::cost(super::formown::form_id(kind))) {
             log!(Forms, "Drive ({}): the Drive gauge is short", kind.name());
             return;
         }
@@ -936,12 +966,15 @@ unsafe fn native_start(d: &mut Drive, actor: usize) {
     d.change = Some(0);
     d.changing_to = Some(kind);
     CHANGING.store(true, Ordering::Relaxed);
+    // (Row 21, t964: KH2's dim through the change, on KH1's light and fog.)
+    super::drivedim::start();
     log!(Forms, "Drive: {} on KH1's own states (MP {before} -> {}), Sora's Drive motion on KH1's request of ours{}", kind.name(), mp(actor), if air { ", held in the air" } else { "" });
 }
 
 /// The swap: Valor's slots on his requests, its data for KH2's pick, its numbers, its arrival.
 unsafe fn native_arrive(d: &mut Drive, kh2: &pose::Kh2, actor: usize) {
     CHANGING.store(false, Ordering::Relaxed);
+    super::drivedim::end(true);
     let kind = d.changing_to.take().unwrap_or(Kind::Valor);
     let Some(f) = kind.data(kh2) else { return };
     // (Sora's abilities from KH1's lists, `combomods::abilities_now`; the form's by KH2's rule,
@@ -969,6 +1002,8 @@ unsafe fn native_arrive(d: &mut Drive, kh2: &pose::Kh2, actor: usize) {
     }
     CURRENT.store(kind.code(), Ordering::Relaxed);
     IN_FORM.store(true, Ordering::Relaxed);
+    // (Row 19, t963: KH1's limit offer off for the form, Drive > Limits in Forms KH2.)
+    super::formlimits::form_changed(true);
     if kind.two_blades() {
         super::valor::started();
     }
@@ -995,6 +1030,7 @@ fn growth_name(a: &Abilities, kind: Kind) -> &'static str {
     let level = match kind {
         Kind::Valor => a.high_jump,
         Kind::Wisdom => a.quick_run,
+        Kind::Limit => a.dodge_roll,
         Kind::Final => a.glide,
     };
     ["none", "LV1", "LV2", "LV3", "MAX"][(level as usize).min(4)]
@@ -1004,14 +1040,21 @@ fn growth_name(a: &Abilities, kind: Kind) -> &'static str {
 /// idle (or fall), the revert's light and sound.
 unsafe fn native_revert(d: &mut Drive, _kh2: &pose::Kh2, actor: usize, why: &str) {
     CHANGING.store(false, Ordering::Relaxed);
+    // (A change cut short: the dim back, t964; KH2's blur off, t965.)
+    super::drivedim::end(false);
     d.change = None;
     d.revert = false;
     d.changing_to = None;
     let Some(f) = d.form.take() else {
         NATIVE.store(false, Ordering::Relaxed);
+        super::driveparty::back_all(why);
         return;
     };
+    // (Row 11, t959: every partner the form took back, however it ends.)
+    super::driveparty::back_all(why);
+    super::driveparty::forget_room();
     IN_FORM.store(false, Ordering::Relaxed);
+    super::formlimits::form_changed(false);
     CURRENT.store(0, Ordering::Relaxed);
     NATIVE.store(false, Ordering::Relaxed);
     if f.kind.two_blades() {
@@ -1057,7 +1100,7 @@ pub fn own_motion(motion: u16) -> bool {
 pub fn effect(motion: u16, n: i16) {
     if in_wisdom() {
         super::formmagic::effect(n);
-    } else if in_valor() || in_final() {
+    } else if in_valor() || in_final() || in_limit() {
         super::kh2fx::form_event(motion, n);
     }
 }

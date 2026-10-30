@@ -146,15 +146,21 @@ unsafe fn weapon_row(base: usize, id: u8) -> Option<usize> {
     super::crash::readable(at + WEAPON_ROW_SIZE - 1).then_some(at)
 }
 
-/// The id stored for Valor (`VALOR_OFF`), if it is still a Keyblade Valor may take; else the
-/// candidate with the most Strength (the lowest id on a tie); `None`: Valor can't be entered.
-pub unsafe fn valor_keyblade(base: usize) -> Option<u8> {
-    let cands = valor_candidates(base);
+/// The Keyblade Valor's slot holds a copy of (t966): the id stored (`VALOR_OFF`) while it is a
+/// Keyblade Sora owns with a copy no member has equipped. KH2 moves a slotted Keyblade out of its
+/// stock (`0x1403C3F00` / `0x1403C49C0` around the form record's `+0` write, `0x1402FC7C0`);
+/// KH1 counts the copies equipped when it reads (`0x1402E8770`), so `valorslot` takes this one off
+/// there (t967).
+pub unsafe fn valor_holds(base: usize) -> Option<u8> {
     let stored = save(base).map(|s| rd::<u8>(s + VALOR_OFF)).unwrap_or(0);
-    if cands.contains(&stored) {
-        return Some(stored);
-    }
-    cands.into_iter().max_by_key(|&id| (weapon_strength(base, id).unwrap_or(0), std::cmp::Reverse(id)))
+    (stored != 0 && is_keyblade(base, stored) && free(base, stored) > 0).then_some(stored)
+}
+
+/// The Keyblade Valor uses (t966, round 11 answer 1 (a)): the slot's; with the slot empty, Sora's
+/// own (KH2's weapon resolver `0x1403DFEB0`, case 0x23B: the form's weapon, else `0x140405190(0)`,
+/// Sora's). `None` only when Sora holds no Keyblade (a dream weapon or the wooden sword).
+pub unsafe fn valor_keyblade(base: usize) -> Option<u8> {
+    valor_holds(base).or_else(|| sora_weapon(base).filter(|&w| is_keyblade(base, w)))
 }
 
 /// KH1's text for a handle (`0x14038B0B0`), 0 for none.

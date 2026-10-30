@@ -29,7 +29,9 @@ use std::sync::OnceLock;
 /// The forms (command record, word index, name).
 /// (In `form::Kind::ALL`'s order, KH2's: Valor, then Wisdom. Wisdom kept its record and word; Valor
 /// takes the next free ones, record 0x7F and word 0x1FD.)
-pub const FORMS: [(u8, u16, &str); 2] = [(0x7F, 0x1FD, "Valor Form"), (0x7E, 0x1FE, "Wisdom Form")];
+/// (Limit, t969: the next free record 0x80 and word 0x1FC, both empty in the player's `btltbl.bin`,
+/// Checked (files).)
+pub const FORMS: [(u8, u16, &str); 3] = [(0x7F, 0x1FD, "Valor Form"), (0x7E, 0x1FE, "Wisdom Form"), (0x80, 0x1FC, "Limit Form")];
 /// The record argument of form `k` (KH1's spells are 0..6, Reflect 7).
 pub const FORM_ARG: u8 = 0x10;
 /// Summon's command (its record opens the summon list) and the summon-is-out one.
@@ -163,7 +165,8 @@ unsafe fn none_owned() -> bool {
 
 /// Whether form `k` can be chosen now (`form`: its MP, or Revert in the form; owned).
 unsafe fn usable(actor: usize, k: usize) -> bool {
-    owned(k) && super::form::Kind::ALL.get(k).is_some_and(|&kind| super::form::usable(actor, kind))
+    // (Drive > Party Required, t958: KH2's partners for the form, `driveparty`.)
+    owned(k) && super::form::Kind::ALL.get(k).is_some_and(|&kind| super::form::usable(actor, kind) && (super::form::in_form() || super::driveparty::ok(super::formown::form_id(kind))))
 }
 
 /// After KH1's battle-menu fill (and Reflect's entry): Drive's row 4 (Drive on page 1) and its
@@ -180,7 +183,9 @@ pub unsafe fn fill(actor: usize, _flags: usize) {
     // valor form magic command menu should be unselectable"). KH1 keeps the same bit (1) set
     // when Sora has no spell, so the list doesn't open; Drive's row 4 is drawn from the magic
     // list's own bit (`drive_row4`), page 2's from the forms (`cmdmenu`), so Revert stays usable.
-    if super::form::in_valor() {
+    // (Limit Form too, t969: KH2 puts its Limit list in Magic's place, `0x1403F29E0`; until that list
+    // is ours, Magic is blocked as in Valor.)
+    if super::form::in_valor() || super::form::in_limit() {
         let top = base + MENU_RVA;
         if rd::<u8>(top + 0x14 + 1) == 2 {
             for off in [4usize, 8] {

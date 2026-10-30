@@ -222,8 +222,7 @@ impl Drop for CostPatch {
     }
 }
 
-/// Command types that don't move Sora (`0x1402A1470`): the party's (`+0x98`'s), the menu's.
-const NOT_SORAS: [u8; 21] = [0x1D, 0x1E, 0x46, 0x51, 0x54, 0x64, 0x4B, 0x4D, 0x4E, 0x52, 0x57, 0x58, 0x59, 0x5A, 0x5B, 0x5E, 0x5F, 0x60, 0x4F, 0x5C, 0x5D];
+// (The command types that don't move Sora, `NOT_SORAS`, are `crate::formcmds` from t962.)
 
 /// Phase 8: KH1's own commands stay KH1's. KH1's command step (`0x1402A5380`, from its think
 /// step `0x1402A4090`) runs a chosen command: Attack (type 1) becomes KH2's attack (`exec`);
@@ -576,13 +575,23 @@ unsafe fn command_step(actor: usize, dir: usize) {
         cmd_log(|| format!("command {kind:#x} ({full:08x}) refused: Reflect can't be cast here"));
         return;
     }
+    // KH1's limits in a form with Drive > Limits in Forms on KH2 (t963, row 19): refused as KH1
+    // refuses an unusable command (KH1's offer is off for the form, `formlimits`; this is for one
+    // offered on the frame the form started).
+    if actor == sora && super::formlimits::refused(kind) {
+        let sound: unsafe extern "system" fn(i32) = std::mem::transmute(base + SOUND_RVA);
+        sound(4);
+        cmd_log(|| format!("command {kind:#x} ({full:08x}) refused: KH1's limits aren't used in a Drive Form (Limits in Forms KH2)"));
+        return;
+    }
     // Valor Form: none of KH1's specials (Sonic Blade, Strike Raid, ...: the user, "dont let
-    // sora use triangle moves (sonic blade, strike raid etc) in valor form"). Every command of
-    // Sora's own that KH1 runs as a move (`0x1402A1470`) other than Attack, magic (refused in
-    // Valor by the menu, `spell_not_yet`) and an item. (Type 99 too, which s222 let through: the
-    // command step runs it as attack row 0x3E, `0x1402A4760`; the user, s229: "valor form can
-    // still use strike raid, ragnarok".)
-    if actor == sora && super::form::two_blades() && !matches!(kind, 0 | 1 | 2 | ITEM_COMMAND_TYPE) && !NOT_SORAS.contains(&kind) {
+    // sora use triangle moves (sonic blade, strike raid etc) in valor form"): KH1's moves (its
+    // limits, Counterattack 99, the summons, ...) other than Attack, magic (refused in Valor by the
+    // menu, `spell_not_yet`) and an item. (Type 99 too, which s222 let through: the command step
+    // runs it as attack row 0x3E, `0x1402A4760`; the user, s229: "valor form can still use strike
+    // raid, ragnarok".) Talk, Examine, a chest's Open, save points and every command an object
+    // offers are let through (t962, row 18: answer 1 (a), KH2's DisableForm 0; `formcmds`).
+    if actor == sora && super::form::two_blades() && !crate::formcmds::valor_allows(kind) {
         static N: AtomicU32 = AtomicU32::new(0);
         if super::log_on(super::LogCat::Combat) && N.fetch_add(1, Ordering::Relaxed) < 30 {
             log!(Combat, "command {kind:#x} ({full:08x}) refused: not in Valor Form");

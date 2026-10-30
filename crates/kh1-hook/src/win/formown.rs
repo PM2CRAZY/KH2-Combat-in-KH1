@@ -68,6 +68,7 @@ pub fn form_id(kind: Kind) -> u8 {
     match kind {
         Kind::Valor => formlevel::form::VALOR,
         Kind::Wisdom => formlevel::form::WISDOM,
+        Kind::Limit => formlevel::form::LIMIT,
         Kind::Final => formlevel::form::FINAL,
     }
 }

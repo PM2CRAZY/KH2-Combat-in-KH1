@@ -188,7 +188,7 @@ pub fn start() {
         // its voices; its effect elements' sounds come with the forms' below (the user: "make
         // sure also that valor form has its proper sound FX").
         // (And Final Form's.)
-        for v in [kh2.valor.as_ref(), kh2.final_form.as_ref()].into_iter().flatten() {
+        for v in [kh2.valor.as_ref(), kh2.final_form.as_ref(), kh2.limit_form.as_ref()].into_iter().flatten() {
             events.extend(v.character.moveset.clips.values().flat_map(|c| c.events.iter().map(|e| e.kind)).filter(|k| matches!(k, character_core::EventKind::Sound(_) | character_core::EventKind::Voice(_))));
         }
         // Reflect (the user: its sounds): its cast voices (MAGC, played by KH2's cast code, not a

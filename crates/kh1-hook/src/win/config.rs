@@ -272,6 +272,13 @@ enum Row {
     RecoveryBattle,
     /// Progression > Drive Recovery (Off | On, `driveitems::sources`, t950).
     RecoverySources,
+    /// Drive > Party Required (Off | KH2, `driveparty::required`, t958).
+    PartyRequired,
+    /// Drive > Limit > Limits in Forms (KH1 | KH2, `formlimits::kh2`, t963; in the Limit list
+    /// from t972).
+    FormLimits,
+    /// Drive > Limit > Cost (KH2 | 3 Bars, `limitform::three_bars`, t972).
+    LimitCost,
 }
 
 /// A row of one of our lists: a setting (label, left value, right value, help, what it switches),
@@ -339,8 +346,11 @@ enum List {
     /// Drive: options for the Drive Forms (the owner, the main-branch port, t927: "same for drives";
     /// "make it a toggle in drive config menu").
     Drive,
+    /// Drive > Limit: Limit Form's settings (the owner, the main-branch port's round 12: "all of
+    /// limits settings will be under a sub menu called limit in the drive submenu"; t972).
+    Limit,
 }
-const LISTS: [List; 13] = [List::Top, List::Camera, List::Combat, List::Magic, List::Movement, List::Misc, List::MagicAnim, List::Tweaks, List::QoL, List::Cosmetics, List::CommandMenu, List::Progression, List::Drive];
+const LISTS: [List; 14] = [List::Top, List::Camera, List::Combat, List::Magic, List::Movement, List::Misc, List::MagicAnim, List::Tweaks, List::QoL, List::Cosmetics, List::CommandMenu, List::Progression, List::Drive, List::Limit];
 
 impl List {
     fn index(self) -> usize {
@@ -353,6 +363,7 @@ impl List {
             List::Magic => Some(List::Combat),
             List::MagicAnim => Some(List::Magic),
             List::Tweaks => Some(List::Combat),
+            List::Limit => Some(List::Drive),
             _ => Some(List::Top),
         }
     }
@@ -400,6 +411,7 @@ impl List {
             List::CommandMenu => &COMMAND_MENU,
             List::Progression => &PROGRESSION,
             List::Drive => &DRIVE,
+            List::Limit => &LIMIT,
         }
     }
 }
@@ -448,11 +460,22 @@ const PROGRESSION: [Item; 3] = [
 // (Gauge Refill: round 2 answer 4: "just have it be off or kh2", KH2 by default; t934.)
 // (Recovery in Battle: round 5 answer 2 (b): KH2's menu-only rule, battle use as a toggle; off by
 // default; t949.)
-const DRIVE: [Item; 4] = [
+// (Party Required: round 7, "make a toggle in drives for parties being required to go into drive
+// forms"; KH2 by default; t958.)
+// (Limits in Forms: round 9 answer 2 (b), KH1's limits in forms as a toggle; KH2 by default; t963.)
+// (Limit: the owner's sub menu for Limit Form's settings, t972; Limits in Forms moved into it.)
+const DRIVE: [Item; 6] = [
     Item::Set([0x7F00_0246, 0x7F00_0247, 0x7F00_0248, 0x7F00_0249], Row::FormCost),
     Item::Set([0x7F00_024A, 0x7F00_011D, 0x7F00_0003, 0x7F00_024B], Row::GaugeRefill),
     Item::Set([0x7F00_0244, 0x7F00_011D, 0x7F00_011E, 0x7F00_0245], Row::DriveMpRefill),
     Item::Set([0x7F00_024E, 0x7F00_011D, 0x7F00_011E, 0x7F00_024F], Row::RecoveryBattle),
+    Item::Set([0x7F00_0252, 0x7F00_011D, 0x7F00_0003, 0x7F00_0253], Row::PartyRequired),
+    Item::Open(0x7F00_0256, 0x7F00_0257, List::Limit),
+];
+// (Cost: round 12 answer 2 (c), KH2's 4 bars by default, the owner's 3 behind this row.)
+const LIMIT: [Item; 2] = [
+    Item::Set([0x7F00_0258, 0x7F00_0003, 0x7F00_0259, 0x7F00_025A], Row::LimitCost),
+    Item::Set([0x7F00_0254, 0x7F00_0002, 0x7F00_0003, 0x7F00_0255], Row::FormLimits),
 ];
 // (QoL: the user, t704: "make a qol (Quality of life) section in the config menu, put gummi skip in
 // there".)
@@ -576,7 +599,7 @@ const BUTTON_HELP: u32 = 0x7F00_0202;
 /// Misc's help, and the same without the debug menu (its row isn't there without the debug tools).
 const MISC_HELP: u32 = 0x7F00_020C;
 const MISC_HELP_NO_DEBUG: &str = "Battle quotes.";
-const STRINGS: [(u32, &str); 159] = [
+const STRINGS: [(u32, &str); 168] = [
     (0x7F00_0201, "KH1 in KH2"),
     (0x7F00_0202, "Choose KH1's or KH2's camera, combat, movement and more."),
     (0x7F00_0203, "Camera"),
@@ -661,6 +684,15 @@ const STRINGS: [(u32, &str); 159] = [
     (0x7F00_0245, "On: entering a Drive Form refills Sora's MP as well as his HP,\nas in KH2. Off: HP only."),
     (0x7F00_023E, "Progression"),
     (0x7F00_023F, "The main branch's progression rules, each on or off."),
+    (0x7F00_0252, "Party Required"),
+    (0x7F00_0254, "Limits in Forms"),
+    (0x7F00_0256, "Limit"),
+    (0x7F00_0257, "Limit Form's settings: its cost, and KH1's limits in a form."),
+    (0x7F00_0258, "Cost"),
+    (0x7F00_0259, "3 Bars"),
+    (0x7F00_025A, "KH2: Limit Form costs 4 Drive bars, as in KH2. 3 Bars: the cost from the\nmain branch. (Form Cost on the Drive gauge only.)"),
+    (0x7F00_0255, "KH2: no KH1 limit (Sonic Blade, Ars Arcanum, ...) in a Drive Form, as in\nKH2. KH1: KH1 offers them as it does (Valor still refuses them)."),
+    (0x7F00_0253, "KH2: a Drive Form needs its partners, as in KH2 (Valor Goofy, Wisdom\nDonald, Master and Final both). Off: whoever is in the party."),
     (0x7F00_0250, "Drive Recovery"),
     (0x7F00_0251, "On: Drive Recovery and High Drive Recovery are sold in the item\nshops and dropped once a Drive Form is open, and found in 17 chests.\nOff: nowhere."),
     (0x7F00_024E, "Recovery in Battle"),
@@ -774,6 +806,9 @@ fn value(what: Row) -> bool {
         Row::GaugeGrowth => super::drivegauge::growth(),
         Row::RecoveryBattle => super::driveitems::battle(),
         Row::RecoverySources => super::driveitems::sources(),
+        Row::PartyRequired => super::driveparty::required(),
+        Row::FormLimits => super::formlimits::kh2(),
+        Row::LimitCost => super::limitform::three_bars(),
     }
 }
 
@@ -823,6 +858,9 @@ fn set(what: Row, v: bool) {
         Row::GaugeGrowth => super::drivegauge::set_growth(v),
         Row::RecoveryBattle => super::driveitems::set_battle(v),
         Row::RecoverySources => super::driveitems::set_sources(v),
+        Row::PartyRequired => super::driveparty::set_required(v),
+        Row::FormLimits => super::formlimits::set_kh2(v),
+        Row::LimitCost => super::limitform::set_three_bars(v),
     }
 }
 

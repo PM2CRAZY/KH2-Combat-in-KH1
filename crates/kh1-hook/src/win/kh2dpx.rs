@@ -479,6 +479,8 @@ pub enum Pkg {
     Weapon,
     Valor,
     Final,
+    /// Limit Form's (`obj/P_EX100_KH1F.a.us`, t971).
+    Limit,
     /// One of the spell packages (`kh2fx::WISDOM`'s numbering): Reflect's levels 1..3, Wisdom's archive 4
     /// (`obj/P_EX100_MAGF.a.us`), then Fire, Blizzard, Thunder and Cure by level (Wisdom's and
     /// base Sora's KH2 magic, `formmagic`).
@@ -713,14 +715,13 @@ fn desired() -> Vec<(Pkg, String)> {
         unsafe { super::form::possible(super::takeover::sora_actor()) }
     };
     for f in &forms {
-        v.push((
-            match f {
-                super::form::Kind::Valor => Pkg::Valor,
-                super::form::Kind::Final => Pkg::Final,
-                super::form::Kind::Wisdom => Pkg::Spell(super::kh2fx::WISDOM),
-            },
-            String::new(),
-        ));
+        let pkg = match f {
+            super::form::Kind::Valor => Pkg::Valor,
+            super::form::Kind::Final => Pkg::Final,
+            super::form::Kind::Wisdom => Pkg::Spell(super::kh2fx::WISDOM),
+            super::form::Kind::Limit => Pkg::Limit,
+        };
+        v.push((pkg, String::new()));
     }
     // (The spell packages play through KH1 on Steam only.)
     if super::addr::Build::current() == super::addr::Build::Steam {
@@ -915,6 +916,7 @@ fn source(kh2: &'static super::pose::Kh2, pkg: Pkg, sig: &str) -> Option<Source>
     let effect_point = match pkg {
         Pkg::Valor => kh2.valor.as_ref().and_then(|f| point(&f.rig)),
         Pkg::Final => kh2.final_form.as_ref().and_then(|f| point(&f.rig)),
+        Pkg::Limit => kh2.limit_form.as_ref().and_then(|f| point(&f.rig)),
         Pkg::Spell(l) if l == super::kh2fx::WISDOM => kh2.wisdom.as_ref().and_then(|f| point(&f.rig)),
         _ => point(&kh2.rig),
     };
@@ -933,8 +935,12 @@ fn source(kh2: &'static super::pose::Kh2, pkg: Pkg, sig: &str) -> Option<Source>
             s(pkg, "p_ex100", "obj/P_EX100.a.us", Some("p_ex"), None, None, sets, false, anchor, 0)
         }
         Pkg::Weapon => s(pkg, "w_ex010", "obj/W_EX010.a.us", None, None, Some(WEAPON_ON), Vec::new(), true, weapon_anchor, ENDS_WITH_MOTION),
-        Pkg::Valor | Pkg::Final => {
-            let (label, path, f) = if pkg == Pkg::Valor { ("p_ex100_btlf", "obj/P_EX100_BTLF.a.us", kh2.valor.as_ref()?) } else { ("p_ex100_ultf", "obj/P_EX100_ULTF.a.us", kh2.final_form.as_ref()?) };
+        Pkg::Valor | Pkg::Final | Pkg::Limit => {
+            let (label, path, f) = match pkg {
+                Pkg::Valor => ("p_ex100_btlf", "obj/P_EX100_BTLF.a.us", kh2.valor.as_ref()?),
+                Pkg::Limit => ("p_ex100_kh1f", "obj/P_EX100_KH1F.a.us", kh2.limit_form.as_ref()?),
+                _ => ("p_ex100_ultf", "obj/P_EX100_ULTF.a.us", kh2.final_form.as_ref()?),
+            };
             let sets = motion_sets(&f.character).into_iter().map(|x| x.1).collect();
             s(pkg, label, path, Some("p_ex"), f.archive.clone(), None, sets, true, form_anchor, 0)
         }
@@ -2076,8 +2082,8 @@ fn kh1_point(pkg: Pkg, mut l: Layer) -> Layer {
 
 /// A frame trigger 1 of Valor's or Final's motion (`kh2fx::form_event`): its element from that
 /// form's own package (`play`): true if KH1 plays it.
-pub fn form_event(final_form: bool, motion: u16, el: i16) -> bool {
-    play(if final_form { Pkg::Final } else { Pkg::Valor }, motion, el)
+pub fn form_event(pkg: Pkg, motion: u16, el: i16) -> bool {
+    play(pkg, motion, el)
 }
 
 /// The Keyblade's vanish flash (`kh2fx::weapon_vanish`, as KH2 puts the Keyblade away, before

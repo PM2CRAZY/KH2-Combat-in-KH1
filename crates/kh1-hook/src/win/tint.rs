@@ -69,12 +69,19 @@ const SLEEVES: [[f32; 4]; 2] = [[0.035, 0.415, 0.236, 0.85], [0.236, 0.415, 0.21
 const BELT: [f32; 4] = [0.035, 0.07, 0.57, 0.14];
 const HOOD_LINING: [f32; 4] = [0.755, 0.72, 1.0, 1.0];
 
-/// A form's look (`form`): Wisdom's blue, Valor's red.
+/// A form's look (`form`): Wisdom's blue, Valor's red, Limit's black (t974).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Look {
     Wisdom,
     Valor,
+    /// Limit Form (the owner, round 12 answer 3 (b), main's s293 / s296: "black jumpsuit and
+    /// jacket, black hood lining, yellow belt, black shoes"; KH2's own Limit Form is KH1 Sora's
+    /// outfit, so this is the owner's look, not KH2's).
+    Limit,
 }
+
+/// How dark a blackened texel is: its brightness scaled to this (its shading kept).
+const BLACK_V: f32 = 0.2;
 
 /// One recolouring.
 #[derive(Clone, Copy)]
@@ -85,6 +92,10 @@ enum Op {
     /// Light, unsaturated texels (white, cream, grey) given hue `to` at saturation `sat`, their
     /// brightness kept; within `rect`.
     Colourize { to: f32, sat: f32, rect: [f32; 4] },
+    /// Texels near hue `(from, width)` (saturated, at least `min_v` bright), or with `None` the
+    /// light unsaturated ones (as `Colourize` takes), made near black: no saturation, their
+    /// brightness × `BLACK_V` (t974, Limit's look); within `rect` if given.
+    Black { hue: Option<(f32, f32)>, min_v: f32, rect: Option<[f32; 4]> },
 }
 
 /// What each look does to each slot (`SLOTS` order); none: that slot isn't swapped.
@@ -110,6 +121,19 @@ fn ops(look: Look, k: usize) -> Vec<Op> {
             v
         }
         (Look::Valor, 2) => vec![shoes(RED)],
+        // Limit (the owner's black outfit): the collar's and the jumpsuit's reds black; the
+        // jacket's sleeves (the light strip, `SLEEVES`) black; the hood's lining black; the belt's
+        // blue yellow; the shoes' yellow black. Assumption: the jacket outside the sleeves' strip
+        // keeps its colours (no mask of the jacket's other islands here).
+        (Look::Limit, 0) => vec![Op::Black { hue: Some((RED, RED_WIDTH)), min_v: 0.0, rect: None }],
+        (Look::Limit, 1) => {
+            let mut v = vec![Op::Black { hue: Some((RED, RED_WIDTH)), min_v: 0.0, rect: None }];
+            v.extend(SLEEVES.map(|rect| Op::Black { hue: None, min_v: 0.0, rect: Some(rect) }));
+            v.push(Op::Black { hue: Some((BLUE_HUE, BLUE_WIDTH)), min_v: 0.0, rect: Some(HOOD_LINING) });
+            v.push(Op::Shift { from: BLUE_HUE, width: BLUE_WIDTH, to: YELLOW_HUE, min_v: 0.0, rect: Some(BELT) });
+            v
+        }
+        (Look::Limit, 2) => vec![Op::Black { hue: Some((YELLOW_HUE, YELLOW_WIDTH)), min_v: YELLOW_MIN_V, rect: None }],
         _ => Vec::new(),
     }
 }
@@ -166,6 +190,7 @@ fn look_name(look: Look) -> &'static str {
     match look {
         Look::Wisdom => "Wisdom",
         Look::Valor => "Valor",
+        Look::Limit => "Limit",
     }
 }
 
@@ -360,6 +385,7 @@ fn apply(p: &mut Pixels, op: Op) -> usize {
     let rect = match op {
         Op::Shift { rect, .. } => rect,
         Op::Colourize { rect, .. } => Some(rect),
+        Op::Black { rect, .. } => rect,
     };
     let [u0, v0, u1, v1] = rect.unwrap_or([0.0, 0.0, 1.0, 1.0]);
     let (x0, x1) = ((u0 * w as f32) as usize, ((u1 * w as f32).ceil() as usize).min(w));
@@ -383,6 +409,16 @@ fn apply(p: &mut Pixels, op: Op) -> usize {
                     let k = ((0.3 - s) / 0.1).clamp(0.0, 1.0) * ((v - 0.3) / 0.15).clamp(0.0, 1.0);
                     // (A little darker: the cream is near white, and a pale tint read as washed out.)
                     (k, rgb(to, sat, v * 0.85))
+                }
+                Op::Black { hue: Some((from, width)), min_v, .. } => {
+                    let dh = (hue - from).rem_euclid(360.0);
+                    let d = dh.min(360.0 - dh);
+                    let k = ((width - d) / RED_SOFT).clamp(0.0, 1.0) * ((s - SAT_FROM) / SAT_SOFT).clamp(0.0, 1.0) * if min_v > 0.0 { ((v - min_v) / 0.08 + 0.5).clamp(0.0, 1.0) } else { 1.0 };
+                    (k, rgb(0.0, 0.0, v * BLACK_V))
+                }
+                Op::Black { hue: None, .. } => {
+                    let k = ((0.3 - s) / 0.1).clamp(0.0, 1.0) * ((v - 0.3) / 0.15).clamp(0.0, 1.0);
+                    (k, rgb(0.0, 0.0, v * BLACK_V))
                 }
             };
             if k <= 0.0 {
@@ -542,6 +578,7 @@ unsafe fn ours_for(s: &mut Swap, k: usize, src: usize, look: Look) -> Option<u64
     let label: &[u8] = match look {
         Look::Wisdom => b"kh2combat_wisdom_blue\0",
         Look::Valor => b"kh2combat_valor_red\0",
+        Look::Limit => b"kh2combat_limit_black\0",
     };
     let t = create(r, &desc, p.bgra.as_ptr(), label.as_ptr(), 0);
     if t < 0x10000 {
