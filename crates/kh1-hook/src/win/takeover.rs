@@ -977,6 +977,15 @@ static LAST_WHY: Mutex<String> = Mutex::new(String::new());
 const WORLD_RVA: Rva = Rva(0x2340E5C);
 const ROOM_RVA: Rva = Rva(0x2340EC4);
 
+/// KH1's current world (`WORLD_RVA`), 0 before the game's base is known.
+pub fn current_world() -> u32 {
+    let base = BASE.load(Ordering::Relaxed);
+    if base == 0 {
+        return 0;
+    }
+    unsafe { rd::<u32>(base + WORLD_RVA) }
+}
+
 /// The room Sora is in, when he came in, and whether its first seconds were logged.
 struct RoomSeen {
     world: u32,

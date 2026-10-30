@@ -145,9 +145,19 @@ drive = on\r\n\
 ;   Guard Armor, Opposite Armor, the Pegasus Cup by the Dive's choice; Master after Anti-Sora,\r\n\
 ;   Final after Riku 2); off = Valor and Wisdom from the start (Config: Progression > Story Unlocks)\r\n\
 story_unlocks = off\r\n\
+; gauge_growth: on = the Drive gauge starts at 3 bars and grows one for each of the owner's six fights\r\n\
+;   (Sabor, Riku 1, Chernabog, Sephiroth, Kurt Zisa, the Unknown); off = 9 bars (Config: Progression >\r\n\
+;   Drive Gauge Growth)\r\n\
+gauge_growth = off\r\n\
 ; drive_mp_refill: on = entering a Drive Form refills MP as well as HP, as KH2's does; off = HP only\r\n\
 ;   (Config: Drive > MP Refill)\r\n\
 drive_mp_refill = off\r\n\
+; drive_cost: gauge = a Drive Form costs KH2's Drive gauge bars and runs on KH2's form gauge; mp = 3 MP,\r\n\
+;   then MP drained while in the form (Config: Drive > Form Cost)\r\n\
+drive_cost = gauge\r\n\
+; drive_refill: kh2 = leaving a world in a Drive Form refills the Drive gauge, HP and MP and reverts (KH2's\r\n\
+;   world map); off = no refill (Config: Drive > Gauge Refill)\r\n\
+drive_refill = kh2\r\n\
 ; valor_left_blade: on = in Valor Form, its Keyblade in Sora's left hand (KH1's own model of it);\r\n\
 ; off = nothing of it is installed (turn it off if it misbehaves)\r\n\
 valor_left_blade = on\r\n\
@@ -522,9 +532,18 @@ pub struct Settings {
     /// The Drive Forms open by the story, the owner's table (`story_unlocks = on`; off by default;
     /// Config: Progression > Story Unlocks, t926; `formown`, `crate::storyforms`).
     pub story_unlocks: bool,
+    /// The Drive gauge's maximum by the owner's six fights (`gauge_growth = on`; off: 9); Config:
+    /// Progression > Drive Gauge Growth, t935; `drivegauge::growth`.
+    pub gauge_growth: bool,
     /// Entering a Drive Form refills MP too (`drive_mp_refill = on`; off by default; Config: Drive >
     /// MP Refill, t927; `form::mp_refill`).
     pub drive_mp_refill: bool,
+    /// A Drive Form costs the Drive gauge (`drive_cost = gauge`, the default) or MP (`mp`); Config:
+    /// Drive > Form Cost, t933; `form::gauge_cost`.
+    pub drive_cost_gauge: bool,
+    /// KH2's refill on leaving a world in a form (`drive_refill = kh2`, the default; `off`); Config:
+    /// Drive > Gauge Refill, t934; `form::gauge_refill`.
+    pub drive_refill: bool,
     /// Valor's Keyblade drawn in his left hand (`valor_left_blade = on`, `leftblade`).
     pub valor_left_blade: bool,
     /// KH2's (true) or KH1's moves per `styles::Kind`, in `Kind::EVERY`'s order.
@@ -796,7 +815,10 @@ fn load(first: bool) -> Option<Settings> {
         physics_rule: crate::kh1phys::Rule::parse(setting(&text, "physics").as_deref()),
         drive: on(&text, "drive", "on", true),
         story_unlocks: on(&text, "story_unlocks", "on", false),
+        gauge_growth: on(&text, "gauge_growth", "on", false),
         drive_mp_refill: on(&text, "drive_mp_refill", "on", false),
+        drive_cost_gauge: on(&text, "drive_cost", "gauge", true),
+        drive_refill: on(&text, "drive_refill", "kh2", true),
         valor_left_blade: on(&text, "valor_left_blade", "on", true),
         styles: {
             // (The Magic / Aerial Magic rows before the per-spell rows, m19: the new rows' defaults

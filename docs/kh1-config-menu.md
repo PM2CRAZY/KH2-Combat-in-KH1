@@ -550,7 +550,8 @@ progression, same for drives". The top list is now Camera, Combat, Movement, Com
 Progression, QoL, Cosmetics, Misc (`List::Drive`, `List::Progression`, parent the top).
 
 - Drive > MP Refill (Off | On, ini `drive_mp_refill`, off): KH2's MP refill on entering a form (`form::mp_refill`).
-  The cost row (MP or Drive gauge) joins it with the gauge.
+  Drive > Form Cost (Drive Gauge | MP, ini `drive_cost`, t933) and Drive > Gauge Refill (Off | KH2, ini
+  `drive_refill`, t934) after it; Progression > Drive Gauge Growth (Off | On, ini `gauge_growth`, t935).
 - Progression > Story Unlocks (Off | On, ini `story_unlocks`, off): the owner's Drive Form table from the
   main branch (`formown`, `crate::storyforms`). A "Balance Changes" row joins this list with the first
   balance rule ported (the owner's answer (a)).

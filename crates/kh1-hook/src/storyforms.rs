@@ -35,6 +35,22 @@ pub const DIVE_CHOICE: usize = 0x48C;
 /// The save bytes read, from `PROGRESS` on (the furthest is the journal's 0x9F byte).
 pub const SPAN_END: usize = JOURNAL + 0x20;
 
+/// The six fights of the owner's Drive gauge growth (main s325, s326: "Let's have the drive gauge start
+/// at 3. Have the drive gauge level up at these points: ... Sabor ... Riku I ... (Chernabog) ...
+/// Sephiroth ... Kurt Zisa ... Unknown"), behind Progression > Drive Gauge Growth (t935). Main's flags
+/// (Assumption on testing): Deep Jungle's story byte `+0x1505` >= 0x42 (Sabor), Hollow Bastion's
+/// `+0x150E` >= 0x32 (Riku 1), End of the World's `+0x150F` >= 0x33 (Chernabog, testing's
+/// `growth::CHERNABOG` too), journal entry 0xA5 (Sephiroth), Agrabah's `+0x1508` >= 0x96 (Kurt Zisa),
+/// journal entry 0xA9 with the Unknown's prize 0x3C owned (`+0x499 + 0x3C`).
+pub fn gauge_fights(save: &[u8]) -> u8 {
+    if save.len() < SPAN_END {
+        return 0;
+    }
+    let journal = |e: u8| save[JOURNAL + (e >> 3) as usize] & (0x80 >> (e & 7)) != 0;
+    let p = |w: usize| save[PROGRESS + w];
+    [p(1) >= 0x42, p(HOLLOW_BASTION) >= 0x32, p(11) >= 0x33, journal(0xA5), p(4) >= 0x96, journal(0xA9) && save[0x499 + 0x3C] >= 1].into_iter().filter(|b| *b).count() as u8
+}
+
 /// The fights the table reads.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Flags {
@@ -147,6 +163,20 @@ mod tests {
         let f = Flags::read(&s).unwrap();
         assert!(f.opposite_armor);
         assert_eq!(f.forms(), owned::bit(form::LIMIT));
+    }
+
+    #[test]
+    fn gauge_fights_count() {
+        let mut s = save();
+        assert_eq!(gauge_fights(&s), 0);
+        s[PROGRESS + 1] = 0x42;
+        s[PROGRESS + 11] = 0x33;
+        s[JOURNAL + (0xA5 >> 3)] |= 0x80 >> (0xA5 & 7);
+        assert_eq!(gauge_fights(&s), 3);
+        s[JOURNAL + (0xA9 >> 3)] |= 0x80 >> (0xA9 & 7);
+        assert_eq!(gauge_fights(&s), 3);
+        s[0x499 + 0x3C] = 1;
+        assert_eq!(gauge_fights(&s), 4);
     }
 
     #[test]

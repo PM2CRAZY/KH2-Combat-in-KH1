@@ -616,6 +616,11 @@ unsafe extern "system" fn hit(attack: usize, target: usize) -> usize {
     if r > 0x10000 {
         super::formexp::hit(owner, target, r);
     }
+    // (KH2's Drive gauge: a hit of Sora's on an enemy adds its drive value, or drains the form's
+    // gauge in a form, `drivegauge::hit`, t932.)
+    if r > 0x10000 && owner != 0 && owner == sora() {
+        super::drivegauge::hit(attack, target);
+    }
     // (t338) Which hit effect KH1's contact will start for this hit (any attack on anyone but Sora).
     // (Debug only: the trace's and log's hit-effect notes, `debug_on`.)
     if super::debug_on() && attack > 0x10000 && target > 0x10000 && target != sora() {

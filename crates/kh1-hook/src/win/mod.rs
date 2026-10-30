@@ -16,6 +16,7 @@ mod cutscenelog;
 mod debugfont;
 mod debugmenu;
 mod drive;
+mod drivegauge;
 mod equipmenu;
 mod fapanel;
 mod feet;

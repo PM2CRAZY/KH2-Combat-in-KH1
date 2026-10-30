@@ -262,6 +262,12 @@ enum Row {
     StoryUnlocks,
     /// Drive > MP Refill (Off | On, `form::mp_refill`, t927).
     DriveMpRefill,
+    /// Drive > Form Cost (MP | Drive Gauge, `form::gauge_cost`, t933).
+    FormCost,
+    /// Drive > Gauge Refill (Off | KH2, `form::gauge_refill`, t934).
+    GaugeRefill,
+    /// Progression > Drive Gauge Growth (Off | On, `drivegauge::growth`, t935).
+    GaugeGrowth,
 }
 
 /// A row of one of our lists: a setting (label, left value, right value, help, what it switches),
@@ -425,10 +431,20 @@ const COMMAND_MENU: [Item; 5] = [
 // (Progression: the owner, the main-branch port, t926. Story Unlocks: his table from the main branch
 // (s279, s307), "a config ... with it on or off, so we can preserve the changes but work on it later";
 // off by default, answer 2 (b).)
-const PROGRESSION: [Item; 1] = [Item::Set([0x7F00_0240, 0x7F00_011D, 0x7F00_011E, 0x7F00_0241], Row::StoryUnlocks)];
+// (Drive Gauge Growth: round 2 answer 3 (a), its own row; t935.)
+const PROGRESSION: [Item; 2] = [
+    Item::Set([0x7F00_0240, 0x7F00_011D, 0x7F00_011E, 0x7F00_0241], Row::StoryUnlocks),
+    Item::Set([0x7F00_024C, 0x7F00_011D, 0x7F00_011E, 0x7F00_024D], Row::GaugeGrowth),
+];
 // (Drive: the owner, the main-branch port, t927. MP Refill: KH2 refills HP and MP on entering a form,
 // `0x1403C17C0`; answer 8: "(a) but make it a toggle in drive config menu"; off by default.)
-const DRIVE: [Item; 1] = [Item::Set([0x7F00_0244, 0x7F00_011D, 0x7F00_011E, 0x7F00_0245], Row::DriveMpRefill)];
+// (Form Cost: round 2 answer 1 "(b)": the Drive gauge by default, MP the other value; t933.)
+// (Gauge Refill: round 2 answer 4: "just have it be off or kh2", KH2 by default; t934.)
+const DRIVE: [Item; 3] = [
+    Item::Set([0x7F00_0246, 0x7F00_0247, 0x7F00_0248, 0x7F00_0249], Row::FormCost),
+    Item::Set([0x7F00_024A, 0x7F00_011D, 0x7F00_0003, 0x7F00_024B], Row::GaugeRefill),
+    Item::Set([0x7F00_0244, 0x7F00_011D, 0x7F00_011E, 0x7F00_0245], Row::DriveMpRefill),
+];
 // (QoL: the user, t704: "make a qol (Quality of life) section in the config menu, put gummi skip in
 // there".)
 // (Soft Reset: the user, t707: "in qol you can quick reset the game", then "the combo does not work in the pc
@@ -551,7 +567,7 @@ const BUTTON_HELP: u32 = 0x7F00_0202;
 /// Misc's help, and the same without the debug menu (its row isn't there without the debug tools).
 const MISC_HELP: u32 = 0x7F00_020C;
 const MISC_HELP_NO_DEBUG: &str = "Battle quotes.";
-const STRINGS: [(u32, &str); 147] = [
+const STRINGS: [(u32, &str); 155] = [
     (0x7F00_0201, "KH1 in KH2"),
     (0x7F00_0202, "Choose KH1's or KH2's camera, combat, movement and more."),
     (0x7F00_0203, "Camera"),
@@ -626,10 +642,18 @@ const STRINGS: [(u32, &str); 147] = [
     (0x7F00_0233, "Skip"),
     (0x7F00_0242, "Drive"),
     (0x7F00_0243, "Options for the Drive Forms."),
+    (0x7F00_0246, "Form Cost"),
+    (0x7F00_0247, "MP"),
+    (0x7F00_0248, "Drive Gauge"),
+    (0x7F00_0249, "Drive Gauge: a form costs KH2's Drive bars and lasts its form gauge,\nas in KH2. MP: 3 MP, then the form drains MP until it runs out."),
+    (0x7F00_024A, "Gauge Refill"),
+    (0x7F00_024B, "KH2: leaving a world in a Drive Form refills the Drive gauge, HP\nand MP and reverts Sora, as in KH2. Off: no refill."),
     (0x7F00_0244, "MP Refill"),
     (0x7F00_0245, "On: entering a Drive Form refills Sora's MP as well as his HP,\nas in KH2. Off: HP only."),
     (0x7F00_023E, "Progression"),
     (0x7F00_023F, "The main branch's progression rules, each on or off."),
+    (0x7F00_024C, "Drive Gauge Growth"),
+    (0x7F00_024D, "On: the Drive gauge starts at 3 bars and grows by one for Sabor, Riku,\nChernabog, Sephiroth, Kurt Zisa and the Unknown. Off: 9 bars."),
     (0x7F00_0240, "Story Unlocks"),
     (0x7F00_0241, "On: the Drive Forms open by the story (Guard Armor, Opposite\nArmor, the Pegasus Cup by the Dive's choice). Off: from the start."),
     (0x7F00_0236, "Item Pickup"),
@@ -732,6 +756,9 @@ fn value(what: Row) -> bool {
         Row::CommandLock => super::cmdmenu::lock_kh2(),
         Row::StoryUnlocks => super::formown::story_unlocks(),
         Row::DriveMpRefill => super::form::mp_refill(),
+        Row::FormCost => super::form::gauge_cost(),
+        Row::GaugeRefill => super::form::gauge_refill(),
+        Row::GaugeGrowth => super::drivegauge::growth(),
     }
 }
 
@@ -776,6 +803,9 @@ fn set(what: Row, v: bool) {
         Row::CommandLock => super::cmdmenu::set_lock_kh2(v),
         Row::StoryUnlocks => super::formown::set_story_unlocks(v),
         Row::DriveMpRefill => super::form::set_mp_refill(v),
+        Row::FormCost => super::form::set_gauge_cost(v),
+        Row::GaugeRefill => super::form::set_gauge_refill(v),
+        Row::GaugeGrowth => super::drivegauge::set_growth(v),
     }
 }
 

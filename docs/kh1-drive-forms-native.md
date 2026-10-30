@@ -1474,3 +1474,389 @@ what command 0x68 shows; the no-drive world list `0x1405BAC00`; the text of KH2'
 
 Still open: Limit and Master (stored, no form yet); the partner rule (row 10); KH2's no-Drive locks; drive
 counters and the pause menu's "new" marks (later, answer 9 (b)). Nothing checked in game.
+
+## 13. The Drive gauge's data and rules (main-port round 2, 2026-10-29)
+
+Research for `docs/main-port-inventory.md` row 1 (round 2 there has the plan and the questions). Base t930.
+
+### 13.0 Corrections to testing's own notes (kh1-drive-forms-native.md §2, §6, §12)
+
+- §2 says the `sstm` numbers +0x68 (600) and +0x6C (0.5) are an Assumption. They are now **Checked
+  (files)** (section 3). `sstm` starts 8 bytes into its entry: a u32 version (1), then a u32 offset (8).
+  The game's pointer `0x142AE5760` is entry + that offset. Checked (decomp), from the loader at line ~768957.
+- §6 says the Anti counter and roll were not located. They are `0x140421D60` (section 1.9).
+- §12.1 calls command kind 0x48 "Limit-type". It is **summons**. `0x140405440` / `0x140405A60` handle
+  kind 0x48 by paying bars (`0x1403C2780` with the row's +0x1C cost) and starting the summon
+  (`0x1403DE460`). The cmd rows 0x58, 0x59, 0x132 and 0x1BF are kind 0x48 with cost 3 (Checked (files)).
+  Command 0x59, which picks a random owned form, is the summon that copies a form (Genie, Assumption
+  from KH2 knowledge). Checked (decomp + files) except that name.
+- §2's "mode 4 (set at a scene)": the player-object constructor `0x140405030` sets mode 4 when
+  `0x142A11400` bit 18 is set. That bit is set by recovery request kind 5 (`0x1403A5650`). Checked (decomp).
+
+### 13.1. KH2's gauge, the whole system (Steam KH2)
+
+#### 13.1.1 The record (status = player `+0x5C0`; the player object also keeps it at `+0x170`)
+| Field | What | Tag |
+|---|---|---|
+| `+0x1AF` | mode: 0 none (status built, `0x1403C0010`), 1 Drive bars, 2 form, 3 summon, 4 no gauge (flag bit 18) | Checked (decomp) |
+| `+0x1B0` | points in the current bar, 0..100 (100 only when the gauge is full) | Checked (decomp) |
+| `+0x1B1` / `+0x1B2` | full bars / maximum bars | Checked (decomp) |
+| `+0x1B3` | form gauge bars (level + 3) | Checked (decomp) |
+| `+0x1B4` / `+0x1B8` | form gauge now / full, float, in 60 Hz ticks (section 1.12) | Checked (decomp) |
+| `+0x1BC` / `+0x1C0` | MP Charge timers (>0 = charging, `0x1403C1D10`) | Checked (decomp) |
+| `+0x1D0..` | ability factor block (`0x1403D7470`), set up by `0x1404016B0`, filled by `0x140401730` | Checked (decomp) |
+
+The ability block fields the gauge reads (`0x140401730`, Checked (decomp)). Each sstm value is
+Checked (files):
+- `+0x40` Drive Boost (ability 0x18D): starts at 1.0, + sstm +0x13C (0.2) per copy.
+- `+0x44` Form Boost (0x18E): starts at 1.0, × sstm +0x140 (0.8) per copy.
+- `+0x58` Damage Drive (0x18C): starts at **0**, + sstm +0x138 (50.0) per copy.
+- `+0x70` Summon Boost (399): 1.0, × sstm +0x16C (0.8) per copy.
+- `+0x74` Drive Converter (0x21C): 1.0, × sstm +0x170 (0.5) per copy (row 5, report only).
+
+#### 13.1.2 Where the gauge lives in KH2's save (Checked (decomp))
+- The status is loaded from the save in `0x1403C1D90` (through `0x1403C0620(1)`; status `+0x26C` = the
+  save `0x1409ABDA0`, set only for characters 1 and 0xE). Save `+0x1038` points, `+0x1039` bars,
+  `+0x103A` max, `+0x103B` form bars, `+0x103C` form time, `+0x1040` form length.
+- It is written back by `0x1403C2120` every time a status reference is let go (`0x1403C07E0`, 22
+  callers). So the gauge, and a form's time left, survive room changes and saves.
+- The save's current form is `+0x1034` (byte, `0x1409ACDD4`), with `+0x1035` beside it (a summon,
+  Assumption).
+- **A new game starts full**: `0x1403A0E70` writes `+0x1038` = 100 points, bars 3, max 3. So main's
+  s323 "full by default" is also KH2's rule.
+
+#### 13.1.3 Adding points `0x1403C0AD0 (status, n)` (Checked (decomp))
+- Points carry into the next bar at 100, up to the maximum. In the last bar they hold at 100.
+- A negative n takes from the current bar. If that goes under 0, one full bar is broken
+  (points = result + 100). With no bars left, points go to 0.
+
+Every caller (Checked (decomp)):
+- the hit/orb add `0x1403A9CF0`;
+- Drive Recovery items `0x1403C4B80` (items 0x112 / 0x113, n × 100; usable while bars < max, `0x1403C3DA0`);
+- the bonus level `0x1403EDF90` (adds 0, see 1.8);
+- area-program command 12 in `0x1403A31A0`: adds raw points to the player in mode 1, with no factors;
+  which areas use it is data, Assumption;
+- a separate player type 0xB's step (`0x140414EB0` / `0x140415DD0`): its own 3-bar gauge, 1 point every
+  sstm +0xD4 (4.0) ticks while it charges. Not Sora's rule (which mode it is: Assumption, a minigame).
+
+#### 13.1.4 The hit/orb add `0x1403A9CF0 (player, value)` (Checked (decomp))
+- **Mode 1**: value × (sstm +0x78 = 2.0 × Drive Boost) while MP Charge runs, × the world factor
+  `0x1403A3990`, truncated to an int, then `0x1403C0AD0`.
+- **Mode 2** (form): the form gauge gets + value × sstm +0x70 (12.0) ticks. This is skipped when the
+  form id `+0xDE0` is 0xC.
+- **Mode 3** (summon): the same + value × 12.
+- **World factor**: the area object `0x142A0FF68 +0x6A8`, set by area-program command 11
+  (`0x1403A31A0`). With no area object it is 1.0. Its default when the program doesn't set it: not
+  found (Assumption 1.0).
+
+#### 13.1.5 The hit rule (Checked (decomp))
+The attack owner's hit callbacks are `0x1403A7480` (by vtable) and `0x1403A8800` (from the form and
+other state wrappers `0x1404042F0`, `0x140404EC0`, `0x140405DC0`, ...). They get the ATKP row as their
+5th argument: hit record `+0x20` holds a handle to the row that `0x1403CF600` picked (`0x1403CE740`,
+`0x1403D12C0`, `0x1403D1730`).
+- The value is the ATKP row's byte **+0x29**: testing's `Atkp::drive_drain`. Main called it "ATKP
+  drive value".
+- Nothing is given unless the value ≠ 0 and the **target** has class bit 4 (`+0x6C8` 0x10). The base
+  enemy constructor `0x1403DB840` sets that bit. The object factory `0x1403DF930` builds objentry type 3
+  with `0x1403F8DA0` (bit 0x400) and type 4 with `0x140419E30` (bit 0x800), both on top of it. So bit 4 =
+  any enemy, and bit 11 = the type-4 class. Checked (decomp). That type 3 is "boss" and type 4 is
+  "normal enemy" comes from OpenKH's objentry names: Assumption on the names only.
+- **Mode 1**: value (× sstm +0x60 = 0.75 on a bit-11 enemy), then `0x1403A9CF0`, so the result is also
+  truncated and × MP Charge × world.
+- **Mode 2**: the form gauge **loses** value × sstm +0x74 (15.0) ticks (× sstm +0x64 = 0.2 on a bit-11
+  enemy). Hits drain a form.
+- **Mode 3** with time left: as mode 1, so through `0x1403A9CF0` + value × 12 (or × 0.75 × 12).
+
+#### 13.1.6 Damage taken (Checked (decomp))
+- The HP-change callbacks `0x1403A75F0` / `0x1403A85F0` act only in mode 1 and only on a loss. They give
+  `damage / max HP × block +0x58` through `0x1403A9CF0`.
+- `+0x58` is 0 without Damage Drive, so **vanilla KH2 gives nothing for damage taken**. With Damage
+  Drive it is 50 per copy (and × world factor, × MP Charge).
+- In a form, damage never touches the form gauge.
+
+#### 13.1.7 Paying a cost `0x1403C2780 (status, cost)` (Checked (decomp))
+- If bars == max (full) or bars < cost, points are set to 0. Then bars −= cost, floored at 0.
+- Callers: the Drive command `0x140405440` (kind 4, using the cost of the form that comes out of the Anti
+  roll, `0x1403B6920(form) +0x1C`), and summons (kind 0x48, `0x140405440` / `0x140405A60`).
+- Anti costs 9, so it empties any gauge.
+- Greying (`0x140401D60`, §12 of the doc): bars < cmd cost.
+
+#### 13.1.8 Raising the maximum `0x1403EDF90 (bons row, status)` (Checked (decomp))
+- max += row +4, capped at 9, then add 0. A full gauge stays full: the new bar comes in filled.
+  A gauge that isn't full gets nothing.
+- On Critical (`0x1409ABD48 == 3`) only the HP and MP bonuses are halved, not the Drive bonus.
+- No other writer raises `+0x1B2` for Sora: the only others are the load and the type-0xB object.
+  Owning forms raises nothing (§12 confirmed).
+
+#### 13.1.9 Entering, reverting, the Anti roll (Checked (decomp))
+- **Enter** `0x1403C17C0 (status, form, level)`:
+  - HP full, MP full (and MP Charge cleared);
+  - mode 2; `+0x1B3` = level + 3; form gauge = (level + 3) × sstm +0x68 (600);
+  - Anti's level = sstm +0x8C (5) − 2 = 3, so 6 bars.
+  - The level comes from the form's save record `+2` (`0x14040CC00` etc.).
+- **Revert on empty**: the form state's step `0x140404A40` (twin `0x140405320`). When form time ≤ 0, it
+  is in a form (`0x1403AA4F0`), and three player checks pass, it issues the Revert command (cmd 5,
+  `0x1403A9EA0`), then change-to-form-0 (`0x14040CE60`). If the command can't run that frame it tries
+  again on the next.
+  - A non-form 0xC state reverts through the revert task.
+  - A summon (`0x1403DE250() == 2`) ends with cmd 0x13C, and mode 1 is set again.
+- **At a revert the bars are untouched**: no refill, no change. Base Sora's new object is built in mode 1
+  (`0x140405030`; mode 3 if a summon is out; mode 2 with level −1 for form id 0xC). His bars and points
+  come back from the save record.
+- **Room change in a form**: the form id and its time left are in the save record, and the form's
+  arrival state `0x140405630` sets mode 2 again. So the form and its time carry over.
+- **Anti roll** `0x140421D60 (player, form)`:
+  - No roll at all while `0x140749804` bit 25 is set (Assumption: a mode or option flag).
+  - Final chosen: Anti counter (form record 6 `+4`) −= sstm +0xA4 (10), floor 0.
+  - Otherwise, if Anti is allowed (`0x140400740(6) == 0`), the chance is the area byte (`0x142A0FF68+8`)
+    `+0xE` (`0x1403A3950`; 1 with no area) × the fmlv row byte +1 found from Anti's fmlv rows by the
+    counter. It is 100 when ability-block bit (block `+0x14` bit 15) is set (Assumption: an "always Anti"
+    ability or scene).
+  - Counter +1. Anti happens only in battle (`0x142A11404 ≠ 0`, `0x1403ABB20`).
+  - If Anti hits while Final is not owned, Final is allowed, story flag 0x4842 is set and bars ≥ Final's
+    cost (5), there is a second roll. Its chance is min(sstm +0x98 (3.0) × sstm +0x9C (3.0)^(Final
+    record `+4`), sstm +0xA0 (75.0))%. Each try adds 1 to Final's counter. On success: Final's counter
+    0, item 0x1D given, Anti counter −10, and the result is Final.
+  - Otherwise the result is Anti and the counter −= sstm +0x90 (6).
+  - The Anti fmlv rows are in 00battle.bin, which isn't staged. Testing's `character_core::drive` says
+    "10% from 5, 25% from 10" (Epic): Assumption until 00battle is read.
+
+#### 13.1.10 The form gauge change `0x1403C0B50` and the drain (Checked (decomp))
+- `0x1403C0B50` adds within 0..full length. In Anti (`+0xDE0 == 6`) a gain becomes a loss, so orbs
+  drain Anti. In summon mode it counts the bars lost for summon EXP (`0x14040D530`).
+- **Drain** (player step `0x1403A92C0`), in modes 2 and 3:
+  - −(one step's ticks × (sstm +0x6C = 0.5 when NOT in battle, `0x142A11404 == 0`) × Form Boost
+    (mode 2) or Summon Boost (mode 3)).
+  - No drain while `0x142A11478 ≠ 0` (`0x1403AC220`; Assumption: an event or pause hold).
+  - So it drains 1 tick per tick in battle and 0.5 outside.
+- Other callers: the two hit callbacks (1.5), the prize code `0x1403DDB50` / `0x1403DEA20` (row 3).
+
+#### 13.1.11 Where KH2 refills the bars (Checked (decomp))
+The only full refill is `0x1403C2020`: bars = max, points 100, form time 0. Its only caller is
+`0x1403A5790`, which also clears the save's form (`+0x1034`). That one is called only by the recovery
+request `0x1403A5650(kind)`:
+- Kinds 2, 6, 10, 0xC: revert + full gauge + full HP/MP.
+- Kinds 1, 4, 5: the same, but **only when in a form or summon** (save `+0x1034` / `+0x1035` ≠ 0).
+  Otherwise kind 1 is just full HP/MP, and 4 / 5 do nothing (5 also sets the no-gauge flag bit 18).
+- Kinds 7, 8, 9 and others: full HP and MP for all 15 characters, gauge untouched.
+- Kind 0xB: clears Anti's form only.
+
+Who asks for which:
+- Entering the world map (`0x1403FC350` case 0xC) asks for **kind 1**. Leaving for the world map in a
+  form reverts and refills; leaving out of a form doesn't touch the gauge. Checked (decomp). That 0xC is
+  the world map: Assumption, from the `worldobj` / `WM_CURSOR` loads in the same case.
+- Map jumps carry a kind (`0x140152990` / `0x140152A90`), and so do area programs (command 0x1D in
+  `0x1403A24C0`). These are event data, Assumption which ones.
+- `0x1403E68F0` asks for kind 0xC, from a menu `0x1403A3DD0(3)` and two other menus (Assumption: the
+  game-over Continue / warp menus).
+- A summon's end `0x140416100` asks for kind 10 (Assumption: summon end).
+- **Not found**: any save-point refill of the gauge, any level-up refill (the level-up never calls the
+  add or the refill: the full caller lists above), any world-change refill out of a form.
+
+#### 13.1.12 Time units (Checked (decomp))
+- The step time `0x140717480` starts at 2.0 and is the frame's 60 Hz tick count × a speed scale
+  (`0x140154740`).
+- MP Charge times are stored as seconds by dividing by 60.0 (`0x1403C2120`).
+- So every frame value here is in **60 Hz ticks**: a bar of form gauge (600) is 10 s in battle and 20 s
+  outside. Testing's `takeover::steps()` already counts 60 Hz steps (Checked (code)). KH1's own tick
+  wasn't re-checked in the KH1 decomp this round (testing's `count_steps` reads KH1's frame scale:
+  Checked (code) only).
+
+### 13.2. Where each Drive value comes from (summary)
+
+| Source | KH2 rule | Address | Tag |
+|---|---|---|---|
+| Hits | ATKP +0x29 on enemies; ×0.75 on type-4 enemies; ×2 (×Drive Boost) in MP Charge; × world; truncated | `0x1403A7480`, `0x1403A8800`, `0x1403A9CF0` | Checked (decomp) |
+| Hits in a form | form gauge −15 × value (×0.2 type 4) | same | Checked (decomp + files) |
+| Damage taken | only with Damage Drive (50 × dmg / max HP per copy) | `0x1403A75F0`, `0x1403A85F0` | Checked (decomp + files) |
+| Orbs | prize row Drive byte through `0x1403A9CF0` (row 3) | `0x1403DCA50` | Checked (decomp); the float argument is dropped by the decomp (Assumption: the byte) |
+| Items | +300 / +900, bars < max | `0x1403C4B80`, `0x1403C3DA0` | Checked (decomp) |
+| Area command 12 | raw points, mode 1 | `0x1403A31A0` | Checked (decomp) |
+| Refills | world map in a form; scripted recoveries; Continue | `0x1403A5650` | Checked (decomp); triggers Assumption |
+| Bonus levels | max +n (cap 9), full stays full | `0x1403EDF90` | Checked (decomp) |
+| Drive Converter / Damage Drive / Form Boost / Drive Boost | the ability block | `0x140401730` | Checked (decomp + files); row 5 |
+
+A Limit-type use `0x1403D8B40` (limit row byte +2 in 0xC8..0xCC, `0x1403E8300`) calls `0x1403A9CF0`
+with an argument the decomp drops. The other limits pay MP (an area can override the cost, area
+`+0x6A4` via command 10, `0x1403A39B0`). Assumption: those limits spend summon or form gauge. This is
+not part of base Sora's rules.
+
+### 13.3. 03system values (Checked (files): /mnt/user-data/uploads/data/kh2/03system.bin)
+
+`pref` is a BAR inside 03system (entries plyr, fmab, prty, sstm, magi). sstm is at pref +0xF14, with
+the data starting 8 bytes in.
+
+| sstm | Value | Used by |
+|---|---|---|
+| +0x54 | 0.5 | `0x1403C3C30` (not the gauge) |
+| +0x60 | 0.75 | hit on a type-4 enemy |
+| +0x64 | 0.2 | form drain per hit on a type-4 enemy |
+| +0x68 | 600.0 | form gauge ticks a bar |
+| +0x6C | 0.5 | drain out of battle |
+| +0x70 | 12.0 | form/summon gauge ticks a point (orbs) |
+| +0x74 | 15.0 | form gauge ticks lost a point (hits) |
+| +0x78 | 2.0 | MP Charge factor |
+| +0x8C | 5 (int) | Anti's level = 3 (6 bars) |
+| +0x90 | 6 (int) | Anti counter after Anti |
+| +0x98 | 3.0 | Final roll base |
+| +0x9C | 3.0 | Final roll power base |
+| +0xA0 | 75.0 | Final roll cap (%) |
+| +0xA4 | 10 (int) | Anti counter after Final |
+| +0xD4 | 4.0 | type-0xB object's charge rate |
+| +0x138 / +0x13C / +0x140 / +0x16C / +0x170 | 50 / 0.2 / 0.8 / 0.8 / 0.5 | Damage Drive / Drive Boost / Form Boost / Summon Boost / Drive Converter |
+
+The `cmd` rows (version 2, 751 rows) have the cost at +0x1C:
+
+| Command | id (kind, argument) | Cost in bars |
+|---|---|---|
+| Valor | 6 (4, 1) | 3 |
+| Wisdom | 7 (4, 2) | 3 |
+| Limit | 0x2A1 (4, 3) | **4** |
+| Master | 0xB (4, 4) | 4 |
+| Final | 0xC (4, 5) | 5 |
+| Anti | 0xD (4, 6) | 9 |
+| Drive (menu) | 4 | 0 |
+| Revert | 5 | 0 |
+| Summons | 0x58, 0x59, 0x132, 0x1BF (kind 0x48) | 3 each |
+
+There is a second set of kind-4 rows, 0x226..0x229 and 0x2A2: costs 3/3/4/5/4, a different byte
++0x1E (0x5A vs 0x64), messages 0xC32A.. (Assumption: the Auto-form reaction commands). So Limit Form
+costs 4 in KH2; main's Limit 3 (s331) is the owner's balance rule.
+
+### 13.4. The KH1 side (Steam KH1) and testing
+
+- **Contact `0x1402BF330 (attack, target)`** (Checked (decomp)):
+  - It makes the hit record (`0x1402BF630`).
+  - For an attacker with stats it adds KH1's MP: attack data (`attack +0x5C`) `+0x2C` × a
+    level-difference factor (btltbl +0x94 / +0x95 MP Haste), at least 1, capped at btltbl +0x96 % of
+    the base, through `0x1402A4AE0`.
+  - KH2's add has no level factor, so the drive add must not reuse KH1's scaling.
+  - Testing already hooks this function (`probe::hit`, Steam `0x1402BF330` via `steam_map.in`
+    `0x2BD180`, checked prologue). After the original runs it calls `formexp::hit(owner, target, rec)`
+    when a record was made (Checked (code)). That is the place for the hit add and the form's hit
+    drain: per hit, no new hook, no per-frame work.
+- **Is the ATKP's drive byte reachable at contact?** Yes, Checked (code): `kh2_formats::battle::Atkp`
+  parses +0x29 as `drive_drain`, and three paths give the hit's row:
+  - `kh1rows::kh2_atkp(attack)`: our own KH1 rows (`DATA_AT` copies), and `bodyhits::atkp` for KH2's
+    body windows and spells as KH1 objects;
+  - `kh1rows::native_atkp(sora)`: base Sora's native swings, from the slot's ATKP event;
+  - `combat::landing()`: gives power only today, so it would need the drive byte added.
+  - `combat::scale_record` already uses the first two at the same point.
+  - KH1's own hits (KH1-style combo, KH1 spells, KH1 limits, summons) have no ATKP (question 6).
+- **Target**: testing's "enemy" test is actor kind byte `+6 == 3` (`formexp::hit`, Checked (code)).
+  KH1's equivalent of KH2's type-3 / type-4 split (boss / normal): not found this round (question 7).
+- **HP change `0x1402A4920 (actor, delta)`** (Checked (decomp), 13 callers):
+  - stats `+0x3C` HP, `+0x40` max, the HUD mirror at stats `+0xC8` byte +1.
+  - This is where Damage Drive's rule belongs (row 5). With no Damage Drive, KH2 gives nothing, so the
+    base rule needs no code at all.
+- **Battle flag**: testing reads KH1's battle flag (`BATTLE_RVA` bit 0) in
+  `takeover::form_native_frame`, which already runs each physics frame while a form runs. The form
+  gauge's drain fits there with no new hook (Checked (code)).
+- **What the change from MP to the gauge touches** (Checked (code), `win/form.rs`):
+  - `COST_MP` 3 (paid through `reflect::pay_mp`, KH1's payment `0x1402A5B60`);
+  - `usable` / `possible` / `choose` test MP > 3;
+  - `drain_step` takes one yellow MP unit every 3 battle frames (2 half-steps in battle, 1 outside);
+  - the out-of-MP revert in `native_frame`;
+  - `drive.rs` greys the list from `form::usable`;
+  - `kh2dpx` builds effects from `possible`.
+  With the gauge, each of these reads "bars ≥ cost" and "form time > 0" instead. Nothing story-side
+  reads MP that we know of (testing's kh1-kh2-mp.md §3.3: Assumption there).
+- **Save bytes**:
+  - Testing uses `+0x1C..` (accessories), `+0x36` weapon, `+0x44`, `+0x74` (Donald's record, Reflect
+    bit), `+0x488`, `+0x48E`, `+0x492`, `+0x499..`, `+0x4CC`, `+0x599`, `+0x5A3`, `+0x844..+0x847`,
+    `+0x874`, `+0x881`, `+0x882..+0x887`, `+0x1504` (grep of every save offset in `crates/`, Checked
+    (code)). Nothing at `+0x37` or `+0xAB`.
+  - KH1's save field list (`0x1402CF620`) describes each 0x74-byte party record with `+0x36..+0x39` as
+    "4c" (four chars). So `+0x37` is a byte field after the weapon, Checked (decomp).
+  - No Steam KH1 instruction in the export reads or writes party record `+0x37`: searched for the record
+    indexing (`× 0x74 + DAT_142868BA0`) and for direct addresses `0x142DE9397` / `0x142DE940B`. KH1's
+    new-game setup `0x1402852C0` zeroes the block and writes `+0x36` only. Checked (decomp). Not
+    excluded: reads through a record pointer held elsewhere (Assumption, the same limit as testing's
+    `+0x881` check). A full instruction scan of the exe, as §9 did for `+0x881..`, would close it
+    (not done this round).
+  - Main's `+0x37` (bars | 0x80 written) and `+0xAB` (points) are free on testing, and keeping them
+    lets a main save keep its gauge.
+  - The maximum needs no byte if it is derived (main's way). KH2 stores it (`+0x103A`) only because
+    bonus levels raise it.
+
+### 13.5. Missing from main (KH2 has it, main lacked it)
+
+1. The world factor on every hit, Damage Drive and orb add (`0x1403A3990`). KH1 has no area factor, so
+   1.0 (KH2's value without an area object). Fix: none needed beyond 1.0; note it.
+2. A full gauge stays full when the maximum rises (`0x1403EDF90`'s add of 0). Main capped saved bars to
+   the new max, so a full 3/3 became 3/4. Fix: in the max raise, if full before, full after.
+3. The form gauge and form survive room changes and saves (`0x1403C2120`, save `+0x103B..+0x1043`).
+   Main reverted on a new world (s275, the owner's) and kept no form time. Fix: optional (question 10).
+4. Refill rules: KH2 refills only through recoveries: leaving for the world map in a form, scripted
+   recoveries, Continue (`0x1403A5650`). Main refilled on every forced revert (s338, the owner's).
+5. Area command 12 (scripted Drive points) and recovery kinds in event map jumps. KH1 has no such data,
+   so there is nothing to port. Note only.
+6. No drain while `0x142A11478` (an event hold, Assumption). Main drained by its own per-frame tick
+   [STEER]. Fix: drain only in `native_frame` while KH1 runs Sora's frame.
+7. The Anti roll's area multiplier (area `+0xE`), the "always Anti" bit, the global no-roll bit, and
+   Final's roll min(3 × 3^n, 75)% after flag 0x4842 (`0x140421D60`). Main: Anti free, Final by Riku 2
+   (owner rules).
+8. Summons on the gauge: cost 3, mode 3, Summon Boost, summon EXP from bars lost (`0x1403C0B50`,
+   `0x14040D530`). KH1's summons are KH1's and stay on MP. Note only.
+9. Mode 4 (no gauge) after recovery kind 5, which greys Drive (`0x140401D60`, bit 18).
+10. Limit costs 4 in KH2 (cmd 0x2A1). Main's 3 is the owner's balance rule (now behind Balance Changes).
+11. Main's damage-taken detection was a per-frame HP diff [STEER]. KH1's HP change `0x1402A4920` is the
+    native place (row 5).
+
+### 13.6. Missing on testing (KH2 has it, testing's forms lack it)
+
+1. **The whole gauge**: record, save, add, pay. Fix: a gauge record in KH1's save (`+0x37` / `+0xAB`),
+   KH2's add and pay rules (1.3, 1.7), as testing's own module. `character_core::drive` exists on
+   testing, unused (Checked (code)). Its add / pay / tick match the Steam decomp, but it lacks the world
+   factor, the type-4 class source, Damage Drive's base 0 and the refill rules, and its Anti rates are
+   Epic. Reusable only with its numbers re-tagged from this round.
+2. **The cost by the gauge**: Drive greyed when bars < cost (`0x140401D60`), cost paid on entry with the
+   points rule (`0x1403C2780`). Fix: behind the cost toggle.
+3. **The form gauge**: (level + 3) × 600 on entry, from testing's form levels (`formexp`, `+0x882..`).
+   Fix: in `native_start` / `native_arrive`.
+4. **Drain**: 1 / 0.5 per 60 Hz step, × Form Boost. Fix: replace `drain_step`'s MP drain when the toggle
+   is the gauge (same per-frame place, no new hook).
+5. **Hits drain the form**: −15 × ATKP +0x29 (× 0.2 on normal enemies), at the contact
+   (`probe::hit`). Testing has nothing like it.
+6. **Revert when the form gauge is out** (`0x140404A40`), through the existing revert path (testing
+   already retries "as soon as he can change").
+7. **Hit add at contact** (1.5), enemies only.
+8. **Refill** when leaving a world in a form (kind 1) and at Continue (question 4).
+9. **No MP cost or drain with the gauge** (KH2). MP refill on entry is already t927's toggle.
+10. **Orbs** (row 3), **items** (row 4), **Damage Drive / Form Boost** (row 5): report only.
+
+### 13.9. Not found, and where I looked
+
+- KH2's save-point refill: none on the gauge in `0x1403C2020` / `0x1403A5650` callers, `0x1403C2040`
+  callers or `0x1403A5760`. Save points are probably data (an object script). Not found.
+- What exactly sets recovery kinds 2 / 6 / 10 / 0xC, `0x1403A3DD0(3)`'s menu, flag `0x142A11478`, and
+  `0x140749804` bit 25: Assumption.
+- The world factor's default, and which areas set it (area programs are data).
+- Form id 0xC's meaning (a special form-like state).
+- The Anti fmlv rows: 00battle.bin is needed (not staged). Please stage it for the Anti round.
+- The float that `0x1403DCA50` and `0x1403D8B40` pass (dropped by the decomp).
+- KH1: a boss / normal enemy signal; the world-exit and Continue signals for the refill; KH1's tick
+  rate in the decomp (testing's code only).
+- Nothing was checked in game, and there were no traces this round.
+
+### 13.10 Built (t931 to t935)
+
+- **t931** `drivegauge.rs` (KH2's rules, pure, tested) and `win/drivegauge.rs`: bars at save `+0x37` (bit 7
+  written; unwritten or points 100 read as full), points at `+0xAB`; the maximum 9 (or the six fights, t935).
+  Save bytes: an objdump scan of the Steam exe found no function that loads the save pointer `0x142868BA0`
+  touching `+0x37` / `+0xAB` (Checked (exe)); a pointer handed in from elsewhere can't be ruled out
+  statically (Assumption).
+- **t932** the hit add at KH1's contact (`probe::hit` → `drivegauge::hit`): KH2's ATKP drive byte `+0x29`
+  (`kh1rows::kh2_atkp`) or KH1's attack data `+0x2C`, on KH1 actors of kind 3, × 0.75 (every KH1 enemy
+  normal until KH1's boss signal is found), truncated; in a form it goes to the form gauge.
+- **t933** Drive > Form Cost (Drive Gauge | MP, ini `drive_cost`, gauge by default): KH2's costs (Valor 3,
+  Wisdom 3) against the bars, paid at the change; the form gauge (form level + 3) × 600 ticks, 1 a frame in
+  battle and 0.5 outside, hits × 15 (× 0.2 normal); empty: the revert; no MP cost or drain.
+- **t934** Drive > Gauge Refill (Off | KH2, ini `drive_refill`, KH2 by default): a form running in another
+  world than it was entered in (the world map between): bars, HP and MP full and the revert (KH2's kind 1
+  at the world map, `0x1403FC350`).
+- **t935** Progression > Drive Gauge Growth (ini `gauge_growth`, off): 3 + the owner's six fights, at most 9.
+
+Still open: bonus levels (later, the owner); KH1's boss signal; KH2's Continue and map-jump refills; Form
+Boost, Damage Drive (row 5); the gauge on the HUD (row 2); the Anti and Final rolls (with Anti). Nothing
+checked in game.

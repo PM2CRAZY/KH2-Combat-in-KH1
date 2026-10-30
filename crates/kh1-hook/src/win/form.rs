@@ -17,7 +17,8 @@
 //! - the change takes 45 frames (the user): Sora's Drive motion for `DRIVE_FRAMES`, then the
 //!   swap and the form's short arrival; in the air he is held where he is through it.
 //! - its shots and its spells: `formmagic`.
-//! The cost is MP (`COST`, KH1's own payment), not a Drive gauge, which KH1 has none of.
+//! The cost is the Drive gauge (t933, Drive > Form Cost: KH2's bars, `drivegauge`, and KH2's form
+//! gauge) or MP (`COST`, KH1's own payment, then the MP drain).
 //!
 //! Valor Form (stage 211, the user: "i want to try to add valor form"): the same change and
 //! revert, `P_EX100_BTLF` (moveset 2, its two Keyblades' swings), its growth ability High Jump
@@ -262,6 +263,81 @@ const HP_ADD_RVA: super::addr::Rva = super::addr::Rva(0x2A2790);
 const MP_ADD_STEAM: usize = 0x2A4A00;
 const MP_ADD_BYTES: [u8; 12] = [0x48, 0x89, 0x74, 0x24, 0x10, 0x48, 0x89, 0x7C, 0x24, 0x18, 0x41, 0x56];
 
+/// Drive > Form Cost: 0 not read yet, 1 MP, 2 the Drive gauge.
+static GAUGE_COST: AtomicU8 = AtomicU8::new(0);
+
+/// Drive > Form Cost is the Drive gauge (the ini's `drive_cost = gauge`, the default; the owner,
+/// round 2 answer 1 (b)): KH2's costs in bars (`crate::drivegauge::cost`), the form gauge, no MP
+/// cost or drain (answer 8 (a)). `mp`: testing's 3 MP and its MP drain.
+pub fn gauge_cost() -> bool {
+    match GAUGE_COST.load(Ordering::Relaxed) {
+        0 => {
+            let on = super::settings::get().drive_cost_gauge;
+            GAUGE_COST.store(1 + on as u8, Ordering::Relaxed);
+            on
+        }
+        v => v == 2,
+    }
+}
+
+/// Switches Drive > Form Cost (the Config menu), kept in the ini. A form already under way keeps
+/// what it was entered with.
+pub fn set_gauge_cost(on: bool) {
+    GAUGE_COST.store(1 + on as u8, Ordering::Relaxed);
+    super::settings::save("drive_cost", if on { "gauge" } else { "mp" });
+    log!(Forms, "Config menu: Form Cost {}", if on { "Drive Gauge" } else { "MP" });
+}
+
+/// What entering `kind` costs now, and whether it can be paid: the Drive gauge's bars (KH2's
+/// usable check `0x140401C80`: cost `+0x1C` within the full bars `+0x1B1`, Checked (decomp)), or
+/// testing's MP (more than 3).
+unsafe fn can_pay(sora: usize, kind: Kind) -> Result<(), String> {
+    if gauge_cost() {
+        let cost = crate::drivegauge::cost(super::formown::form_id(kind));
+        let have = super::drivegauge::bars();
+        if have < cost {
+            return Err(format!("Drive gauge {have} of {cost} bars"));
+        }
+        return Ok(());
+    }
+    let have = mp(sora);
+    if have <= COST_MP {
+        return Err(format!("MP {have}: it costs {COST_MP} and needs some left to run on"));
+    }
+    Ok(())
+}
+
+/// A hit's form gauge loss waiting for the form's next step (hundredths of a tick; `hit_drain`
+/// runs at KH1's contact, outside the form's step).
+static HIT_LOSS: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
+/// Drive > Gauge Refill: 0 not read yet, 1 off, 2 KH2's.
+static GAUGE_REFILL: AtomicU8 = AtomicU8::new(0);
+/// The world the form was entered in (`takeover::current_world`).
+static FORM_WORLD: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
+/// Drive > Gauge Refill (the ini's `drive_refill = kh2`, the default; `off`): KH2's refill (the
+/// recovery request `0x1403A5650` kind 1, asked for on entering the world map, `0x1403FC350`; in a
+/// form it reverts and refills the bars, HP and MP, `0x1403A5790` / `0x1403C2020`, Checked
+/// (decomp)): on KH1, a world left in a form. Off: nothing, the form carries on as before.
+pub fn gauge_refill() -> bool {
+    match GAUGE_REFILL.load(Ordering::Relaxed) {
+        0 => {
+            let on = super::settings::get().drive_refill;
+            GAUGE_REFILL.store(1 + on as u8, Ordering::Relaxed);
+            on
+        }
+        v => v == 2,
+    }
+}
+
+/// Switches Drive > Gauge Refill (the Config menu), kept in the ini.
+pub fn set_gauge_refill(on: bool) {
+    GAUGE_REFILL.store(1 + on as u8, Ordering::Relaxed);
+    super::settings::save("drive_refill", if on { "kh2" } else { "off" });
+    log!(Forms, "Config menu: Gauge Refill {}", if on { "KH2" } else { "Off" });
+}
+
 /// Drive > MP Refill: 0 not read yet, 1 off, 2 on.
 static MP_REFILL: AtomicU8 = AtomicU8::new(0);
 
@@ -368,7 +444,7 @@ pub unsafe fn usable(sora: usize, kind: Kind) -> bool {
     if in_form() {
         return true;
     }
-    pose::kh2().is_some_and(|k| kind.data(k).is_some()) && super::shared::active() && sora > 0x10000 && mp(sora) > COST_MP && own_needs(kind).is_ok()
+    pose::kh2().is_some_and(|k| kind.data(k).is_some()) && super::shared::active() && sora > 0x10000 && can_pay(sora, kind).is_ok() && own_needs(kind).is_ok()
 }
 
 /// The forms Sora could change into from now on (`kh2dpx`, to have their effects built before
@@ -376,13 +452,13 @@ pub unsafe fn usable(sora: usize, kind: Kind) -> bool {
 /// it needs itself (`usable` without the frame's own conditions: KH2 having him, KH1's cut window;
 /// Valor's second Keyblade read without `valor::keyblade`'s save write and log).
 pub unsafe fn possible(sora: usize) -> Vec<Kind> {
-    if in_form() || busy() || sora < 0x10000 || mp(sora) <= COST_MP {
+    if in_form() || busy() || sora < 0x10000 {
         return Vec::new();
     }
     let Some(k) = pose::kh2() else { return Vec::new() };
     let base = super::sys::GetModuleHandleA(std::ptr::null()) as usize;
     let needs = |kind: Kind| kind != Kind::Valor || super::equip::valor_keyblade(base).is_some();
-    Kind::EVERY.into_iter().filter(|&kind| kind.data(k).is_some() && needs(kind)).collect()
+    Kind::EVERY.into_iter().filter(|&kind| kind.data(k).is_some() && needs(kind) && can_pay(sora, kind).is_ok()).collect()
 }
 
 /// What a form needs besides MP: Valor its second Keyblade (`valor::keyblade`).
@@ -417,10 +493,7 @@ pub unsafe fn choose(sora: usize, kind: Kind) -> Result<&'static str, String> {
     if native && !native_can_change(sora) {
         return Err("KH1's move has him and he can't change now (no queue)".into());
     }
-    let have = mp(sora);
-    if have <= COST_MP {
-        return Err(format!("MP {have}: it costs {COST_MP} and needs some left to run on"));
-    }
+    can_pay(sora, kind)?;
     WANT.store(kind.code(), Ordering::Relaxed);
     NATIVE.store(native, Ordering::Relaxed);
     REQUEST.store(1, Ordering::Relaxed);
@@ -443,6 +516,9 @@ pub struct Drive {
 
 struct InForm {
     kind: Kind,
+    /// Entered on the Drive gauge (Form Cost): the form gauge's ticks left of its full length
+    /// (KH2's `+0x1B4` / `+0x1B8`), no MP drain. `None`: on MP.
+    gauge: Option<(f32, f32)>,
     /// Half frames toward the next MP drained (2 a frame in battle, 1 out of it).
     left: u32,
     logged_s: u32,
@@ -524,6 +600,18 @@ unsafe fn drain_step(d: &mut Drive, actor: usize, battle: bool) {
             super::valor::keyblade();
         }
     }
+    // (Form Cost on the Drive gauge, t933: KH2's form gauge, one tick a 60 Hz frame in battle and
+    // 0.5 outside (the player step `0x1403A92C0`, sstm `+0x6C`, Checked (decomp) and (files)), less
+    // the hits' losses; empty: the revert (`0x140404A40`, the bars untouched). No MP drain.)
+    if let Some((left, full)) = f.gauge.as_mut() {
+        let hits = HIT_LOSS.swap(0, Ordering::Relaxed) as f32 / 100.0;
+        *left = (*left - crate::drivegauge::drain(battle) - hits).clamp(0.0, *full);
+        if *left <= 0.0 && !d.revert {
+            d.revert = true;
+            log!(Forms, "{}: the form gauge is out", f.kind.name());
+        }
+        return;
+    }
     f.left += if battle { 2 } else { 1 };
     if f.left >= DRAIN_FRAMES * 2 {
         f.left = 0;
@@ -541,6 +629,17 @@ unsafe fn drain_step(d: &mut Drive, actor: usize, battle: bool) {
         log!(Forms, "{}: out of MP", f.kind.name());
     }
 }
+
+/// A hit of Sora's in a form (`drivegauge::hit`): KH2's hit callbacks in mode 2 take the drive
+/// value × 15 (× 0.2 on a normal enemy) ticks off the form gauge (Checked (decomp)), applied at the
+/// form's next step. A form on MP has no form gauge.
+pub unsafe fn hit_drain(value: u8, normal: bool) {
+    let loss = (crate::drivegauge::hit_drain(value, normal) * 100.0) as u32;
+    HIT_LOSS.fetch_add(loss, Ordering::Relaxed);
+}
+
+/// The change under way was paid with the Drive gauge (`native_start` to `native_arrive`).
+static PAID_GAUGE: AtomicBool = AtomicBool::new(false);
 
 /// The yellow part of Sora's MP (stats `+0xBE`).
 unsafe fn yellow(sora: usize) -> u16 {
@@ -731,6 +830,19 @@ pub unsafe fn native_frame(kh2: &pose::Kh2, actor: usize, battle: bool, steps: u
         }
         _ => {}
     }
+    // (Gauge Refill KH2, t934: a world left in the form, as KH2's world map: the bars, HP and MP
+    // full, and the revert.)
+    if d.form.is_some() && gauge_refill() {
+        let world = super::takeover::current_world();
+        let was = FORM_WORLD.load(Ordering::Relaxed);
+        if world != 0 && was != 0 && world != was {
+            super::drivegauge::refill("a world left in a form, KH2's refill");
+            heal_full(actor);
+            refill_mp(actor);
+            native_revert(d, kh2, actor, "a world left (KH2's refill)");
+            return;
+        }
+    }
     if let Some(n) = d.change {
         let n = n + steps.max(1);
         d.change = Some(n);
@@ -753,7 +865,8 @@ pub unsafe fn native_frame(kh2: &pose::Kh2, actor: usize, battle: bool, steps: u
     }
     if d.revert && native_can_change(actor) {
         d.revert = false;
-        native_revert(d, kh2, actor, "out of MP");
+        let why = if d.form.as_ref().is_some_and(|f| f.gauge.is_some()) { "the form gauge out" } else { "out of MP" };
+        native_revert(d, kh2, actor, why);
     }
 }
 
@@ -762,8 +875,8 @@ pub unsafe fn native_frame(kh2: &pose::Kh2, actor: usize, battle: bool, steps: u
 unsafe fn native_start(d: &mut Drive, actor: usize) {
     let Some(kind) = Kind::from_code(WANT.load(Ordering::Relaxed)) else { return };
     let state = rd::<i32>(actor + 0x70);
-    if !matches!(state, 0..=2) || mp(actor) <= COST_MP {
-        log!(Forms, "Drive ({}, KH1's states): not now (KH1 state {state}, MP {})", kind.name(), mp(actor));
+    if !matches!(state, 0..=2) || can_pay(actor, kind).is_err() {
+        log!(Forms, "Drive ({}, KH1's states): not now (KH1 state {state}, MP {}, Drive gauge {} bars)", kind.name(), mp(actor), super::drivegauge::bars());
         return;
     }
     let base = super::takeover::game_base();
@@ -783,7 +896,17 @@ unsafe fn native_start(d: &mut Drive, actor: usize) {
         return;
     }
     let before = mp(actor);
-    super::reflect::pay_mp(actor, COST);
+    // (Form Cost, t933: the Drive gauge's bars, KH2's pay `0x1403C2780`, no MP; or testing's MP.)
+    if gauge_cost() {
+        if !super::drivegauge::pay(crate::drivegauge::cost(super::formown::form_id(kind))) {
+            log!(Forms, "Drive ({}): the Drive gauge is short", kind.name());
+            return;
+        }
+        PAID_GAUGE.store(true, Ordering::Relaxed);
+    } else {
+        PAID_GAUGE.store(false, Ordering::Relaxed);
+        super::reflect::pay_mp(actor, COST);
+    }
     heal_full(actor);
     if mp_refill() {
         refill_mp(actor);
@@ -809,7 +932,19 @@ unsafe fn native_arrive(d: &mut Drive, kh2: &pose::Kh2, actor: usize) {
     // `combomods::valor_square`: the controller's `square_finishers`, which took 12 / 38 for
     // finishers, isn't used here.)
     super::kh2fx::owner_gone();
-    d.form = Some(InForm { kind, left: 0, logged_s: 0 });
+    // (Form Cost on the Drive gauge, t933: KH2's form gauge, (form level + 3) bars of 600 ticks,
+    // `0x1403C17C0`; the level after `formexp::entered` below, so Lv1 the first time.)
+    let gauge = PAID_GAUGE.swap(false, Ordering::Relaxed).then(|| {
+        let level = super::formexp::record(kind).level.max(1);
+        let full = crate::drivegauge::form_ticks(level);
+        (full, full)
+    });
+    HIT_LOSS.store(0, Ordering::Relaxed);
+    FORM_WORLD.store(super::takeover::current_world(), Ordering::Relaxed);
+    d.form = Some(InForm { kind, gauge, left: 0, logged_s: 0 });
+    if let Some((_, full)) = gauge {
+        log!(Forms, "{}: the form gauge {} ticks ({} bars)", kind.name(), full, full / crate::drivegauge::TICKS_PER_BAR);
+    }
     CURRENT.store(kind.code(), Ordering::Relaxed);
     IN_FORM.store(true, Ordering::Relaxed);
     if kind.two_blades() {

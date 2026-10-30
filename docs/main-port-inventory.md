@@ -1,4 +1,4 @@
-aligned with main s339 / testing t930
+aligned with main s339 / testing t935
 
 # Main → testing port inventory
 
@@ -58,10 +58,10 @@ every start; [EPIC] Epic RVAs mapped through `steam_map.in`, not re-found on Ste
 
 | Status | Rows |
 |---|---|
-| Ported (native) | 16 |
+| Ported (native) | 17 |
 | Ported (running along) | 0 |
 | Partly | 7 |
-| Missing | 18 |
+| Missing | 17 |
 | Superseded | 10 |
 | Obsolete | 10 (each needs an in-game confirm where marked) |
 
@@ -82,7 +82,7 @@ identical on both branches and unused by testing's `kh1-hook`.
 
 | # | System | On main | What the player sees | Owner's decisions (main) | Testing now | Status | Conflicts | Plan (one version each) |
 |---|---|---|---|---|---|---|---|---|
-| 1 | Drive gauge data | `drivegauge.rs`, `win/gauge.rs`; s318, s323, s325, s326, s331 | Bars of 100 points. Max 3, +1 each for Sabor, Riku 1, Chernabog, Sephiroth, Kurt Zisa, the Unknown (cap 9). Costs Valor 3, Wisdom 3, Limit 3, Master 4, Final 5, Anti 9 (needs 3). Fills from hits (KH2 ATKP drive value; KH1 hits 3 physical / 5 spell), damage taken (Damage Drive only), orbs (1 / 3). In a form the gauge is the form gauge `(level + 3) × 600` frames, 1 a frame in battle, 0.5 outside. Full by default. MP cost and drain removed. | s318 "lets incorporate the drive gauge"; s323 "don't show the drive gauge until the first drive form is unlocked. By default, the drive gauge should be full."; s325 the six-fight table, "when in a form, have the drive capacity be raised to whatever level the form is"; s326 Chernabog instead of beating the game; s331 "Make limit form only cost 3 bars to enter" | No gauge; forms on MP. Planned as step 1 in `docs/kh1-drive-forms-native.md` §5 (KH1 hit contact `0x1402BF330`, HP change `0x1402A4920` noted on Steam). | Missing | **Settled (owner):** a Config toggle in a new Drive submenu picks MP or the Drive gauge as the cost. The form gauge uses testing's KH2 form levels 1..7 (KH2's `(level + 3) × 600`, 1:1); main's growth-level rule (s325) is dropped. Still open: the max table and Limit's 3 bars are the owner's, not KH2's. | Gauge data in the save + KH2's add rules + the hit add at KH1's contact; then the Drive submenu and its cost toggle (MP / Drive gauge); then the form gauge and drain. |
+| 1 | Drive gauge data | `drivegauge.rs`, `win/gauge.rs`; s318, s323, s325, s326, s331 | Bars of 100 points. Max 3, +1 each for Sabor, Riku 1, Chernabog, Sephiroth, Kurt Zisa, the Unknown (cap 9). Costs Valor 3, Wisdom 3, Limit 3, Master 4, Final 5, Anti 9 (needs 3). Fills from hits (KH2 ATKP drive value; KH1 hits 3 physical / 5 spell), damage taken (Damage Drive only), orbs (1 / 3). In a form the gauge is the form gauge `(level + 3) × 600` frames, 1 a frame in battle, 0.5 outside. Full by default. MP cost and drain removed. | s318 "lets incorporate the drive gauge"; s323 "don't show the drive gauge until the first drive form is unlocked. By default, the drive gauge should be full."; s325 the six-fight table, "when in a form, have the drive capacity be raised to whatever level the form is"; s326 Chernabog instead of beating the game; s331 "Make limit form only cost 3 bars to enter" | No gauge; forms on MP. Planned as step 1 in `docs/kh1-drive-forms-native.md` §5 (KH1 hit contact `0x1402BF330`, HP change `0x1402A4920` noted on Steam). | Ported (native) (t931–t935; not checked in game) | **Settled (owner):** a Config toggle in a new Drive submenu picks MP or the Drive gauge as the cost. The form gauge uses testing's KH2 form levels 1..7 (KH2's `(level + 3) × 600`, 1:1); main's growth-level rule (s325) is dropped. Still open: the max table and Limit's 3 bars are the owner's, not KH2's. | Gauge data in the save + KH2's add rules + the hit add at KH1's contact; then the Drive submenu and its cost toggle (MP / Drive gauge); then the form gauge and drain. |
 | 2 | Drive gauge HUD | `win/gaugehud.rs`, `win/kh2hud.rs`, kh2-formats `seqd.rs` `dds.rs` `png.rs`; s319–s324, s326; ini `drive_gauge_art`, `drive_gauge`, `drive_gauge_scale`, `hide_hp_label`, `drive_gauge_debug` | KH2's DRIVE bar, MAX plate, number, FORM bar in a form, left of / below Sora's portrait inside KH1's HP/MP task with KH1's sprite calls; optional KH2 `gaug` art from `zz0field.2dd`; only while the player controls Sora; KH1's "MP HP" label hidden. | s320 "use ghidra if you have to on KH2 to get the exact graphics, the animation while the gauge is charging, when its being drained, and all the animations"; s321 no rise-in animation; s322 "This should be the right size and positioning"; s324 bar outlines restored; s326 "only showing when the character is actively controlling sora" | Nothing. KH1's HUD task noted on Steam `0x14026DB00` (field meanings Assumption). | Missing | None. | KH1 pieces on KH1's HUD; then KH2's art built once into the mod folder (main decoded it every start [DECODE]); visibility from a KH1 signal (main used `takeover::script_has_sora` [CTRL]). |
 | 3 | Drive orbs as KH1 prize types | `win/prize.rs`, `win/prizeart.rs`, kh2-formats `prize.rs`; s318, s328 | Prize types 7 / 8 in a copied KH1 prize row table; KH1's spawner, pickup, scatter and blink run them. Drop weights after KH1's own drop. KH2's orb sprite from `obj/PRIZE.mdlx` through KH1's texture lookup. | s318 "I want them to run through KH1's engine, not an overlay"; s328 "if possible, let's try to get the texture from KH2" | Nothing. Steam addresses already in `kh1-drive-forms-native.md` §3 (make `0x1402AB2A0`, drop `0x1402ABC40`, pickup `0x1402AC080`, rows `0x140528BE0`, Checked (decomp) there; they differ from main's). | Missing | Drop weights partly ours ("six small and two big"), not KH2's `przt`: check. | Prize types on KH1's prize code; then the art built once [DECODE on main]. |
 | 4 | Drive Recovery / High Drive Recovery | `driveitems.rs`, `win/items.rs`; s326, s327, s333 | KH1's unused item ids `0x91` / `0x92` as KH2's items (+3 / +9 bars), pause-menu use only, bought 80 / 120; in item shops with a Potion (Traverse Town `tw10`, Agrabah `al19`) once a form is open; enemy drops (3% / 0.5%, MP orbs 5% / 0.75%, 20+ prizes 15% / 4%, × Lucky Strike); 17 chests patched (12 / 5). | s326 "have drive recovery items exist and be sold at the item shop in traverse town"; s333 "more available throughout the game (mob drops, chests, etc)" | Nothing (no 0x91 / 0x92 anywhere). Testing's `win/chest.rs` hooks KH1's chest Open (`chest.rs:211-225`). | Missing | Rates, prices, chests and shops are the owner's design (KH2 never sells them). Chest table patching must coexist with `chest.rs` (Assumption: no clash). Ids must stay 0x91 / 0x92 for main saves. | Item records + shops; then drops and chests. |
@@ -344,3 +344,146 @@ Progression submenu, added with the first balance rule that is ported).** t925 t
 cap; t926 Progression > Story Unlocks; t927 Drive > MP Refill; t928 the Drive list from the owned forms with
 KH2's greyed "?"; t929 the "New Drive Form" box; t930 Valor's Keyblade slot at gain. Notes:
 `docs/kh1-drive-forms-native.md` §12.8.
+
+
+### Round 2: the Drive gauge's data and rules (row 1), 2026-10-29
+
+Full notes: `docs/kh1-drive-forms-native.md` §13. Base t930.
+
+**Corrections first.** §2's pref numbers (600 a bar, 0.5 out of battle) are now Checked (files). §6 said
+KH2's Anti counter and roll weren't found: they are in `0x140421D60`. §12 called command kind 0x48
+"Limit-type": it is the summons (3 bars, paid the same way). Round 1's command 0x59 is the summon that takes
+a form's look (Assumption which).
+
+**Testing now.** No gauge. Forms cost 3 MP, drain one yellow MP every 3 battle frames and revert at 0 MP
+(`win/form.rs`). `character_core::drive` (KH2's rules, Epic-derived) is on testing but unused. Checked (code).
+
+**Main and the owner.** s318 "lets incorporate the drive gauge": KH2's costs in bars; filled by hits, damage
+taken, orbs; KH2's form gauge. s323 "By default, the drive gauge should be full" and hidden until the first
+form. s325 / s326 the maximum: 3, +1 each for Sabor, Riku 1, Chernabog, Sephiroth, Kurt Zisa, the Unknown
+(cap 9). s331 Limit 3 bars. s338 forced reverts refill the bars. Testing's decisions: the cost by a toggle in
+Drive; the form gauge on testing's form levels; progression and balance rules behind toggles.
+
+**What KH2 does** (Checked (decomp), Steam KH2):
+- A new game starts full, 3 of 3 bars (`0x1403A0E70`). The gauge lives in the player's status record and
+  is saved at save `+0x1038..+0x1043`; a form and its time left survive room changes and saves.
+- Hits: the ATKP's drive byte (`+0x29`), on enemies only, × 0.75 on normal enemies, × 2 (× Drive Boost) while
+  MP charges, × a world factor, truncated, through the add `0x1403A9CF0` → `0x1403C0AD0` (100 points a bar,
+  held at the maximum). In a form a hit takes 15 × the value off the form gauge (× 0.2 on normal enemies).
+- Damage taken gives nothing without Damage Drive (its factor starts at 0, +50 a copy; row 5).
+- Paying (`0x1403C2780`): bars minus the cost, floored at 0; the points are cleared when the gauge was full
+  or short. Costs (03system `cmd`, Checked (files)): Valor 3, Wisdom 3, Limit 4, Master 4, Final 5, Anti 9,
+  summons 3.
+- The maximum rises only by bonus levels (`0x1403EDF90`, cap 9); a full gauge stays full as it rises.
+- Entering: HP and MP full, the form gauge (level + 3) × 600 ticks (Anti as level 3). The drain is 1 a tick
+  in battle, 0.5 outside, × 0.8 per Form Boost, none while an event holds (Assumption which flag). Empty:
+  the Revert command (`0x140404A40`); the bars aren't touched.
+- The only full refill is the recovery request `0x1403A5650`: going to the world map in a form (refill and
+  revert), scripted map jumps, area programs, a Continue-type menu (which triggers: Assumption). No save
+  point or level-up refill in code.
+
+**How KH1 does it** (Checked (decomp) / (code)): KH1 has no gauge. KH1's contact `0x1402BF330` is already
+hooked (`probe::hit` → `formexp::hit`); the ATKP's drive byte is reachable there through `kh1rows`
+(`kh2_atkp`, `native_atkp`) and `bodyhits` (`combat::landing` carries only power: the byte has to be added).
+KH1's own MP-on-hit has a level factor KH2's add doesn't, so it isn't reused. The drain fits in
+`form::native_frame`, which already runs each frame of a form and reads KH1's battle flag. Damage taken would
+go at KH1's HP change `0x1402A4920` (with Damage Drive). Save: testing uses neither `+0x37` nor `+0xAB`;
+KH1's save field list marks `+0x37` a char field and no Steam KH1 code in the export reads it (a full exe
+scan, as for `+0x881`, still to do).
+
+**1:1 checked.** Costs, the add, the pay, the maximum, the entry, the drain and its numbers (sstm `+0x68`
+600, `+0x6C` 0.5, `+0x70` 15, `+0x78` 2.0 Checked (files)), the revert on empty, the start full. Not checked:
+the world factor's default (taken as 1.0 for KH1), the normal / boss split's names.
+
+**Missing from main.** The world factor; a full gauge staying full when the maximum rises; a form and its
+time carried over room changes and saves; KH2's refill rules (main refilled on every forced revert, s338);
+the Anti / Final roll details; no drain during events; KH2's no-gauge mode 4; Limit at 4 (main 3, the owner's).
+Main's per-frame HP-difference check for damage taken was a deprecated per-frame hook.
+
+**Missing on testing** (told to the owner in chat): the whole gauge (record, save, add, pay), the Drive list
+greyed by bars, the form gauge and its drain, hits draining a form, the revert on empty, the refills, and no
+MP cost or drain when the gauge pays.
+
+**Deprecated in main's version.** The HP-difference check every frame (replaced by KH1's HP change, with
+Damage Drive); the hit add read from our own hit records (replaced by KH1's contact with the ATKP byte);
+`takeover`'s scene signals (replaced by KH1's own, with the refills).
+
+**What KH1 lacks, the ability to add.** A Drive gauge: bars, points and maximum in Sora's save, KH2's add at
+KH1's contact, the pay, the form gauge in the form's own frame. Written up in §13 for the HUD (row 2), orbs
+(row 3), items (row 4) and the support abilities (row 5).
+
+**Plan, one version each.**
+1. Gauge data and save (bars `+0x37` with bit 7 "written", unwritten reads full; points `+0xAB`; the maximum
+   derived). No change in play.
+2. Drive > Form Cost (MP | Drive Gauge): with the gauge, KH2's costs, the list greyed by bars, no MP cost or
+   drain.
+3. The hit add at KH1's contact (KH2's rule).
+4. The form gauge, its drain, hits draining it, the revert on empty.
+5. The refills.
+6. Progression > the owner's six-fight maximum.
+7. With Limit Form: Balance Changes > Limit 3 bars.
+
+**Not found.** A KH2 save-point refill (save points are likely object-script data); what triggers each
+recovery kind; the world factor's default; form id 0xC; two values the decomp drops; on KH1, a boss signal,
+the world-exit and Continue signals, and KH1's tick rate in the decomp itself. The Anti chance rows are in
+00battle.bin (needed for the Anti round).
+
+**Questions.**
+1. Form Cost's default: (a) MP (as today); (b) Drive Gauge. Recommend (a) until the gauge shows on the HUD
+   (row 2).
+2. The maximum with the six-fight row off: KH2's own rule would leave it at 3 for good (KH1 has no bonus
+   levels), so Final's 5 could never be paid. (a) 3; (b) 9; (c) another rule. Recommend (b), as Story
+   Unlocks off gives every form; the doc says it isn't KH2's number.
+3. The six-fight maximum: (a) its own Progression row; (b) part of Story Unlocks. Recommend (a).
+4. Refills: (a) KH2's (leaving a world in a form, a Continue); (b) also main's s338 forced-revert refill;
+   (c) KH1's save points too. Recommend (a) now, (b) asked again with row 6.
+5. Before any form is owned: (a) the gauge runs as KH2's; (b) it stays off. Recommend (a) (s323's hiding is
+   the HUD's, row 2).
+6. KH1's own hits (no ATKP): (a) KH1's attack data `+0x2C` (swings 3, finishers 6, spells 0, its MP-charge
+   value); (b) main's 3 / 5; (c) nothing. Recommend (a).
+7. KH2's normal-enemy factor: (a) find KH1's boss signal and use it, (b) every KH1 enemy normal, (c) every
+   one a boss. Recommend (a), with (b) until the signal is found.
+8. MP when the gauge pays: (a) no MP cost and no MP drain (KH2); (b) keep the drain. Recommend (a).
+9. Save bytes: (a) main's `+0x37` / `+0xAB` after the exe scan (main saves keep their gauge); (b) new bytes.
+   Recommend (a).
+10. A form across a room change: (a) carried over (KH2); (b) reverted. Recommend (b) for now (testing's
+    forms rebuild KH1's tables per actor; carrying over is its own work).
+11. The Anti and Final rolls: (a) later, with Anti; (b) now. Recommend (a).
+
+Write "go ahead" with the answers.
+
+**The owner's answers (2026-10-29):** 1 (b) Form Cost's default the Drive gauge. 2 (b) maximum 9 with the
+six-fight row off, **and bonus levels come later** (the owner: "we'll add bonus levels later, take a note of
+it"; KH2's only way to raise the maximum, `0x1403EDF90`; to do: a KH1-native bonus-level system). 3 (a) its
+own Progression row. 4 (a), and a three-value row in Drive, Off | KH2 | Save (the owner: "there's also an
+exploit where if you leave a world while being in a drive form your drive gauge gets max refill, add it as a
+3 toggle in drive"). 5 (a). 6 (a). 7 (a). 8: asked to clarify (below). 9 (a). 10 (a), as testing's Valor and
+Wisdom already work (the owner: "check and see how they implement their drive forms and do the same for the
+other forms"). 11 (a).
+
+**Question 10 checked (code):** testing's form state is the Drive record in `win/form.rs` (`DRIVE`, `CURRENT`,
+`IN_FORM`), not tied to the actor; each new actor's motion requests read the form at each lookup
+(`kh2slots`, `form::native_form`, `redirect`), so a form already carries over room changes. The form gauge's
+time goes in the same record and carries over with it; every later form (Limit, Master, Anti, Final) uses
+the same path (`form::Kind::native_capable`, §7.5). Not saved in the save file (KH2 saves it): a loaded save
+starts out of a form (Assumption, not checked in game).
+
+**Question 8, restated.** Today a form costs 3 MP, then drains one yellow MP every 3 battle frames and reverts
+at 0 MP. With Form Cost on the Drive gauge: (a) KH2's way: entering pays bars only, MP is untouched while in
+the form, and the form ends when its form gauge runs out; (b) bars to enter, and the MP drain and the revert
+at 0 MP stay as today (two timers). Recommend (a).
+
+**Question 4's row, to confirm.** Drive > Gauge Refill: Off (no refill), KH2 (KH2's: leaving a world in a form
+refills every bar and reverts), Save (Assumption: also refilled at a KH1 save point). Default KH2.
+
+**Answers 8 and 4 (2026-10-29):** 8 (a) KH2's way; 4: "just have it be off or kh2". "keep checking": every value
+rechecked in the Steam KH2 decomp as it was built.
+
+**Built (go-ahead 2026-10-29):** t931 the gauge's data in Sora's save (`+0x37` / `+0xAB`, main's bytes;
+an objdump scan of the Steam exe found no access by the save's pointer); t932 the hit add at KH1's contact
+(KH2's ATKP drive byte, KH1's own `+0x2C` for KH1's moves, × 0.75 normal); t933 Drive > Form Cost (Drive
+Gauge by default): KH2's costs in bars, the form gauge, hits draining it, the revert on empty, no MP; t934
+Drive > Gauge Refill (Off | KH2): KH2's refill and revert on a world left in a form; t935 Progression > Drive
+Gauge Growth (the six fights; off: 9). Notes: `docs/kh1-drive-forms-native.md` §13.10. Still open: bonus
+levels (the owner, later); KH1's boss signal for the normal-enemy factor; the gauge on the HUD (row 2);
+KH2's other refill kinds (Continue, map jumps); Form Boost and Damage Drive (row 5); the Anti / Final rolls.
