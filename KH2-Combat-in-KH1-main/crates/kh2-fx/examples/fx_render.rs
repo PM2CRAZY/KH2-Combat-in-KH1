@@ -328,6 +328,13 @@ const SCENES: &[Scene] = &[
     Scene { name: "finishing_leap", motion: 167, triggers: &[(2, 33), (28, 34)], frames: 80 },
     Scene { name: "aerial_recovery", motion: 40, triggers: &[(0, 0)], frames: 40 },
     Scene { name: "aerial_finish", motion: 194, triggers: &[(0, 35), (0, 36), (0, 37), (0, 38)], frames: 80 },
+    // Counterguard (171): its frame-18 elements, the burst at his root and the slash's flash.
+    Scene { name: "counterguard", motion: 171, triggers: &[(18, 40), (18, 41)], frames: 70 },
+    // The Drive motion's (52) frame-0 elements: 1 on the root, 2..13 on his limbs.
+    Scene { name: "drive", motion: 52, triggers: &[(0, 1), (0, 2), (0, 3), (0, 4), (0, 5), (0, 6), (0, 7), (0, 8), (0, 9), (0, 10), (0, 11), (0, 12), (0, 13)], frames: 160 },
+    Scene { name: "drive_root", motion: 52, triggers: &[(0, 1)], frames: 160 },
+    // Their revert counterparts (15..27), started together as `kh1-hook` starts them.
+    Scene { name: "revert", motion: 2, triggers: &[(0, 15), (0, 16), (0, 17), (0, 18), (0, 19), (0, 20), (0, 21), (0, 22), (0, 23), (0, 24), (0, 25), (0, 26), (0, 27)], frames: 120 },
 ];
 
 #[allow(clippy::too_many_arguments)]

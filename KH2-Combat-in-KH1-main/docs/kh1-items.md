@@ -95,10 +95,15 @@ it set: the item table `*0x142D23738` = `+0x1A58`, 255 records of `0x14` bytes, 
 - The item shop's lists: 0..3 Potion, Hi-Potion, Ether, Tent, then more as the story goes (Camping
   Set, Elixir... and Donald's staves and Goofy's shields); 4..6 accessories; 7 Potion, Hi-Potion,
   Ether, Tent, Camping Set.
-- Who opens which (all `.ard` scripts searched): **room `tw10`** (Traverse Town, world 3 room
-  9 in memory: KH1 numbers rooms from 0, the files from 1; the Item Shop) opens lists 0..3 by its story byte; `tw11` (the Accessory Shop) 4..6;
-  `al19` (Agrabah) 7; `tw01` op 0x274. Worlds are numbered by KH1's prefix table
-  (`0x1404DD980`: dh, di, dc, tw, ...).
+- Who opens which (all `.ard` scripts searched again: op 0xDE is in these three only):
+  **room `tw10`** (Traverse Town, world 3 room 9 in memory: KH1 numbers rooms from 0, the files
+  from 1; the Item Shop) opens lists 0..3 by its story byte; `tw11` (the Accessory Shop) 4..6;
+  **`al19`** (Agrabah, world 8 room 18) 7; `tw01` op 0x274 (kind 2, lists of synthesis items and
+  accessories: the Moogle's). Worlds are numbered by KH1's prefix table (`0x1404DD980`: 0 dh,
+  1 di, 2 dc, 3 tw, 4 aw, 5 tz, 6 po, 8 al, 9 lm, 10 nm, 11 he, 12 pi, 13 pp, 15 pc, 16 ew).
+- The lists: 0 Potion, Hi-Potion, Ether, Tent; 1..3 those and more (Camping Set from 2, synthesis
+  item 0xFF in 3) with Donald's staves and Goofy's shields; 4..6 accessories only; 7 Potion, Hi-Potion,
+  Ether, Tent, Camping Set.
 - Buying (`0x1402FF220`): price `+0x08` × count against the munny; a kind-0 item asks which
   member's slot. Selling (`0x1402FF380`): every id with a free copy and a sell price `+0x0A`.
 
@@ -121,9 +126,12 @@ it set: the item table `*0x142D23738` = `+0x1A58`, 255 records of `0x14` bytes, 
   call at `0x1402EAECB`). Otherwise KH1's own path: its use switch does nothing for these ids, so
   the error sound and its "can't use" window. The log has each use with the gauge before and
   after.
-- **Shop** (`0x1402FEC60`, hooked): when the item shop opens in world 3 room 9 (script `tw10`: KH1's room numbers are the script file's less one) and a Drive Form
-  is open, the list it gets is KH1's with ours after it (a list of ours, at most 52). Every shop
-  opening is logged with its world, room and list. Other shops are untouched.
+- **Shops** (`0x1402FEC60`, hooked): when an item shop opens with a list that sells
+  consumables (it has a Potion: lists 0..3, the Traverse Town Item Shop, `tw10`, world 3 room 9,
+  and list 7, Agrabah's, `al19`, world 8 room 18) and a Drive Form is open, the list it gets is
+  KH1's with ours after it (a list of ours, at most 52). Every shop opening is logged with its
+  world, room and list. The Accessory Shop (lists 4..6) and the Moogle's (kind 2) are untouched.
+- **Enemy drops** and **chests**: sections 7 and 8.
 
 ## 6. Saves
 
@@ -134,8 +142,105 @@ it set: the item table `*0x142D23738` = `+0x1A58`, 255 records of `0x14` bytes, 
   equipped (kind 12) or sold (sell price 0, so the sell list leaves them out). Loading isn't
   affected: the bytes are plain counts.
 
+## 7. Enemy item drops (high, except the tiers' meaning)
+
+The user: "lets make drive recovery and high drive recoveries more available throughout the game
+(mob drops, chests, etc)".
+
+- **KH1's.** An enemy's AI script drops through ops `0x1402BA490` / `0x1402BA500` (mode from
+  `0x14298D3A0`, 1 underwater, or 1), both jumping to `0x1402A9AB0 (drop, position, mode)`. The
+  drop is 7 int counts (the prizes: `docs/kh1-prizes.md`) and at `+0x1C` three (float chance, int
+  item) pairs. After the prizes, per pair: `chance × *0x142D619A8` against KH1's random float
+  (`0x1401DED50`), and on success `0x1402BDD50 (item, position, mode)`.
+- `*0x142D619A8` is 1 plus a step per Lucky Strike (`0x1402A439E`: the ability count
+  `0x140282A70 (0x1C, member)`; `*0x142D619A4`, Jackpot's (0x1B), scales the prize counts).
+- `0x1402BDD50` is the field item: one of 8 slots of 0x50 bytes at `0x142DE9820` (all used:
+  the oldest is taken), the item's model from its record's `+3` (`0x14052ACF0`, model and scale),
+  a bounce. Its step (`0x1402BE720`) gives it to Sora when he reaches it: KH1's inventory add
+  `0x140282CF0 (item, Sora's member id)` (a kind-0 item into his item slots first, the others
+  counted), the "obtained" notice (`0x1402712A0`) and sound 0x1B; with 99 already, the notice
+  "full" and it stays.
+- **Ours** (`items::enemy_drop`, from `prize`'s hook on `0x1402A9AB0`, after KH1's own drop and
+  the Drive orbs): only with the Drive option on and a Drive Form open (`gauge::form_open`), and
+  only for a drop with prizes in it. The tier by KH1's own counts, one roll for High Drive
+  Recovery and then one for Drive Recovery, each chance times KH1's Lucky Strike factor, and
+  KH1's `0x1402BDD50` makes the item at the drop's position and mode. At most one per drop.
+
+The rates (`driveitems::TIERS`, the table to edit; before Lucky Strike):
+
+| Tier (KH1's drop) | Drive Recovery | High Drive Recovery |
+|---|---|---|
+| any enemy (KH1's drops seen in the user's logs: 3..15 prizes, mostly HP orbs) | 3% | 0.5% |
+| an enemy whose drop has MP orbs (KH1's types 5, 6) | 5% | 0.75% |
+| a big drop: 20 prizes or more (bosses, large Heartless) | 15% | 4% |
+
+So about one Drive Recovery every 30 enemies and one High every 200; likelier from bosses.
+KH1's drop doesn't say which enemy made it (the AI op gets only the drop and a position), so the
+tiers go by what KH1 drops, not by the Heartless' kind: which Heartless have MP orbs is not
+checked (the log names the counts of each drop). Each drop of ours is logged (the first 60).
+
+## 8. Chests (high)
+
+- **KH1's chest table** is in the executable's own data: 512 u16 at `0x140529A60` (Steam
+  `0x140528D60`, the same bytes). Read at two places only: the chest open (`0x1402B3740`) and the
+  new game's flag set (`0x14028342B`: bit 0 set → the chest starts opened).
+- **A chest's index** is its object record's `+0x48` (records of `0x78` bytes; type `+0x54` = 8
+  is a chest). The room's records are in its `.ard`: section `6 + variant` of the file's 32
+  (`0x140285EB0`: `data + i32[data + 0x1C + 4 × variant]`, the variant `*0x142340EC8`), its
+  `+4` the record list (a count, then the records). At a room's load (`0x140285AE0`) a chest whose
+  flag is set (`0x140282F80`: `save + 0x5CC + (index >> 2) × 4`, bit `index & 3`) is shown
+  opened. 222 indices are placed in the user's `.ard` files (Atlantica's rooms read none).
+- **A value**: bits 1..3 the kind, bits 4.. its value. Kind 0 an item (`0x140282CF0 (item, 12)`,
+  counted only); 1 a Gummi block (`0x14020B290`); 2 Dalmatians (1..33, all 33 placed); 3 munny
+  × 10; 7 a prize table row (`btltbl` + 0xC6A8, u16: type in the low nibble, the item in the high
+  byte), whose item is given. If the add finds 99 already, the flag isn't set (the chest stays).
+  Then the flag (`0x140283680`) and the "obtained" event (`0x14028BBF0`), which names the item.
+- **Ours** (`items::patch_chests`): the chests below changed in memory to kind 0 with our item
+  (`0x0910`, `0x0920`), each checked against KH1's value first (else left KH1's, logged). The prize
+  table rows two of them named are not touched (scripts give prize rows too). **Fixed contents**: a changed chest gives ours
+  whenever it is opened; all are in worlds after Traverse Town's first visit (whose end, Guard
+  Armor, opens the first Drive Form), so before a form one can only be had by skipping ahead.
+  The opened flags are KH1's, by index: a save made with the mod opens the same chests without it
+  (a chest opened with the mod stays opened), and one made without it has KH1's flags.
+- The chest open is hooked only to log each changed chest once per session (the count before and
+  after).
+
+Only chests of plain consumables were changed (no key items, abilities, Keyblades, accessories,
+stat ups, synthesis items, Dalmatians, Gummi blocks, maps or trinities; no Neverland chest is a
+plain consumable, so none there). Room: the script file (KH1's room number is its number less
+one); the duplicates are the same chest in another room's set (KH1 places some in several).
+
+| Chest | World | Room | KH1's | Ours |
+|---|---|---|---|---|
+| 99 | Wonderland | `aw02` (also `aw07`) | Mega-Potion | Drive Recovery |
+| 109 | Wonderland | `aw08` | Mega-Potion | Drive Recovery |
+| 125 | Deep Jungle | `tz06` | Mega-Potion | Drive Recovery |
+| 131 | Deep Jungle | `tz08` | Potion | Drive Recovery |
+| 200 | Agrabah | `al04` (also `al20`) | Mega-Potion | Drive Recovery |
+| 210 | Agrabah | `al08` | Mega-Potion | Drive Recovery |
+| 302 | Halloween Town | `nm01` | Mega-Potion | Drive Recovery |
+| 316 | Halloween Town | `nm07` (also `nm09`) | Ether | Drive Recovery |
+| 333 | Olympus Coliseum | `he01` (also `he04`) | Mega-Potion | Drive Recovery |
+| 363 | Monstro | `pi08` | Mega-Ether | Drive Recovery |
+| 375 | Monstro | `pi10` | Mega-Ether | Drive Recovery |
+| 242 | Monstro | `pi11` | Megalixir | High Drive Recovery |
+| 412 | Hollow Bastion | `pc01` | Megalixir | High Drive Recovery |
+| 420 | Hollow Bastion | `pc04` | Megalixir | High Drive Recovery |
+| 454 | End of the World | `ew02` (also `ew03`..`ew12`) | Mega-Potion (prize row 0x7D) | Drive Recovery |
+| 456 | End of the World | `ew02` (also `ew03`..`ew12`) | Elixir (prize row 0x7F) | High Drive Recovery |
+| 475 | End of the World | `ew25` | Megalixir | High Drive Recovery |
+
+Twelve Drive Recovery and five High Drive Recovery. The list is `driveitems::CHEST_LIST`.
+
 ## Open
 
 - That the result window's line reads well (its code set and length): the log has KH1's own
   Potion line once ("KH1's own line for a Potion reads ..."), and the records' names and help.
 - That KH1 allows the pause menu in battle everywhere (KH2 does; KH1's own rules decide).
+- Enemy drops in game (read, not yet seen): that KH1's field item shows our records' models
+  (Ether's 0, Elixir's 2) and that its "obtained" notice names them; whether some enemies' AI
+  drop on a hit too (each drop rolls, as the Drive orbs do; the log's counts show it); how often
+  the tiers come up (the log has each drop of ours with its counts).
+- Chests in game: the "obtained" event's line for a kind-12 item (KH1 names the item from its
+  record, as for a Tent); which room is which in a world's own names (only the script files are
+  read); Atlantica's rooms have no chest records in the layout read, so none changed there.

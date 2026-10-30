@@ -13,14 +13,17 @@
 //!   enemy takes him for a foe, `0x14028FE30`, and nothing touches him: what KH1's own script
 //!   op for a member leaving sets, `0x1402B9160`);
 //! - his HUD entry: KH1's slot fade (`0x140266CC0`) set to hidden (mode 3, as that op does), kept
-//!   hidden while he is away, and on his return faded in as KH1's revive does (mode 1), or left
-//!   hidden if Sora's own entry is hidden then.
+//!   hidden while he is away, and on his return faded in as KH1's revive does (mode 1) once Sora's
+//!   own entry shows.
 //! Nothing in the save is touched (its party list stays as it was), so a save in the form has
 //! them, and a new room's actors come in whole. His HP, MP and state stay on his actor.
 //!
 //! Each of Sora's frames checks it (`takeover`'s physics step), and the form's end at once
-//! (`form::revert`). A partner KH1 has put back itself (a new room, its game over's revive) is
-//! taken again if the form is still on.
+//! (`form::revert`, `revert`). Every check works on the actor in the field party now for his
+//! member id, never a remembered one. The decisions are `crate::partners::vanish`'s (tested
+//! there): a hide of ours stays owed until we show him again or KH1 draws him itself, so KH1's
+//! actor reset (s333: a Coliseum round's placing turns acting back on and leaves the model and
+//! shadow off) can't leave him invisible.
 //!
 //! Whenever KH1's script has Sora (`takeover::script_has_sora`: an event, its script's actions
 //! for him, its hold bit, or its hold `+0x444`) they are back at once: its script may command
@@ -31,8 +34,9 @@
 
 use super::addr::Rva;
 use super::{log, pose};
+use crate::partners::vanish::{self as rule, Act, Seen, ACTS, AWAY_BITS, MODEL};
 use crate::partners::Partner;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::Mutex;
 
 /// KH1's field party (Sora, then the two others).
@@ -47,26 +51,53 @@ const HUD_SLOT: usize = 0xDF0;
 /// KH1's HUD slot fade `(slot, mode)`: 0 fade out, 1 fade in, 2 shown, 3 hidden.
 const HUD_MODE_RVA: Rva = Rva(0x266CC0);
 
-/// The flag bits changed: on while here (acting, model, shadow), on while away (not a foe,
-/// untouchable).
-const HERE_BITS: u32 = 0x8000 | 0x1 | 0x2;
-const AWAY_BITS: u32 = 0x200 | 0x40;
-const MASK: u32 = HERE_BITS | AWAY_BITS;
 /// KH1's actor flag stack (`0x14028FFF0` pushes the flags word to `+0x37C + depth * 4` and sets a
 /// new one, `0x14028FFD0` pops it; depth `+0x388`), used by its game over.
 const STACK: usize = 0x37C;
 const DEPTH: usize = 0x388;
 const STACK_MAX: u32 = 3;
+/// KH1's actor fade (`0x14029EDB0 (actor, to, frames)`: `+0x60` the value, `+0x64` its step),
+/// which its model-on command and its partner warp use; for the log.
+const FADE: usize = 0x60;
 
+/// A hide of ours on an actor.
 struct Away {
     actor: usize,
-    /// His flags' `MASK` bits before.
+    /// His flags' away bits before.
     was: u32,
     /// The flag stack's depth when he went.
     depth: u32,
     /// Where he was when he went (back for a scene: left where KH1's script put him, if it did).
     at: [f32; 3],
 }
+
+/// One partner's state.
+struct Member {
+    /// Our hide, while it is on his actor (`rule::held`).
+    away: Option<Away>,
+    /// A hide of ours may still be on him (`rule::owed`), set in room `room`.
+    owed: bool,
+    room: (u32, u32),
+    /// His HUD entry hidden by us and not shown since.
+    hud: bool,
+    /// Away for the form (the log).
+    gone: bool,
+}
+
+impl Member {
+    const NEW: Member = Member { away: None, owed: false, room: (0, 0), hud: false, gone: false };
+    fn idle(&self) -> bool {
+        self.away.is_none() && !self.owed && !self.hud && !self.gone
+    }
+}
+
+struct State {
+    members: [Member; 2],
+    /// The field party's actors last seen (the log of their changes).
+    slots: [usize; 3],
+}
+
+static STATE: Mutex<State> = Mutex::new(State { members: [Member::NEW, Member::NEW], slots: [0; 3] });
 
 /// The last game frame (`takeover::GAME_FRAME`) KH1's script had Sora, or waited on a partner
 /// away (`script_waits_on`).
@@ -82,7 +113,7 @@ static WAITED: AtomicBool = AtomicBool::new(false);
 pub fn script_waits_on(actor: usize) {
     {
         let Ok(st) = STATE.try_lock() else { return };
-        if !st.iter().any(|(a, _)| a.as_ref().is_some_and(|a| a.actor == actor)) {
+        if !st.members.iter().any(|m| m.away.as_ref().is_some_and(|a| a.actor == actor)) {
             return;
         }
     }
@@ -90,9 +121,6 @@ pub fn script_waits_on(actor: usize) {
     WAITED.store(true, Ordering::Relaxed);
     frame();
 }
-
-/// Per partner (Donald, Goofy): hidden now, and whether he is away for the form (the log).
-static STATE: Mutex<[(Option<Away>, bool); 2]> = Mutex::new([(None, false), (None, false)]);
 
 const BOTH: [Partner; 2] = [Partner::Donald, Partner::Goofy];
 
@@ -108,18 +136,23 @@ fn base() -> usize {
     unsafe { super::sys::GetModuleHandleA(std::ptr::null()) as usize }
 }
 
+/// A field party slot's actor, if it is one we can read.
+unsafe fn slot_actor(base: usize, slot: usize) -> Option<usize> {
+    let a = rd::<u64>(base + PARTY_RVA + slot * 8) as usize;
+    (a >= 0x10000 && super::crash::readable(a) && super::crash::readable(a + 0x4AF)).then_some(a)
+}
+
+/// An actor's party member id (its object's `+0x4C`).
+unsafe fn member_id(actor: usize) -> Option<u16> {
+    let obj = pose::ptr(rd::<u32>(actor + 0x130));
+    (obj > 0x10000 && super::crash::readable(obj + 0x4D)).then(|| rd::<u16>(obj + 0x4C))
+}
+
 /// The actor of partner `p` in the field party now (live, his object's member id his), if there.
 unsafe fn actor_of(base: usize, p: Partner) -> Option<usize> {
-    (1..3).map(|slot| rd::<u64>(base + PARTY_RVA + slot * 8) as usize).find(|&a| {
-        if a < 0x10000 || !super::crash::readable(a) || !super::crash::readable(a + 0x4AF) {
-            return false;
-        }
+    (1..3).filter_map(|slot| slot_actor(base, slot)).find(|&a| {
         let live = rd::<u32>(a + 0x374);
-        if live & 1 == 0 || live & 2 != 0 {
-            return false;
-        }
-        let obj = pose::ptr(rd::<u32>(a + 0x130));
-        obj > 0x10000 && super::crash::readable(obj + 0x4D) && rd::<u16>(obj + 0x4C) == p.member()
+        live & 1 != 0 && live & 2 == 0 && member_id(a) == Some(p.member())
     })
 }
 
@@ -140,10 +173,96 @@ unsafe fn hud_fade(base: usize, slot: usize) -> (f32, f32) {
     (rd::<f32>(r + 0xABC), rd::<f32>(r + 0xAC0))
 }
 
+/// A HUD slot shown or fading (not hidden: alpha and speed 0).
+unsafe fn hud_showing(base: usize, slot: usize) -> bool {
+    let (alpha, speed) = hud_fade(base, slot);
+    alpha > 0.0 || speed != 0.0
+}
+
+unsafe fn seen(actor: usize) -> Seen {
+    Seen {
+        flags: rd::<u32>(actor),
+        depth: rd::<u32>(actor + DEPTH).min(STACK_MAX),
+        left: rd::<u32>(actor + 0x374) & LEFT_FOR_GOOD != 0,
+    }
+}
+
+/// The field party for the log: each slot's actor, member, flags, flag stack, fade and HUD entry.
+unsafe fn party_line(base: usize) -> String {
+    (0..3)
+        .map(|slot| {
+            let Some(a) = slot_actor(base, slot) else {
+                return format!("slot {slot}: none ({:#x})", rd::<u64>(base + PARTY_RVA + slot * 8));
+            };
+            let f = rd::<u32>(a);
+            let who = member_id(a).map_or("?".to_string(), crate::partners::member_name);
+            let hud = match hud_slot(base, a) {
+                Some(s) => {
+                    let (alpha, speed) = hud_fade(base, s);
+                    format!("HUD slot {s} alpha {alpha:.2} speed {speed:.3}")
+                }
+                None => "no HUD slot".to_string(),
+            };
+            format!(
+                "slot {slot}: {who} actor {a:#x} flags {f:08x} ({}), +0x374 {:08x}, stack {}, fade {:.2}, {hud}",
+                rule::describe(f),
+                rd::<u32>(a + 0x374),
+                rd::<u32>(a + DEPTH),
+                rd::<f32>(a + FADE)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("; ")
+}
+
 /// Who the form now (or the change under way) takes, and its name.
 fn wanted() -> Option<(&'static [Partner], &'static str)> {
     let kind = super::form::vanishing()?;
     Some((super::form::takes_partners(kind), kind.name()))
+}
+
+/// A few lines of each kind, not one a frame.
+fn limited(n: &AtomicU32, max: u32, line: impl FnOnce() -> String) {
+    if n.fetch_add(1, Ordering::Relaxed) < max {
+        log(&line());
+    }
+}
+
+/// The form's end (`form::revert`): the partners back now, the party logged before and after.
+pub fn revert() {
+    let base = base();
+    log(&format!("Drive: the party at the revert, before: {}", unsafe { party_line(base) }));
+    frame();
+    log(&format!("Drive: the party at the revert, after: {}", unsafe { party_line(base) }));
+}
+
+/// A forced revert (`form::revert`, out of the player's hands: a scene, a KO, a new world, the
+/// Coliseum's cup): `taken`, the partners the form took, fully back on their current actors
+/// whatever our record says (the user: "The sora is force reverted in any circumstances ...
+/// make sure the party members are fully visible"): acting, model and shadow on, the away bits
+/// off, beside Sora, and his HUD entry faded in. KH1's own member-leaving mark is left alone.
+pub fn force_back(taken: &[Partner]) {
+    let base = base();
+    let Ok(mut st) = STATE.lock() else { return };
+    for &p in taken {
+        let i = BOTH.iter().position(|&b| b == p).unwrap_or(0);
+        let Some(actor) = (unsafe { actor_of(base, p) }) else { continue };
+        unsafe {
+            if rd::<u32>(actor + 0x374) & LEFT_FOR_GOOD != 0 {
+                continue;
+            }
+            let rec = st.members[i].away.take().filter(|a| a.actor == actor);
+            back(base, actor, rec.as_ref(), false);
+            wr(actor, rd::<u32>(actor) & !AWAY_BITS);
+            if let Some(slot) = hud_slot(base, actor) {
+                if !hud_showing(base, slot) {
+                    hud_mode(base, slot, 1);
+                }
+            }
+        }
+        st.members[i] = Member::NEW;
+        log(&format!("Drive: {} fully back (a forced revert): {}", p.name(), unsafe { party_line(base) }));
+    }
 }
 
 /// Each of Sora's frames (and at a form's end): partners away while the form takes them, back
@@ -152,10 +271,6 @@ pub fn frame() {
     let base = base();
     let Ok(mut st) = STATE.try_lock() else { return };
     let want = wanted();
-    // (Out of a form with no one away: nothing to look at.)
-    if want.is_none() && st.iter().all(|(a, g)| a.is_none() && !g) {
-        return;
-    }
     // KH1's script has Sora now or had him a moment ago: no one away (`QUIET_FRAMES`).
     let frame = super::takeover::GAME_FRAME.load(Ordering::Relaxed);
     if super::takeover::script_has_sora() {
@@ -163,96 +278,180 @@ pub fn frame() {
     }
     let last = SCENE_FRAME.load(Ordering::Relaxed);
     let scene = last != u64::MAX && frame.saturating_sub(last) < QUIET_FRAMES;
+    let room = super::cup::world_room();
+    // The field party's actors changed while a partner is (or may be) hidden by us: logged.
+    let slots: [usize; 3] = std::array::from_fn(|s| unsafe { rd::<u64>(base + PARTY_RVA + s * 8) as usize });
+    if slots != st.slots {
+        if st.members.iter().any(|m| !m.idle()) {
+            static N: AtomicU32 = AtomicU32::new(0);
+            limited(&N, 40, || {
+                format!("Drive: the field party's actors changed ({:x?} -> {slots:x?}) with a partner away: {}", st.slots, unsafe { party_line(base) })
+            });
+        }
+        st.slots = slots;
+    }
     let why = if WAITED.swap(false, Ordering::Relaxed) { "a KH1 script waits on him" } else { "KH1's script takes Sora" };
     for (i, &p) in BOTH.iter().enumerate() {
-        let (away, gone) = &mut st[i];
+        let m = &mut st.members[i];
         let takes = want.is_some_and(|(w, _)| w.contains(&p));
         unsafe {
             let actor = actor_of(base, p);
-            // His actor gone (a new room, the party changed) or KH1 put him back itself (a new
-            // room's actor at the same place, the pop of its game over): nothing of ours left on
-            // him (only KH1's creation and that pop give an actor `0x8000` back).
-            if let Some(a) = away.as_ref() {
-                if actor != Some(a.actor) || rd::<u32>(a.actor) & 0x8000 != 0 {
-                    *away = None;
-                }
-            }
-            match (takes && !scene, actor, away.is_some()) {
-                // (Not while KH1 holds him frozen itself, its game over: his flags then aren't his.)
-                (true, Some(actor), false) if rd::<u32>(actor) & 0x8000 != 0 => {
-                    *away = Some(hide(base, actor));
-                    if !*gone {
-                        *gone = true;
-                        log(&format!("Drive: {} leaves for {}", p.name(), want.map_or("", |w| w.1)));
-                    }
-                }
-                (true, Some(actor), true) => {
-                    // (Kept so if KH1 turns his model or shadow back on.)
-                    let f = rd::<u32>(actor);
-                    let hidden = (f & !HERE_BITS) | AWAY_BITS;
-                    if f != hidden {
-                        wr(actor, hidden);
-                    }
-                    // (KH1 shows the whole HUD again at times, e.g. after an event or its game
-                    // over: his entry stays hidden.)
-                    if let Some(s) = hud_slot(base, actor) {
-                        if hud_fade(base, s) != (0.0, 0.0) {
-                            hud_mode(base, s, 3);
-                        }
-                    }
-                }
-                (false, _, true) => {
-                    if let Some(a) = away.take() {
-                        // (Back for KH1's script, the form still on: where its script put him.)
-                        back(base, &a, takes);
-                        if takes && *gone {
-                            *gone = false;
-                            log(&format!("Drive: {} is back ({why})", p.name()));
-                        }
-                    }
-                }
-                _ => {}
+            if let Some(actor) = actor {
+                step(base, m, p, actor, takes, scene, room, want.map_or("", |w| w.1), why);
             }
         }
-        if !takes && *gone {
-            *gone = false;
+        if !takes && m.gone {
+            m.gone = false;
             log(&format!("Drive: {} is back", p.name()));
         }
     }
 }
 
-unsafe fn hide(base: usize, actor: usize) -> Away {
-    let flags = rd::<u32>(actor);
-    let a = Away { actor, was: flags & MASK, depth: rd::<u32>(actor + DEPTH).min(STACK_MAX), at: rd::<[f32; 3]>(actor + 0x10) };
-    wr(actor, (flags & !HERE_BITS) | AWAY_BITS);
-    if let Some(s) = hud_slot(base, actor) {
-        hud_mode(base, s, 3);
+/// One partner's frame, on his actor now.
+#[allow(clippy::too_many_arguments)]
+unsafe fn step(base: usize, m: &mut Member, p: Partner, actor: usize, takes: bool, scene: bool, room: (u32, u32), form: &str, why: &str) {
+    let s = seen(actor);
+    let held = rule::held(m.away.as_ref().map(|a| a.actor), actor, s.flags);
+    // Our hide isn't on his actor any more: a new actor for him, or KH1 gave it acting back (its
+    // actor reset: a round's placing, its reset of every actor, its partner warp; or the pop of
+    // its game over). Its model and shadow may still be off from us: `owed` keeps that.
+    if let Some(a) = m.away.as_ref().filter(|_| !held) {
+        static N: AtomicU32 = AtomicU32::new(0);
+        let what = if a.actor != actor {
+            format!("a new actor for him ({:#x} -> {actor:#x})", a.actor)
+        } else {
+            "KH1 gave his actor acting back (its actor reset, or its game over's pop)".to_string()
+        };
+        limited(&N, 30, || format!("Drive: {} while away: {what}; flags {:08x} ({})", p.name(), s.flags, rule::describe(s.flags)));
+        m.away = None;
     }
-    a
+    // (A room's load makes its actors whole: nothing of ours carries into another room.)
+    if !held && m.room != room {
+        m.owed = false;
+    }
+    m.room = room;
+    let was_owed = m.owed;
+    m.owed = rule::owed(m.owed, held, s);
+    if s.left {
+        m.hud = false;
+    }
+    match rule::decide(takes && !scene, held, m.owed, s) {
+        Act::Hide => {
+            let (a, hud) = hide(base, actor, s.flags);
+            m.away = Some(a);
+            m.owed = true;
+            m.hud |= hud;
+            if !m.gone {
+                m.gone = true;
+                log(&format!("Drive: {} leaves for {form}", p.name()));
+            } else {
+                static N: AtomicU32 = AtomicU32::new(0);
+                limited(&N, 30, || {
+                    format!(
+                        "Drive: {} taken again for {form} (actor {actor:#x}, flags {:08x} ({}){})",
+                        p.name(),
+                        s.flags,
+                        rule::describe(s.flags),
+                        if was_owed && s.flags & MODEL == 0 { ": acting but undrawn after a hide of ours, KH1's reset" } else { "" }
+                    )
+                });
+            }
+        }
+        Act::Keep => {
+            // (Kept so if KH1 turns his model or shadow back on.)
+            let hidden = rule::hidden(s.flags);
+            if s.flags != hidden {
+                wr(actor, hidden);
+            }
+            // (KH1 shows the whole HUD again at times, e.g. after an event or its game over:
+            // his entry stays hidden.)
+            if let Some(slot) = hud_slot(base, actor) {
+                if hud_showing(base, slot) {
+                    hud_mode(base, slot, 3);
+                    m.hud = true;
+                }
+            }
+        }
+        Act::Restore => {
+            let a = m.away.take();
+            back(base, actor, a.as_ref(), scene && takes);
+            m.owed = false;
+            if a.is_none() {
+                static N: AtomicU32 = AtomicU32::new(0);
+                limited(&N, 30, || {
+                    format!(
+                        "Drive: {} shown again: acting but undrawn after a hide of ours (flags {:08x} ({}) -> {:08x}, actor {actor:#x}){}",
+                        p.name(),
+                        s.flags,
+                        rule::describe(s.flags),
+                        rd::<u32>(actor),
+                        if super::form::in_form() { " (the form doesn't take him, or KH1's script has Sora)" } else { "" }
+                    )
+                });
+            }
+            if takes && m.gone {
+                m.gone = false;
+                log(&format!("Drive: {} is back ({why})", p.name()));
+            }
+        }
+        Act::Nothing => {}
+    }
+    // His HUD entry back once he is (drawn, not ours to hide) and Sora's own entry shows.
+    if m.hud && m.away.is_none() {
+        let flags = rd::<u32>(actor);
+        match hud_slot(base, actor) {
+            Some(slot) if hud_showing(base, slot) => m.hud = false,
+            Some(slot) if flags & MODEL != 0 && hud_showing(base, 0) => {
+                hud_mode(base, slot, 1);
+                m.hud = false;
+            }
+            _ => {}
+        }
+    }
 }
 
-/// His flags as they were, beside Sora, his HUD entry as Sora's is. `scene`: back for KH1's
-/// script with the form still on: beside Sora only if nothing moved him while away (a script that
-/// placed him for its scene keeps him there).
-unsafe fn back(base: usize, a: &Away, scene: bool) {
-    let actor = a.actor;
-    let restore = |f: u32| (f & !MASK) | a.was;
+/// KH1's member-leaving mark (`+0x374` bit 28, set by its script op `0xCF` with the same `0x240`
+/// bits; nothing clears it): such a member is KH1's own business.
+const LEFT_FOR_GOOD: u32 = 1 << 28;
+
+/// Our hide on `actor`; whether his HUD entry was hidden.
+unsafe fn hide(base: usize, actor: usize, flags: u32) -> (Away, bool) {
+    let a = Away { actor, was: flags & AWAY_BITS, depth: rd::<u32>(actor + DEPTH).min(STACK_MAX), at: rd::<[f32; 3]>(actor + 0x10) };
+    wr(actor, rule::hidden(flags));
+    let hud = hud_slot(base, actor).map(|s| hud_mode(base, s, 3)).is_some();
+    (a, hud)
+}
+
+/// His flags back on his actor now (`rule::restored`: acting, model and shadow on, whatever was
+/// saved), beside Sora. `a`: our hide's record, if it is still on this actor. `scene`: back for
+/// KH1's script with the form still on: beside Sora only if nothing moved him while away (a
+/// script that placed him for its scene keeps him there; one that reset him placed him).
+///
+/// The bits we turn off always come back on (s331, the player: "In the Olympus Coliseum, if Sora
+/// uses Drive Forms mid-match, in the next round Sora reverts to normal and allies become
+/// invisible"; s333, the user: "after reverting from a drive form inside a coliseum cup the party
+/// members that disappeared remain invisible"). KH1's own scripts turn them off again after this
+/// if they want him hidden. His HUD entry comes back in `step` once Sora's shows.
+unsafe fn back(base: usize, actor: usize, a: Option<&Away>, scene: bool) {
+    let saved = a.map(|a| a.was);
+    let restore = |f: u32| rule::restored(f, saved);
+    let from = a.map_or(0, |a| a.depth);
     let depth = rd::<u32>(actor + DEPTH).min(STACK_MAX);
-    if depth > a.depth {
+    if depth > from {
         // KH1 pushed his flags while he was away (its game over freezes every actor and pops
         // them at Continue): what it pops is his own again, and it holds `0x8000` off till then.
-        for i in a.depth..depth {
+        for i in from..depth {
             let p = actor + STACK + i as usize * 4;
             wr(p, restore(rd::<u32>(p)));
         }
         let f = rd::<u32>(actor);
-        wr(actor, (restore(f) & !0x8000) | (f & 0x8000));
+        wr(actor, (restore(f) & !ACTS) | (f & ACTS));
     } else {
         wr(actor, restore(rd::<u32>(actor)));
     }
     // Beside Sora, on the side he was on (KH2: they reappear by him).
     let sora = rd::<u64>(base + PARTY_RVA) as usize;
-    let placed = scene && rd::<[f32; 3]>(actor + 0x10) != a.at;
+    let placed = scene && a.is_none_or(|a| rd::<[f32; 3]>(actor + 0x10) != a.at);
     if !placed && sora > 0x10000 && super::crash::readable(sora + 0x20) {
         let s = rd::<[f32; 3]>(sora + 0x10);
         let mut at = rd::<[f32; 3]>(actor + 0x10);
@@ -263,10 +462,6 @@ unsafe fn back(base: usize, a: &Away, scene: bool) {
             at = [s[0] + ux * BESIDE, s[1], s[2] + uz * BESIDE];
             wr(actor + 0x10, at);
         }
-    }
-    if let Some(s) = hud_slot(base, actor) {
-        let (alpha, speed) = hud_fade(base, 0);
-        hud_mode(base, s, if alpha > 0.0 || speed > 0.0 { 1 } else { 3 });
     }
 }
 

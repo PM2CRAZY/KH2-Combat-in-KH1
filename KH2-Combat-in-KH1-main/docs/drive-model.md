@@ -70,6 +70,34 @@ Each form is its own object in `00objentry.bin`, with:
    - HP and MP go to full, and MP Charge is cancelled.
 6. **Form gauge** = `(form level + 3) × 600` frames. Anti uses 6 bars.
 
+**The change's effects in the KH1 port (s331; Data + Log).** The player: "The transform effects in
+DriveForms aren't working; Sora only transforms."
+- What the logs show (s315 to s328, every Drive): motion 52's frame-0 triggers start Sora's package
+  elements 1..13 ("KH2 effect: element 1 of motion 52 started" ... 13), the form's arrival (53)
+  starts its package's 1..12 and 100..102, and "KH2 effects: 12 ended with Sora's object (a form
+  change)" at the swap. Nothing broke them in a recent build: `form.rs`'s Drive start (s318), the
+  partners' vanish (s312) and the reverts (s314, s315) leave the effects alone.
+- The data (P_EX100's `p_ex`, Data): element 1 (effect 1, flags 0x3, on the object root 112 up) is
+  the orb: a sphere round Sora from tick 9 that bursts into shards and sparkles, 120 frames in all;
+  it is not one that ends with its owner, so it plays out across the swap. Elements 2..13 (flags
+  0x241: end with the owner, fade-out 0) are the glows on his limbs, looping; KH2 ends them when the
+  form's object replaces his, as the port does at its swap (frame 39 of the user's 45-frame change).
+  The revert's 15..27 are the same pair: a shrinking sphere and burst (15, sound 115), then glows
+  on his limbs (16..27, flags 0x241), looping.
+- What was missing, now done (`kh2fx`):
+  - KH2's grey screen tint (step 4 above; `kh2-bevy`'s `drive.rs`): RGB 0x30 over the screen at
+    0.5, in over 12 frames from the Drive motion's start, out over 15 after the swap (or at once
+    from a change cut short), drawn first in the effects' pass (the orb and the arrival draw over
+    it). Without it the orb's additive light washed out over KH1's bright fields.
+  - The revert's limb glows looped on base Sora until the next form change (their owner never
+    goes): ended 60 frames after the revert starts them (ours; KH2's call for them isn't traced).
+  - One log line per change ("KH2 effects: the Drive's orb and glows (elements 1..13) started on
+    Sora", "... the revert's light (elements 15..27) ..."), as the first 20 starts' lines had long
+    run out by the time a player drives.
+- To check in game: Drive into each form (the screen dims, the orb closes round Sora and bursts,
+  the form appears with its arrival light and aura, the screen comes back); revert (the revert's
+  sphere and burst, the limb light gone after a second).
+
 ## In a form (Checked, exe)
 
 - **Draining.** The form gauge drains 1 per frame in battle, 0.5 outside (×0.8 per Form
@@ -97,6 +125,72 @@ Each form is its own object in `00objentry.bin`, with:
   - Wisdom: +1 per Heartless defeated (status ids 1000..2011, not 1047..1059)
   - Final: +1 per Nobody defeated (3000..4014)
   - Master's rule (drive orbs) and Limit's (limit finishers) aren't modelled.
+
+## Support abilities for the gauge and damage (Checked, exe + Data)
+
+Read from the Steam KH2FM executable (image base `0x140000000`) and the install's 03system.
+- **How KH2 counts them.** Each time a party member's abilities change, KH2 rebuilds an ability
+  record (in the member's status at `+0x1D0`; the builder `0x140401730`, called for every
+  equipped ability, base Sora's list and, in a Drive Form, the form's). In a form, base Sora's
+  abilities count only if the item row's byte 6 is 0: his support abilities carry over, his
+  action abilities don't. Each copy applies its step again, so copies stack. The steps' numbers
+  are `sstm`'s (03system `pref`):
+
+| Ability | Item (num) | Record field, start | Per copy (`sstm`) | AP |
+|---|---|---|---|---|
+| Damage Drive | 396 (108) | `+0x58`, 0 | + 50 (`+0x138`) | 3 |
+| Drive Boost | 397 (109) | `+0x40`, 1 | + 0.2 (`+0x13C`) | 3 |
+| Form Boost | 398 (110) | `+0x44`, 1 | × 0.8 (`+0x140`) | 5 |
+| Drive Converter | 540 (174) | `+0x74`, 1 | × 0.5 (`+0x170`) | 5 |
+| Damage Control | 542 (176) | `+0x78`, 0 | + 0.25 (`+0x174`) | 5 |
+
+- **Damage Drive** (the HP-change handler, `0x1403A75F0`): only in the gauge's normal mode (not
+  in a form) and only for HP lost, `lost / max HP × rate` drive points, through the hit's add
+  (`0x1403A9CF0`: ×(2 + Drive Boost) while MP charges, × a world factor that is 1 outside
+  missions, truncated). So 0 without the ability, 50 per copy.
+- **Form Boost** (the form's per-frame drain, `0x1403A92C0`): 1 a frame, × 0.5 out of battle,
+  × the record's factor in a form (`+0x44`, Summon Boost's `+0x70` for a summon). One copy 0.8,
+  two 0.64. Hits and orbs aren't changed by it.
+- **Drive Converter** (the prize drop, `0x1403DC170`): the factor is the product of the party's
+  records (only Sora has it). For each prize type the count is `ceil(row byte × drop factor)`;
+  for the three munny sizes (KH2 types 2, 3, 4: big, medium, small) `count × factor` (truncated)
+  is kept and the rest is made as the type in the exe's table `0x1405C7978` (types 0..8 -> 7 8 8
+  8 7 7 8 7 8): big and medium munny become big Drive orbs, small munny small ones. The orbs are
+  made first. One copy: half kept, so a single coin of a size is always an orb.
+- **Damage Control** (the damage routine's last step, `0x1403C12F0`): when the target's HP
+  (before the hit) is at or below `max HP × share` (truncated), the damage becomes `(damage ×
+  50 + 99) / 100` (`sstm +0x178` is 50, an int): half, rounded up. One copy a quarter of max HP,
+  two half (the help: "Equip two to accelerate the effect"). It comes after Anti Form's ×1.5
+  and the element resistances.
+
+**In the KH1 port** (`crate::support`, `growth::MENU` ids 78..81): learned at Sora's level into
+KH1's menu (Sora's list, KH2's AP, KH2's names and help with its line breaks), counted per copy
+equipped on base Sora (`Kh1Sora::support`; `abilities = all` gives one of each, `test` none).
+In a Drive Form they are base Sora's, as KH2's carry over. Berserk Charge and Drive Boost are
+left out (the user: KH1 has no MP Charge).
+
+| Level | Ability | AP | Where it acts |
+|---|---|---|---|
+| 14 | Damage Drive | 3 | `gauge::frame`: HP lost out of a form, `damage / max HP × 50` a copy |
+| 24 | Form Boost | 5 | `gauge::with` -> `Drive::form_boost`: drain × 0.8 a copy |
+| 38 | Damage Control | 5 | `hurt::damage_control`: each hit record's damage before KH1 applies it |
+| 35 | Drive Converter | 5 | `prize::converted_drop`: an enemy's munny drop |
+
+The levels are one table (`growth::SUPPORT_LEVELS`), none a level another schedule uses; Damage
+Drive comes once the first Drive Form is likely open (Guard Armor). For Drive Converter KH1's three
+munny types (1, 5 and 20 munny) are KH2's small, medium and big: the munny KH1 would make (its count
+times its Jackpot factor, `0x142D619A4`) keeps half a copy, the rest are Drive orbs (20 and 5
+munny big ones, 1 munny small ones), all made by KH1's own spawn (`0x1402A9110`). Damage Control
+reads Sora's HP from his stats and halves each record still to deal damage (not drains or heals),
+in KH2 or KH1's hands and with `hurt` off too, after Anti's ×1.5. The log: one line per ability
+when its equipped copies change ("Damage Control: 1 equipped (was 0): damage taken halved at 25%
+of max HP or less"), "Damage Control x1: 40 -> 20 (HP 20 of 100, at or below 25)" (the first 60,
+then one in 25), "Drive Converter x1: munny drop (1 / 5 / 20) [3, 1, 0] (8 munny) -> [1, 0, 0] (1
+munny) and 2 small, 1 big Drive orbs" (the first 40, then one in 50), and the gauge's summary
+("+5 from damage (Damage Drive x1)", "60 frames of the form (Form Boost x1: drain x0.800)").
+
+**Approximate (ours):** Drive Converter acts on enemies' drops only (KH1's `0x1402A9AB0`), not on
+objects' or events' prize rows. KH2's own "drop factor" is KH1's Jackpot factor here.
 
 ## Wisdom Form's shots (Checked, exe + Data)
 
@@ -707,14 +801,40 @@ lists (`.hed` names). Nothing of it is in the repository.
     text. KH1's magic list shows no cost.
   - **Greyed** while KH1 couldn't start it there (`limits::kh1_usable`), its own conditions for
     offering one (`0x14028AF60`): no limit running (bit 16), limits allowed (`0x142D54438` bit 1
-    clear), the limit data loaded, Sora in KH1's ground state (`+0x70` 0) and not in KH2's air, a
-    target (`0x142DB3F18` hittable, `+0x374 & 0x60` = 0x40), for Trinity Limit both others there
+    clear), the limit data loaded, Sora in KH1's ground state (`+0x70` 0) and not in KH2's air,
+    for Trinity Limit both others there
     and able (`+0x88 & 0x30` clear, hittable, not `+0x374 & 0x8000`, not `+0 & 0x200`, within 500
     of Sora), and its MP (KH1's test `0x1402A2A80` with KH1's cost, `*0x142D23730 + 0xF4 + 2k`).
     **Ours:** not the offer's distance (the record's `+0xE`) and height rules (Sonic Blade only
     with the target at most 160 above, Ragnarok only at least 160): they choose the one limit
     the box shows, and in a menu they would always grey one of those two. Where KH1 greys Magic
     itself (save `+0x874` bit 0) the Limit row stays greyed.
+  - **Anywhere, out of battle too (ours; the user: "in limit form, sora should be able to use
+    the limits whenever, even when out of combat").** KH1's offer also wants a target
+    (`0x142DB3F18` hittable, `+0x374 & 0x60` = 0x40), and that is what keeps KH1's limits to
+    battles. The Limit menu and shortcuts no longer ask for one (`limits::kh1_usable`): in the
+    field (no foes, KH1's field mode) or in a battle with nothing aimed at, the limit plays to his
+    facing. Every other gate stays: the MP, Trinity Limit's party, on the ground, no limit
+    running, KH1's "no limits" flag, the limit data loaded, and no event or menu (the command
+    menu isn't there then). Read from the executable, KH1's own code runs a limit without a
+    target:
+    - the limit data `xl_limit.dat` is loaded in the field as in battle: the frame task's gate
+      (`0x14028B420`) takes KH1's mode (`0x14017CEA0`) 0, the field, as well as 2, battle, and
+      looks at no foe;
+    - the command step's dispatch (`0x1402A1470`) and the limit start (`0x14028B240`,
+      `0x14028B670`) check no battle and no target;
+    - every place the limit modules read the target checks it first: the turn toward it
+      (`0x1402A1970`) keeps his own facing (`+0x30`) without one (Ars Arcanum's hits, Strike
+      Raid's throws, Ragnarok's last rise); Sonic Blade's next dash (`0x14039EBF0`) and Strike
+      Raid's throw (`0x1403A0440`) test it and go on along his facing; Ragnarok's shots
+      (`0x14039FD60`) look for a foe within 1000 themselves and fly straight on without one;
+      Trinity Limit aims at nothing;
+    - the limit's flag (bit 16) clears when its module stops, as in battle, so nothing waits on a
+      foe.
+
+    Base Sora is unchanged: his limits are KH1's Triangle offer, target and all, so battles only.
+    The log says "Limit Form: <limit> used out of battle (KH1's field mode)" (or "in battle"),
+    and ", no target: KH1 plays it to his facing" when there is none.
   - **Chosen** (or from a shortcut): KH1's menu passes it on once KH2's move can take a command
     (else the list stays open, as for a spell). `combat::command` turns it into KH1's own limit
     command (type the limit's command id, argument 0, the step's flags kept) and it goes on as
@@ -740,7 +860,7 @@ lists (`.hed` names). Nothing of it is in the repository.
     still takes KH1's out of Sora's ability list (`menu.rs`, s153).
 - **KH1's limits in Limit Form: how they run (ours).**
   - **The start** (`combat::command`) is taken only as KH1 could start it (`limits::kh1_usable`,
-    what greys its menu row: on the ground, a target, Trinity's party, the MP), and only when
+    what greys its menu row: on the ground, Trinity's party, the MP; no target needed, above), and only when
     KH2's move can take a command (`can_take_command`, no queue, as every command here).
     Otherwise it is refused with KH1's "can't". KH1's command step then runs it as KH1 does: its
     limit, its MP cost. If its limit flag (bit 16) is set after that, KH1 takes Sora as for a KH1
@@ -783,9 +903,40 @@ lists (`.hed` names). Nothing of it is in the repository.
     On the ground, KH2 takes him on KH1's idle, the stick, an Attack, a jump or Square. In the
     air (KH1's jump or fall state), it is KH2's fall at KH1's speed. KH2's controller starts over
     in the form (`form::character`) and comes back in its battle stance.
+  - **HP back from its hits (KH2's rule; the user: "when in limit form, when sora performs a
+    limit, he should get health back").** Read from KH2 FM (the Steam executable, its addresses
+    here, and 00battle): an attack's ATKP byte `+0x2F` (OpenKH's last byte, `hp_drain` in
+    `kh2-formats`) is HP its owner gets back for each target it hits. The hit routine
+    (`0x1403D1730`, after the damage) passes it to the owner's stat change (its method `+0xE8`,
+    kind 0, HP; the stat code `0x1403C0C30` adds it clamped to the maximum, as a level-up's HP
+    bonus is added), in HP points, with no sound or effect. Of KH2's 2713 ATKP rows only Limit
+    Form's limits carry it: Infinity's combo 1857..1861 (10, 5, 5, 5, 15; its shots 1862 none),
+    Strike Raid's Raid 1866 and Judgment 1867 (8 each), Sonic Rave's Rave 1878 and Finish 1879 (5
+    each), Last Arcanum 1883..1895 (3, 1 ×5, 2 ×6, 5). So in KH2 a limit gives HP back as its hits
+    land, never for starting it, and nothing when it hits nothing. Ours, on that rule
+    (`limits::LIMIT_HP_PER_HIT`, `limits::kh1_limit_hit`): each hit of KH1's limit in Limit Form
+    that lands on a foe (KH1's hit record, `probe::hit`, KH1's foe test) gives back its KH2
+    counterpart's amount through KH1's own HP change (`0x1402A2790`: clamped to the maximum, its
+    HUD mirror kept, so the HP gauge moves as for any heal): Sonic Blade 5, Strike Raid 8 (KH2's
+    own values), Ars Arcanum 2 (Last Arcanum's 25 over 13 hits, rounded: KH1's hits aren't
+    KH2's), Ragnarok 8 for its combo (Infinity's 40 over 5) and 0 for its shots (after its
+    follow-up 0x5B, as Infinity's shots), Trinity Limit 1 (no KH2 counterpart: ours, KH2's
+    smallest). KH1's HP and KH2's are on the same scale, so the amounts are KH2's as they are. No
+    sound (KH2 plays none). Not while Sora is down (KH1's HP change would clear its down bit), not
+    for a limit refused (it never starts), and out of battle there is nothing to hit, so nothing
+    comes back there, as in KH2. The log: "Limit Form: <limit> hit: HP a -> b of max (+n, KH2's
+    HP drain)" per hit, and "<limit>'s hits gave back n HP in all (m hits)" when the next one
+    starts.
   - **Unchanged out of a form.** Base Sora's KH1 limits still run as before: no hand-off, KH1
     keeping him while its slot is one of its own actions.
 - **Unchecked in game:** all of it. In particular:
+  - the limits out of battle (each of the five in the field with no foe: Sonic Blade's dashes and
+    Strike Raid's throws along his facing, Ragnarok's shots flying straight on, Trinity Limit with
+    the party there, Ars Arcanum's flurry), that each ends and KH2 takes him back, and that a
+    limit in a battle with nothing aimed at plays to his facing;
+  - the HP back per hit (Sora's HP gauge rising on each hit of a KH1 limit in Limit Form; that
+    KH1 makes one hit record per hit, so the amounts aren't taken twice) and that none comes
+    from Ragnarok's shots;
   - whether the KH1F archive loads as a PAX;
   - the Limit menu's rows and names, and the Triangle box with our record (KH1's step runs it
     only at the menu's top level);
@@ -1145,7 +1296,7 @@ KH2's form gauge, draining, the form ending when it runs out. The model is `char
 (the "Drive gauge" and "In a form" sections above); the tables are `kh1-hook/src/drivegauge.rs`;
 the game side `win/gauge.rs`, `win/prize.rs`, `win/gaugehud.rs`.
 
-**Costs** (`drivegauge::cost`; KH2's 03system `cmd` byte 0x1c): Valor 3, Wisdom 3, Limit 4,
+**Costs** (`drivegauge::cost`; KH2's 03system `cmd` byte 0x1c): Valor 3, Wisdom 3, Limit 3 (KH2's 4; the user's, s331),
 Master 4, Final 5. Anti Form (the secret code's) costs 9, which empties any gauge; it wants 3 full
 bars to start (ours: KH2's Anti only comes out of a Drive the gauge could pay for, the cheapest 3).
 The cost is paid as the Drive motion starts, by KH2's rule: a part-filled bar survives unless the
@@ -1189,10 +1340,11 @@ the user moved it to Chernabog.)
   combo swings 127, 128, 130, 134), a spell 5 (Thunder's level-1 rows 249 / 250), told apart by
   the attack's data (KH1's spells' attack data, `combat::is_kh1_spell_data`). KH2 multiplies by
   0.75 on a normal enemy and truncates: a 3 adds 2 points, a 4 adds 3.
-- *Damage taken*: KH2's Damage Drive rule with one copy, `damage / max HP × 50` points, truncated
-  (`drivegauge::damage_points`): losing a tenth of his HP adds 5. KH2 itself gives nothing
-  without the ability; the user wanted damage to count, so every Sora has it once. Read as his HP
-  dropping from one frame to the next (`gauge::frame`; not across a change of max HP or actor).
+- *Damage taken*: KH2's Damage Drive rule, `damage / max HP × 50` points a copy equipped,
+  truncated (`drivegauge::damage_points`): with one copy losing a tenth of his HP adds 5. As in
+  KH2, nothing without the ability (until the support abilities came, every Sora had it once).
+  Read as his HP dropping from one frame to the next (`gauge::frame`; not across a change of max
+  HP or actor). See "Support abilities" above.
 - *Drive orbs*: a small orb 1 point, a big one 3 (KH2's prize table), below.
 - Save points do not refill it (nothing of KH1's touches it).
 
@@ -1332,7 +1484,7 @@ out)"; "Drive orbs: an enemy's drop (...): 4 small, 0 big" and "Drive orb (small
 - KH1 has no boss mark this reads, so every foe takes KH2's normal-enemy rates (×0.75 drive, ×0.2
   form-gauge drain per hit); KH2's bosses give the full value.
 - KH1's own attacks' drive values (3 physical, 5 spell) are KH2's for the like, not per move.
-- Damage Drive is on for everyone (one copy); MP Charge's ×2 doesn't exist in KH1.
+- MP Charge's ×2 (and so Drive Boost and Berserk Charge) doesn't exist in KH1.
 - Drive orb drops are rolled per drop from KH2's normal-enemy rows, not per enemy kind; KH1's
   bosses drop as any enemy.
 - The form level is its growth ability's level (1..4, the user's rule), not KH2's form EXP (KH1
@@ -1344,7 +1496,7 @@ out)"; "Drive orbs: an enemy's drop (...): 4 small, 0 big" and "Drive orb (small
 growing after Sabor, Riku 1, the final fight, Sephiroth, Kurt Zisa and the Unknown (log), not
 as forms open; each form's gauge as long as its level (Valor with High Jump LV2 learned: 6
 bars, the HUD's number 5 when full); hits
-filling it (KH2 combo, KH1 combo, KH1 spells, limits), taking damage filling it; the Drive list
+filling it (KH2 combo, KH1 combo, KH1 spells, limits), taking damage filling it (with Damage Drive equipped only); the Drive list
 greying rows by cost and showing the costs; a Drive paying its cost (log), the form gauge on the
 HUD draining in and out of battle, hits draining it, orbs refilling it (Anti: draining), the
 revert when it runs out (in the air, mid-combo, mid-KH1-limit in Limit Form); enemies dropping
@@ -1437,6 +1589,16 @@ The log: "Drive: Goofy leaves for Valor Form" / "Drive: Goofy is back". The rule
   `+0x388`, three places) and sets the new one; `0x14028FFD0` pops. Only the game over pushes.
 - Deleting an actor (`0x140290200`: `+0x374` bit 1, his party slot emptied) can't be undone in the
   room (a new party actor is made only by a room's load), so it isn't used.
+- KH1's actor reset (`0x1402904D0 (actor, place)`, s333) keeps only `0x1004083` of the flags word
+  and sets `0x8000`, its flag stack's depth 0: `0x200` and `0x40` go, the model and shadow bits
+  stay as they were. It is reached from KH1's actor script commands (the queue run by
+  `0x14028C550`, its jump table of 45: command 32 "reset at a point", command 40 "reset every actor
+  in place", `0x140288A30` -> `0x1402902E0`), the actor creation's placing (`0x14028EBD0`, the
+  partners beside Sora) and the partners' catch-up warp (`0x1401D02AC`, `0x1401D03E3`, which also
+  fade him in with `0x14029EDB0`, the actor's fade `+0x60` / `+0x64`). The same queue's commands 6
+  and 7 turn the model on (with that fade) and off, 8 and 9 the shadow, 33 / 34 `0x200`, 42 / 43
+  `0x40`, 13 / 14 the `+0x444` hold. A created actor (`0x14028EBD0`) comes in whole: zeroed,
+  `0x8000 | 0x3`.
 
 **KH1's HUD gauge slots (Checked, exe).** `0x1428123E0`: a u32 "bound" flag per slot, and slot n's
 record at `+ n × 0xDF0`, its actor `+0x28` (bound by `0x140266960 (actor, slot)` ->
@@ -1460,9 +1622,9 @@ in the save's party list, `0x140282EC0`). KH1 sets all three at once at times (`
   - else he is back: his bits as they were, placed 60 units beside Sora (on the side he was on,
     at Sora's height), his HUD entry faded in as KH1's revive does (or left hidden if Sora's own
     entry is hidden then);
-  - his actor gone (a new room, the party changed: no member of his id in the field party) or
-    given `0x8000` back by KH1 itself (a new room's actor at the same place, the game over's
-    pop): nothing of ours is left on it; if the form still takes him he is taken again. KH1
+  - his actor replaced (a new room, the party changed) or given `0x8000` back by KH1 itself (its
+    actor reset, the game over's pop): our record of the hide is dropped, but not what it owes
+    (s333, below): if the form still takes him he is taken again, and out of it he is shown. KH1
     holding him frozen (no `0x8000`, its game over) is waited out.
   - KH1's game over pushed his flags while he was away: on his return the pushed copies get his
     bits back too, and `0x8000` stays as KH1 holds it, so its Continue pops him back whole.
@@ -1528,5 +1690,108 @@ lines); Anti with one partner knocked out or away; Wisdom in Deep Jungle with Ta
 a save point (talking to it) in the form, then saving and loading; enemies ignoring where the
 partner stood; Limit Form's Trinity Limit as before (Limit takes no one); Page Down's HUD hiding
 in and out of a form; a cup round won in Valor, Wisdom and Master (the victory scene plays, the
-partners are back at its start, the form reverts 2.5 s in); a door and a room entry in a form
-(the partners show for the walk, then go).
+partners are back at its start, the form carries into the next round: "Drive Forms in the
+Coliseum" below); a door and a room entry in a form (the partners show for the walk, then go).
+
+**Partners left invisible (s331).** The player: "In the Olympus Coliseum, if Sora uses Drive Forms
+mid-match, in the next round Sora reverts to normal and allies become invisible."
+- The cause (Ours, from the code; no log of it): a partner's return wrote back the flag bits saved
+  when he was taken, whole. A partner taken again after a scene (30 quiet frames) while KH1 had his
+  model off for a moment (`0x1`: a round's or a room's setup moving the party) had that saved, and
+  came back with his model off for good, acting but unseen. The revert then had nothing left to do.
+- Now he is taken only with his model on (`0x8001` both set), and his return always turns acting,
+  model and shadow on (`0x8000 | 0x1 | 0x2`), the foe and touch bits as they were. KH1's own
+  scripts turn them off again after that if a scene wants him hidden.
+- A safety net (`vanish::stray`): a Donald or Goofy we hold no record of (his actor replaced or
+  reset), when he should be here (no form takes him, or KH1's script has Sora), still showing
+  exactly our bits (acting, model and shadow off, `0x240` on), with no game over's flag stack and
+  not KH1's own leaving (`+0x374` bit 28): the bits are cleared and his HUD entry faded in as
+  Sora's is. The log: "Drive: Goofy found with our away bits out of a form ...: shown again".
+
+**Partners left invisible after a cup round (s333).** The user: "after reverting from a drive form
+inside a coliseum cup the party members that disappeared remain invisible". Wisdom Form in a
+Pegasus Cup round, two rounds won in it, then the form gauge ran out.
+- The log: "Drive: Donald leaves for Wisdom Form", then at both rounds' victory scenes KH1 has Sora
+  (its script's action 31, then its hold) but no "Donald is back (KH1's script takes Sora)" and no
+  later "leaves"; at the revert only "Drive: Donald is back". The scenes didn't freeze on his
+  pose either: he was stepping. Our record of the hide was gone before the first scene.
+- The cause (Checked: exe; which of KH1's resets the cup's script uses wasn't traced): KH1 resets
+  the party's actors in place around a round's end (its actor reset above, `0x1402904D0`: the
+  same actors, not new ones; a new one would have come in whole, drawn). The reset turned `0x8000`
+  back on and cleared `0x240`, and kept the model and shadow bits off from our hide. The code took
+  an actor given `0x8000` back as "KH1 put him back itself" and dropped the record silently; the
+  re-take wanted `0x8001` both on (s331), the safety net exactly our away bits, and the revert had
+  no record: Donald was left acting (stepping, a foe and touchable again) but undrawn, for good.
+- Now (`partners::vanish`, tested there; `win/vanish.rs`): every check takes the actor in the field
+  party now for his member id. A hide of ours is **owed** until we show him again or his model is
+  seen on (KH1 drew him itself, or a new actor came in whole), or the room changes (a room's load
+  makes its actors whole); our exact away bits count as owed whatever is remembered. Owed and
+  undrawn but acting, he is taken again while the form takes him ("Drive: Donald taken again ...:
+  acting but undrawn after a hide of ours, KH1's reset") and shown when it doesn't, at a scene's
+  start or the form's end, acting, model and shadow on whatever was saved ("Drive: Donald shown
+  again ..."). A partner KH1 hid itself (never owed) is never touched; one shown by us once is ours
+  no more, so a scene's own hide after it isn't fought (one KH1 gives while he is already hidden by
+  us can't be told from ours and is undone at his return, as since s331). KH1's own leaving (`+0x374`
+  bit 28) and its game over's frozen flags are left alone.
+- His HUD entry: hidden by us, it stays owed too, and is faded in (mode 1) once he is drawn and
+  Sora's own entry shows (a scene hides the whole HUD; KH1's own showing of it clears the debt).
+- The log: at each revert "Drive: the party at the revert, before: ..." and "... after: ...", each
+  party slot's actor, member, flags word with the bits named (`+acts -model ...`), `+0x374`, flag
+  stack depth, fade `+0x60` and HUD slot alpha and speed; "Drive: the field party's actors changed
+  (...) with a partner away: ..." whenever the slots' actors change while one of ours is away or
+  owed; "Drive: Donald while away: KH1 gave his actor acting back ..." / "... a new actor for him"
+  when our hide stops being on his actor.
+
+## Drive Forms in the Coliseum (the rule the user's; the rooms Checked: Log)
+
+The user (s331): "in the coliseum, you should be able to maintain your drive form throughout
+rounds. if you enter the cup in a drive form you should be reverted before the first battle, but
+if you defeat a round in a drive form it should carry over into the next round". `win/cup.rs`.
+- **Where (Checked: the s314 / s315 logs).** KH1's world `0xB` is Olympus Coliseum: room 0 its
+  gates (Sora lands there), room 1 the lobby (Phil's cups), room 5 the Pegasus Cup's arena. Every
+  match set has an arena room of its own (Pegasus "is run in the arena that loads Leon's and
+  Yuffie's battle models", above); the arena is taken as any room from 2 on (medium: only room 5 was
+  seen).
+- **The cup's start.** Into an arena room from outside the arena in a form (or changing): back to
+  Sora there and then, before the first battle. Log: "Coliseum: into the arena (room 0x1 -> 0x5)
+  in a form: back to Sora before the first battle".
+- **A round won.** `takeover::scene_frame`'s reverts (an event 1 s, a battle's end 2.5 s, a long
+  scene 20 s) don't apply in the arena (`cup::carries`): the victory scene and the next round's
+  setup keep the form. One line per scene: "Coliseum: a round's scene (a battle's end) in Valor
+  Form: the form carries over into the next round (no revert)". The form gauge doesn't drain while
+  KH1's script has Sora there (`cup::gauge_held`). The partners the form took are back for the
+  scene as for any scene (it waits on their poses) and go again 30 frames after it, on the next
+  round's actors if KH1 made new ones (the partners' rules above).
+- **The cup's end.** A cup's state byte (`story::CUPS`, `save + 0xF36 + cup`, stepped by the cup's
+  script when it is won) changing while in the arena: the scene rules apply again, so the trophy
+  scene ends the form as a battle's end does. Log: "Coliseum: a cup's state changed ...". (When
+  in the trophy scene the byte steps isn't traced; leaving the arena reverts anyway.)
+- **Leaving the arena** (the cup over, lost or quit): out of an arena room in a form, back to Sora.
+  Log: "Coliseum: out of the arena ...".
+- Moving between two arena rooms keeps the form (logged), in case KH1 changes rooms between
+  rounds.
+- Knocked out still reverts at once, as anywhere.
+
+**Open.** A story scene in the arena (Hercules', Cerberus') no longer ends a form by the scene
+rules either; leaving the arena does. The arena's rooms besides 5 weren't traced. A round's change
+(the s333 log) keeps room 5; the party's actors are reset, not made anew (a new one comes in
+whole, drawn; Donald stayed undrawn) (above, "Partners
+left invisible after a cup round"); which of KH1's reset commands the cup's script sends isn't
+traced.
+
+To check in game: enter a cup in a form (reverted on entering the arena, partners back); Drive in
+round 1, win it (the victory scene plays with the partners, the form and its gauge carry over, the
+partners vanish again once the next round starts, never invisible afterwards); revert in a later
+round (partners back and visible); win the cup in a form (the trophy scene ends it); lose a round
+in a form (knocked out: reverted) and quit a cup in a form (reverted on leaving the arena).
+
+
+## Forced reverts (s338)
+
+A revert out of the player's hands (a KO, a new world, every scene revert: cutscenes, battle
+ends, the Coliseum's arena entry and exit) refills every bar of the Drive gauge
+(`gauge::refill_bars`) and brings the partners the form took fully back on their current actors
+(`vanish::force_back`: acting, model and shadow on, the away bits off, beside Sora, the HUD entry
+faded in; KH1's member-leaving mark is left alone). The Revert command and the form gauge running
+out are the player's own and keep KH2's rule (no refill). The log: "Drive gauge: refilled after a
+forced revert (...)" and "Drive: Donald fully back (a forced revert): ...".

@@ -122,6 +122,25 @@ swim; the Cave of Wonders' water (`0x8-0xD`..`0xF`) the same, out over a ledge (
   there (the mast, the rigging). Now no grab while coming down where KH1 would be flying him.
 - Not done: a check that a hang KH1 holds has a ledge (none found in KH1's code to call).
 
+## 5. Glide in a flight world [high for KH1's rule, med for the player's case]
+
+- KH1's fall state's jump press (state 2's `+0x38`, `0x1402ADBD0`): in a flight world (`0x142867CD8`
+  bit `0x20`) it calls the flight start `0x1402AFD30` (more than 100 over the floor: motion 0x75,
+  state 8; else nothing) and **never its glide** (`0x1402B0530`, only outside flight worlds). Its
+  glide's next-state step (`0x1402B05F0`) turns a glide into flight in the flight rooms too. So
+  vanilla has no glide where Sora can fly.
+- Under KH2 the glide was KH2's own there. Out of flight for a combo (`FLY_ATTACK`) the glide is on
+  the jump button, and the jump held for flight's rise was KH2's first frame's press (the button as
+  last seen before the flight): its glide, held on and on (levels 2 and up glide for good),
+  hovering in place with the stick let go, kept off the floor by the flight combo's floor (15), and
+  flight takes him again only out of KH2's jump or fall. The player: "he constantly gets stuck in
+  the air and doesn't move". (No Neverland session in the user's logs to confirm.)
+- Now: in a flight world KH2's glide is off (`Character::glide_blocked`, a glide playing ends in the
+  fall). Its press in the air is KH1's flight on the next frame where KH1 would fly him (over 100,
+  out of a flight combo over 5, or under a flight room's height), else nothing, as KH1. Out of
+  flight the held jump / Square aren't fresh presses. Logged (`flight: glide press ...`, `flight
+  world on: KH2's glide off`).
+
 ## Steam
 
 New RVAs (Epic, Steam): `0x2BF300` / `0x2C14B0` (the walk-in), `0x2C0020` / `0x2C21D0` (the

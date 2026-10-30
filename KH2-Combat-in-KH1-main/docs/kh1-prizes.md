@@ -78,6 +78,16 @@ him and ends it (its states 2..3; inferred from the step).
   form gauge in a form, Anti's lost). Any party member's pickup counts (the gauge is Sora's, as in
   KH2, where the orbs are the party's).
 
+- **Drive Converter** (KH2FM's support ability, equipped on base Sora): the same hook gives the
+  drop's munny partly as Drive orbs, by KH2's rule (`docs/drive-model.md`, "Support
+  abilities"): of the munny KH1 would make (each count times KH1's Jackpot factor
+  `0x142D619A4`, as its loop does), `× 0.5` a copy is kept, the rest are Drive orbs (KH1's 20
+  and 5 munny big ones, 1 munny small ones). KH1's drop then runs on a copy of the counts with no
+  munny, and KH1's own spawn (`0x1402A9110`) makes the munny kept and the orbs.
+
+The same hook on `0x1402A9AB0` drops the Drive Recovery items (KH1's field items, after its own
+item pairs): `docs/kh1-items.md`, section 7. It goes in even if the orbs' parts don't.
+
 Everything else is KH1's: the scatter and bounce, the pull toward a member, the lifetime and
 blink-out, the pickup sound, the draw.
 

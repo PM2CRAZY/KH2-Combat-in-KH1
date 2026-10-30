@@ -550,6 +550,8 @@ unsafe extern "system" fn hit(attack: usize, target: usize) -> usize {
             d => d as u8,
         };
         super::gauge::hit(owner, target, d);
+        // A KH1 limit's hit in Limit Form: HP back (KH2's HP drain, `limits::LIMIT_HP_PER_HIT`).
+        super::limits::kh1_limit_hit(owner, target);
     }
     if owner != 0 && owner == sora() && target > 0x10000 && super::combat::POWER.load(Ordering::Relaxed) == 0 {
         let words = |p: usize, n: usize| (0..n).map(|i| format!("{:08x}", rd::<u32>(p + i * 4))).collect::<Vec<_>>().join(" ");

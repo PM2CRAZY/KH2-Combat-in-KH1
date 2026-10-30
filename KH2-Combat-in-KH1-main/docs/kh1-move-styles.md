@@ -49,8 +49,28 @@ has him in the air then, else Magic (`formmagic::base_kh2`).
     sub (level × 2 − 2, + 1 for the finisher; Wisdom's are + 10 and Final's + 30,
     `form::magic_sub`; Final Form's magic: `drive-model.md`), its effects
     and sounds, its attacks through the spell hit records with KH1's own data for the spell at
-    its level (element). Level: KH1's spell level; cost: KH1's (1 MP). Cure heals a share of
-    KH1's max HP by the ATKP row's power (as Wisdom's did).
+    its level (element). Level: KH1's spell level; cost: KH1's (1 MP).
+  - **Cure** heals by KH2's rule on KH1's stats (`crate::cure`, applied in `formmagic::cure`;
+    the user: "using cure with KH2 magic selected barely heals sora"):
+    - KH2 (its hit routine in the Steam executable, 00battle, the `.mag` scripts; **Checked**):
+      Cure's script strikes the caster with ATKP 708 and every party member in range (not a
+      summon) with 709. Both are kind 6, Magic: `ceil(power × caster's Magic / 100)` HP, no share
+      of max HP. Base Sora's subs 0 / 2 / 4: 708 is 400 / 500 / 600, 709 half that (Wisdom's
+      subs 10..14 double both; Master's and Final's are 3000). With KH2's Sora (Magic 16 at level
+      20, 30 at 50, plus his Keyblade's, against his HP then) Cure heals about 110..120% of max
+      HP: a full heal all through the game.
+    - KH1 has no Magic stat (its spells, its own Cure too, scale from max MP), and its max MP is
+      a few points where KH2's Magic is tens. Ours: Magic = KH1's max MP (with equipment) × 3 ×
+      the ini's `magic_scale`, in KH2's formula. At level 37 (KH1's base 51 HP + a 6 HP
+      accessory, 5 MP): 60 / 75 / 90, a full heal; 3 MP: 36 / 45 / 54 of 57. The partners get
+      half. **Ours** (the factor), on KH2's rule.
+    - Before (s192..s338): `ceil(max HP × power / 3000)`, Sora only: 8 / 10 / 12 of 57.
+    - KH1's own Cure (`magic = kh1`, unchanged): its attack data's power 15 / 27 / 36 + max MP.
+    - Not one knocked out (KH1's down bits, or 0 HP). Through KH1's HP change (`0x1402A2790`,
+      the HUD kept). The log: "Cure (KH2): HP a -> b of max (+n)" (" on Donald" for a partner),
+      with the row, power and Magic. KH2 also halves a heal on a low-HP target with Damage
+      Control (its low-HP rate, `sstm +0x178`); not copied.
+    - In a form Cure stays KH1's own (Wisdom's, Master's and Final's: `drive-model.md`).
   - Gravity, Stop, Aero (no KH2 version): KH1 casts the spell, drawn with base Sora's KH2 cast
     motion (Gravity on Thunder's, Stop and Aero on Cure's, the air ones in the air) and run on
     that motion's clock, input window and movement, as Wisdom's KH1-only spells

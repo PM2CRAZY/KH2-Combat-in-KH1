@@ -72,7 +72,8 @@ config_row = on\r\n\
 shortcuts = 4\r\n\
 ; kh2_effects: KH2's own visual effects for these moves, from your KH2 install, drawn in\r\n\
 ; KH1's frame: magnet_explosion (Magnet Burst, Explosion, Vicinity Break, Aerial Finish, Guard\r\n\
-;   Break, Finishing Leap, Aerial Recovery), all (every move), off\r\n\
+;   Break, Finishing Leap, Aerial Recovery, Counterguard, Flash Step, Retaliating Slash), all\r\n\
+;   (every move), off\r\n\
 kh2_effects = magnet_explosion\r\n\
 ; flip_weapons: Sora's weapons (KH1 item ids) KH2's grip holds the wrong way round, turned half\r\n\
 ; round in his hand (0x53: the Dream Shield); none = off\r\n\

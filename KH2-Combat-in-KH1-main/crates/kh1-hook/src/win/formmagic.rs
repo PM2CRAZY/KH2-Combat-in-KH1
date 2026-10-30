@@ -14,8 +14,12 @@
 //!   cost and level (Fire / Fira / Firaga ...), KH2's script (`magic/FIRE_<level>.mag` ...)
 //!   at Wisdom's magic sub (level × 2 − 2, + 1 for the combo finisher, + 10), its effects
 //!   (`kh2fx` packages from 5, `spell_package`) and sounds, its attacks through the spell hit
-//!   records. Cure's heal (a script's direct application to Sora): ours, a share of KH1's max
-//!   HP by the ATKP row's power (`CURE_SHARE`), as KH1 has no KH2 Magic stat to scale it by.
+//!   records. (Cure in a form is KH1's own on the form's motion, below.)
+//! - Base Sora's KH2 Cure (the Magic style at KH2): its script strikes Sora (ATKP 708) and each
+//!   partner in range (709, `reflect::KhWorld::party`); each strike heals by KH2's rule on KH1's
+//!   stats (`crate::cure`: power × Magic / 100, max MP standing in for Magic) through KH1's own
+//!   HP change (`form::HP_ADD_RVA`, the HUD kept). The s192..s338 heal was a share of max HP
+//!   (power / 3000: 13..20%), and Sora's alone.
 //! - Final Form casts the same way (the user: "lets try to incorporate our rules, logic, and
 //!   process from wisdom forms' magic, and bring it to final form, with final form's
 //!   animations"): `form::casting_form`. The same MAGC rows and spell files (KH2 has none of
@@ -80,8 +84,6 @@ const ENVELOPE_FRAMES: u32 = 90;
 const AURA: u16 = 100;
 /// How long a chosen spell waits for KH2's move to allow a cast.
 const WAIT_S: f32 = 5.0;
-/// Cure's heal: the ATKP row's power / this, of KH1's max HP (ours).
-const CURE_SHARE: f32 = 3000.0;
 
 pub fn spell_package(spell: u8, level: u8) -> u8 {
     FIRST_SPELL_PACKAGE + spell * 3 + (level - 1)
@@ -397,21 +399,58 @@ fn place(pos: Vec3, dir: Vec3) -> Mat4 {
     flip() * Mat4::from_rotation_translation(r, pos) * flip()
 }
 
-/// Sora healed by a script (Cure): KH1's HP.
-unsafe fn heal(actor: usize, power: u16) -> Option<(i32, i32)> {
+/// A stats block (`actor + 0x6C`), when readable.
+unsafe fn stats_of(actor: usize) -> Option<usize> {
+    if actor < 0x10000 || !super::crash::readable(actor + 0x70) {
+        return None;
+    }
     let stats = pose::ptr(std::ptr::read_unaligned((actor + 0x6C) as *const u32));
-    if stats < 0x10000 {
-        return None;
+    (stats > 0x10000 && super::crash::readable(stats + 0x50)).then_some(stats)
+}
+
+/// A party member's name for the log (his object's member id, `actor + 0x130` → `+0x4C`).
+unsafe fn member_name(actor: usize) -> String {
+    let obj = pose::ptr(std::ptr::read_unaligned((actor + 0x130) as *const u32));
+    if obj < 0x10000 || !super::crash::readable(obj + 0x4E) {
+        return "a partner".into();
     }
-    let hp = std::ptr::read_unaligned((stats + 0x3C) as *const i32);
-    let max = std::ptr::read_unaligned((stats + 0x40) as *const i32);
-    if hp <= 0 || max < hp || max <= 0 {
-        return None;
+    crate::partners::member_name(std::ptr::read_unaligned((obj + 0x4C) as *const u16))
+}
+
+/// A script's heal (Cure's rows, kind 5 / 6) on `target` (Sora or a partner), cast by Sora
+/// (`caster`): KH2's rule on KH1's stats (`crate::cure`), added through KH1's own HP change
+/// (clamped to the maximum, the HUD's mirror kept). Not on one down (that call would clear
+/// KH1's down bit). Logged.
+unsafe fn cure(caster: usize, target: usize, name: &str, r: &Atkp) {
+    let (Some(cs), Some(ts)) = (stats_of(caster), stats_of(target)) else { return };
+    let rd = |p: usize| std::ptr::read_unaligned(p as *const i32);
+    let (hp, max) = (rd(ts + 0x3C), rd(ts + 0x40));
+    if hp <= 0 || max <= 0 {
+        return;
     }
-    let add = ((max as f32 * power as f32 / CURE_SHARE).ceil() as i32).max(1);
-    let now = (hp + add).min(max);
-    std::ptr::write_unaligned((stats + 0x3C) as *mut i32, now);
-    Some((hp, now))
+    // KH1's stats: max MP `+0x48` (with his equipment's), Strength `+0x4C`.
+    let mp = rd(cs + 0x48);
+    let scale = super::settings::get().magic_scale;
+    let magic = crate::cure::magic(mp, scale);
+    let strength = rd(cs + 0x4C).clamp(0, u16::MAX as i32) as u16;
+    let amount = crate::cure::heal(r.kind, r.stat_source, r.power, magic, strength, max as u32).min(i32::MAX as u32) as i32;
+    if amount > 0 && hp < max {
+        let add: unsafe extern "system" fn(usize, i32) -> u32 = std::mem::transmute(super::sys::GetModuleHandleA(std::ptr::null()) as usize + super::form::HP_ADD_RVA);
+        add(target, amount.min(max - hp));
+    }
+    let now = rd(ts + 0x3C);
+    static N: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+    if N.fetch_add(1, Ordering::Relaxed) < 200 {
+        log(&format!(
+            "Cure (KH2){name}: HP {hp} -> {now} of {max} (+{}) | ATKP {} sub {} kind {}, power {} x Magic {magic} (max MP {mp} x {} x magic_scale {scale}): heals {amount}",
+            now - hp,
+            r.id,
+            r.sub(),
+            r.kind,
+            r.power,
+            crate::cure::MAGIC_PER_MP
+        ));
+    }
 }
 
 /// After KH2's step and the swings: the form's scripts' frame (casts, shots, effects, hits).
@@ -491,25 +530,27 @@ pub unsafe fn shots_step(actor: usize, out: &Output, airborne: bool, strikes: &m
                 }
             }
             Event::Error(e) => log(&format!("{}'s script error: {e}", who())),
-            Event::Strike { attack, target } if target == SORA => {
+            // Cure's direct applications: Sora (708) and each partner in range (709).
+            Event::Strike { attack, target } => {
+                let to = if target == SORA { Some(actor) } else { world.partner_actor(target) };
+                let Some(to) = to else { continue };
                 let Some(a) = rt.magic.attack_mut(attack) else { continue };
                 let (atk, sub) = (a.atk, a.sub);
                 let Some(r) = row(battle, atk, sub, 0) else { continue };
-                if matches!(combat_core::AttackKind::from_id(r.kind), combat_core::AttackKind::Cure | combat_core::AttackKind::CureStrong) {
-                    if let Some((from, to)) = heal(actor, r.power) {
-                        log(&format!("{} Cure: ATKP {atk} sub {sub} (power {}): HP {from} -> {to}", who(), r.power));
-                    }
+                if combat_core::AttackKind::from_id(r.kind).heals() {
+                    let name = if target == SORA { String::new() } else { format!(" on {}", member_name(to)) };
+                    cure(actor, to, &name, r);
                 }
             }
-            Event::Strike { .. } => {}
         }
     }
-    // Effects: bound ones follow Sora's bones; unbound ones go where the script has them.
+    // Effects: Sora's bound ones follow his bones; the rest (unbound, or bound to a partner, as
+    // Cure's on each one it heals) go where the script has them.
     let mut seen = Vec::new();
     for e in &rt.magic.effects {
         seen.push(e.id);
         let package = rt.package.get(&e.spell).copied().unwrap_or(super::kh2fx::WISDOM);
-        let placed = e.owner.is_none().then(|| place(e.pos, e.dir));
+        let placed = (e.owner != Some(SORA)).then(|| place(e.pos, e.dir));
         match rt.fx.get(&e.id) {
             None => {
                 let h = if e.alive() { super::kh2fx::spell_start(package, e.element.id) } else { None };

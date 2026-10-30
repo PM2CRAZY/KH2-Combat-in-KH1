@@ -26,7 +26,9 @@ weakness does 0.
 | — | Anti Form: damage Sora takes in Anti Form is scaled by a system rate. Not modelled. | Checked (exe), not implemented |
 
 Cure (ATKP type 5) heals `ceil(target max HP × power × stat / 10000)`. C-Cure (type 6) heals
-`ceil(power × stat / 100)`. **Checked (exe).**
+`ceil(power × stat / 100)`, `stat` the caster's. **Checked (exe).** Then, for heals as for
+damage, the target's low-HP rate (step 8) applies. The Cure spells are type 6, Magic: ATKP 708
+on the caster, 709 (half its power) on each party member in range (`kh1-move-styles.md`).
 
 ## Attack rows
 
@@ -340,6 +342,36 @@ says that the row was taken or why not:
 - the combo's step;
 - per target: distance, height, or angle from the aim, with the window each needs;
 - the row passed but an earlier row came first, or its motion was already playing.
+
+## How high a target is, for the combo rows
+
+**The rows (PTYA set 1; Checked (data)).** The table's first ground rows (0, 33, 48: flags
+2 | 8, a jump of 17 or 41 and up, near 0, height window low -110 / high -250 in y-down, the
+primary target dead ahead) jump Sora to a foe in the air: with flag 8 the window's low bound
+shrinks by the target's size, so they want the target's point less its size 110 or more above
+his feet, which is the bottom of its target shape. The ground swing rows (low -20 / high -110,
+no flags) grow their window by the size both ways: a body whose span overlaps 20..110 above
+him. So the measure that matters is the target shape's point and size (`0x1403C8EE0`): its
+middle and half its height. **Inferred** from the table; KH2's own shapes weren't read.
+
+**What went wrong (the player: "In the Olympus Coliseum, Sora cannot use ground combos
+against Hercules; on the second hit, he initiates an aerial combo").** The hook gave every
+target KH1's lock point 0 with that point's own radius as its size, and the R1 / soft lock's
+point the same. A tall foe standing on Sora's floor (Hercules, Large Body, Cerberus, the
+armors) has its point high on its body and a small size, so the point less the size was over
+110: row 0 (or 33 / 48) passed, Sora jumped to it and went on in the air. Why the second hit:
+**Inferred**, row 0 reaches only 260 (less the target's radius): the first swing, started from
+farther, is a ground row that lunges in, and the second, from close, passes row 0 (or the first
+is the one before KH1's soft target is up). Not seen in a log (no Coliseum fight in the user's
+logs).
+
+**Ours now (`TargetInfo::body`, `combat::bodies`):** a target's point is the middle of its hit
+parts' height span and its size half the span. A foe standing on the ground (KH1's `+0x3D4`, its
+height over its floor, within 40 and its collision's in-the-air bit clear) spans from its feet.
+Across, KH1's lock point as before (where the swings go; the locked point's for the lock). The
+spell scripts still aim at the lock point. Real flyers span only their parts, high above him:
+the jump to them and the air combo as before. The hook logs each object's measure once
+(`combo measure, object N: ...`). Test: `a_tall_grounded_target_gets_the_ground_combo`.
 
 ## Not modelled yet
 

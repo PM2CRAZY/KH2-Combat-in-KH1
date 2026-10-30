@@ -112,11 +112,20 @@ a "New Ability" box in KH1's level-up prompt style names it):
 | 4 | Aerial Recovery | Sora's | 2 |
 | 10 | Dodge Slash | Sora's | 2 |
 | 12 | Quick Run LV1 (LV2 at 20, LV3 at 32, MAX at 45; its menu name shows the level, an "Ability Up" box each time) | Sora's | 2 |
+| 14 | Damage Drive (damage taken out of a form fills the Drive gauge) | Sora's | 3 |
 | 16 | Horizontal Slash | Sora's | 2 |
 | 20 | Negative Combo | Sora's | 2 |
+| 24 | Form Boost (the form gauge drains ×0.8 a copy) | Sora's | 5 |
 | 25 | Aerial Spiral | Sora's | 2 |
 | 34 | Finishing Plus | Sora's | 5 |
+| 38 | Damage Control (half damage at a quarter of max HP or less a copy) | Sora's | 5 |
 | 43 | Retaliating Slash | Sora's | 3 |
+| 35 | Drive Converter (an enemy's munny partly Drive orbs) | Sora's | 5 |
+
+Damage Drive, Form Boost, Damage Control and Drive Converter are KH2's support abilities for
+the Drive gauge and damage (KH2's own rules, per copy equipped, base Sora's in a Drive Form too:
+`docs/drive-model.md`, "Support abilities"). Their levels are one table,
+`growth::SUPPORT_LEVELS`. Berserk Charge and Drive Boost are left out (KH1 has no MP Charge).
 
 Bosses give KH2 moves too, as KH2 does (the user's list), on top of what they already give;
 learned once the world's story progress passes the boss (off until equipped, with a "New
@@ -194,7 +203,7 @@ Rod (held back until Dragon Maleficent), Vicinity Break at 39 with the Sword and
 36 with the Rod (spares).
 
 Each of these Sora learns raises his max AP by its own AP (`bonus_ap`), so the KH2
-abilities take none of the AP KH1 gives him: +2 at level 4, +32 in all by level 50 (KH1's
+abilities take none of the AP KH1 gives him: +2 at level 4, +50 in all by level 50 (KH1's
 cap of 100 still holds). The save keeps KH1's own AP; the bonus is added while the game runs.
 
 The dodge roll (KH1's Dodge Roll equipped) reaches LV2 / LV3 / MAX at levels 19 / 37 / 60; its
@@ -214,7 +223,7 @@ Strike, Treasure Magnet, ...). Equipped abilities, Guard, Dodge Roll, the specia
 combo modifiers are never removed. Each removal is written to `kh1-kh2-removed.txt` next to the
 game.
 
-They live in an extended copy of KH1's ability table (ids 66 to 77), so a save holding them
+They live in an extended copy of KH1's ability table (ids 66 to 81), so a save holding them
 needs this mod to show them. To go back to a plain KH1 save: set `abilities = test`, load the
 save (they are taken out of Sora's lists), save, then remove the mod.
 

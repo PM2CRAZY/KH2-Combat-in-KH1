@@ -31,7 +31,8 @@ const KH1_ENTRIES: usize = 65;
 const PROGRESS_OFF: usize = 0x1504;
 /// Our Aerial Dodge's id (`growth::MENU`).
 const AERIAL_DODGE: u8 = 67;
-const ENTRIES: usize = 80;
+/// Entries in our copy: every id a list byte can name (bit 7 is the not-equipped mark).
+const ENTRIES: usize = 0x7F;
 
 static TABLE: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
 /// Our abilities' text handles (name, help), by `MENU` order, then `RENAMED`'s.
@@ -1024,6 +1025,8 @@ impl Growth {
         if self.seen.as_ref() == Some(&now) {
             return;
         }
+        // KH2's support abilities equipped (`crate::support`): one line for each that changes.
+        set_support(if self.mode == Mode::Kh1 { now.support() } else if self.mode == Mode::All { crate::support::Support::ONE_EACH } else { Default::default() });
         let from_kh1 = now.kh2();
         let list = |l: &[u8]| l.iter().take_while(|b| **b != 0).map(|b| if b & 0x80 != 0 { format!("({})", b & 0x7F) } else { b.to_string() }).collect::<Vec<_>>().join(" ");
         log(&format!("KH1 Sora: level {}, abilities [{}], shared [{}] (in brackets: not equipped)", now.level, list(&now.abilities), list(&now.shared)));
@@ -1035,6 +1038,23 @@ impl Growth {
             ch.abilities = from_kh1;
         }
         self.seen = Some(now);
+    }
+}
+
+/// KH2's support abilities equipped on base Sora (`crate::support::Support`, packed), for
+/// `hurt` (Damage Control), `gauge` (Damage Drive, Form Boost) and `prize` (Drive Converter):
+/// `Kh1Sora::support` with `abilities = kh1`, one of each with `all`, none with `test`. KH2
+/// counts base Sora's support abilities in a Drive Form too, so the forms read the same.
+static SUPPORT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
+pub fn support() -> crate::support::Support {
+    crate::support::Support::unpack(SUPPORT.load(std::sync::atomic::Ordering::Relaxed))
+}
+
+fn set_support(now: crate::support::Support) {
+    let old = crate::support::Support::unpack(SUPPORT.swap(now.pack(), std::sync::atomic::Ordering::Relaxed));
+    for line in now.changes(old) {
+        log(&line);
     }
 }
 

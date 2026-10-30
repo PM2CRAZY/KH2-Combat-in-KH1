@@ -8,8 +8,9 @@
 //!   (`drivegauge::BARS_OFF` / `POINTS_OFF`): every change is written there at once, and every use
 //!   reads them back, so a save keeps the gauge and a load brings its own.
 //! - **Filling.** Sora's hits (`hit`, from KH1's hit record `probe::hit`: KH2's ATKP drive value
-//!   for a KH2 hit, `drivegauge::KH1_PHYSICAL` / `KH1_SPELL` for KH1's), damage he takes (`frame`,
-//!   KH2's Damage Drive rule) and Drive orbs (`orb`, `prize`).
+//!   for a KH2 hit, `drivegauge::KH1_PHYSICAL` / `KH1_SPELL` for KH1's), damage he takes with
+//!   Damage Drive equipped (`frame`, KH2's rule, per copy) and Drive orbs (`orb`, `prize`).
+//!   Form Boost's copies slow the form gauge's drain (×0.8 each, `with`).
 //! - **In a form** the gauge is the form's countdown (`enter`, `frame`, `ran_out`): `(level + 3) ×
 //!   600` frames, the level the form's growth ability's (`form::form_level`), 1 a frame in battle
 //!   and 0.5 outside, less per hit, more per orb (Anti: its own 6 bars, orbs drain it).
@@ -123,6 +124,8 @@ fn with<R>(f: impl FnOnce(&mut Drive) -> R) -> Option<R> {
         let mut g = STATE.lock().ok()?;
         let d = g.get_or_insert_with(|| Drive::new(max));
         d.max = max;
+        // Form Boost's copies (KH2: the form gauge drains ×0.8 a copy; base Sora's, in the form).
+        d.form_boost = super::menu::support().form_boost;
         let (have_b, have_p) = (rd::<u8>(save + dg::BARS_OFF), rd::<u8>(save + dg::POINTS_OFF));
         let (b, p) = dg::from_save(have_b, have_p, max);
         if have_b & dg::SET != 0 && ((have_b & !dg::SET) > dg::MAX_BARS || have_p > 100) {
@@ -247,6 +250,21 @@ pub fn recover(points: i32) -> (String, String) {
     (before, describe_bars())
 }
 
+/// Fills every bar (out of a form) after a forced revert (`form::revert`, the user: "fully
+/// refill sora's drive gauge"), once the gauge is shown.
+pub fn refill_bars(why: &str) {
+    if !form_open() {
+        return;
+    }
+    let before = describe_bars();
+    with(|d| {
+        d.gauge = None;
+        d.refill();
+    });
+    LOGGED.store(u32::MAX, Ordering::Relaxed);
+    log(&format!("Drive gauge: refilled after a forced revert ({why}): {before} -> {}", describe_bars()));
+}
+
 /// Fills the gauge (a testing aid): every bar, or the form gauge in a form.
 #[allow(dead_code)]
 pub fn refill() {
@@ -256,7 +274,7 @@ pub fn refill() {
 
 /// KH1's foe test (`0x14028FE30 (a, b)`): `b` isn't marked not-a-foe (`0x200`), and has a team
 /// (`+0x374` bits 5-6) other than `a`'s.
-unsafe fn foe(a: usize, b: usize) -> bool {
+pub(super) unsafe fn foe(a: usize, b: usize) -> bool {
     if b < 0x10000 || !super::crash::readable(b + 0x378) {
         return false;
     }
@@ -326,22 +344,25 @@ pub unsafe fn frame(actor: usize) {
             enter(kind, level);
         }
     }
-    // The form gauge drains (KH2: every frame of the form, half as fast out of battle).
-    let empty = with(|d| d.gauge.is_some() && d.tick(battle)).unwrap_or(false);
+    // The form gauge drains (KH2: every frame of the form, half as fast out of battle). Not while
+    // KH1's script has Sora between the Coliseum's rounds (the form carries into the next, `cup`).
+    let empty = !super::cup::gauge_held() && with(|d| d.gauge.is_some() && d.tick(battle)).unwrap_or(false);
     if super::form::in_form() {
         FRAMES.fetch_add(1, Ordering::Relaxed);
     }
     if empty && !RAN_OUT.swap(true, Ordering::Relaxed) {
         log(&format!("{}: the form gauge ran out", super::form::current().map_or("The form", |k| k.name())));
     }
-    // Damage taken (KH2's HP-change rule): his HP down from last frame, the same actor and max HP.
+    // Damage taken (KH2's HP-change rule, Damage Drive's): his HP down from last frame, the same
+    // actor and max HP, with Damage Drive equipped (per copy; nothing without it, as KH2).
     let stats = super::pose::ptr(rd::<u32>(actor + 0x6C));
     if stats > 0x10000 && super::crash::readable(stats + 0x44) {
         let (hp, max_hp) = (rd::<i32>(stats + 0x3C), rd::<i32>(stats + 0x40));
         let same = LAST_ACTOR.swap(actor, Ordering::Relaxed) == actor && LAST_MAX_HP.swap(max_hp, Ordering::Relaxed) == max_hp;
         let last = LAST_HP.swap(hp, Ordering::Relaxed);
-        if same && last > hp && hp >= 0 {
-            let n = dg::damage_points(last - hp, max_hp);
+        let copies = super::menu::support().damage_drive;
+        if same && last > hp && hp >= 0 && copies > 0 {
+            let n = dg::damage_points(last - hp, max_hp, copies);
             // (Out of a form only: KH2's damage rule runs in its normal gauge mode.)
             if n > 0 && with(|d| {
                 if d.gauge.is_some() {
@@ -383,7 +404,7 @@ fn summary() {
         why.push(format!("{hp:+} from {hits} hit{}", if hits == 1 { "" } else { "s" }));
     }
     if dp != 0 {
-        why.push(format!("{dp:+} from damage"));
+        why.push(format!("{dp:+} from damage (Damage Drive x{})", super::menu::support().damage_drive));
     }
     if orbs > 0 {
         why.push(format!("{op:+} from {orbs} Drive orb{}", if orbs == 1 { "" } else { "s" }));
@@ -391,7 +412,9 @@ fn summary() {
     match s.form {
         Some(g) => {
             if frames > 0 {
-                why.insert(0, format!("{frames} frames of the form"));
+                let boost = super::menu::support().form_boost;
+                let drain = if boost > 0 { format!(" (Form Boost x{boost}: drain x{:.3})", crate::support::form_drain(boost)) } else { String::new() };
+                why.insert(0, format!("{frames} frames of the form{drain}"));
             }
             log(&format!(
                 "{}'s gauge: {:.0} of {:.0} frames ({:.1} bars){}",

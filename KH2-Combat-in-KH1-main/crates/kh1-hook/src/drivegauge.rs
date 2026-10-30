@@ -2,8 +2,8 @@
 //! they are easy to change and to test. The gauge itself is `character_core::drive::Drive`
 //! (KH2's rules from the executable, `docs/drive-model.md`, "Drive gauge (Checked, exe)").
 //!
-//! - **Costs** (the user's, KH2's 03system `cmd` byte 0x1c): Valor 3, Wisdom 3, Limit 4, Master
-//!   4, Final 5; Anti 9, which empties the gauge.
+//! - **Costs** (the user's, KH2's 03system `cmd` byte 0x1c): Valor 3, Wisdom 3, Limit 3 (KH2's
+//!   4; the user's, s331), Master 4, Final 5; Anti 9, which empties the gauge.
 //! - **Maximum** (the user's, s325): 3 bars, then +1 for each of six fights won (`MAX_TABLE`:
 //!   Sabor, Riku 1, Chernabog, Sephiroth, Kurt Zisa, the Unknown), KH2's 9 with all six.
 //!   Derived from the story flags (`crate::story::Flags`) each time, never stored.
@@ -86,8 +86,9 @@ pub fn form_view(left: f32, max: f32) -> (f32, i32) {
 /// A Drive's cost in bars (KH2's `cmd` byte 0x1c; `None` is Anti Form, the secret code's).
 pub fn cost(form: Option<Form>) -> u8 {
     match form {
-        Some(Form::Valor) | Some(Form::Wisdom) => 3,
-        Some(Form::Limit) | Some(Form::Master) => 4,
+        // (Limit 3, not KH2's 4: the user, "Make limit form only cost 3 bars to enter".)
+        Some(Form::Valor) | Some(Form::Wisdom) | Some(Form::Limit) => 3,
+        Some(Form::Master) => 4,
         Some(Form::Final) => 5,
         None => ANTI_COST,
     }
@@ -131,15 +132,15 @@ pub fn from_save(bars: u8, points: u8, max: u8) -> (u8, u8) {
 }
 
 /// Drive from damage Sora takes (KH2's HP-change rule, `Drive gauge` in the docs): out of a
-/// form, `damage / max HP × 50` points (KH2 gives `× 0` without Damage Drive and `× 50` with one
-/// copy; here every Sora has it once, the user: "damage Sora takes" fills it), truncated.
-pub const DAMAGE_DRIVE: f32 = 50.0;
+/// form, with Damage Drive equipped, `damage / max HP × 50` points per copy
+/// (`crate::support::damage_drive_rate`; KH2 gives nothing without it), truncated.
+pub const DAMAGE_DRIVE: f32 = crate::support::DAMAGE_DRIVE_RATE;
 
-pub fn damage_points(damage: i32, max_hp: i32) -> i32 {
-    if damage <= 0 || max_hp <= 0 {
+pub fn damage_points(damage: i32, max_hp: i32, copies: u8) -> i32 {
+    if damage <= 0 || max_hp <= 0 || copies == 0 {
         return 0;
     }
-    (damage.min(max_hp) as f32 / max_hp as f32 * DAMAGE_DRIVE) as i32
+    (damage.min(max_hp) as f32 / max_hp as f32 * crate::support::damage_drive_rate(copies)) as i32
 }
 
 /// The drive value of a hit of KH1's own (its combo, its limits, its spells), which has no ATKP
@@ -263,7 +264,7 @@ mod tests {
     fn costs_are_kh2s() {
         assert_eq!(cost(Some(Form::Valor)), 3);
         assert_eq!(cost(Some(Form::Wisdom)), 3);
-        assert_eq!(cost(Some(Form::Limit)), 4);
+        assert_eq!(cost(Some(Form::Limit)), 3);
         assert_eq!(cost(Some(Form::Master)), 4);
         assert_eq!(cost(Some(Form::Final)), 5);
         assert_eq!(cost(None), 9);
@@ -291,11 +292,16 @@ mod tests {
 
     #[test]
     fn damage_drive() {
-        assert_eq!(damage_points(10, 100), 5);
-        assert_eq!(damage_points(1, 100), 0, "truncated");
-        assert_eq!(damage_points(500, 100), 50, "at most the whole HP");
-        assert_eq!(damage_points(0, 100), 0);
-        assert_eq!(damage_points(5, 0), 0);
+        assert_eq!(damage_points(10, 100, 1), 5);
+        assert_eq!(damage_points(1, 100, 1), 0, "truncated");
+        assert_eq!(damage_points(500, 100, 1), 50, "at most the whole HP");
+        assert_eq!(damage_points(0, 100, 1), 0);
+        assert_eq!(damage_points(5, 0, 1), 0);
+        // Per copy, and nothing without one (KH2's vanilla Sora).
+        assert_eq!(damage_points(10, 100, 2), 10);
+        assert_eq!(damage_points(3, 100, 2), 3, "the rate adds up before the truncation");
+        assert_eq!(damage_points(50, 100, 0), 0);
+        assert_eq!(DAMAGE_DRIVE, 50.0);
     }
 
     #[test]

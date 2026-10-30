@@ -3584,6 +3584,80 @@ KH2_GAME="D:\epic\KH_1.5_2.5\KINGDOM HEARTS II FINAL MIX.exe" cargo test
   bounce, the swing goes on. Ini `walls = kh1 | clink | pass` (default kh1; `wall_clink` no longer
   read). Enemies' guards clink as before. `docs/kh1-clash.md`.
 
+### 2026-10-24: Stage 339 (KH2-style Cure heals by KH2's rule)
+- The user: "using cure with KH2 magic selected barely heals sora". `formmagic::heal` was
+  ceil(max HP x power / 3000) (13-20%), Sora only. KH2's heal (kind 6): ceil(power x Magic / 100);
+  Cure's rows 708 (caster: 400 / 500 / 600) and 709 (each partner in range: half). New `cure.rs`:
+  KH1's live max MP x 3 x `magic_scale` stands in for Magic (near-full heals, as KH2's); partners
+  in the field healed (`reflect::KhWorld`), knocked-out ones skipped. KH1-style and the forms'
+  Cure unchanged. docs/kh1-move-styles.md, docs/combat-model.md.
+
+### 2026-10-23: Stage 338 (forced reverts: partners fully back, Drive gauge full)
+- The user: "The sora is force reverted in any circumstances (reverted outside of the player's
+  control) make sure the party members are fully visible, and fully refill sora's drive gauge".
+  `form::revert` takes `forced`: true for a KO, a new world and every `scene_revert` (scenes,
+  battle ends, the Coliseum's arena entry and exit); false for the Revert command and the gauge
+  running out. Forced: `gauge::refill_bars` (every bar) and `vanish::force_back` (the partners the
+  form took, on their current actors: acting, model, shadow on, away bits off, beside Sora, HUD
+  entry faded in; KH1's member-leaving mark left alone). Also: installs now come from
+  PM2CRAZY/KH2-Combat-In-KH1-Mod (one commit, the latest build). docs/drive-model.md.
+
+### 2026-10-23: Stage 337 (Drive Converter at level 35)
+- The user: "make drive converter come at level 35". `growth::SUPPORT_LEVELS` 50 -> 35.
+
+### 2026-10-23: Stage 336 (Limit Form: limits heal per hit; limits out of battle)
+- The user: "when in limit form, when sora performs a limit, he should get health back. Also, in
+  limit form, sora should be able to use the limits whenever, even when out of combat". KH2's ATKP
+  `hp_drain` (only Limit Form's limits have one; added per target hit, capped at max HP) as
+  `limits::LIMIT_HP_PER_HIT`: Sonic Blade 5, Strike Raid 8, Ars Arcanum 2, Ragnarok's combo 8 (shots
+  0), Trinity Limit 1 (ours). `limits::kh1_usable` no longer needs a target, so Limit Form's limits
+  work in the field; base Sora unchanged. docs/drive-model.md.
+
+### 2026-10-23: Stage 335 (Damage Drive, Form Boost, Damage Control, Drive Converter)
+- The user: "lets try to implement berserk charge, damage control, damage drive, drive boost, form
+  boost, drive converter?", then Berserk Charge and Drive Boost left out (no MP Charge in KH1) and
+  the others "At set levels". `growth::SUPPORT_LEVELS` (ids 78..81: Damage Drive 14 / 3 AP, Form
+  Boost 24 / 5, Damage Control 38 / 5, Drive Converter 50 / 5), KH2's names, help and AP. Rules from
+  the Steam KH2 exe: Damage Drive damage / max HP x 50 per copy out of a form (no longer free); Form
+  Boost x0.8 drain per copy; Damage Control halves (rounded up) at or below 25% HP per copy
+  (`hurt.rs`); Drive Converter keeps munny x0.5 per copy, the rest as Drive orbs. Also the Steam
+  decomps (local/decomps/steam) and docs/steam-epic-addresses.md. docs/drive-model.md.
+
+### 2026-10-22: Stage 334 (partners no longer left invisible after a Coliseum round)
+- The user: "after reverting from a drive form inside a coliseum cup the party members that
+  disappeared remain invisible". KH1's actor reset (0x1402904D0, from actor script commands 32/40,
+  partner placement and the catch-up warp) turns 0x8000 back on and clears 0x200/0x40 but keeps
+  0x1/0x2 off, so our record was dropped as "KH1 put him back" and he stayed undrawn. Now a hide is
+  owed until we show him, his model is seen on, or the room changes; every check uses the current
+  party-slot actor; a restore sets acting, model and shadow on (`partners::vanish`, tested).
+  Revert logs the party's flags before and after. docs/drive-model.md.
+
+### 2026-10-22: Stage 333 (Drive Recovery items from drops, chests and shops)
+- The user: "lets make drive recovery and high drive recoveries more available throughout the game
+  (mob drops, chests, etc)". Enemy drops: after KH1's own drop (`0x1402A9AB0`), one roll by
+  `driveitems::TIERS` (any 3% / 0.5%, MP-orb drops 5% / 0.75%, 20+ prizes 15% / 4%; Lucky Strike
+  applies) made with KH1's dropped item `0x1402BDD50`, once a form is open. Chests: 17 plain
+  consumable chests in KH1's chest table (`0x140529A60`) patched in memory (12 Drive Recovery,
+  5 High). Shops: any item shop list with a Potion (Traverse Town, Agrabah). docs/kh1-items.md.
+
+### 2026-10-22: Stage 332 (a player's five bugs; Drive Forms across Coliseum rounds)
+- Glide in Neverland flight hung Sora: KH2's glide is off in flight worlds (`glide_blocked`), a glide
+  press starts KH1's flight where KH1 would, held buttons out of flight aren't fresh presses.
+  Hercules' second hit jumped to the air combo: combo rows measure a target by its body
+  (`TargetInfo::body`, feet up when standing), not its lock point.
+- Drive transform effects: they did play; KH2's grey screen tint during the change was missing (now
+  drawn) and the revert's limb glows looped (end after 60 frames). Counterguard's effects: motion
+  171 (and 169 Flash Step, 172 Retaliating Slash) added to the default `kh2_effects`.
+- The user: "in the coliseum, you should be able to maintain your drive form throughout rounds. if
+  you enter the cup in a drive form you should be reverted before the first battle, but if you
+  defeat a round in a drive form it should carry over into the next round". `win/cup.rs`: arena
+  entry reverts, round-end scenes don't, a cup state change or leaving the arena does. Partners are
+  hidden only while their model shows, always come back with model and shadow on, and any left
+  hidden out of a form are cleared (the invisible allies). docs/drive-model.md.
+
+### 2026-10-22: Stage 331 (Limit Form costs 3 bars)
+- The user: "Make limit form only cost 3 bars to enter". `drivegauge::cost`: Limit 3 (KH2's 4).
+
 ### 2026-10-22: Stage 330 (a player's seven bugs)
 - Walk with no animation / walk at run speed (Misc Animations KH1 only): KH1's idle/walk/run is
   chosen by KH2's state, not KH1's own stick thresholds (KH1 still at 0.41..0.50, KH2 walks from

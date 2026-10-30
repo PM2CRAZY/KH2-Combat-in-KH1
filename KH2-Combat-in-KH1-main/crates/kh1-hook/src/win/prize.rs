@@ -29,8 +29,12 @@
 //!   drive-orb yellow-orange (`ppp_draw`, each time it runs).
 //! - **Their drop**: after an enemy's own drop (`ai_drop`), KH2's normal enemies' Drive orb rows
 //!   (`drivegauge::DROPS`) roll, and KH1 makes the orbs (`0x1402A9110`, the same mode as its own).
+//!   The same hook rolls the Drive Recovery items' drop (`items::enemy_drop`), with or without
+//!   the orbs.
 //! - **Their pickup**: KH1's pickup (`pickup`) runs as ever; one of ours picked up adds its points
 //!   to the Drive gauge (`gauge::orb`: small 1, big 3; in a form its form gauge, × 12 frames).
+//! - **Drive Converter** (KH2FM's, equipped on base Sora): an enemy's munny is partly Drive orbs
+//!   (`converted_drop`, `crate::support::convert_munny`).
 
 use super::addr::Rva;
 use super::{hook, log};
@@ -72,6 +76,10 @@ const PPP_DRAW_RVA: Rva = Rva(0x33E8D0);
 const PPP_DRAW_PROLOGUE: [u8; 8] = [0x48, 0x89, 0x5C, 0x24, 0x20, 0x55, 0x56, 0x57];
 /// Prizes off (KH1's drop functions return at once while it is set).
 const PRIZES_OFF_RVA: Rva = Rva(0x2D619AC);
+/// KH1's prize count factor (1 + 0.5 per Jackpot equipped in the party, set where KH1 reads the
+/// party's abilities, beside Lucky Strike's `0x142D619A8`): the drop functions make
+/// `(int)(count × factor)` of each type.
+const COUNT_FACTOR_RVA: Rva = Rva(0x2D619A4);
 /// The prizes' draw records (0x20 bytes each: `+0x18` type, `+0x19` bits, bit 0 live, `+0x1C` the
 /// animation timer, `+0x1E` its step).
 const RECORDS_RVA: Rva = Rva(0x2432B40);
@@ -88,6 +96,7 @@ static ORIG_PPP: AtomicUsize = AtomicUsize::new(0);
 static SEED: AtomicU64 = AtomicU64::new(0x9E37_79B9_7F4A_7C15);
 static DROPS_LOGGED: AtomicU32 = AtomicU32::new(0);
 static PICKUPS_LOGGED: AtomicU32 = AtomicU32::new(0);
+static CONVERTED_LOGGED: AtomicU32 = AtomicU32::new(0);
 
 unsafe fn rd<T: Copy>(p: usize) -> T {
     std::ptr::read_unaligned(p as *const T)
@@ -181,17 +190,75 @@ unsafe extern "system" fn pickup(prize: usize, pos: usize) -> usize {
 
 type AiDropFn = unsafe extern "system" fn(usize, usize, u32);
 
-/// An enemy's own drop (its AI's drop op): as ever, then KH2's Drive orbs for it.
+/// The drop's 13 dwords: KH1's seven counts, then three (chance, item) pairs.
+const DROP_DWORDS: usize = 13;
+
+/// Drive Converter (KH2's rule, `crate::support::convert_munny`): with it equipped, the drop's
+/// munny (KH1's types 0..2, as many as KH1 would make: its count factor applied) keeps `× 0.5`
+/// a copy, truncated, and the rest come as Drive orbs (20 and 5 munny big ones, 1 munny small
+/// ones). KH1's drop runs on a copy of the counts with no munny, then KH1's own spawn makes the
+/// munny kept and the orbs (the same position and mode). False if it doesn't apply (none
+/// equipped, no munny, no orbs): the drop is KH1's as it is.
+unsafe fn converted_drop(f: AiDropFn, base: usize, counts: usize, pos: usize, mode: u32) -> bool {
+    let copies = super::menu::support().drive_converter;
+    if copies == 0 || !on() || counts < 0x10000 || pos < 0x10000 || rd::<u32>(base + PRIZES_OFF_RVA) != 0 || !super::crash::readable(counts + DROP_DWORDS * 4 - 1) {
+        return false;
+    }
+    let mut local: [i32; DROP_DWORDS] = rd(counts);
+    let factor = rd::<f32>(base + COUNT_FACTOR_RVA);
+    let factor = if factor.is_finite() && factor > 0.0 { factor } else { 1.0 };
+    let made = |n: i32| if n > 0 { (n as f32 * factor) as i32 } else { 0 };
+    let munny = [made(local[0]), made(local[1]), made(local[2])];
+    let (kept, small, big) = crate::support::convert_munny(munny, copies);
+    if small + big == 0 {
+        return false;
+    }
+    local[..3].fill(0);
+    f(local.as_ptr() as usize, pos, mode);
+    let spawn: unsafe extern "system" fn(u32, usize, u32) = std::mem::transmute(base + SPAWN_RVA);
+    for (t, n) in kept.iter().enumerate() {
+        for _ in 0..*n {
+            spawn(t as u32, pos, mode);
+        }
+    }
+    for _ in 0..small {
+        spawn(SMALL as u32, pos, mode);
+    }
+    for _ in 0..big {
+        spawn(BIG as u32, pos, mode);
+    }
+    let n = CONVERTED_LOGGED.fetch_add(1, Ordering::Relaxed);
+    if n < 40 || n % 50 == 0 {
+        let worth = |c: [i32; 3]| c[0] + c[1] * 5 + c[2] * 20;
+        log(&format!(
+            "Drive Converter x{copies}: munny drop (1 / 5 / 20) {munny:?} ({} munny) -> {kept:?} ({} munny) and {small} small, {big} big Drive orbs{}",
+            worth(munny),
+            worth(kept),
+            if n >= 40 { format!(" (drop {})", n + 1) } else { String::new() }
+        ));
+    }
+    true
+}
+
+/// An enemy's own drop (its AI's drop op): as ever (its munny partly Drive orbs with Drive
+/// Converter, `converted_drop`), then KH2's Drive orbs for it.
 unsafe extern "system" fn ai_drop(counts: usize, pos: usize, mode: u32) {
     let f: AiDropFn = std::mem::transmute(ORIG_AI_DROP.load(Ordering::Acquire));
-    f(counts, pos, mode);
     let base = base();
-    if !on() || counts < 0x10000 || pos < 0x10000 || rd::<u32>(base + PRIZES_OFF_RVA) != 0 {
+    if !converted_drop(f, base, counts, pos, mode) {
+        f(counts, pos, mode);
+    }
+    if counts < 0x10000 || pos < 0x10000 || rd::<u32>(base + PRIZES_OFF_RVA) != 0 {
         return;
     }
     // (Only a drop with something in it: KH1's seven counts.)
     let kh1: [i32; 7] = rd(counts);
     if kh1.iter().all(|&n| n <= 0) {
+        return;
+    }
+    // A Drive Recovery item, maybe (`items`: KH1's field item drop).
+    super::items::enemy_drop(base, kh1, pos, mode);
+    if !on() {
         return;
     }
     let (small, big) = crate::drivegauge::drop_for(roll());
@@ -268,24 +335,36 @@ unsafe fn restart(ty: u8) {
     }
 }
 
+/// The Drive orbs' parts: the row table, the draw and the pickup. False (none dropped) if any
+/// isn't as expected.
+unsafe fn install_orbs(base: usize) -> bool {
+    if !relocate_table(base) {
+        return false;
+    }
+    if hook::install(base + PPP_DRAW_RVA, &PPP_DRAW_PROLOGUE, ppp_draw as *const () as usize, &ORIG_PPP, "prize effect draw (Drive orbs)").is_none() {
+        log("Drive orbs: the prize effect's draw wasn't as expected: none dropped (they would not show)");
+        return false;
+    }
+    if hook::install(base + PICKUP_RVA, &PICKUP_PROLOGUE, pickup as *const () as usize, &ORIG_PICKUP, "prize pickup (Drive orbs)").is_none() {
+        log("Drive orbs: KH1's pickup wasn't as expected: none dropped");
+        return false;
+    }
+    true
+}
+
 pub unsafe fn install() {
     let base = base();
     if !super::settings::get().drive {
         return;
     }
-    if !relocate_table(base) {
+    let orbs = install_orbs(base);
+    // The enemy drop's hook also drops the Drive Recovery items (`items::enemy_drop`), so it goes
+    // in even without the orbs.
+    if hook::install(base + AI_DROP_RVA, &AI_DROP_PROLOGUE, ai_drop as *const () as usize, &ORIG_AI_DROP, "enemy prize drop (Drive orbs, Drive Recovery items)").is_none() {
+        log("Drive orbs: KH1's enemy drop wasn't as expected: no Drive orbs or Drive Recovery items dropped");
         return;
     }
-    if hook::install(base + PPP_DRAW_RVA, &PPP_DRAW_PROLOGUE, ppp_draw as *const () as usize, &ORIG_PPP, "prize effect draw (Drive orbs)").is_none() {
-        log("Drive orbs: the prize effect's draw wasn't as expected: none dropped (they would not show)");
-        return;
-    }
-    if hook::install(base + PICKUP_RVA, &PICKUP_PROLOGUE, pickup as *const () as usize, &ORIG_PICKUP, "prize pickup (Drive orbs)").is_none() {
-        log("Drive orbs: KH1's pickup wasn't as expected: none dropped");
-        return;
-    }
-    if hook::install(base + AI_DROP_RVA, &AI_DROP_PROLOGUE, ai_drop as *const () as usize, &ORIG_AI_DROP, "enemy prize drop (Drive orbs)").is_none() {
-        log("Drive orbs: KH1's enemy drop wasn't as expected: none dropped");
+    if !orbs {
         return;
     }
     let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(1, |d| d.as_nanos() as u64);

@@ -20,6 +20,9 @@
 //!   Explosion, Ripple Drive: Vicinity Break, Stun Impact: Guard Break, Gravity Break: Aerial
 //!   Finish).
 //!   Final Mix's own Combo Master (65) is KH2's.
+//! - KH2's support abilities Damage Drive, Form Boost, Damage Control and Drive Converter (ids
+//!   78..81, `SUPPORT_LEVELS`) are counted per equipped copy (`Kh1Sora::support`) for
+//!   `crate::support`'s rules.
 //! - What only KH2 has goes into KH1's menu as new abilities (`MENU`, ids 66 up, in an
 //!   extended copy of KH1's ability table, `win/menu.rs`), learned at Sora's level: Quick Run
 //!   and Aerial Dodge in the shared abilities (with High Jump and Glide), the rest in Sora's,
@@ -108,6 +111,12 @@ pub enum Effect {
     FinishingPlus,
     NegativeCombo,
     Modifier(u16),
+    /// KH2's support abilities for the Drive gauge and damage taken (`crate::support`), counted
+    /// per equipped copy (`Kh1Sora::support`).
+    DamageControl,
+    DamageDrive,
+    FormBoost,
+    DriveConverter,
 }
 
 /// A KH2 ability in KH1's menu.
@@ -167,7 +176,7 @@ pub const BOSS_GIFTS: [BossGift; 9] = [
 /// The first id past KH1's own (65 entries in its table).
 pub const FIRST_ID: u8 = 66;
 
-pub const MENU: [MenuAbility; 12] = [
+pub const MENU: [MenuAbility; 16] = [
     // (The user: Quick Run from level 12, growing with Sora; both with AP in Sora's own
     // list, not the shared one. AP as KH2's.)
     m(66, "Quick Run", "Dash swiftly along the ground.", 2, 12, List::Sora, kh1::DODGE_ROLL, Effect::QuickRun),
@@ -183,7 +192,40 @@ pub const MENU: [MenuAbility; 12] = [
     m(75, "Retaliating Slash", "When knocked away, recover and strike back with Square.", 3, 43, List::Sora, kh1::SLAPSHOT, Effect::Modifier(kh2::RETALIATING_SLASH)),
     m(76, "Aerial Dive", "From the ground: leap at a far airborne foe.", 2, BOSS, List::Sora, kh1::SLAPSHOT, Effect::Modifier(kh2::AERIAL_DIVE)),
     m(77, "Magnet Burst", "Air combo finisher: pull in foes all around.", 3, BOSS, List::Sora, kh1::SLAPSHOT, Effect::Modifier(kh2::MAGNET_BURST)),
+    // KH2's support abilities for the Drive gauge and damage taken (the user: Damage Control,
+    // Damage Drive, Form Boost, Drive Converter, at set levels; no Berserk Charge or Drive Boost,
+    // KH1 has no MP Charge). Names, help (with KH2's line breaks) and AP are KH2's: the install's
+    // 03system `item` rows 542, 396, 398 and 540 and their sys.bar text. Levels (ours, one table:
+    // `SUPPORT_LEVELS`): Damage Drive once the first Drive Form is likely open (Guard Armor),
+    // Drive Converter late. Each from a KH1 support ability's entry (MP Rage for Damage Drive,
+    // Second Chance for Damage Control, MP Haste for Form Boost, Jackpot for Drive Converter).
+    m(78, "Damage Drive", "Restores the Drive Gauge every time damage\nis taken. The amount restored to the Drive\nGauge is relative to the damage received.", 3, SUPPORT_LEVELS[0], List::Sora, 24, Effect::DamageDrive),
+    m(79, "Form Boost", "Increases the duration of each\nDrive Form.\nEquip more to increase the effect.", 5, SUPPORT_LEVELS[1], List::Sora, 23, Effect::FormBoost),
+    m(80, "Damage Control", "Halves damage taken at critical moments.\nEquip two to accelerate the effect.", 5, SUPPORT_LEVELS[2], List::Sora, 25, Effect::DamageControl),
+    m(81, "Drive Converter", "Increases the drop rate of drive orbs\nin place of munny.\nEquip more to increase the effect.", 5, SUPPORT_LEVELS[3], List::Sora, 27, Effect::DriveConverter),
 ];
+
+/// The support abilities' levels (`MENU` 78..81), in one place to change: Damage Drive 14 (after
+/// Guard Armor, the first Drive Form), Form Boost 24, Damage Control 38, Drive Converter 35 (the
+/// user: "make drive converter come at level 35"). None is a level another `MENU` row,
+/// `LEVEL_GIFTS` or a growth step uses.
+pub const SUPPORT_LEVELS: [u8; 4] = [14, 24, 38, 35];
+
+/// The support abilities equipped on base Sora (`crate::support`), from his list.
+pub fn support_of(list: &[u8]) -> crate::support::Support {
+    let mut s = crate::support::Support::default();
+    for ab in MENU.iter().filter(|a| a.list == List::Sora) {
+        let n = equipped(list, ab.id);
+        match ab.effect {
+            Effect::DamageControl => s.damage_control = s.damage_control.saturating_add(n),
+            Effect::DamageDrive => s.damage_drive = s.damage_drive.saturating_add(n),
+            Effect::FormBoost => s.form_boost = s.form_boost.saturating_add(n),
+            Effect::DriveConverter => s.drive_converter = s.drive_converter.saturating_add(n),
+            _ => {}
+        }
+    }
+    s
+}
 
 /// Our Quick Run's ability id (`MENU`).
 pub const QUICK_RUN_ID: u8 = 66;
@@ -618,6 +660,8 @@ impl Kh1Sora {
                         out.equipped.push(n);
                     }
                 }
+                // (Not the controller's: `support`.)
+                Effect::DamageControl | Effect::DamageDrive | Effect::FormBoost | Effect::DriveConverter => {}
             }
         }
         for (at, g) in GROWTH {
@@ -634,6 +678,12 @@ impl Kh1Sora {
         out.quick_run = quick_run;
         out.aerial_dodge = aerial_dodge;
         out
+    }
+
+    /// KH2's support abilities equipped on base Sora (`crate::support`; KH2 counts base Sora's
+    /// support abilities in a Drive Form too).
+    pub fn support(&self) -> crate::support::Support {
+        support_of(&self.abilities)
     }
 
     /// The menu abilities Sora's level has earned that his lists don't hold yet.
@@ -947,7 +997,47 @@ mod tests {
         ids.dedup();
         assert_eq!(ids.len(), MENU.len());
         assert!(ids.iter().all(|i| *i >= FIRST_ID && *i < 0x80));
-        assert!(MENU.iter().all(|a| a.name.len() <= 24 && a.help.len() <= 60));
+        // (Help of up to three lines, as KH2's own text breaks them.)
+        assert!(MENU.iter().all(|a| a.name.len() <= 24 && a.help.lines().count() <= 3 && a.help.lines().all(|l| l.len() <= 60)));
+        // The menu table holds every id (`win::menu`'s ENTRIES: 0x7F).
+        assert!(MENU.iter().all(|a| (a.id as usize) < 0x80));
+    }
+
+    #[test]
+    fn support_abilities_count_per_equipped_copy() {
+        // Learned at their levels, off until equipped.
+        let ids = |l: u8| sora(l, &[], &[]).grants().iter().map(|a| a.id).filter(|id| (78..=81).contains(id)).collect::<Vec<_>>();
+        assert_eq!(ids(13), Vec::<u8>::new());
+        assert_eq!(ids(14), vec![78]);
+        assert_eq!(ids(24), vec![78, 79]);
+        assert_eq!(ids(35), vec![78, 79, 81]);
+        assert_eq!(ids(38), vec![78, 79, 80, 81]);
+        // Equipped copies only (bit 7 clear); copies stack.
+        let s = sora(60, &[80, 80, 78, 79 | 0x80, 81, kh1::GUARD], &[]).support();
+        assert_eq!(s, crate::support::Support { damage_control: 2, damage_drive: 1, form_boost: 0, drive_converter: 1 });
+        assert_eq!(sora(60, &[78 | 0x80, 79 | 0x80, 80 | 0x80, 81 | 0x80], &[]).support(), Default::default());
+        // Nothing for the controller, and never single (KH2 stacks them).
+        assert_eq!(sora(60, &[78, 79, 80, 81], &[]).kh2(), sora(60, &[], &[]).kh2());
+        assert!((78..=81).all(|id| !single(id)));
+        // Their levels are none another schedule uses.
+        let mut used: Vec<u8> = MENU.iter().filter(|a| a.level != BOSS && !(78..=81).contains(&a.id)).map(|a| a.level).collect();
+        used.extend(LEVEL_GIFTS.iter().map(|g| g.0));
+        used.extend(QUICK_RUN_LEVELS.iter().map(|g| g.0));
+        used.extend(HIGH_JUMP_LEVELS);
+        used.extend(AERIAL_DODGE_LEVELS);
+        used.extend(GLIDE_LEVELS);
+        used.extend(GROWTH.iter().map(|g| g.0));
+        assert!(SUPPORT_LEVELS.iter().all(|l| !used.contains(l)), "{used:?}");
+        // KH1's level-ups never hold them back, and a full list never gives them up.
+        assert!((78..=81).all(|id| sora(1, &[], &[]).held_back(id).is_none() && !early_kh1().contains(&id)));
+        let mut full: Vec<u8> = vec![78 | 0x80, 79 | 0x80, 80 | 0x80, 81 | 0x80];
+        full.resize(48, kh1::GUARD);
+        assert_eq!(make_room(&full), None);
+        full[47] = 16 | 0x80;
+        assert_eq!(make_room(&full), Some(47), "Cheer goes, ours stay");
+        // Their AP counts in the bonus once learned.
+        assert_eq!(bonus_ap(14, &[]) - bonus_ap(13, &[]), 3);
+        assert_eq!(bonus_ap(35, &[]) - bonus_ap(34, &[]), 5);
     }
 
     #[test]

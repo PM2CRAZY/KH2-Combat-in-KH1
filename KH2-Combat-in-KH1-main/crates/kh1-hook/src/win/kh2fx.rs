@@ -24,8 +24,12 @@ use super::addr::Rva;
 /// Vicinity Break's was asked for when it went unnoticed without it, Aerial Finish's (motion
 /// 194, Sora's combo row 29, ability 100) when it was missing), then Guard Break (165: elements
 /// 31, 30, 32), Finishing Leap (167: 33, 34) and Aerial Recovery (40: element 0), the user
-/// finding them without theirs.
-pub const DEFAULT_MOTIONS: [u16; 7] = [166, 170, 197, 194, 165, 167, 40];
+/// finding them without theirs. Then Counterguard (171: elements 40 and 41 at frame 18, the burst
+/// round him and the counter slash's flash on his hand; the player: "Counterguard doesn't have it
+/// VFX"), and the two other moves with frame triggers 1 that were left out the same way: Flash Step
+/// (169: 53 at frame 8, 54..56 at 18; KH1's Vortex is it) and Retaliating Slash (172: 39 at frame
+/// 0). Sora's guard motions (41, 42, 173) start none.
+pub const DEFAULT_MOTIONS: [u16; 10] = [166, 170, 197, 194, 165, 167, 40, 171, 169, 172];
 use super::{fx12, hook, log};
 use character_core::EventKind;
 use glam::{Mat4, Vec3};
@@ -64,7 +68,24 @@ struct State {
     hidden: bool,
     /// The Keyblade's own package (`obj/W_EX010.a.us`): its flash as it vanishes (`weapon_vanish`).
     weapon: Option<SpellFx>,
+    /// The Drive's screen tint (`drive_tint`): its alpha now, and whether it is fading in.
+    tint: f32,
+    tint_on: bool,
+    /// Frames since the revert's elements started (`form::REVERT_FX`), until they are ended.
+    revert_age: Option<u32>,
 }
+
+/// KH2's screen tint while Sora changes (`kh2-bevy`'s `drive.rs`, from KH2's exe): RGB 0x30 grey
+/// over the whole screen, in over 12 frames from the Drive motion's start, out over 15 after the
+/// swap; its strength as `kh2-bevy` has it (0.5).
+const TINT_ALPHA: f32 = 0.5;
+const TINT_IN: f32 = 12.0;
+const TINT_OUT: f32 = 15.0;
+const TINT_GREY: f32 = 0x30 as f32 / 255.0;
+/// The revert's light on his limbs (elements 16..27, looping until their owner is gone: KH2's call
+/// for them isn't traced) is ended this long after it starts, its burst (15) long over; it stayed on
+/// base Sora until the next form change before (ours).
+const REVERT_GLOW_FRAMES: u32 = 60;
 
 struct SpellFx {
     fx: Effects,
@@ -170,7 +191,22 @@ pub unsafe fn start() {
                 let mut fx = Effects::new(lib);
                 fx.seed(0x2D1F);
                 if let Ok(mut g) = STATE.lock() {
-                    *g = Some(State { fx, running: Vec::new(), form_running: Vec::new(), motion: u16::MAX, tip_local, frame: Frame::new(), test_at: None, started: 0, spell, hidden: false, weapon });
+                    *g = Some(State {
+                        fx,
+                        running: Vec::new(),
+                        form_running: Vec::new(),
+                        motion: u16::MAX,
+                        tip_local,
+                        frame: Frame::new(),
+                        test_at: None,
+                        started: 0,
+                        spell,
+                        hidden: false,
+                        weapon,
+                        tint: 0.0,
+                        tint_on: false,
+                        revert_age: None,
+                    });
                 }
             }
             Err(e) => log(&format!("KH2 effects: not loaded ({e})")),
@@ -740,12 +776,69 @@ pub fn event(motion: u16, kind: EventKind) {
         Some(h) => {
             s.running.push((h, motion, ends));
             s.started += 1;
-            if s.started <= 20 {
+            let drive = super::form::own_motion(motion);
+            if drive {
+                // (The Drive's and the revert's, one line each change, past the first 20 starts.)
+                if el == 1 || el == super::form::REVERT_ELEMENTS[0] {
+                    log(&format!(
+                        "KH2 effects: the {} (elements {el}..{}) started on Sora",
+                        if motion == super::form::REVERT_FX { "revert's light" } else { "Drive's orb and glows" },
+                        el + 12
+                    ));
+                }
+                if motion == super::form::REVERT_FX {
+                    s.revert_age = Some(0);
+                }
+            } else if s.started <= 20 {
                 log(&format!("KH2 effect: element {el} of motion {motion} started"));
             }
         }
         None => log(&format!("KH2 effect: element {el} not in Sora's package")),
     }
+}
+
+/// KH2's screen tint for the Drive (`TINT_ALPHA`): on as Sora's Drive motion starts, off at the swap
+/// (or a change cut short). It fades by Sora's frames (`step`).
+pub fn drive_tint(on: bool) {
+    if super::settings::get().kh2_effects.is_none() {
+        return;
+    }
+    let Ok(mut g) = STATE.lock() else { return };
+    let Some(s) = g.as_mut() else { return };
+    s.tint_on = on;
+}
+
+/// A quad over the whole screen in KH1's world (y down) for the frame's `view` and `proj`: its four
+/// corners well past the screen's edges, half way through the depth range, in front of the camera.
+fn screen_quad(view: Mat4, proj: Mat4) -> Option<[Vec3; 4]> {
+    let inv = (proj * view).inverse();
+    if !inv.is_finite() {
+        return None;
+    }
+    let at = |x: f32, y: f32| {
+        let p = inv * glam::Vec4::new(x, y, 0.5, 1.0);
+        (p.w.abs() > 1e-6).then(|| p.truncate() / p.w)
+    };
+    let q = [at(-3.0, -3.0)?, at(3.0, -3.0)?, at(3.0, 3.0)?, at(-3.0, 3.0)?];
+    // (In front of the camera: its clip w positive.)
+    let w = (proj * view * q[0].extend(1.0)).w;
+    (w > 0.0 && q.iter().all(|p| p.is_finite())).then_some(q)
+}
+
+/// The tint's quad first in `frame` (the effects then draw over it), no texture, no depth test.
+fn prepend_tint(frame: &mut Frame, view: Mat4, proj: Mat4, alpha: f32) {
+    let Some(q) = screen_quad(view, proj) else { return };
+    let colour = [TINT_GREY, TINT_GREY, TINT_GREY, alpha];
+    let v = |p: Vec3| kh2_fx::Vertex { pos: p.to_array(), uv: [0.0, 0.0], color: colour };
+    let quad = [v(q[0]), v(q[1]), v(q[2]), v(q[0]), v(q[2]), v(q[3])];
+    frame.vertices.splice(0..0, quad);
+    for b in &mut frame.batches {
+        b.first += 6;
+    }
+    frame.batches.insert(
+        0,
+        kh2_fx::Batch { texture: None, blend: kh2_fx::Blend::ALPHA, depth_test: false, depth_write: false, depth_offset: 0.0, first: 0, count: 6, sorted: None },
+    );
 }
 
 /// One game frame of KH2's controller: KH2's motion now.
@@ -776,6 +869,22 @@ fn step(s: &mut State, motion: Option<u16>) {
                 }
             }
             s.motion = m;
+        }
+    }
+    // The Drive's screen tint, in or out by a frame.
+    s.tint = if s.tint_on { (s.tint + TINT_ALPHA / TINT_IN).min(TINT_ALPHA) } else { (s.tint - TINT_ALPHA / TINT_OUT).max(0.0) };
+    // The revert's light on his limbs ended once its time is up.
+    if let Some(n) = s.revert_age {
+        if n + 1 >= REVERT_GLOW_FRAMES {
+            s.revert_age = None;
+            let revert = super::form::REVERT_FX;
+            for (h, from, _) in &s.running {
+                if *from == revert {
+                    s.fx.end(*h);
+                }
+            }
+        } else {
+            s.revert_age = Some(n + 1);
         }
     }
     let tip = s.tip_local;
@@ -833,7 +942,7 @@ fn draw() {
         }
         // (KH1's frames step the effects too: `takeover::physics`.)
     }
-    if s.fx.running_count() == 0 && s.spell.iter().flatten().all(|sp| sp.fx.running_count() == 0) && s.weapon.as_ref().is_none_or(|w| w.fx.running_count() == 0) {
+    if s.tint <= 0.0 && s.fx.running_count() == 0 && s.spell.iter().flatten().all(|sp| sp.fx.running_count() == 0) && s.weapon.as_ref().is_none_or(|w| w.fx.running_count() == 0) {
         return;
     }
     let base = BASE.load(Ordering::Relaxed);
@@ -875,6 +984,9 @@ fn draw() {
                 s.frame.batches.push(b);
             }
         }
+    }
+    if s.tint > 0.0 {
+        prepend_tint(&mut s.frame, view, proj, s.tint);
     }
     unsafe { fx12::draw(base, &s.frame, view, proj) };
 }

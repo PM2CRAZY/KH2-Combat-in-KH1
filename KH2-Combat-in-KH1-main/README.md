@@ -4,10 +4,11 @@
 
 The KH1 mod (KH2's combat in Kingdom Hearts Final Mix, PC: Epic or Steam) installs straight
 from this repository with OpenKH's Mods Manager: pick Kingdom Hearts Final Mix, then
-Mods > Install a New Mod and enter `PM2CRAZY/KH2-Combat-in-KH1`; tick it and Build. You need
-KH 1.5+2.5 for PC with KH II Final Mix in the same install (the mod reads KH2's animations,
-sounds and effects from it) and Panacea. `kh1-kh2.dll` and `mod.yml` at the top are the built
-mod, updated with each build; `crates/kh1-hook/openkh/README.txt` has the full guide.
+Mods > Install a New Mod and enter `PM2CRAZY/KH2-Combat-In-KH1-Mod` (a small repository with
+only the latest build, so it installs in seconds); tick it and Build. You need KH 1.5+2.5 for
+PC with KH II Final Mix in the same install (the mod reads KH2's animations, sounds and effects
+from it) and Panacea. `kh1-kh2.dll` and `mod.yml` at the top here are the same build;
+`crates/kh1-hook/openkh/README.txt` has the full guide.
 
 
 A Rust re-implementation of **Kingdom Hearts II Final Mix's movement and combat**, built as
