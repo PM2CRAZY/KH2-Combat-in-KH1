@@ -712,7 +712,8 @@ pub fn note_launch(vel: [f32; 2]) {
 /// level from KH1's lists now, the record from the moveset's (`kh2table`, t897). Not known yet:
 /// the start height as last read.
 fn kh2_glide_open(above: f32) -> bool {
-    if !super::styles::kh2(super::styles::Kind::Glide) || !above.is_finite() {
+    // (t1036: in Final too, whatever the style, `glide::style_kh2`.)
+    if !super::glide::style_kh2() || !above.is_finite() {
         return false;
     }
     static START: AtomicU32 = AtomicU32::new(u32::MAX);

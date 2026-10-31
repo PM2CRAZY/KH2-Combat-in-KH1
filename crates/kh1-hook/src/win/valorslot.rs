@@ -24,6 +24,10 @@
 //!   Master's slot holds (`equip::master_holds`), and during an M: pick the compare box shows
 //!   Master's "now" (his own Keyblade and the M: slot's), as Master adds its Keyblade as Valor does
 //!   (t1024). During a pick only the other form's copy is taken off.
+//! - **Final's F: slot (t1038)** the same way: the free count takes off the copy each of the three
+//!   slots holds (`equip::SLOT_FORMS`, `equip::slot_holds`), during a pick the other two forms'
+//!   only; an F: pick's compare box shows Final's "now" (his own Keyblade and the F: slot's, his own
+//!   twice with it empty).
 //! - Only with Drive on and on Steam. Both run when KH1 calls them (menus, shops), never each frame.
 
 use super::log;
@@ -73,8 +77,8 @@ pub unsafe fn install(base: usize) {
     super::hook::install(base + COMPARE_RVA, &COMPARE_BYTES, compare as *const () as usize, &ORIG_COMPARE, "KH1's weapon compare box (Valor's figures)");
 }
 
-/// KH1's free count, less the copies Valor's and Master's slots hold (Master's since t1025; during
-/// a form's pick, the other form's only).
+/// KH1's free count, less the copies Valor's, Master's and Final's slots hold (Master's since
+/// t1025, Final's t1038; during a form's pick, the other forms' only).
 unsafe extern "system" fn free_count(item: u32) -> u64 {
     let f: unsafe extern "system" fn(u32) -> u64 = std::mem::transmute(ORIG_FREE.load(Ordering::Relaxed));
     let n = f(item);
@@ -87,7 +91,7 @@ unsafe extern "system" fn free_count(item: u32) -> u64 {
     }
     let picking = super::equipmenu::slot_picking().map(|(kind, _)| kind);
     let mut left = n;
-    for kind in [super::form::Kind::Valor, super::form::Kind::Master] {
+    for kind in super::equip::SLOT_FORMS {
         if picking != Some(kind) && left > 0 && super::equip::slot_holds(base, kind) == Some(item as u8) {
             left -= 1;
             note(|| format!("item {item:#04x}: {n} free, {left} with {}'s copy taken off", kind.name()));

@@ -24,7 +24,12 @@
 //!   show the number at it and add it to the party, `0x140284990`), hooked at their entry so EXP
 //!   Zero doesn't stop it. Assumption: every KH1 enemy gives its EXP through one of the two once
 //!   when defeated, and counts as a Heartless (KH1's ids aren't KH2's).
-//! - **Final, +1 per Nobody defeated**: KH1 has none, so Final gains nothing (asked).
+//! - **Final, +1 per enemy defeated by Sora** (t1039, the owner's answer 2 (b) after Final's
+//!   research round 2): KH2's `0x1403E8780` gives form 5 +1 per defeated enemy with id 3000..4014
+//!   (the Nobodies; Checked (decomp), re-read for t1039), from the same death callbacks as Wisdom's.
+//!   KH1 has no Nobodies, so every KH1 enemy stands in for one, as every KH1 enemy stands in for a
+//!   Heartless for Wisdom: Wisdom's defeat path above, while he is in Final. fmlv form 5's EXP to
+//!   the next level 12 / 24 / 48 / 76 / 133 / 157 (Checked (files)), kept at `+0x886`.
 //! - Limit (t973): +1 per finishing follow-up of its limits (`follow_up`).
 //! - **Master (t1026), its Drive orbs**: KH2's prize pickup `0x1403DCA50` gives the orb's value
 //!   (the reward table `0x1405C7420` `+6`) to the gauge (`0x1403A9CF0`) and to `0x1403E8760 (value)`,
@@ -157,7 +162,8 @@ pub fn rewards_due() -> Vec<(Kind, u8, u16)> {
     let mut out = Vec::new();
     // (Master since t1026: fmlv form 4 gives Auto Master (387) at LV2, no KH1 counterpart, passed
     // with a note as the other Auto abilities, and Air Combo Plus (163) at LV4 and LV6, Checked
-    // (files).)
+    // (files). Final, t1039: Auto Final (388) at LV2, passed with the same note, and Form Boost
+    // (398) at LV4 and LV6, a copy of ours each, `growth::kh2_support_reward`.)
     for kind in [Kind::Valor, Kind::Wisdom, Kind::Limit, Kind::Master, Kind::Final] {
         let rec = unsafe { record(kind) };
         out.extend(formlevel::rewards_due(t, kh2_form(kind), &rec).into_iter().map(|(l, id)| (kind, l, id)));
@@ -270,8 +276,8 @@ pub unsafe fn orb(value: u8) {
     }
 }
 
-/// Enemy `enemy` was defeated (its script gives its EXP): Wisdom's EXP when Sora was its last
-/// attacker (KH2's `0x1403E8780`).
+/// Enemy `enemy` was defeated (its script gives its EXP): Wisdom's or Final's EXP when Sora was its
+/// last attacker (KH2's `0x1403E8780`).
 unsafe fn defeated(enemy: usize) {
     let last = LAST.lock().ok().and_then(|mut v| v.iter().position(|e| e.0 == enemy).map(|i| v.remove(i).1));
     let sora = super::takeover::sora_actor();
@@ -280,7 +286,9 @@ unsafe fn defeated(enemy: usize) {
     }
     match super::form::current() {
         Some(Kind::Wisdom) => add(Kind::Wisdom, 1, "an enemy defeated"),
-        // (Final counts Nobodies, which KH1 has none of.)
+        // (t1039: KH2 counts Nobodies for Final, ids 3000..4014; each KH1 enemy stands in for one,
+        // answer 2 (b).)
+        Some(Kind::Final) => add(Kind::Final, 1, "an enemy defeated, standing in for a Nobody"),
         _ => {}
     }
 }

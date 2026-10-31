@@ -784,6 +784,23 @@ impl Growth {
                         continue;
                     }
                     let what = growth::kh2_reward_name(kh2_id);
+                    // (t1039, the owner's answer 4 (a) after Final's round 2: KH2's own support
+                    // ability, Form Boost at Final LV4 / LV6, one more copy of ours in the KH2
+                    // list, off, beside the one every save has (`grants`); KH2's 0.8 a copy.)
+                    if let Some(id) = growth::kh2_support_reward(kh2_id) {
+                        if self.give_ours(base, save, id | 0x80, on_list) {
+                            log!(Menus, "{} LV{level}: Sora learns {what} (KH2's {kh2_id}, one more copy, id {id}, {}), off", kind.name(), if on_list { "KH2 list" } else { "his own list" });
+                            self.prompts.push_back(("New Ability".to_string(), what.to_string(), String::new()));
+                            super::formexp::rewarded(kind, level);
+                        } else {
+                            stopped.push(kind);
+                            if !self.no_room.contains(&id) {
+                                self.no_room.push(id);
+                                log!(Menus, "{} LV{level}: no room for {what} in {} (48)", kind.name(), if on_list { "the KH2 list" } else { "Sora's list" });
+                            }
+                        }
+                        continue;
+                    }
                     let Some(id) = growth::kh1_reward(kh2_id) else {
                         log!(Menus, "{} LV{level}: KH2 gives Sora {what} ({kh2_id}), which has no KH1 counterpart yet: not given", kind.name());
                         super::formexp::rewarded(kind, level);

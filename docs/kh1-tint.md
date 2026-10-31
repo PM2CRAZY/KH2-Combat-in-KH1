@@ -201,6 +201,18 @@ look, KH1's own texture back out of the form:
 - **Master** (t1029, main's yellow spec): the belt's blue black first; the hood lining's blue, the jumpsuit's red on `-1c1`
   and the collar's red strip on `-1c0` (main's region u 0..0.025 × v 0.34..0.70, leaving `-1c0`'s red oval on the shoe piece)
   painted one bright yellow (hue 45°, saturation 0.85, brightness 0.55 + 0.45 × v, main's values); shoes and jacket kept.
+- **Final** (white, t1041; the owner's carried answer, main's white spec: "outfit white including
+  the shoes, belt black; the jacket's black trim stays"; main `tint.rs` `Look::Final`, Checked
+  (main's code)): on `-1c1` the belt's blue black first (inside the belt region, Limit's black:
+  brightness × 0.2, no saturation), then every red (the jumpsuit) and every blue (the hood's
+  lining, the jacket's blue trim) white; on `-1c0` the reds white (the collar's strip and the red
+  oval on the shoe piece, no region); on `-1c3` the shoes' bright yellow and their red and blue
+  white. "White" is main's grey op: saturation 0, brightness `0.5 + 0.47 × v`, so the folds still
+  show. The jacket's cream, its black trim, the skin, hair and face stay (not a saturated red or
+  blue, nor a bright yellow). Cache files `form-tint-Final-1c0` / `-1c1` / `-1c3`, built once
+  into the mod folder the first time Final needs them. Assumption: the regions are the ones
+  plotted above (not plotted again); main's belt black was its grey at 0.04 + 0.16 × v, ours
+  Limit's black (v × 0.2), near the same.
 
 Where the parts are, from plotting the remastered mesh 1 (and 3)'s vertices on the texture by
 the bone each follows (`-c0.cvbl`: tag 0x11 chunks give matrix slot → bone at `+8` / `+0xC`, a

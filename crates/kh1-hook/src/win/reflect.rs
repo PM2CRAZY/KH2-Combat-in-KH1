@@ -630,6 +630,8 @@ const QUEUE_MOTION_RVA: Rva = Rva(0x29D8A0);
 fn native_path() -> bool {
     // (t1027: Master too, its own 71 / 72 / 73 (D373, Checked (files)) at its sub + 20, ATKP 573 /
     // 574 at 20 / 22 / 24 (Checked (files)): `form::Kind::kh2_magic`.)
+    // (t1040: Final too, its own 71 / 72 / 73 (E362 / E363 / E372, Checked (files)) at its sub + 30,
+    // ATKP 573 / 574 at 30 / 32 / 34 (Checked (files)).)
     !super::form::in_form() || super::form::native_form().is_some_and(|k| k.kh2_magic())
 }
 

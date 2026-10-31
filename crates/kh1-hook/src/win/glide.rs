@@ -133,15 +133,31 @@ pub(crate) fn note(s: impl FnOnce() -> String) {
     }
 }
 
-/// Base Sora can take KH2's glide in KH1's state (the Steam build: the KH1 addresses below are its
-/// own; not in a Drive Form, whose moveset is KH2's controller's).
+/// Base Sora, or Final Form on KH1's own states (t1036), can take KH2's glide in KH1's state (the
+/// Steam build: the KH1 addresses below are its own). No other Drive Form: KH2's air action handler
+/// (`0x1403A81F0`) glides at the Glide level of the ability block (`0x140401680 (block, 3)`, block
+/// `+0x23`), which in a form `0x1404014A0` builds from the form's own ability list with Sora's
+/// action and growth abilities left out (Checked (decomp)): only Final's has Glide (fmlv form 5's
+/// growth, Checked (files)), so the others have level 0 and no glide (`form::form_abilities`).
 pub fn built() -> bool {
-    Build::current() == Build::Steam && !super::form::in_form()
+    Build::current() == Build::Steam && (!super::form::in_form() || final_now())
 }
 
-/// The wrappers act for `actor`: Sora, at Glide KH2, base Sora.
+/// Final Form on KH1's own states now (`form::native_form`).
+fn final_now() -> bool {
+    super::form::native_form() == Some(super::form::Kind::Final)
+}
+
+/// The glide is KH2's here: the Glide style at KH2 for base Sora, always in Final (a Drive Form is
+/// KH2's all through and the move styles don't apply to it, the tester after m13, as
+/// `combomods::style_kh2`; the owner, §25.6: Final glides KH2's way at Glide KH1 too).
+pub fn style_kh2() -> bool {
+    styles::kh2(Kind::Glide) || final_now()
+}
+
+/// The wrappers act for `actor`: Sora, at Glide KH2 (base Sora) or in Final.
 pub(crate) unsafe fn ours(actor: usize) -> bool {
-    actor > 0x10000 && actor == takeover::sora_actor() && styles::kh2(Kind::Glide) && built()
+    actor > 0x10000 && actor == takeover::sora_actor() && style_kh2() && built()
 }
 
 /// He is in KH1's glide state with KH2's glide (ours) now.
@@ -187,7 +203,12 @@ static PARTY_BIT: AtomicBool = AtomicBool::new(false);
 /// glide stays KH1's (KH1's handlers run for them). Sora's own reader of `0x80`, the fall state's
 /// jump press (`0x1402AFD60`), is ours at Glide KH2 (`fall_jump`: no KH1 glide on his jump).
 /// Checked (decomp).
+/// In Final (t1036) nothing is done: both partners are away for the form (its cost, Checked (files)),
+/// so there is no one to glide after him, and the bit is left as it was until he reverts.
 unsafe fn party(base: usize) {
+    if final_now() {
+        return;
+    }
     let p = base + ABILITY_BITS_RVA;
     let v: u32 = rd(p);
     let want = styles::kh2(Kind::Glide) && built() && takeover::kh2_glide_growth().is_some();
@@ -383,7 +404,9 @@ fn wrap_angle(a: f32) -> f32 {
     a
 }
 
-/// The request that plays KH2's `motion` here (`kh2slots`).
+/// The request that plays KH2's `motion` here (`kh2slots`). In a Drive Form (Final, t1036) the
+/// hover is the form's own slot only (`kh2slots::has_own`, its 208 on our row): never base Sora's
+/// 208 on the form's rig through `live`'s fallback; without its own, KH1's 0x71 (its glide 205).
 fn request_for(motion: u16) -> u32 {
     use character_core::motion::{GLIDE_HOVER, GLIDE_TURN_A, GLIDE_TURN_B};
     match motion {
@@ -391,7 +414,7 @@ fn request_for(motion: u16) -> u32 {
         GLIDE_TURN_B => TURN_B_REQUEST,
         GLIDE_HOVER => super::kh1rows::by_motion(GLIDE_HOVER)
             .map(super::kh1rows::request)
-            .filter(|&r| super::kh1rows::installed() && super::kh2slots::has(r as usize, GLIDE_HOVER))
+            .filter(|&r| super::kh1rows::installed() && if super::form::in_form() { super::kh2slots::has_own(r as usize, GLIDE_HOVER) } else { super::kh2slots::has(r as usize, GLIDE_HOVER) })
             .unwrap_or(GLIDE_REQUEST),
         _ => GLIDE_REQUEST,
     }
@@ -737,9 +760,10 @@ unsafe extern "system" fn pre_step(actor: usize, input: usize) -> usize {
     }
     note_bank(motion, asked, before, tilt);
     // (The hover's slot is made on an air swing of KH1's, which holds at its end: kept going round
-    // as KH2 loops it. KH1's glide slots loop as KH1's own glide has them.)
+    // as KH2 loops it. KH1's glide slots loop as KH1's own glide has them. Its length is the clip of
+    // the moveset playing, `pose::kh2_moves`: Final's own 208 in Final, t1036.)
     if let Some((GLIDE_HOVER, t)) = super::kh2slots::now_playing(actor) {
-        let len = super::pose::kh2().and_then(|k| k.character.moveset.clips.get(&GLIDE_HOVER).map(|c| c.length as f32));
+        let len = super::pose::kh2_moves().and_then(|c| c.moveset.clips.get(&GLIDE_HOVER).map(|c| c.length as f32));
         if len.is_some_and(|len| len > 1.0 && t + dt >= len) {
             wr(actor + SLOT_TIME, 0.0f32);
         }

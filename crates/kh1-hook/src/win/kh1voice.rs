@@ -182,6 +182,43 @@ const STAND_INS_MORE: [(u16, i16, Line); 11] = [
 /// with base Sora's and the other forms' moves, whose voices are left as they were.
 const MASTER_STAND_INS: [(u16, i16, Line); 3] = [(183, 4, Line::Group(SWING_GROUP)), (183, 5, Line::Group(FINISHER_GROUP)), (184, 5, Line::Group(FINISHER_GROUP))];
 
+/// t1042, Final Form (the owner's carried answer: KH1 stand-ins, row-less lines only, by
+/// t1017..t1019's rule, as Master's t1030). KH2's (Checked (files), `P_EX100_ULTF.mset` trigger 14,
+/// re-dumped): 151 voice 4 at 0 and 52; 152 4 at 0; 153 4 at 0, 6 at 72; 154 6 at 0, 5 at 52; 181 4
+/// at 0, 42 and 72; 182 4 at 0; 183 6 at 0, 4 at 89, 5 at 136. Each move runs a KH1 attack row
+/// whose start says the template row's `+0xF` at frame 0 (`btltbl.bin` +0xA9F0, Checked (files)):
+/// 151 on "151" (row 13, group 4), 152 on "152" (row 11, 4), 153 on "153 (finisher)" (row 8, 5),
+/// 154 on "154" (row 8, 5) and "154 (air finisher)" (row 16, 5), 181 / 182 on "181" / "182" (row
+/// 18, 4), 183 on "183" (row 16, 5) (`kh1rows`, t1034; our combo rows keep the template's byte). So
+/// the frame-0 lines are KH1's row voice already (none added; 153's, 154's and 183's are KH1's
+/// finisher line 5 where KH2 says 4 / 6 / 6), and only the later ones get a stand-in: (motion,
+/// voice, KH2's frame, what plays). 151's and 181's later line is the same voice as their frame-0
+/// one, so a row here plays only when the key fired nearer its own frame than frame 0
+/// (`past_start`). Item use 9's voice 3 at 0 gets none: KH1's own item use says no line (its motion
+/// carries only its item sound, `kh2sound::ITEM_VOICE`), as base Sora's and Master's at KH1. Only
+/// in Final (`form::in_final`): the ids are shared with base Sora's and the other forms' moves.
+const FINAL_STAND_INS: [(u16, i16, u32, Line); 7] = [
+    (151, 4, 52, Line::Group(SWING_GROUP)),
+    (153, 6, 72, Line::Group(BIG_GROUP)),
+    (154, 5, 52, Line::Group(FINISHER_GROUP)),
+    (181, 4, 42, Line::Group(SWING_GROUP)),
+    (181, 4, 72, Line::Group(SWING_GROUP)),
+    (183, 4, 89, Line::Group(SWING_GROUP)),
+    (183, 5, 136, Line::Group(FINISHER_GROUP)),
+];
+
+/// The actor's motion time (KH1's `+0x16C`, the slot's time in KH2's frames: `kh2slots`'
+/// `TIME_NOW`, which its key handler logs at the key).
+const MOTION_TIME: usize = 0x16C;
+
+/// Whether the voice key now firing on `actor` is the one at KH2 frame `at`, not one of the same
+/// voice at frame 0: the motion's time is nearer `at` than 0 (Final's later lines are 42 frames or
+/// more in; KH1 fires a key at t with from <= t < to, `kh1_data::slot::kh2_trigger_time`).
+unsafe fn past_start(actor: usize, at: u32) -> bool {
+    let t = std::ptr::read_unaligned((actor + MOTION_TIME) as *const f32);
+    t.is_finite() && t * 2.0 >= at as f32
+}
+
 /// The Raves of a Sonic Rave so far (the start's line resets it) and the game frame the last fired
 /// (the script starts the first Rave over on the frame KH1's queue started it, so a second key
 /// within two frames is the same Rave).
@@ -193,7 +230,9 @@ static RAVE_AT: AtomicU64 = AtomicU64::new(0);
 pub unsafe fn stand_in(actor: usize, motion: u16, voice: i16) {
     // (t1030: Master's own, only in Master, `MASTER_STAND_INS`.)
     let master: &[(u16, i16, Line)] = if super::form::in_master() { &MASTER_STAND_INS } else { &[] };
-    let Some(&(_, _, line)) = master.iter().chain(STAND_INS.iter()).chain(STAND_INS_MORE.iter()).find(|&&(m, v, _)| m == motion && v == voice) else { return };
+    // (t1042: Final's own, only in Final and only the later lines, `FINAL_STAND_INS`.)
+    let fin = if super::form::in_final() { FINAL_STAND_INS.iter().find(|&&(m, v, at, _)| m == motion && v == voice && past_start(actor, at)).map(|x| x.3) } else { None };
+    let Some(line) = fin.or_else(|| master.iter().chain(STAND_INS.iter()).chain(STAND_INS_MORE.iter()).find(|&&(m, v, _)| m == motion && v == voice).map(|x| x.2)) else { return };
     static N: AtomicU32 = AtomicU32::new(0);
     match line {
         Line::Roll => dodge_roll(actor),

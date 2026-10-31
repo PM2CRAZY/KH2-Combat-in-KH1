@@ -607,14 +607,29 @@ pub struct FormGrowth {
 /// LV6: KH2's shortens MP Charge, which KH1 has no system for) is KH1's own MP Haste (the tester,
 /// after m16, answer 4 (a); once a KH2 MP system is a Config setting, it becomes MP Charge's
 /// MP Haste there). None yet: the Auto forms (385 Valor, 386 Wisdom, 387 Master, 388 Final, 568
-/// Limit; to be built natively later, answer 3), Form Boost (398, waits for the Drive gauge,
-/// answer 5), Draw (405), Lucky Lucky (407).
+/// Limit; to be built natively later, answer 3), Draw (405), Lucky Lucky (407). Form Boost (398,
+/// Final LV4 / LV6) is KH2's own, a copy in the KH2 list (`kh2_support_reward`, t1039).
 pub fn kh1_reward(kh2_id: u16) -> Option<u8> {
     match kh2_id {
         162 => Some(kh1::COMBO_PLUS),
         163 => Some(kh1::AIR_COMBO_PLUS),
         412 => Some(kh1::MP_RAGE),
         413 => Some(kh1::MP_HASTE),
+        _ => None,
+    }
+}
+
+/// KH2 fmlv abilities given as a copy of our own KH2 support ability (t1039, the owner's answer 4
+/// (a) after Final's research round 2): Form Boost (398), which waited for the Drive gauge until
+/// t955 built it, at Final LV4 and LV6 (fmlv form 5, Checked (files)). Each is one more copy in the
+/// KH2 list, off until equipped; KH2 multiplies the form gauge's drain by sstm `+0x140` (0.8) per
+/// equipped copy (`0x1404014A0` -> `0x140401730` case 0x18E, Checked (decomp)), and so does
+/// `drivesupport::form_boost` with the copies counted in Sora's lists. It is the only fmlv reward
+/// that waited for the gauge (Checked (files): the other forms' are Combo Plus / Air Combo Plus /
+/// MP Rage / MP Haste, given by `kh1_reward`, the Auto forms, Draw and Lucky Lucky, passed).
+pub fn kh2_support_reward(kh2_id: u16) -> Option<u8> {
+    match kh2_id {
+        398 => Some(ours::FORM_BOOST),
         _ => None,
     }
 }
@@ -1116,6 +1131,12 @@ mod tests {
         assert_eq!(KH1_ABILITIES[kh1::MP_RAGE as usize - 1].name, "MP Rage");
         assert_eq!(kh1_reward(385), None);
         assert_eq!(kh1_reward(413), Some(kh1::MP_HASTE));
+        // (t1039: Form Boost as a copy of ours, not KH1's; the Auto forms neither.)
+        assert_eq!(kh1_reward(398), None);
+        assert_eq!(kh2_support_reward(398), Some(ours::FORM_BOOST));
+        assert!(MENU.iter().any(|a| a.id == ours::FORM_BOOST && a.list == List::Kh2 && a.effect == Effect::Support(kh2::FORM_BOOST)));
+        assert_eq!(kh2_support_reward(388), None);
+        assert_eq!(kh2_support_reward(162), None);
     }
 
     #[test]

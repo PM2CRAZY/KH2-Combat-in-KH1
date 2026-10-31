@@ -32,6 +32,8 @@
 //! Key, no menu slot: the user, "don't add the final form keyblade selection into the menu like we
 //! did for valor, just default it to kingdom key"). Not in the Drive list: a secret button
 //! code on the pad (`pad`) asks for it, as the Drive list would.
+//! (t1033: Final is in the Drive list on KH1's own states, KH2's fifth form, `Kind::ALL`; the code
+//! sets nothing anyone reads now and stays for Anti, research round 2 for Final §5.)
 
 use super::{log, pose};
 use character_core::{Abilities, Character, EventKind};
@@ -75,9 +77,16 @@ const UPPER_SLASH: u16 = 95;
 /// KH2's magic sub offset in Wisdom Form.
 pub const MAGIC_SUB: i32 = 10;
 /// (t1027) KH2's magic sub offset in Master Form: pref `magi` rows 20..25 and the spells' ATKP rows
-/// at subs 20 / 22 / 24 (ATKP 248..251, 502, 573.., Checked (files)). The code adding 20 wasn't
-/// found in the decomp (Assumption, as Wisdom's + 10).
+/// at subs 20 / 22 / 24 (ATKP 248..251, 502, 573.., Checked (files)).
+/// (t1040) The code adding it is KH2's cast start `0x1403C5170`: sub = level × 2 − 2 (+ 1 on a
+/// finisher), then + 10 / + 20 / + 30 for forms 2 / 4 / 5 (the player's form `+0xDE0`, gated on
+/// `+0x6C8` bit 7), Checked (decomp) (t1027 had it an Assumption).
 pub const MASTER_MAGIC_SUB: i32 = 20;
+/// (t1040) KH2's magic sub offset in Final Form: + 30 for form 5 in `0x1403C5170`, Checked
+/// (decomp); pref `magi` rows 30..35 (Checked (files) `03system.bin`) and the spells' ATKP rows at
+/// every sub 30..35, finishers included (248..251, 502), Reflect's 573 / 574 at 30 / 32 / 34
+/// (Checked (files) `00battle.bin`).
+pub const FINAL_MAGIC_SUB: i32 = 30;
 
 /// The forms (`drive::FORMS` in the same order).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -92,9 +101,10 @@ pub enum Kind {
 }
 
 impl Kind {
-    /// The Drive list's (Final is secret, `pad`).
+    /// The Drive list's.
     /// (KH2's order, `0x1403F3110`: Valor, Wisdom, Limit, Master, then Final.)
-    pub const ALL: [Kind; 4] = [Kind::Valor, Kind::Wisdom, Kind::Limit, Kind::Master];
+    /// (t1033: Final in it, on KH1's own states, `drive::FORMS`' fifth.)
+    pub const ALL: [Kind; 5] = [Kind::Valor, Kind::Wisdom, Kind::Limit, Kind::Master, Kind::Final];
     const EVERY: [Kind; 5] = [Kind::Valor, Kind::Wisdom, Kind::Limit, Kind::Master, Kind::Final];
     pub fn name(self) -> &'static str {
         match self {
@@ -122,7 +132,7 @@ impl Kind {
         }
     }
     /// With a second Keyblade (Valor's slot's; Master's floating one, t1024: `W_EX010_TRIF_L`,
-    /// Checked (files); Final's Kingdom Key).
+    /// Checked (files); Final's F: slot's since t1038, the Kingdom Key before).
     pub fn two_blades(self) -> bool {
         matches!(self, Kind::Valor | Kind::Master | Kind::Final)
     }
@@ -139,8 +149,9 @@ impl Kind {
     }
     /// Runs on KH1's own states where it can (`native_ok`): its moves baked into KH1 slots
     /// (`kh2slots::FORM_SLOTS`), its numbers on KH1's states. The others can't be entered (t873: refused, no KH2 controller).
+    /// (t1033: Final too, `kh2slots::FINAL_SPECS`.)
     pub fn native_capable(self) -> bool {
-        matches!(self, Kind::Valor | Kind::Wisdom | Kind::Limit | Kind::Master)
+        matches!(self, Kind::Valor | Kind::Wisdom | Kind::Limit | Kind::Master | Kind::Final)
     }
     /// Its growth ability (KH2's form growth: Valor High Jump, Wisdom Quick Run, Limit Dodge Roll
     /// (fmlv form 3, Checked (files)), Master Aerial Dodge (fmlv form 4, Checked (files)), Final
@@ -157,16 +168,20 @@ impl Kind {
     /// (t1027) Casts KH2's Fire, Blizzard, Thunder, Cure (and Reflect) on KH1's cast state with its
     /// own cast clips, Wisdom's path (`formmagic::form_kh2_spell`): Wisdom and Master (their
     /// movesets have the MAGC cast motions 56..73, Checked (files)). Valor has no magic (KH2's
-    /// Valor can't cast), Limit has its limits in Magic's place, Final stays as it is.
+    /// Valor can't cast), Limit has its limits in Magic's place.
+    /// (t1040: Final too, its own casts 56..73 in `P_EX100_ULTF.mset`, Checked (files); KH2's cast
+    /// start gives form 5 its sub, `FINAL_MAGIC_SUB`.)
     pub fn kh2_magic(self) -> bool {
-        matches!(self, Kind::Wisdom | Kind::Master)
+        matches!(self, Kind::Wisdom | Kind::Master | Kind::Final)
     }
-    /// (t1027) Its KH2 magic sub offset (`magic_sub`): Wisdom + 10, Master + 20 (Checked (files):
-    /// `magi` rows 10..15 / 20..25), else 0.
+    /// (t1027) Its KH2 magic sub offset (`magic_sub`): Wisdom + 10, Master + 20, Final + 30 (t1040)
+    /// (KH2's `0x1403C5170`, Checked (decomp); `magi` rows 10..15 / 20..25 / 30..35, Checked
+    /// (files)), else 0.
     pub fn magic_sub(self) -> i32 {
         match self {
             Kind::Wisdom => MAGIC_SUB,
             Kind::Master => MASTER_MAGIC_SUB,
+            Kind::Final => FINAL_MAGIC_SUB,
             _ => 0,
         }
     }
@@ -281,12 +296,13 @@ pub fn busy() -> bool {
 }
 
 /// KH2's magic sub offset now (`reflect`, `formmagic`): the form's (`Kind::magic_sub`, t1027:
-/// per form; Wisdom 10, Master 20), base Sora's 0.
+/// per form; Wisdom 10, Master 20, Final 30), base Sora's 0.
 pub fn magic_sub() -> i32 {
     current().map_or(0, |k| k.magic_sub())
 }
 
-/// (t1027) In a form that casts KH2's magic on KH1's states (`Kind::kh2_magic`): Wisdom, Master.
+/// (t1027) In a form that casts KH2's magic on KH1's states (`Kind::kh2_magic`): Wisdom, Master,
+/// Final (t1040).
 pub fn in_kh2_magic_form() -> bool {
     current().is_some_and(|k| k.kh2_magic())
 }
@@ -547,8 +563,8 @@ pub unsafe fn choose(sora: usize, kind: Kind) -> Result<&'static str, String> {
     own_needs(kind)?;
     // (Valor on KH1's own states, `native_frame`: KH1 has him, KH1's rule for the change.)
     let native = native_ok(kind) && super::shared::active();
-    // (t873) On Steam only KH1's own states run a form: one that can't (Final, or Valor / Wisdom
-    // whose slots didn't build) is refused, not handed to the old controller.
+    // (t873) On Steam only KH1's own states run a form: one that can't (a form whose slots didn't
+    // build) is refused, not handed to the old controller. (t1033: Final runs there too.)
     if !native {
         super::shared::note_cut_off(&format!("the Drive to {}", kind.name()));
         return Err(format!("{} can't run on KH1's own states here (not ported yet, or its slots didn't build)", kind.name()));
@@ -668,7 +684,8 @@ unsafe fn drain_step(d: &mut Drive, actor: usize, battle: bool) {
             Kind::Limit => Some(super::tint::Look::Limit),
             // (Master's look, the owner's §24.2 answer 4, main's yellow spec, t1029.)
             Kind::Master => Some(super::tint::Look::Master),
-            Kind::Final => None,
+            // (Final's look, the owner's carried answer, main's white spec, t1041.)
+            Kind::Final => Some(super::tint::Look::Final),
         }),
     );
     // Valor's second Keyblade's Strength and MP (and back to Sora's own after).
@@ -677,13 +694,20 @@ unsafe fn drain_step(d: &mut Drive, actor: usize, battle: bool) {
     // (Valor: its Keyblade checked every 10 frames, so a change made in the menu reaches his
     // hand, `valor::keyblade`.)
     // (Master, t1024: the same check of its second Keyblade; t1025 its M: slot, `valor::master_slot`.)
-    if matches!(f.kind, Kind::Valor | Kind::Master) {
+    // (Final, t1038: its F: slot, `valor::final_slot`.)
+    if matches!(f.kind, Kind::Valor | Kind::Master | Kind::Final) {
         static TICK: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
         if TICK.fetch_add(1, Ordering::Relaxed) % 10 == 0 {
-            if f.kind == Kind::Valor {
-                super::valor::keyblade();
-            } else {
-                super::valor::master_slot();
+            match f.kind {
+                Kind::Valor => {
+                    super::valor::keyblade();
+                }
+                Kind::Master => {
+                    super::valor::master_slot();
+                }
+                _ => {
+                    super::valor::final_slot();
+                }
             }
         }
     }
@@ -759,7 +783,8 @@ unsafe fn yellow(sora: usize) -> u16 {
 //   High Jump at its form level, `formexp`); then Valor's arrival 53 on its request of ours.
 // - Revert: everything back to base Sora's, what was playing cut into KH1's idle (or fall).
 // The MP cost, drain, out-of-MP revert, KO revert, look and the second Keyblade's stats are the
-// same as on KH2's controller (`drain_step`). Wisdom runs on KH1's states too; Final is refused (t873).
+// same as on KH2's controller (`drain_step`). Wisdom runs on KH1's states too, and Limit, Master
+// and (t1033) Final.
 
 /// The form arriving or playing runs on KH1's own states (Valor, `native_ok`).
 static NATIVE: AtomicBool = AtomicBool::new(false);

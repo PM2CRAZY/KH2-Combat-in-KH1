@@ -387,7 +387,7 @@ pub struct FormSlots {
     ours: &'static [u16],
 }
 
-pub const FORM_SLOTS: [FormSlots; 4] = [
+pub const FORM_SLOTS: [FormSlots; 5] = [
     FormSlots { kind: super::form::Kind::Valor, specs: &VALOR_SPECS, ours: &[] },
     // (Wisdom's Quick Run, its growth ability: its own 203 and its stop 204 on our Quick Run rows,
     // `quickrun`; its own Reflect 71 / 72 / 73 on our Reflect rows, `reflect::native_path`.)
@@ -406,6 +406,92 @@ pub const FORM_SLOTS: [FormSlots; 4] = [
         specs: &MASTER_SPECS,
         ours: &[character_core::motion::AERIAL_DODGE, character_core::motion::AIR_RECOVERY, super::reflect::GROUND_MOTION, super::reflect::FINISHER_MOTION, super::reflect::AIR_MOTION],
     },
+    // (Final, t1033: its own Air Recovery 40 (E212, Checked (files) `P_EX100_ULTF.mset`) on our row
+    // of it, `kh1rows` "Aerial Recovery", as Master's.)
+    // (t1040: its own Reflect 71 / 72 / 73 (E362 / E363 / E372, battle slot 0, Checked (files)
+    // `P_EX100_ULTF.mset`) on our Reflect rows, as Wisdom's and Master's, `reflect::native_path`.)
+    // (t1036: its own glide hover 208 (E173, battle slot 0, entry 832 of 833, body and both
+    // Keyblades, Checked (files)) on our row "Glide hover", which KH2's hover asks: `0x140423840`
+    // asks 208 through `0x1403C6DC0`, whose lookup `0x1403C7C50` tries the four slots of 208 by the
+    // variant table at `0x1405C5D38` (each row has slot 0, Checked (exe)) and finds E173, and plays
+    // it (`0x1403C86A0`), Checked (decomp). t1032's research had it absent.)
+    FormSlots {
+        kind: super::form::Kind::Final,
+        specs: &FINAL_SPECS,
+        ours: &[character_core::motion::AIR_RECOVERY, character_core::motion::GLIDE_HOVER, super::reflect::GROUND_MOTION, super::reflect::FINISHER_MOTION, super::reflect::AIR_MOTION],
+    },
+];
+
+/// Final Form's motions on KH1's own requests (t1033, plan row t1033 of Final's research round 2,
+/// `docs/kh1-drive-forms-native.md` §25), each the same KH1 request and template as base Sora's
+/// move of that kind, from `P_EX100_ULTF.mset` (moveset 5, Checked (files): every clip in its
+/// battle slot 0 but the arrival 53 (field slot 3); jump / fall / land 3..5 E003..E005, item use 9
+/// E110, reactions 10..15, Air Recovery 40, its ground combo 151..154 E300..E303 and air combo
+/// 181..183 E330..E332; no 41 / 42 / 43, no High Jump 201, no roll 209, no guard 173). As Valor's
+/// and Limit's: 152 on 0xC9, 151 on 0xC8 / 0xCA, 154 on 0xCB, 181..183 on 0xCC..0xCE (KH1's own
+/// requests, as base Sora's `SPECS`; KH2's picks play on our combo rows: from t1034 its air
+/// finisher 154 and its ground Finishing Plus 153 on rows of their own kind, `kh1rows` "154 (air
+/// finisher)" / "153 (finisher)", its 154 / 183 on "154" / "183"). Its jump
+/// is 3 on both takeoffs (no 201 in its file). No recoils: every Final attack row has refact self 2
+/// (65 of 65 read, Checked (files) `00battle.bin`), so it is never stopped and KH2's Final has no
+/// 41 / 43. Its item use 9 is in the battle slot (unlike Master's, t1031), so `ITEMS` takes its own
+/// clip there, the same lookup order (`kh2_data::sora::moves`). Its casts on KH1's cast requests
+/// (t1040, below). Its hits are its own ATKP rows (`form::battle`).
+/// (t1036: its glide 205 / 206 / 207 (E170..E172, battle slot 0, Checked (files)) on KH1's glide
+/// requests 0x71..0x74 as base Sora's (`GLIDES`: 0x71 / 0x72 205, 0x73 206, 0x74 207), played in
+/// KH1's glide state 0x15 by `glide` (KH2's air action handler `0x1403A81F0` glides with no form
+/// test, Checked (decomp)). A form's slots are on their requests whatever the styles (`redirect`),
+/// so they play at Glide KH1 too, as the owner has Drive Forms ignore the move styles.)
+const FINAL_SPECS: [Spec; 40] = [
+    Spec { motion: 152, stands_for: 99, request: 0xC9, kind: Kind::GroundCombo },
+    Spec { motion: 151, stands_for: 98, request: 0xC8, kind: Kind::GroundCombo },
+    Spec { motion: 151, stands_for: 100, request: 0xCA, kind: Kind::GroundCombo },
+    Spec { motion: 154, stands_for: 101, request: 0xCB, kind: Kind::GroundCombo },
+    Spec { motion: 181, stands_for: 102, request: 0xCC, kind: Kind::AirCombo },
+    Spec { motion: 182, stands_for: 103, request: 0xCD, kind: Kind::AirCombo },
+    Spec { motion: 183, stands_for: 104, request: 0xCE, kind: Kind::AirCombo },
+    reaction_spec(0),
+    reaction_spec(1),
+    reaction_spec(2),
+    reaction_spec(3),
+    reaction_spec(4),
+    reaction_spec(5),
+    item_spec(0),
+    item_spec(1),
+    FALL,
+    jump_spec(0),
+    Spec { motion: character_core::motion::JUMP, stands_for: 12, request: 0x9, kind: Kind::Jump },
+    LAND,
+    CHEST,
+    glide_spec(0),
+    glide_spec(1),
+    glide_spec(2),
+    glide_spec(3),
+    // (t1040) Its casts on KH1's cast requests, as Wisdom's and Master's (`CASTS`): its own clips of
+    // the MAGC motions, Checked (files) `P_EX100_ULTF.mset` (battle slot 0): Fire 56 E362 / 57 E363
+    // / 58 E372, Blizzard 59 E360 / 60 E361 / 61 E370, Thunder 62 E364 / 63 E365 / 64 E374, Cure 65
+    // E362 / 67 E372 / 68 E365 / 70 E374 (KH2 shares clips between spells here). KH1's Gravity on
+    // Thunder's 62 / 64, Stop / Aero on 68 / 65 / 67 (the owner's carried answer 3: Wisdom's
+    // mapping, the same `CASTS` rows as Wisdom's and Master's), so in Final they play E364 / E374
+    // and E365 / E362 / E372. Its finisher casts 57 / 60 / 63 are built after, `CAST_FINISHERS`.
+    // None of these clips has root travel (Checked (files)), so the generic form cast travel
+    // (`redirect`, `air_root_form`) moves him by nothing.
+    cast_spec(0),
+    cast_spec(1),
+    cast_spec(2),
+    cast_spec(3),
+    cast_spec(4),
+    cast_spec(5),
+    cast_spec(6),
+    cast_spec(7),
+    cast_spec(8),
+    cast_spec(9),
+    cast_spec(10),
+    cast_spec(11),
+    cast_spec(12),
+    cast_spec(13),
+    cast_spec(14),
+    cast_spec(15),
 ];
 
 /// Master Form's motions on KH1's own requests (t1021, the owner after t1019: "move onto the new
@@ -693,16 +779,19 @@ pub fn prepare(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, mut cac
         // request is then the one playing: this row plays it, so a next finisher always has a row
         // of ours (the tester, combo row selection after m26, answer 1: no fallback onto KH1's
         // finisher row).)
+        // (t1034: a combo row of ours only where base Sora's rows find it, `kh1rows::combo_in`:
+        // not Final's "154 (air finisher)" / "153 (finisher)"; every other one as by its motion.)
+        let base_rows = &kh2.character.moveset.combo_rows;
         let ours_motions = |o: &super::kh1rows::Ours| -> Vec<u16> {
             // (A Valor-only move, its arrival: built from Valor's moveset only, below.)
-            if o.valor || !wanted(o.motion) || (o.combo && !combo_ok.contains(&o.motion)) {
+            if o.valor || !wanted(o.motion) || (o.combo && (!combo_ok.contains(&o.motion) || !super::kh1rows::combo_in(o, base_rows))) {
                 return Vec::new();
             }
             let mut motions = vec![o.motion];
             if o.next_finisher {
                 let air = o.kind.air();
                 for f in super::kh1rows::OURS.iter().filter(|f| f.attack && f.kind.finisher() && !f.kind.cast() && f.kind.air() == air && !f.next_finisher && !f.rises) {
-                    if wanted(f.motion) && (!f.combo || combo_ok.contains(&f.motion)) && !motions.contains(&f.motion) {
+                    if wanted(f.motion) && (!f.combo || (combo_ok.contains(&f.motion) && super::kh1rows::combo_in(f, base_rows))) && !motions.contains(&f.motion) {
                         motions.push(f.motion);
                     }
                 }
@@ -721,26 +810,28 @@ pub fn prepare(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, mut cac
             Vec::new()
         };
         let form_has = |v: &pose::Src, m: u16| v.character.moveset.clips.contains_key(&m) && v.rig.motions.contains_key(&m);
-        // (Each form's plain combo rows' motions: its PTYA, e.g. Valor's moveset 2, Checked (files):
-        // 151..155 on the ground, 181..184 in the air, no ability rows of its own.)
-        let form_combo = |v: &pose::Src| -> Vec<u16> { v.character.moveset.combo_rows.iter().filter(|r| r.ability == 0).map(|r| r.motion).collect() };
+        // (Each form's plain combo rows: its PTYA, e.g. Valor's moveset 2, Checked (files): 151..155
+        // on the ground, 181..184 in the air, no ability rows of its own. A combo row of ours is
+        // the form's when one of those rows finds it, `kh1rows::combo_in` (t1034: by motion and
+        // kind, so Final's air 154 and finisher 153 get rows of their own kind and the other forms
+        // build as by their motions before).)
+        let form_combo = |v: &pose::Src, o: &super::kh1rows::Ours| -> bool { super::kh1rows::combo_in(o, v.character.moveset.combo_rows.iter().filter(|r| r.ability == 0)) };
         let form_ours = |f: &FormSlots, v: &pose::Src, o: &super::kh1rows::Ours| -> Vec<u16> {
             if !wanted(o.motion) {
                 return Vec::new();
             }
-            let combo = form_combo(v);
             if o.valor || f.ours.contains(&o.motion) {
                 return if form_has(v, o.motion) { vec![o.motion] } else { Vec::new() };
             }
             if o.next_finisher {
                 let air = o.kind.air();
-                let mut motions: Vec<u16> = super::kh1rows::OURS.iter().filter(|x| x.combo && x.kind.finisher() && x.kind.air() == air && combo.contains(&x.motion) && form_has(v, x.motion) && wanted(x.motion)).map(|x| x.motion).collect();
+                let mut motions: Vec<u16> = super::kh1rows::OURS.iter().filter(|x| x.combo && x.kind.finisher() && x.kind.air() == air && form_combo(v, x) && form_has(v, x.motion) && wanted(x.motion)).map(|x| x.motion).collect();
                 // (Its first is its own motion, as base Sora's, `ours_motions`.)
                 motions.sort_by_key(|&m| m != o.motion);
                 motions.dedup();
                 return if motions.first() == Some(&o.motion) { motions } else { Vec::new() };
             }
-            if o.combo && combo.contains(&o.motion) && form_has(v, o.motion) {
+            if o.combo && form_combo(v, o) && form_has(v, o.motion) {
                 return vec![o.motion];
             }
             Vec::new()
@@ -960,6 +1051,11 @@ fn make(mset: &[u8], src: &pose::Src, bake: Option<&pose::Baker>, cache: Option<
     // takeoff being frame 4 in both games; not stretched over KH2's longer High Jump.)
     let r = if kind == Kind::Jump { 1.0 } else { frames as f32 / old.max(1) as f32 };
     let mut tracks = kh1_tracks(&ks::events(&template).map_err(|e| e.to_string())?, clip, r, leave);
+    // (t1043) Final's Keyblade guard windows (ATKP 162), each blade's on a KH1 attack group of its
+    // own (`guard_channels`), which the KH1 guard object `lefthits` makes for that blade is tied to.
+    if src.form == Some(super::form::Kind::Final) {
+        tracks.extend(guard_tracks(clip));
+    }
     // (Only KH2's own sounds for it: the template's left out, `kh1rows::Ours::own_sounds`.)
     // (KH2's chest motion, t802: only KH2's own sounds, its Keyblade's 500047 at frame 1 and 500034 at 28; the
     // owner: "the sound effect from the keyblade needs to be the one from kh2".)
@@ -1094,8 +1190,9 @@ fn holder_key(template: &[u8], (motion, field): (u16, bool), frames: u32, form: 
     if let Some(k) = form {
         h.str(k.model());
         // (t829: Valor's left Keyblade from KH2's weapon bone 2, `pose::kh2_hold`; t831: in the
-        // left palm's own space, for the holder actor. t1024: Master's the same.)
-        if matches!(k, super::form::Kind::Valor | super::form::Kind::Master) {
+        // left palm's own space, for the holder actor. t1024: Master's the same. t1035: Final's,
+        // floating from its own palm 86, in place of `leftblade::left_bones`.)
+        if matches!(k, super::form::Kind::Valor | super::form::Kind::Master | super::form::Kind::Final) {
             h.str("kh2 hold");
             h.str("palm space");
             // (t841: no root travel, the template's travel helper's channels dropped.)
@@ -1247,6 +1344,33 @@ pub unsafe fn now_playing(actor: usize) -> Option<(u16, f32)> {
     let m = current(actor)?;
     let t: f32 = rd(actor + TIME_NOW);
     (t.is_finite() && t >= 0.0).then_some((m.motion, t))
+}
+
+/// (t1037) Our slot playing on `actor` now runs no KH1 attack row, so nothing of KH1's makes its
+/// Keyblade attack object there (`lefthits` makes one for the right Keyblade's windows): one on
+/// KH1's own request whose KH1 state attacks with nothing, a jump, fall or landing (`JUMPS`,
+/// `FALL`, `LAND`), a glide (`GLIDES`), an item's use or the chest (`ITEMS`, `CHEST`: KH1's
+/// command step starts the item's effect as a task of its own, Checked (decomp), the kind's
+/// note; the idle / walk / run cycles are this kind too, with no hit windows). Not a row of ours (`own`: KH1's row runner makes the object), nor a cast (KH1's cast
+/// state makes none either, but Master's casts' Keyblade windows and Final's 56 / 58 come with
+/// their own versions), nor a reaction (no hit windows).
+/// (t1040) Final's casts are: KH1's cast state makes no Keyblade object, and Final's right
+/// Keyblade has windows in them (`W_EX010_ULTF_R.mset`, Checked (files)): 56 / 58 / 65 / 67 / 71 /
+/// 73 ATKP 1429 (power 20, re-hit 22) at 6..68/69, 57 / 72 1608 (20, re-hit 32) at 1..74 then 31
+/// (group 2, 20) at 74..92; the other cast clips none. So Final's slots of kind Magic / AirMagic,
+/// on KH1's cast requests and our Reflect rows (cast rows of ours run no KH1 attack row either,
+/// `kh1rows` "Reflect" `attack: false`), give the right object too; the left one's (1428 / 1607 /
+/// 30) are the left object's already.
+/// (t1044) Master's casts too (the owner: yes, as Final's). Its right Keyblade's cast windows
+/// (`W_EX010_TRIF_R.mset`, Checked (files)): Fire 56 / 57 / 58 (one clip, D371) ATKP 1097 (power 50,
+/// no re-hit) at 18..53, Blizzard 59 / 60 / 61 (D370) 1066 (power 50, no re-hit) at 26..34; Thunder
+/// D372, Cure / Magnet D374 and its Reflect D373 (71 / 72 / 73, our Reflect rows) have none on the
+/// right, so no object is made there (`lefthits::make` needs a window). Its left blade's 1096 /
+/// 1065 / 1098 / 1099 / 1078 are the left object's already (`W_EX010_TRIF_L.mset`, Checked (files)).
+pub unsafe fn rowless_now(actor: usize) -> bool {
+    current(actor).is_some_and(|m| {
+        (m.own.is_none() && matches!(m.kind, Kind::Jump | Kind::Glide | Kind::MiscAnims)) || (matches!(m.form, Some(super::form::Kind::Final | super::form::Kind::Master)) && matches!(m.kind, Kind::Magic | Kind::AirMagic))
+    })
 }
 
 /// The KH2 motion whose invulnerable range holds KH1's no-damage flag now (`invulnerable_step`),
@@ -1784,8 +1908,9 @@ fn slot_key(template: &[u8], (motion, field): (u16, bool), frames: u32, tracks: 
         h.str(k.model());
         // (The form's own Keyblade hold on KH1's grip, `pose::form_grip`: the forms' bakes once.)
         h.str("form grip");
-        // (t829: Valor's Keyblade from KH2's weapon bone 2, `pose::kh2_hold`.)
-        if k == super::form::Kind::Valor {
+        // (t829: Valor's Keyblade from KH2's weapon bone 2, `pose::kh2_hold`. t1035: Final's
+        // too, its floating right Keyblade, in place of `form_grip`.)
+        if matches!(k, super::form::Kind::Valor | super::form::Kind::Final) {
             h.str("kh2 hold");
             // (t851: the hold placed from the middle knuckle.)
             h.str("knuckle anchor");
@@ -2237,6 +2362,53 @@ pub fn left_channel(clip: &character_core::Clip) -> Option<u8> {
     }
     let ch = body_windows(clip).len() + 1;
     (ch <= BODY_CHANNELS).then_some(ch as u8)
+}
+
+/// (t1043) The KH2 guard windows on each Keyblade of `clip` (`WindowKind::Guard` with weapon 1, the
+/// right; 2.., the left), as (start, end) frames (no end: the clip's end).
+pub fn blade_guard_spans(clip: &character_core::Clip, left: bool) -> Vec<(f32, f32)> {
+    let len = clip.length as f32;
+    clip.windows
+        .iter()
+        .filter(|w| matches!(w.kind, WindowKind::Guard { weapon, .. } if if left { weapon >= 2 } else { weapon == 1 }))
+        .map(|w| (w.start as f32, w.end.map_or(len, |e| e as f32)))
+        .collect()
+}
+
+/// (t1043) The KH1 attack groups `clip`'s Keyblade guard windows play on, [right, left]: the next
+/// free ones after its body windows' (`body_windows`) and its left Keyblade's hits'
+/// (`left_channel`), the right blade's first; `None` for a blade with no guard window, or with no
+/// group left (KH1 has groups 1..3 besides the Keyblade's 0). Final's 151 / 153 / 183 (no body
+/// windows, left hits on group 1): the right guard on 2, the left on 3; its hover 208 (no hits):
+/// 1 and 2 (Checked (files) `W_EX010_ULTF_R` / `_L.mset`, `P_EX100_ULTF.mset`).
+pub fn guard_channels(clip: &character_core::Clip) -> [Option<u8>; 2] {
+    let mut next = body_windows(clip).len() + 1 + left_channel(clip).is_some() as usize;
+    let mut out = [None, None];
+    for (side, left) in [(0, false), (1, true)] {
+        if blade_guard_spans(clip, left).is_empty() {
+            continue;
+        }
+        if next <= BODY_CHANNELS {
+            out[side] = Some(next as u8);
+        }
+        next += 1;
+    }
+    out
+}
+
+/// (t1043) KH1's hit-window tracks (`ks::HIT` level events) of `clip`'s Keyblade guard windows, each
+/// blade's on its group (`guard_channels`): KH1's own motion pass then switches the guard objects'
+/// group bits (`+0x1CC` bit `0x10000 << group`, `0x1402B47A0`, Checked (decomp)) exactly at KH2's
+/// window frames, as it does KH1's own Keyblade object's.
+fn guard_tracks(clip: &character_core::Clip) -> Vec<EventTrack> {
+    let ch = guard_channels(clip);
+    let mut out = Vec::new();
+    for (side, left) in [(0, false), (1, true)] {
+        if let Some(c) = ch[side] {
+            out.push(EventTrack::level(ks::HIT, c as u16, &blade_guard_spans(clip, left)));
+        }
+    }
+    out
 }
 
 /// (t680) The KH2 motion our slot plays on `actor` now, its clip (Valor's in Valor on KH1's own
@@ -3606,6 +3778,13 @@ pub unsafe fn pick_ability(request: usize, motion: Option<u16>, force: bool) -> 
 /// A slot of ours plays KH2's `motion` for KH1's `request` (`pick` can point it there).
 pub fn has(request: usize, motion: u16) -> bool {
     built().is_some_and(|b| b.moves.iter().any(|m| m.request == request && m.motion == motion && live(b, m)))
+}
+
+/// `has`, without `live`'s fallback onto base Sora's slot: in a Drive Form on KH1's own states only
+/// the form's own slot of `motion` on `request` counts (t1036, `glide`'s hover in Final).
+pub fn has_own(request: usize, motion: u16) -> bool {
+    let now = super::form::native_form();
+    built().is_some_and(|b| b.moves.iter().any(|m| m.request == request && m.motion == motion && m.form == now))
 }
 
 /// The KH2 motion of our slot `actor` plays now (KH2's anti-repeat passes over it, `pick`).

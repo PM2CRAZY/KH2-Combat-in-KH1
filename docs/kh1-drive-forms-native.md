@@ -2878,3 +2878,305 @@ Paused here to move on to the next form; t1013..t1019 are untested in game. Open
 - t1029: Master's look (answer 4): main's yellow spec, from main's `tint.rs` (belt black; hood lining, jumpsuit and collar strip one bright yellow by `Op::Paint`, main's values), `tint::Look::Master`, built once into the tint cache; Player Model kh2 draws `P_EX100_TRIF`.
 - t1030: Master's KH1 battle quotes (answer 7): the row-less lines only, in Master: 183 voice 4 → group 4, 183 / 184 voice 5 → group 5 (`kh1voice::MASTER_STAND_INS`); the frame-0 lines are KH1's row voices already (4 on 181 / 182 / 185, 5 on 183 / 184).
 - t1031: Item use in Master (answer 8): Master has motion 9 in its field slot only (`A110`, as Wisdom's and Limit's, Checked (files)); KH2's lookup `0x1403C7C50` tries the id's four slots by the table at `0x1405C5D38` and nothing else (Checked (decomp) / (exe)), so Master plays its own. `MASTER_SPECS` gets the item specs (0x3E / 0x3F).
+- t1032: Limit's and Master's KH2 swing sounds play whatever `kh2_sounds` lists, as Valor's / Final's (the owner's answer
+  2 (a)); Master's finishers keep KH1's row line at Battle Quotes KH1 (answer 1 (a), no change).
+
+## 25. Final Form on KH1's states (the owner, after t1032: "start final", 2026-10-30)
+
+Research round 2 on base t1032 (Checked (code): `VERSION`, top AGENTS stage 1032), against `P_EX100_ULTF.mset` / `.mdlx` / `.a.us`, `W_EX010_ULTF_R` / `_L`, `00battle.bin`, `03system.bin`, `btltbl.bin`, the KH2 Steam decomp and the KH1 exe. Nothing built yet: the plan waits on the owner's answers to §25.4.
+
+**What testing has today (Checked (code)).** `Kind::Final` with its name, model (`P_EX100_ULTF`, body 3), growth (Glide), `two_blades`, `Pkg::Final` / `kh2fx::FINAL` = 18, its sounds, the level u16 at `+0x886`, Riku 2 in Story Unlocks, the 5-bar cost and both partners are in place. Final is refused because it isn't in `Kind::ALL` or `native_capable`; it has no Drive list record (record 0x80 / word 0x1FC are Limit's now; free: record 0x8F, word 0x1ED, Checked (files) / (code)) and no `FORM_SLOTS` entry. The left Keyblade is fixed to the Kingdom Key (`valor::FINAL_KEYBLADE`), there is no F: slot, the right blade still uses the per-frame `leftblade::final_float`, and `glide::built` turns every form away. The secret code sets `CODE_DONE`, which nothing reads.
+
+### 25.1 KH2 (Checked against the files and the decomp)
+
+#### 25.1.1 Moveset (Checked (files): `P_EX100_ULTF.mset`, 833 entries; every clip in slot 0 except 53)
+- **Present:** 0 / 1 / 2 idle, walk, run (E000..E002); 3 / 4 / 5 jump, fall, land (E003..E005); 6 stance (E010); 7 / 8
+  (E100 / E101, role not checked); **9 item use (E110, battle slot)**; 10..19 reactions (10 = 11 E200, 12 = 13 E202, 17 =
+  19 = E005); 40 Air Recovery (E212); 53 arrival (A121, field slot); casts 56..73; 139 (E001); **151..154 ground combo
+  (E300..E303)**; 181..183 (E330..E332); **glide 205 / 206 / 207 (E170..E172)**.
+- **Absent:** 41 / 42 / 43 (no repel, no guard), 173 guard, 184, 185, 201 High Jump, 202 Aerial Dodge, 203 / 204 Quick Run,
+  **208 glide hover**, 209 roll.
+- **Against Master (Checked (files)):** Master has 41..43 (D350), 184 / 185, 202; its 151..154 are casts and its 3..19 and 9
+  are in slot 2. Final has a real ground combo (151..154), Master has none. Final has glide 205..207, Master none.
+- **Casts (no root travel at all, Checked (files)):** Fire 56 E362 / 57 E363 / 58 E372; Blizzard 59 E360 / 60 E361 / 61
+  E370; Thunder 62 E364 / 63 E365 / 64 E374; Cure 65 E362 / 67 E372 / 68 E365 / 70 E374; Reflect 71 E362 / 72 E363 / 73 E372.
+  So with Wisdom's mapping (answer 3 carries) Gravity on 62 / 64 and Stop / Aero on 68 / 65 / 67 play Thunder's / Fire's
+  clips, none travelling.
+- **Combo root travel (Checked (files)):** 151 z +400, 153 z +100, **154 y up 150** (rises on the ground), 182 z +200, 183 y
+  −300 and z +300; 181 / 152 none. Glide clips 30 frames at 30 fps, looping to 0.
+- **PTYA set 5** (12 rows, shared by movesets 5 / 15 / 41 / 47; Checked (files)):
+  - Ground: id 6 (151, 180..400 away), id 4 (152, near), id 5 (151, near), id 32 (152 after id 5); hop id 0 (182, jump 47,
+    target above), id 1 kind 0 (181, 40).
+  - Ground finisher: **id 2 = 154** (flag 4); **its Finishing Plus next: id 3 = 153** (kind 3 sub 2, flag 4). Base Sora's
+    next is 155.
+  - Air: id 9 (181), id 10 (182 after id 9); **air finisher id 7 = 154** (flag 5), its next **id 8 = 183**.
+  - No guard row 11, no Square or ability rows (all `ability` 0).
+- **prty row 5 (Checked (files)):** walk 2, run 16, jump 585, turn 0.196, accel 0.94, brake 0.99, subjective 170.
+  final.md's numbers confirmed.
+- **Voices (trigger 14):** 151 4 @0, 4 @52; 152 4 @0; 153 4 @0, 6 @72; 154 6 @0, 5 @52; 181 4 @0 / 42 / 72; 182 4 @0;
+  183 6 @0, 4 @89, 5 @136; 9 voice 3 @0. Elements (trigger 1): 151 → 52..57, 153 → 20..24, 154 → 25..40 (+ sound 999043),
+  181 → 58..61, 182 → 62 / 63, 183 → 42..51. `.mdlx` has no script entry (types 4 / 7 / 23); `.a.us` is PAX "p_ex" + face.
+
+#### 25.1.2 Weapon motions and hit windows (Checked (files): `W_EX010_ULTF_R` / `_L`, ATKP in `00battle.bin`)
+`(range 10 = hit, (ATKP, group))`. Every Final attack row read has refact self 2 (65 of 65): **Final is never stopped by a
+clash**, so it never recoils. That explains why it has no 41 / 43.
+
+| Motion | `_R` | `_L` |
+|---|---|---|
+| 3 jump | 1273 at 2..12 (power 20), then 1286 from 12 to the end (power 10, re-hit 10) | 1274 / 1287 |
+| 4 fall | 1275 at 2..20 (20) | 1276 |
+| 5 land | 1277 at 0..20 (20) | 1278 |
+| **9 item use** | 1284 at 1..38 (20, re-hit 12), **1449 at 38..46 (power 200)** | 1285 / 1450 |
+| 151 | 1390, 1392, 1394..1398; **guard ATKP 162 at 55..84** | 1391..1397; 162 at 55..89 |
+| 152 | 1400 at 8..64 | 1399 |
+| 153 | 1404, 1423..1427; **162 at 4..125** | 1403, 1422..1426; 162 |
+| 154 | 1402 at 11..50 (re-hit 16), 1458 at 83..112 | 1401 / 1457 |
+| 181 | 1405..1411 | 1406..1410 |
+| 182 | 1413 | 1412 |
+| 183 | 1415..1421; **162 at 4..165** | 1414..1420; 162 |
+| 205 / 206 / 207 glide | **1281 all through (power 100, re-hit 30)** | 1282 |
+| 56 / 58 casts | 1429 (20) | 1428 |
+
+- **154 also hits on the body:** ATKP 1456 group 2 at 52..82 (pierce, power 50, re-hit 6) and 1737 group 19 at 112..124
+  (pierce, 100), plus invulnerable 36..92 (range 27) and no gravity from 16. Two body channels + the left channel = 3 =
+  `BODY_CHANNELS` (Checked (code), `kh2slots.rs:2267`): fits exactly.
+- ATKP 162 is kind 2 (a guard), power 0, refact self 2: KH2's "stops a hit from in front, the move goes on", the same id as
+  Guard Break's (`kh2slots::keyblade_guard`, Checked (code)).
+- **Correction:** final.md's "hover 208: ATKP 162, a guard" is wrong. Final has no 208; its 162 windows are in 151 / 153 / 183.
+
+#### 25.1.3 Floating blades (Checked (files))
+- `03system` `wmst` rows 10 / 11 are `W_EX010_ULTF_R` / `_L`. `sklt` row 0 (joint 1) is (178, 86): right and left palm.
+- **Both float.** Unlike Master's held `_R`, each weapon's bone 0 translation is animated away from its own palm in every
+  motion: idle `_R` x −72..−55, z 9..33; `_L` x −41..−33; 181 `_R` x −27..90, z 4..62, `_L` z down to −101; glide `_R`
+  y about −100.
+- **The spin is bone 2:** the glide clips turn bone 2's z rotation 0 → −37.7 rad (−12π, six turns per 30-frame loop) on
+  `_R`, and about the same on `_L`. Idle turns bone 2's x by 2π a loop. It is all data.
+- **Correction:** main's "both hang from the right hand" doesn't match the files. Each hangs from its own palm, as Master's
+  `_L` does.
+- Assumption: Final's objentry uses weapon joint 1 (`00objentry.bin` is not uploaded), as for Master.
+
+#### 25.1.4 Keyblades in the hands (Checked (decomp))
+- `0x1403D59C0`: in a form (`+0x6CB` bit 0), hand 0 gets Sora's own Keyblade (`0x140405190(0)`). Hand 1 keeps the form's
+  weapon (`0x140405190(5)`, Sora's record `+0x16 + 5×2`).
+- `0x1403DFEB0` case 0x23B: an empty slot resolves to Sora's own (as for Valor and Master).
+- Fill on gain (`0x1403C3FE0`, forms 1 / 4 / 5): already noted Checked (decomp) in docs §15.
+- So: right = Sora's own, left = F: slot; an empty F: gives Sora's own twice (round 11 answer 1 (a) carries).
+
+#### 25.1.5 Glide (Checked (decomp) / (files))
+- The air action handler `0x1403A81F0` reads Glide's level (`0x140401680(abilities, 3)` = ability block `+0x23`, or 5 when
+  `0x1403ABCD0` is true: world 0x12 room 0x17, or `0x142A11400` bit 13). It glides once the height above the floor beats
+  fmab `+0x34` (`0x1403E92D0(level)`). **There is no form test**, so Final glides on the same fmab rows as base Sora, at its
+  own level.
+- fmab rows (Checked (files)):
+
+| Level | Speed | Fall ratio | Fall max | Accel | Start / end height |
+|---|---|---|---|---|---|
+| LV1 | 16 | 0.015 | 3.0 | 0.91 | 60 / 10 |
+| LV2 | 20 | 0.015 | 2.5 | 0.93 | 60 / 10 |
+| LV3 | 24 | 0.015 | 2.0 | 0.95 | 60 / 10 |
+| MAX | 32 | 0.01 | 1.0 | 0.97 | 60 / 10 |
+| level 5 | 64 | 0 | 0 | 0.98 | 20 / 10 |
+
+  Turn 0.052 at every level.
+- **Final's level** comes from fmlv form 5's ability levels by form level: 1, 1, 2, 2, 3, 3, 4 (Checked (files)). Base Sora's
+  is one under (already built, `formlevel::sora_growth`).
+- **Hover:** a neutral stick at the start picks the hover action. `0x140423840` asks motion 0xD0 (208) through
+  `0x1403C6DC0`. Final has no 208, and KH2's lookup never falls back (`0x1403C7C50`, t1031). Assumption, from
+  `0x1403C88C0` returning 0 without a slot: in KH2's Final the hover changes no motion, so the last one (jump 3 / fall 4,
+  or glide 205) keeps playing. Not traced.
+- **How Final's glide differs from base Sora's:** only its motions (205..207 with the spinning blades), its hits (1281 /
+  1282 on both blades, power 100, re-hit 30, Drive value 6), no hover motion, and no partners to glide after it.
+
+#### 25.1.6 Magic (Checked (decomp) `0x1403C5170`, (files))
+- sub = level×2 − 2 (+1 on a finisher), plus 10 / 20 / 30 for forms 2 / 4 / 5 (`param_1[0x378]` = player `+0xDE0`),
+  gated on `+0x6C8` bit 7. **Correction to t1027:** Master's +20 is in this same function, so `form::MASTER_MAGIC_SUB`'s
+  "Assumption" is now Checked (decomp).
+- ATKP 248..251 / 502 have subs 30..35 (finishers included). Reflect 573 / 574 have 30 / 32 / 34 (Checked (files)). Cure is
+  KH2's in Final.
+
+#### 25.1.7 EXP, levels, cost, unlock, revert
+- **EXP (Checked (decomp) `0x1403E8780`):** in form 5, +1 per defeated enemy with id 3000..4014 (Nobodies). Form 2's
+  rule is ids 1000..2011 plus `0x1403BA050`.
+- **fmlv form 5 (Checked (files)):** EXP 12 / 24 / 48 / 76 / 133 / 157; Glide 1, 1, 2, 2, 3, 3, 4; rewards Auto Final (388)
+  at LV2, **Form Boost (398) at LV4 and LV6**.
+- **Cost (Checked (files) + decomp):** 5 bars (already built), both partners (already built).
+- **Unlock (Checked (decomp) `0x140421D60`, sstm Checked (files)):** only through the Anti roll. A second roll at
+  min(3.0 × 3.0^n, 75.0)% (sstm `+0x98` / `+0x9C` / `+0xA0`), when:
+  - Final (item 0x1D) is not owned;
+  - Final's party is available (`0x140400740(5)`);
+  - flag 0x4842 is set;
+  - Final's cost (`0x1403B6920(5)+0x1C`) is within the bars.
+
+  On success: item 0x1D is given and the Anti counter drops by sstm `+0xA4` = 10. Choosing Final also lowers it by 10;
+  Anti lowers it by `+0x90` = 6. All of final.md's numbers are confirmed.
+- **Revert:** as every form.
+
+### 25.2 How KH1 hosts each part natively
+
+#### 25.2.1 On KH1's states (Limit's / Master's path)
+- `FINAL_SPECS`, as Valor's, on KH1's own requests:
+  - 152 on 0xC9, 151 on 0xC8 / 0xCA, 154 on 0xCB;
+  - 181 / 182 / 183 on 0xCC..0xCE;
+  - reactions 10..15, FALL, jump 3 on both takeoffs 0x4 / 0x9 (no 201), LAND, CHEST;
+  - `item_spec(0/1)` (its 9 is in the battle slot);
+  - `glide_spec(0..3)` (205, 205, 206, 207);
+  - `cast_spec(0..15)` from the magic version;
+  - `ours`: Air Recovery 40 and the Reflect rows.
+- **No recoil specs:** it is never stopped (§25.1.2), so KH1's recoil requests shouldn't be reached at Recoil KH2.
+- `live()` (`kh2slots.rs:2726`, Checked (code)) gives a form base Sora's slot wherever it has no move. With Recoil KH1,
+  base Sora's 41 / 43 could play on Final's rig (Assumption, see §25.5).
+- prty numbers and ground inertia (`shared.rs:1419`, accel 0.94 / brake 0.99) are already generic for a native form.
+- The arrival 53 and stance 6 rows are built for any form that has the clips (Final has both).
+
+#### 25.2.2 The floating Keyblades (Valor's and Master's machinery, no per-frame code)
+- Right: the main bake carries `_R`'s bone 2 from KH2's right palm 178 onto KH1's (`pose::kh2_hold`, as Valor's,
+  `pose.rs:1428-1446`), into KH1's weapon bones 280..292 of every Final slot. The float and the spin are in the slot.
+- Left: `holder_poses` carries `_L` from palm 86 onto KH1's 206 (Valor's / Master's branch, `pose.rs:1513`). The holder
+  actor, the trail from `_L`'s range 12, and `secondary` hang the chain.
+- Then `final_float` and its call, and the old owner copy, go. KH1's own Keyblade attack object and trail follow the drawn
+  (baked) bones as they are, so the right blade's KH1 hit sphere floats with it.
+
+#### 25.2.3 Hits
+- In attack rows (151..154, 181..183): KH1's row object for `_R` (group 0) and `lefthits` for `_L` (`left_channel`), as
+  Valor and Master. 154's body windows go through `bodyhits`.
+- **New:** `_R` windows in slots that run no KH1 attack row (jump 3, fall 4, land 5, item 9, glide 205..207). Nothing makes
+  a KH1 Keyblade object there. They get a KH1 attack object of ours on group 0: `lefthits`' maker (`0x1402B2DC0`) with the
+  right Keyblade's own row, tied to the slot's request, re-hit by `rehit`.
+- `_L` there: `lefthits::new_play` runs for any of our slots in a two-bladed native form (`lefthits.rs:133`), so it should
+  need only the HIT track on its channel (Assumption: `bodyhits::frame` sees the glide requests 0x71..0x74 as our slots).
+- The ATKP 162 windows on 151 / 153 / 183 are KH2's weapon guard, taken by `kh2slots::keyblade_guard` (Checked (code)
+  generic). Check that it reads weapon 2 too.
+
+#### 25.2.4 The F: slot (t1025's path)
+- Needs `equip::FINAL_OFF` (Q1); `slot_off` / `slot_holds` / `candidates` three-way (each slot's copy kept off the
+  others' lists, Valor first, then Master); `valor::final_slot` / `final_keyblade`; `second_keyblade`; the 10-frame check.
+- `valorslot`'s free count `0x1402E8770` and compare box `0x1403050D0` handle any form's slot (no new hook).
+- `equipmenu`: an "F:" row hidden until owned (answer 5 carries). The row stub handles rows 1 and 2 by their own cells
+  (106 bytes, t1025), so it must take a third.
+- `formown` fill on gain (KH2 `0x1403C3FE0`). `FINAL_KEYBLADE` goes.
+
+#### 25.2.5 Glide (KH1's state 0x15, `glide.rs`)
+- `built()` and `ours()` open to native Final. `kh2_glide_growth` already reads `abilities_now` (Final's `form_growth`
+  glide) and `kh2table::now()` (Final's table: the same fmab), so the numbers are already right.
+- 205..207 are on KH1's 0x71..0x74 by `glide_spec`. Hover: Q3.
+- `party()` is a no-op in Final (the partners are away). Neverland flight stays KH1's (`fall_jump`).
+
+#### 25.2.6 Magic, level, effects, look, quotes
+- **Magic:** Wisdom's / Master's path per form (`kh2_magic`, `magic_sub` + 30, `form_kh2_spell`); exact ATKP rows (Final
+  has every sub).
+- **Level:** the record exists at `+0x886`; the EXP rule is Q2. Rewards at `menu::Growth::update`.
+- **Effects:** `Pkg::Final` / `kh2fx::FINAL` / `form_event` exist; the native slot keys trigger 1 with the form tag (t1028
+  note). Expected to work once the slots exist. Verify only.
+- **Look:** main's `Look::Final` spec (main `tint.rs:260-270`, the owner's words: outfit white including the shoes, belt
+  black; the jacket's black trim stays). Model body 3 is already drawn.
+- **Quotes:** t1030's rule, the row-less lines only.
+
+### 25.3 Plan (one system per version, after a go-ahead; re-hits are 60 Hz as `rehit` has them, KH1 frame counts come from the bake)
+
+| Ver | System | Files |
+|---|---|---|
+| **t1033** | Final on KH1's states: `Kind::ALL` and `native_capable` gain Final; `drive::FORMS` `(0x8F, 0x1ED)`; `FINAL_SPECS` (§25.2.1, without casts and glide) and `FORM_SLOTS[5]` (`ours`: Air Recovery); Story Unlocks off owns Final as V/W/L/M (`formown::always`, answer 2 carries; the level cap counts it). One blade drawn as today (`left_bones`), Kingdom Key, no look. Test with t1034 / t1035. | `form.rs`, `drive.rs`, `kh2slots.rs`, `formown.rs`, `lib.rs` |
+| **t1034** | Final's combo rows: PTYA set 5's 154 as an **air finisher** and 153 as the **ground Finishing Plus next** (today `by_combo_motion` gives "154" a ground finisher row and "153" a swing row, `kh1rows.rs:242-250`). Rows of ours built only from Final's set (as t1022's "185"). The lookup is keyed by (motion, air, finisher). 154's ground rise of 150 (root y) checked against `rises` / `air_root`. | `kh1rows.rs`, `combomods.rs`, `kh2table.rs`, `kh2slots.rs` |
+| **t1035** | The floating Keyblades baked: `_R` by `kh2_hold` in the main bake, `_L` by `kh2_hold` in `holder_poses` (both palms); hold strings in the slot / holder keys; `final_float`, its `pose.rs:2221` call and the old owner copy removed (less per-frame code). | `pose.rs`, `kh2slots.rs`, `leftblade.rs` |
+| **t1036** | Glide in Final: `glide::built` / `ours` for native Final; `glide_spec(0..3)` in `FINAL_SPECS`; the level from Final's form level; hover by Q3. | `glide.rs`, `kh2slots.rs` |
+| **t1037** | The blades' hits outside attack rows: a right-Keyblade KH1 attack object of ours on group 0 for jump / fall / land / item / glide windows (`lefthits`' maker, the right Keyblade's row, `rehit`); the left ones' tracks on those slots; ATKP 162 guard windows checked on both blades. | `lefthits.rs` (or a sibling), `bodyhits.rs`, `kh2slots.rs` |
+| **t1038** | The F: slot: the save byte (Q1), three-way `equip`, `valor::final_slot`, `valorslot`, the "F:" row (hidden until owned), the fill on gain; `FINAL_KEYBLADE` goes; stats from the F: Keyblade. | `equip.rs`, `valor.rs`, `valorslot.rs`, `equipmenu.rs`, `formown.rs`, `valorstats.rs`, `form.rs`, `docs/kh1-equipment.md` |
+| **t1039** | Final's EXP and rewards: Q2's rule; Form Boost 398 at LV4 / LV6 by Q4; Auto Final 388 passed with a note. | `formexp.rs`, `growth.rs`, `menu.rs` |
+| **t1040** | Final's magic: `kh2_magic` and `magic_sub` + 30 (`FINAL_MAGIC_SUB`, and Master's +20 note corrected to Checked (decomp)); `cast_spec(0..15)` and finisher casts; Reflect 71..73 on our rows. | `form.rs`, `formmagic.rs`, `kh2slots.rs`, `reflect.rs`, `combat.rs`, `pose.rs`, `kh2dpx.rs` |
+| **t1041** | Effects and sounds on the native slots: verify `Pkg::Final` trigger 1 and element sounds. A version only if something is missing. | `kh2fx.rs`, `kh2dpx.rs` |
+| **t1042** | Look: `tint::Look::Final`, main's white spec, built once into the tint cache. | `tint.rs`, `form.rs`, `docs/kh1-tint.md` |
+| **t1043** | KH1 battle-quote stand-ins (answer 7 carries): row-less lines only (151 4 @52, 153 6 @72, 154 5 @52, 181 4 @42 / @72, 183 4 @89 / 5 @136), `FINAL_STAND_INS` while `in_final()`. | `kh1voice.rs` |
+| Later, with Anti | KH2's Final roll; the Anti counter −10 on choosing Final; the secret code on Anti. | — |
+
+Per frame: one function less (`final_float`). Nothing new runs per frame; the 10-frame slot check gains Final.
+
+### 25.4 Questions waiting on the owner
+
+**Carried over, not asked:**
+- Owned from the start with Story Unlocks off (Master's answer 2); with it on, Riku 2 stays (`storyforms`).
+- An empty slot is Sora's own Keyblade (round 11 answer 1 (a)).
+- F: row hidden until owned (answer 5).
+- No KH1 command refused (answer 6).
+- Gravity / Stop / Aero by Wisdom's mapping (answer 3).
+- Look: main's spec (Limit round 12 answer 3 (b), Master answer 4).
+- KH1 quote stand-ins (answer 7).
+- Drive Forms ignore the move styles, so Final glides KH2's way even at Glide KH1 (the tester, after m13, `combomods.rs:335`).
+- The code stays for Anti.
+
+1. **The F: slot's save byte.** `+0x488` (Valor), `+0x489` (Master) and the layout mark `+0x48A..B` are taken, and
+   `+0x48C / D` are KH1's.
+   - (a) `+0x894`, the byte after Master's level u16 in the unlisted span `+0x888..+0xC00`. No absolute reference to
+     `0x142DE9BF4` in `.text`. The three `0x894` displacements (`0x140041980`, `0x140100170`, `0x14039DB44`) are stack
+     frames or other objects that also hit `0x890` / `0x892`, the bytes t973 / t1026 already took (Checked (exe)).
+   - (b) `+0x888`, the first byte of the span.
+   - (c) Another byte you name.
+
+   Recommend (a): nothing moves, and it sits with the other form bytes. Assumption for all three: nothing reaches it
+   through a computed pointer.
+2. **Final's EXP (answer 7, still open since m15).** KH2 counts Nobodies, which KH1 doesn't have. This decides whether
+   Final's glide ever grows past LV1 and whether base Sora's Glide grows from Final.
+   - (a) None, KH2's rule as written. Final stays LV1 (glide speed 16).
+   - (b) +1 per enemy defeated in Final on Wisdom's defeat path, every KH1 enemy standing in for a Nobody, as Wisdom
+     already takes every KH1 enemy as a Heartless.
+   - (c) Drive orbs, as Master's.
+
+   Recommend (b): the same stand-in Wisdom uses, and KH2's +1 per defeat with fmlv's 12..157.
+3. **The glide hover (no motion 208 in Final).** A neutral stick at the glide's start is KH2's hover.
+   - (a) KH2's as read: the motion doesn't change, so the jump or fall keeps playing and its blades' hits with it.
+     Assumption from `0x1403C88C0`, to trace further.
+   - (b) Final's glide 205 plays in the hover (spinning blades, the glide's 1281 hits).
+   - (c) Base Sora's 208 on Final's rig. Today's fallback through `live()` would give this; not KH2's.
+
+   Recommend (a) once the decomp read is confirmed, else (b).
+4. **Final's fmlv rewards.** Form Boost (398, LV4 and LV6) has existed as a KH2 support ability since t955, but the
+   rewards code still passes it as "waits for the Drive gauge" (`growth.rs:610`).
+   - (a) Give each as a copy in the KH2 support list.
+   - (b) Pass as today.
+
+   Auto Final (388) has no system either way. Recommend (a). It also applies to Wisdom's / Limit's rewards that were
+   waiting on the same thing; say if you want those included.
+5. **Scope found (ask before adding):**
+   - (a) **Item use in Final hits**: both blades, 1284 / 1285 at 1..38 and 1449 / 1450 (power 200) at 38..46. Built
+     in t1037 with the other non-row hits unless you say no.
+   - (b) **The guard windows** (ATKP 162) in 151 / 153 / 183 stop hits from in front while those moves play. Build them
+     with t1037 too?
+
+   Recommend yes to both: it's KH2's data.
+
+### 25.5 Not checked
+- Final's objentry weapon joint (`00objentry.bin` not uploaded).
+- KH2's hover in Final in game (§25.1.5).
+- Whether `bodyhits::frame` / `lefthits::new_play` see the glide requests as our slots.
+- Whether `live()` hands Final base Sora's recoil slots at Recoil KH1, where KH1's clash rules could stop him (at Recoil
+  KH2 his rows are unstoppable, Checked (code) `kh1rows.rs:649`).
+- Motions 7 / 8 / 139's roles.
+- How KH2 applies the two blades' Strength (`valorstats::bonus`'s rule carried from Valor).
+- 154's ground rise on KH1's ground rows.
+- The slots window with three form rows (11 + 1 rows; Assumption that it scrolls).
+- Flag 0x4842's meaning, world 0x12 room 0x17.
+- The F: byte through a computed pointer.
+- Nothing was tested in game.
+
+### 25.6 The owner's answers (2026-10-30)
+
+1. (a) The F: slot is save `+0x894`.
+2. (b) Final gets +1 EXP per enemy defeated in Final, on Wisdom's defeat path, every KH1 enemy standing in for a Nobody.
+3. The recommendation: KH2's hover as read (the motion doesn't change) once the decomp read is confirmed, else Final's glide 205 in the hover.
+4. (a) Form Boost (398) at Final LV4 / LV6 is given as a KH2 support copy, and the other forms' rewards that waited on the same thing too. The owner asked for a note on what Form Boost is (below, with t1039).
+5. Not objected: item use in Final hits with both blades, and the ATKP 162 guard windows in 151 / 153 / 183, both with t1037.
+
+### 25.7 Built (one system a version)
+
+- t1033: Final on KH1's states. `Kind::ALL` / `native_capable` gain Final (V, W, L, M, F); Drive list record 0x8F, word 0x1ED (Checked (files) `btltbl.bin`); `FINAL_SPECS` (ground 151 / 152 / 154, air 181..183, reactions, item use 9, jump 3 / fall / land) and Air Recovery 40 on our row; no recoils, glide or casts yet. Final's files noted for the slot cache. Square and the air jump hidden in Final until its glide (t1036), not Wisdom's Quick Run. Owned from the start with Story Unlocks off. Blades as drawn (one), no F: slot, no look.
+- t1034: Final's combo rows. PTYA set 5 re-read (Checked (files)); `kh1rows::by_combo_row` finds a combo row by motion and kind (air flag 1, finisher flag 4), first-of-motion otherwise; new rows "154 (air finisher)" (id 7) and "153 (finisher)" (id 3), built only for a moveset whose rows find them (`combo_in`: Final's). Ground Finishing Plus 154 -> 153, air 154 -> 183, by KH2's own walk on Final's table. 154's ground rise is `lifts_off`'s (no gravity from 16, Checked (files)). Other movesets unchanged (Checked (code)).
+- t1035: Final's floating Keyblades baked. `_R` (`W_EX010_ULTF_R`) by `pose::kh2_hold` in the main bake onto KH1's 280..292 of every Final slot (as Valor's), `_L` by `kh2_hold` from palm 86 onto KH1's 206 in `holder_poses` (as Valor's / Master's); both bone 0 floats and bone 2 spins are in the files (Checked (files)); Master's `_R` is held (constant bone 0), so it stays on `form_grip`. Slot and holder keys gain Final. KH1's Keyblade hit point and trail read the drawn (baked) bones (Checked (decomp) `0x14029EB20` / `0x1401D6320`). `leftblade::final_float` and the old controller's left path (owner copy, its draw, trail and `note_pose`) removed: unreachable since every form runs on KH1's states (Checked (code)). Per frame: less.
+- t1036: Final's glide in KH1's glide state 0x15 at either Glide style: `glide::built` / `ours` / `style_kh2` take native Final, `party()` a no-op there, Square in the air starts it from Final's arm of `shared::control`; `FINAL_SPECS` gains `glide_spec(0..3)` (205 / 205 / 206 / 207 on 0x71..0x74). Level: fmlv form 5's growth by Final's level (1, 1, 2, 2, 3, 3, 4, Checked (files)) on the shared fmab rows, from the form's own ability block (`0x1404014A0`, Checked (decomp)), so base Sora's Glide needn't be equipped. Correction to §2.5 / §6: Final has motion 208 (E173, `P_EX100_ULTF.mset` entry 832, with `_R` / `_L`, Checked (files)), and KH2's hover plays it (`0x140423840` -> `0x1403C6DC0` -> `0x1403C7C50` finds slot 0 by the variant table `0x1405C5D38`, Checked (decomp + exe)); built as Final's own 208 on our "Glide hover" row, never base Sora's (`kh2slots::has_own`). Its 208 carries ATKP 162 guard windows on both blades (Checked (files)): for t1037.
+- t1037: Final's blade hits outside attack rows. A right-Keyblade KH1 attack object of ours (`lefthits` `RIGHT`, KH1's constructor `0x1402B2DC0`, Sora's own weapon row, group 0, re-armed / re-hit by `rehit`) in Final's slots that run no KH1 attack row (`kh2slots::rowless_now`: jump 3 1273 / 1286, fall 4 1275, landing 5 1277, item use 9 1284 / 1449, glide 205..207 1281; Checked (files)); the left one's object already ran there. The same motion looping on the same request keeps both objects (the glide's window stays one attack, re-hit 30). Blade data copies keyed by (ATKP, group, air). 154's body windows were already `bodyhits`'; its shapes now from the form's own model (Checked (files) `P_EX100_ULTF.mdlx`). Guard windows (ATKP 162) not built: on Steam the native guard objects run for base Sora only and have no second-blade path; question to the owner. Casts 56 / 58: t1040. Damage split between the blades: Assumption.
+- t1038: Final's F: Keyblade slot at save `+0x894` (answer 1 (a); Checked (exe): no absolute reference, the three `0x894` displacements other objects), as Master's M:: `equip::FINAL_OFF` / `final_holds` / `final_keyblade`, `candidates` three-way (Valor, then Master, then Final keep a shared copy), `valor::final_slot` (10-frame check, Final's start), `second_keyblade` for Final from the slot (Kingdom Key `FINAL_KEYBLADE` gone; empty F: = Sora's own in both hands, KH2 `0x1403DFEB0` case 0x23B and `0x1403D59C0`, Checked (decomp)), so `valorstats` adds the F: Keyblade; `valorslot` handles three slots; Equipment's F: row under M:, hidden until owned; the row stub takes rows 1..=3 (120 bytes, objdump-checked); the label goes by KH1's draw order; Story Unlocks fills an empty F: on Final's gain (KH2 `0x1403C3FE0` forms 1 / 4 / 5, Checked (decomp)). KH1's slots window with 12 rows: Checked (decomp) that it scrolls from its row count; not seen in game.
+- t1039: Final's EXP and level rewards. EXP (answer 2 (b)): +1 per enemy Sora defeats while in Final, on Wisdom's defeat path (`formexp::defeated`), every KH1 enemy standing in for a Nobody (KH2 `0x1403E8780`: form 5, ids 3000..4014, Checked (decomp)); fmlv form 5 EXP 12 / 24 / 48 / 76 / 133 / 157 (Checked (files)), record `+0x886`, the level-up box and Glide growth as before. Rewards (answer 4 (a)): Form Boost (398) at LV4 and LV6, each one more copy of our Form Boost in the KH2 list, off (`growth::kh2_support_reward`, `menu::Growth::update`); Auto Final (388) at LV2 passed with the note the other Auto forms have (no Anti / auto-drive system). Form Boost was the only fmlv reward waiting on the Drive gauge (Checked (files), every form's rows): Limit's Draw (405) and Lucky Lucky (407) and the Auto forms stay passed for having no system yet.
+  - **Form Boost (the owner asked for a note).** In KH2, Form Boost makes a Drive Form last longer. The form gauge empties by itself over time while Sora is in a form; with Form Boost equipped it empties at 80% of the normal speed (sstm `+0x140`, 0.8), and each further copy multiplies again: 1 copy 0.8 (the form lasts 1.25 times as long), 2 copies 0.64 (about 1.56 times), 3 copies 0.512 (about 1.95 times). KH2 counts every equipped copy, in Sora's own abilities and in the form's own list; it only changes the time drain, not what hits taken or Drive orbs do to the form gauge, and nothing outside a form. Checked (decomp): the factor is set to 1.0 (`0x1404016B0`), multiplied by 0.8 for each equipped Form Boost (`0x1404014A0` -> `0x140401730`, ability 0x18E), and the form gauge's per-frame drain (`0x1403A92C0`, gauge kind 2) is multiplied by it. Ours (t955) does the same: the form gauge's time drain in our form step × 0.8 per copy equipped in Sora's lists (`drivesupport::form_boost`), so its numbers are 1:1. Not fully native in one way: KH1 has no form gauge, so the gauge and its drain are our own code in the form's step, and Form Boost multiplies that; and copies are counted from Sora's lists only (our forms have no ability lists of their own, so KH2's form-list copies can't occur).
+- t1040: Final's magic, as Master's (t1027). KH2's cast start `0x1403C5170` adds 10 / 20 / 30 to the sub for forms 2 / 4 / 5 (Checked (decomp)), so Master's +20 is Checked (decomp) now and Final's is +30 (`form::FINAL_MAGIC_SUB`); `magi` 30..35 and ATKP 248..251 / 502 at every sub 30..35, Reflect 573 / 574 at 30 / 32 / 34 (Checked (files)): exact rows, no fallback. Final casts KH2's Fire, Blizzard, Thunder, Cure and Reflect on KH1's cast state with its own clips (`P_EX100_ULTF.mset`: Fire 56 / 57 / 58 E362 / E363 / E372, Blizzard 59 / 60 / 61 E360 / E361 / E370, Thunder 62 / 63 / 64 E364 / E365 / E374, Cure 65 / 67 / 68 / 70 E362 / E372 / E365 / E374, Reflect 71 / 72 / 73 E362 / E363 / E372, Checked (files)), no root travel; KH1's Gravity / Stop / Aero on Wisdom's mapping (Gravity 62 / 64, Stop / Aero 68 / 65 / 67). The right blade's cast windows (1429 in 56 / 58 / 65 / 67 / 71 / 73, 1608 then 31 in 57 / 72, Checked (files)) now hit through t1037's right-Keyblade object (`kh2slots::rowless_now`, Final's casts only).
+- t1041: Final's look, main's white spec (main `tint.rs` `Look::Final`, Checked (main's code)): `tint::Look::Final` built once into the tint cache; the belt black, the reds / blues / shoes' yellow white by main's grey op (`Op::Grey`, brightness 0.5 + 0.47 × v); the jacket's black trim and cream stay. `form::drain_step` gives Final its look. Plan row t1041 (Final's effects and sounds) needed no version: everything already reaches Final's native slots (stage 1041 lists what was checked).
+- t1042: Final's KH1 battle quotes at Battle Quotes KH1, row-less lines only (as Master's t1030): the frame-0 lines are the KH1 rows' own voices (rows 13 / 11 / 18 a grunt, rows 8 / 16 the finisher line, `btltbl.bin`, Checked (files)); stand-ins for 151's 4 at 52, 181's 4 at 42 / 72, 183's 4 at 89 (grunt), 154's 5 at 52, 183's 5 at 136 (finisher line), 153's 6 at 72 (big line) (`P_EX100_ULTF.mset`, Checked (files)); a later line with the same voice id as the frame-0 one (151, 181) plays only on its own key (the motion's time at the key). Item use's voice 3: none (KH1's item use has no line).
+- t1043: Final's ATKP 162 guard windows (151 55..84 R / 55..89 L, 153 4..125, 183 4..165, hover 208 1..end; Checked (files)) as KH1's own guard object on each Keyblade (the owner's "(a)"): KH1's constructor on a copy of KH1's guard row 0x3D's data (0x4DA8, bone 0x30, clash type 2, Checked (files) and (decomp)), each blade's windows a HIT track on a KH1 group of their own, so KH1's pass switches it at KH2's frames; priority 100 so Sora gets no KH1 clash (the move goes on, refact self 2); 162's reflect range 180 = every side (Checked (files)). The left one on the left Keyblade (`leftblade`'s owner copy). No per-frame code.
+- t1044: Master's casts get the right Keyblade's hit object (owner: yes), as Final's (t1040): `rowless_now` covers Master's casts and Reflect rows. Right windows (Checked (files) `W_EX010_TRIF_R.mset`): Fire 56 / 57 / 58 (D371) ATKP 1097 at 18..53, Blizzard 59 / 60 / 61 (D370) 1066 at 26..34 (both power 50, no re-hit); Thunder, Cure / Magnet and Reflect have none on the right. Left 1096 / 1065 / 1098 / 1099 / 1078 unchanged (left object).

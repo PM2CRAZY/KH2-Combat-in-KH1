@@ -654,13 +654,17 @@ pub unsafe fn frame(actor: usize) {
     if windows.is_empty() {
         return;
     }
+    // (t1037) The shapes of the model playing: a Drive Form's own on KH1's own states (Final's 154:
+    // group 2 a sphere of 150 on bone 67, group 19 an ellipsoid 120 up, 350 across, 180 high,
+    // `P_EX100_ULTF.mdlx`, Checked (files)), else base Sora's.
+    let rig = super::form::native_form().and_then(|k| k.data(kh2)).map_or(&kh2.rig, |f| &f.rig);
     let new_attack: unsafe extern "system" fn(usize, u32, usize) -> usize = std::mem::transmute(base + NEW_ATTACK_RVA);
     let free_bit: unsafe extern "system" fn() -> u32 = std::mem::transmute(base + FREE_BIT_RVA);
     let info = pose::ptr(rd::<u32>(actor + 0x14C));
     let mut made = Vec::new();
     for w in &windows {
         let Some(a) = kh2.battle.attack_for_level(w.attack, 0, 0).cloned() else { continue };
-        let shapes: Vec<&kh2_data::sora::BoneShape> = kh2.rig.body_shapes.iter().filter(|s| s.group == w.group && (s.kind == ATTACK_KIND || s.kind == GUARD_KIND)).collect();
+        let shapes: Vec<&kh2_data::sora::BoneShape> = rig.body_shapes.iter().filter(|s| s.group == w.group && (s.kind == ATTACK_KIND || s.kind == GUARD_KIND)).collect();
         for (si, s) in shapes.iter().enumerate() {
             let kh1_type = match s.shape {
                 0 | 3 => 1u32,

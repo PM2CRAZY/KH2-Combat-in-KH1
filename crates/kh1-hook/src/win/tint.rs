@@ -80,9 +80,14 @@ const COLLAR: [f32; 4] = [0.0, 0.34, 0.025, 0.70];
 const MASTER_YELLOW_HUE: f32 = 45.0;
 const MASTER_YELLOW_SAT: f32 = 0.85;
 const MASTER_YELLOW_LO: f32 = 0.55;
+/// (t1041) Final's white (main's spec, main `tint.rs` `WHITE_LO` / `WHITE_HI`): a recoloured
+/// texel's brightness `0..1` mapped to `0.5..0.97` with no saturation (`Op::Grey`), so the folds
+/// still show on the white.
+const FINAL_WHITE_LO: f32 = 0.5;
+const FINAL_WHITE_HI: f32 = 0.97;
 
 /// A form's look (`form`): Wisdom's blue, Valor's red, Limit's black (t974), Master's yellow
-/// (t1029).
+/// (t1029), Final's white (t1041).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Look {
     Wisdom,
@@ -97,6 +102,12 @@ pub enum Look {
     /// to be black"). KH2's own Master Form wears its own outfit (`P_EX100_TRIF`), so on KH1's
     /// model this is the owner's look, as Limit's.
     Master,
+    /// Final Form (t1041; the owner's carried answer: main's white spec, "outfit white including
+    /// the shoes, belt black; the jacket's black trim stays"; main's words: "make sora's outfit
+    /// White, including his shoes. turn his belt black though"). KH2's own Final Form wears its
+    /// own outfit (`P_EX100_ULTF`), so on KH1's model this is the owner's look, as Limit's and
+    /// Master's.
+    Final,
 }
 
 /// How dark a blackened texel is: its brightness scaled to this (its shading kept).
@@ -120,6 +131,10 @@ enum Op {
     /// `lo + (hi - lo) × v` (a dark colour made a bright one, its shading kept); within `rect` if
     /// given.
     Paint { from: f32, width: f32, to: f32, sat: f32, lo: f32, hi: f32, rect: Option<[f32; 4]> },
+    /// (t1041, Final's look; main's op of the same name) Saturated texels near hue `from` (within
+    /// `width`, at least `min_v` bright, as `Shift`) made grey: no saturation, brightness
+    /// `lo + (hi - lo) × v` (white with its shading kept); within `rect` if given.
+    Grey { from: f32, width: f32, min_v: f32, lo: f32, hi: f32, rect: Option<[f32; 4]> },
 }
 
 /// What each look does to each slot (`SLOTS` order); none: that slot isn't swapped.
@@ -127,6 +142,7 @@ fn ops(look: Look, k: usize) -> Vec<Op> {
     let shift = |from, width, to| Op::Shift { from, width, to, min_v: 0.0, rect: None };
     let shoes = |to| Op::Shift { from: YELLOW_HUE, width: YELLOW_WIDTH, to, min_v: YELLOW_MIN_V, rect: None };
     let paint_yellow = |from, width, rect| Op::Paint { from, width, to: MASTER_YELLOW_HUE, sat: MASTER_YELLOW_SAT, lo: MASTER_YELLOW_LO, hi: 1.0, rect };
+    let white = |from, width, min_v| Op::Grey { from, width, min_v, lo: FINAL_WHITE_LO, hi: FINAL_WHITE_HI, rect: None };
     match (look, k) {
         // Wisdom (the user: "recolor KH1 Sora blue"): the reds and the shoes' yellow blue, and
         // the sleeves blue (the user, s232: "can you make his sleeves blue when in wisdom?").
@@ -169,6 +185,19 @@ fn ops(look: Look, k: usize) -> Vec<Op> {
             paint_yellow(BLUE_HUE, BLUE_WIDTH, Some(HOOD_LINING)),
             paint_yellow(RED, RED_WIDTH, None),
         ],
+        // Final (t1041, main's spec, main `tint.rs` `Look::Final`): the belt's blue black first
+        // (so the white pass leaves it; Limit's black, as Master's belt); then the reds (the
+        // jumpsuit on `-1c1`, the collar and the shoe piece's red oval on `-1c0`), the blues (the
+        // hood lining and the jacket's blue trim) and the shoes' yellow (with their red and blue)
+        // white, their shading kept (`Op::Grey`). The jacket's black trim, its cream, the skin and
+        // the rest stay (none is a saturated red, blue or bright yellow).
+        (Look::Final, 0) => vec![white(RED, RED_WIDTH, 0.0)],
+        (Look::Final, 1) => vec![
+            Op::Black { hue: Some((BLUE_HUE, BLUE_WIDTH)), min_v: 0.0, rect: Some(BELT) },
+            white(RED, RED_WIDTH, 0.0),
+            white(BLUE_HUE, BLUE_WIDTH, 0.0),
+        ],
+        (Look::Final, 2) => vec![white(YELLOW_HUE, YELLOW_WIDTH, YELLOW_MIN_V), white(RED, RED_WIDTH, 0.0), white(BLUE_HUE, BLUE_WIDTH, 0.0)],
         _ => Vec::new(),
     }
 }
@@ -227,6 +256,7 @@ fn look_name(look: Look) -> &'static str {
         Look::Valor => "Valor",
         Look::Limit => "Limit",
         Look::Master => "Master",
+        Look::Final => "Final",
     }
 }
 
@@ -423,6 +453,7 @@ fn apply(p: &mut Pixels, op: Op) -> usize {
         Op::Colourize { rect, .. } => Some(rect),
         Op::Black { rect, .. } => rect,
         Op::Paint { rect, .. } => rect,
+        Op::Grey { rect, .. } => rect,
     };
     let [u0, v0, u1, v1] = rect.unwrap_or([0.0, 0.0, 1.0, 1.0]);
     let (x0, x1) = ((u0 * w as f32) as usize, ((u1 * w as f32).ceil() as usize).min(w));
@@ -462,6 +493,13 @@ fn apply(p: &mut Pixels, op: Op) -> usize {
                     let d = dh.min(360.0 - dh);
                     let k = ((width - d) / RED_SOFT).clamp(0.0, 1.0) * ((s - SAT_FROM) / SAT_SOFT).clamp(0.0, 1.0);
                     (k, rgb(to, sat, lo + (hi - lo) * v))
+                }
+                Op::Grey { from, width, min_v, lo, hi, .. } => {
+                    let dh = (hue - from).rem_euclid(360.0);
+                    let d = dh.min(360.0 - dh);
+                    let k = ((width - d) / RED_SOFT).clamp(0.0, 1.0) * ((s - SAT_FROM) / SAT_SOFT).clamp(0.0, 1.0) * if min_v > 0.0 { ((v - min_v) / 0.08 + 0.5).clamp(0.0, 1.0) } else { 1.0 };
+                    let l = lo + (hi - lo) * v;
+                    (k, (l, l, l))
                 }
             };
             if k <= 0.0 {
@@ -623,6 +661,7 @@ unsafe fn ours_for(s: &mut Swap, k: usize, src: usize, look: Look) -> Option<u64
         Look::Valor => b"kh2combat_valor_red\0",
         Look::Limit => b"kh2combat_limit_black\0",
         Look::Master => b"kh2combat_master_yellow\0",
+        Look::Final => b"kh2combat_final_white\0",
     };
     let t = create(r, &desc, p.bgra.as_ptr(), label.as_ptr(), 0);
     if t < 0x10000 {

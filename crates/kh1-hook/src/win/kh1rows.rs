@@ -151,8 +151,10 @@ pub struct Ours {
     pub own_sounds: bool,
     /// One of KH2's combo rows of Sora's (`COMBO`, the tester, combo row selection after m25,
     /// answer 3 (a): "every KH2 combo row gets its own KH1 row"): found by its KH2 motion
-    /// (`by_combo_motion`; several of KH2's PTYA rows share a motion: one KH1 row plays them all,
-    /// KH2's rows differing only in when they're picked).
+    /// (`by_combo_row`; several of KH2's PTYA rows share a motion: one KH1 row plays them all,
+    /// KH2's rows differing only in when they're picked; t1034: a row of ours of the same motion
+    /// whose kind is the PTYA row's, in the air or not and a finisher or not, before them, Final's
+    /// air finisher 154 and its ground finisher 153).
     pub combo: bool,
     /// KH1's own row it is like when not its kind's first (`Kind::template_row`): (row, its request,
     /// that request's slot). 152, KH2's second swing, on KH1's second (row 11, 0xC9, slot 99), as it
@@ -213,7 +215,7 @@ pub const NO_ROW: u8 = u8::MAX;
 /// his body, `P_EX100.mset`, Checked (files)) and Valor's arrival 53 (6 frames, guard and
 /// invulnerable all through, `P_EX100_BTLF.mset`, Checked (files)), their requests only, on KH1's
 /// ground swing as template (its sounds left out: KH2's own play, `kh2slots::tick`).
-pub const OURS: [Ours; 64] = [
+pub const OURS: [Ours; 66] = [
     Ours { name: "Upper Slash", kh2_row: 12, motion: 161, kind: Kind::Swing, rises: false, guard_break: false, attack: true, next_finisher: false, frames: None, own_sounds: false, combo: false, template: None, valor: false },
     Ours { name: "Finishing Leap", kh2_row: 37, motion: 167, kind: Kind::AirFinisher, rises: true, guard_break: false, attack: true, next_finisher: false, frames: None, own_sounds: false, combo: false, template: None, valor: false },
     Ours { name: "Horizontal Slash", kh2_row: 38, motion: 193, kind: Kind::AirSwing, rises: false, guard_break: false, attack: true, next_finisher: false, frames: None, own_sounds: false, combo: false, template: None, valor: false },
@@ -311,6 +313,19 @@ pub const OURS: [Ours; 64] = [
     // whose PTYA has 185 (`kh2slots::prepare`: Master's; base Sora's, Valor's, Wisdom's and Limit's
     // sets have none, Checked (files)). Appended, so no other row's request moves.
     combo("185", MASTER_SWING_MOTION, Kind::AirSwing),
+    // (t1034) Final Form's PTYA set 5 (`00battle.bin`, 12 rows, shared by movesets 5 / 15 / 41 /
+    // 47, Checked (files)) plays two of base Sora's combo motions as another kind: its air finisher
+    // row 7 is 154 (flag 5, kind 2, far 300, hop 14) and its ground Finishing Plus row 3 is 153
+    // (flag 4, kind 3, the `sub` of its ground finisher row 2, 154). Base Sora's "154" is a ground
+    // finisher and his "153" a swing (his set 1: row 2 154 flag 4, row 6 153 flag 0), so Final's
+    // 154 in the air ran on a ground finisher row (KH1's ground finisher's data, no air hop, and
+    // KH1's own flight row in flight, `combomods::flight_pick`) and its 153 on a swing row (not
+    // counted a finisher: the next press no Finishing Plus). These two rows of ours are found by
+    // (motion, air, finisher) (`by_combo_row`) and built only from a moveset with such a row
+    // (`combo_in`: Final's; base Sora's, Valor's, Wisdom's, Limit's and Master's sets have none,
+    // Checked (files)). Appended, so no other row's request moves.
+    combo("154 (air finisher)", 154, Kind::AirFinisher),
+    combo("153 (finisher)", 153, Kind::Finisher),
 ];
 
 /// Master Form's own air swing (`OURS` "185", t1022).
@@ -380,9 +395,24 @@ pub fn by_motion(motion: u16) -> Option<usize> {
     OURS.iter().position(|o| o.motion == motion && !o.next_finisher)
 }
 
-/// Our KH1 row for KH2's combo motion `motion` (`Ours::combo`), if any.
-pub fn by_combo_motion(motion: u16) -> Option<usize> {
-    OURS.iter().position(|o| o.combo && o.motion == motion)
+/// Our KH1 row for KH2's combo row `r` (`Ours::combo`), if any: the row of its motion whose kind
+/// is the row's (in the air or not, PTYA flag 1; a finisher or not, flag 4), else the first row of
+/// its motion (KH2's hops from the ground on our air rows, Limit's ground 154 of kind 0, Valor's
+/// air 183 that is no finisher...). Only Final's 154 in the air and 153 as a finisher find a row
+/// other than the first of their motion (t1034).
+pub fn by_combo_row(r: &character_core::ComboRow) -> Option<usize> {
+    OURS.iter()
+        .position(|o| o.combo && o.motion == r.motion && o.kind.air() == r.is_air() && o.kind.finisher() == r.is_finisher())
+        .or_else(|| OURS.iter().position(|o| o.combo && o.motion == r.motion))
+}
+
+/// A combo row of ours plays one of `rows` (a moveset's PTYA rows): one of them finds it
+/// (`by_combo_row`; ours are told apart by name, every name its own). Our slots of a combo row are
+/// built only for a moveset where it does (`kh2slots::prepare`), so Final's "154 (air finisher)"
+/// and "153 (finisher)" are Final's alone, and every other combo row builds as it did by its
+/// motion (each is the only row of its motion, or the one its moveset's rows find).
+pub fn combo_in<'a>(o: &Ours, rows: impl IntoIterator<Item = &'a character_core::ComboRow>) -> bool {
+    rows.into_iter().any(|r| by_combo_row(r).is_some_and(|n| OURS[n].name == o.name))
 }
 
 /// The KH1 request a script should see for one of our attack rows' requests (`request`), its

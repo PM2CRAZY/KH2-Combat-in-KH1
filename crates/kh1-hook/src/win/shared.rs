@@ -225,6 +225,22 @@ pub fn control(s: &Seen) -> u32 {
         // no roll; its jump in the air is its Aerial Dodge (its growth ability), base Sora's native
         // path below with its own clip and levels.)
         Some(super::form::Kind::Master) => {}
+        // (Final Form, t1033: KH2's action button finds no guard (no 42 / 173 in `P_EX100_ULTF.mset`,
+        // no guard row in PTYA set 5, Checked (files)), no roll and no Quick Run (its growth is
+        // Glide, fmlv form 5, Checked (files)); in the air it glides (`0x1403A81F0`, Checked
+        // (decomp)). KH1 sees no Square and no jump in the air past the rise, as in Valor (without
+        // Valor's Square rows: PTYA set 5 has none).)
+        // (t1036: Square in the air is KH2's glide in KH1's glide state, as base Sora's below: a
+        // fresh press from KH1's jump or fall state over the start height for Final's own Glide
+        // level, `glide::start`; KH2's handler has no form test, Checked (decomp). In the glide
+        // (KH1's state 0x15) KH1 sees neither button: Square held is read off the pad by `glide`,
+        // and the jump is nothing (Final has no Aerial Dodge).)
+        Some(super::form::Kind::Final) => {
+            if air && s.can_act && s.kh2_glide && square_fresh && unsafe { super::glide::start(super::takeover::sora_actor(), "Square in the air (Final)") } {
+                return KH1_JUMP_BITS | KH1_ACTION_BIT;
+            }
+            return KH1_ACTION_BIT | if air && !s.rising || s.state == super::glide::STATE { KH1_JUMP_BITS } else { 0 };
+        }
         Some(_) => {
             if s.state == 0 && square_fresh && s.can_act {
                 let _ = unsafe { quick_run_on_stick("Square in Wisdom Form (its growth ability)") };

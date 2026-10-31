@@ -34,7 +34,11 @@ use std::sync::OnceLock;
 /// (Master, t1021: record 0x8E, the next after the limits' and follow-ups' 0x81..0x8D, and word
 /// 0x1EE, the next after Judgment's 0x1EF: the record empty in the player's `btltbl.bin` and no KH1
 /// record (0x00..0x7C, words up to 0x173) naming the word, Checked (files).)
-pub const FORMS: [(u8, u16, &str); 4] = [(0x7F, 0x1FD, "Valor Form"), (0x7E, 0x1FE, "Wisdom Form"), (0x80, 0x1FC, "Limit Form"), (0x8E, 0x1EE, "Master Form")];
+/// (Final, t1033: record 0x8F, the next after Master's, and word 0x1ED, the next after Master's:
+/// the record all zero in the player's `btltbl.bin` (file `+0xA58 + id x 0x10`) and no record
+/// naming the word, Checked (files); nothing of ours uses either, Checked (code). Its argument
+/// `FORM_ARG + 4` = 0x14 is below the limits' 0x20.)
+pub const FORMS: [(u8, u16, &str); 5] = [(0x7F, 0x1FD, "Valor Form"), (0x7E, 0x1FE, "Wisdom Form"), (0x80, 0x1FC, "Limit Form"), (0x8E, 0x1EE, "Master Form"), (0x8F, 0x1ED, "Final Form")];
 /// The record argument of form `k` (KH1's spells are 0..6, Reflect 7).
 pub const FORM_ARG: u8 = 0x10;
 /// Summon's command (its record opens the summon list) and the summon-is-out one.

@@ -50,7 +50,7 @@
 //!   blade off the palm); KH1's pose step (`0x14029F0A0` → `0x1402A0350`) starts it and poses it. Its time (`+0x16C`) is Sora's each frame, its own speed (`+0x284`) 0, so it never
 //!   runs ahead of him. The holder motions keep the weapon bones where they sit from the wrist
 //!   (`pose::Baker::holder_poses`, t849); the wrist is the actor's root, so KH1's pose leaves the
-//!   left Keyblade in Sora's hand as drawn (`leftblade::posed_left` reads them from its instance).
+//!   left Keyblade in Sora's hand as drawn.
 //! - **No hit set** (`+0x134` cleared: no hit or lock-on target, `0x140292070`), hidden-mesh mask
 //!   `+0x38C` all set, so KH1's draw shows only its weapon.
 //! - **Its weapon and trail (t832).** Its weapon object `+0x14C` is the left Keyblade's KH1 object
@@ -391,7 +391,7 @@ pub fn making() -> bool {
     MAKING.load(Ordering::Relaxed)
 }
 
-/// The holder's instance once KH1 has posed it with a holder motion of ours (`leftblade::posed_left`).
+/// The holder's instance once KH1 has posed it with a holder motion of ours (`leftblade::left_owner`).
 pub fn posed_instance() -> Option<usize> {
     let a = actor()?;
     (POSED.load(Ordering::Relaxed) == a && unsafe { rd::<u32>(a + A_FLAGS2) } & POSED_ONCE != 0).then(instance).flatten()

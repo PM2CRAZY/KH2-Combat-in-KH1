@@ -13,35 +13,27 @@
 //! 2. **Pose**: on Valor's KH1 states, KH1's own pose task poses the holder actor (`holder`, one
 //!    of KH1's actors attached to Sora's left palm) with the holder motion of Sora's move (the left
 //!    hand's weapon bones baked from KH2's left Keyblade in the palm's space, `kh2slots::holder_one`;
-//!    KH1's own slots get Valor's idle hold), through KH1's own blends (t831); `posed_left` reads its
-//!    weapon bones. Elsewhere (Final Form) `pose` hands over the left hand's 13 weapon matrices each
-//!    frame (`note_pose`), from KH2's own left Keyblade (the rig's second weapon, `kh2_left` from
-//!    `takeover`).
-//! 3. **Draw**: on Valor's KH1 states (t832) KH1's own draw task draws the holder actor (`holder`),
-//!    whose weapon object is the left Keyblade's KH1 object from KH1's own pool, every body mesh
-//!    hidden. Under KH2's controller (Final Form) KH1's own actor draw (`0x1402A1630`, Steam) is run,
-//!    after Sora's, on our copy of his actor with the left hand's bones written in for the call.
+//!    KH1's own slots get Valor's idle hold), through KH1's own blends (t831). Every two-Keyblade
+//!    form (Valor, Master, Final) runs on KH1's states.
+//! 3. **Draw**: on the forms' KH1 states (t832) KH1's own draw task draws the holder actor
+//!    (`holder`), whose weapon object is the left Keyblade's KH1 object from KH1's own pool, every
+//!    body mesh hidden.
 //!
-//! On Valor's KH1 states the holder actor is also the trail's owner (KH1's own step runs its trail
-//! step, t832) and the bone source of the left hits and KH2's second-weapon effects (`left_owner`,
-//! t833); the copy below (`fill_owner`) serves Final Form only, and with no holder actor (KH1's pool
-//! full) nothing of the left Keyblade shows.
+//! The holder actor is also the trail's owner (KH1's own step runs its trail step, t832) and the
+//! bone source of the left hits and KH2's second-weapon effects (`left_owner`, t833). With no holder
+//! actor (KH1's pool full) nothing of the left Keyblade shows. (t1035: the old controller's copy of
+//! Sora's actor, its left draw and its trail, which served Final Form under KH2's controller, are
+//! gone: that controller was removed, and Final runs on KH1's states since t1033.)
 //!
 //! 4. **Trail**: KH1's own trail system on the holder: each request KH1 gets for Sora
 //!    (`0x1402C2310`) is asked for the holder too (its weapon object, so the left Keyblade's own
 //!    effect data: the file's second section, set up as KH1 sets up its weapon's, `0x1401DDF20`;
 //!    the right one's if it has none), and KH1's trail step (`0x1402C1F20`) runs on the holder
-//!    after Sora's, making, fading and ending the trail by the holder's trail bit: on KH1's own
-//!    states the left weapon's trail windows baked as motion event 7.1 (`kh2slots`), read with
-//!    KH1's own event reader; under KH2's controller the left weapon's KH2 windows.
+//!    after Sora's, making, fading and ending the trail by the holder's trail bit: the left
+//!    weapon's trail windows baked into the holder motions as KH1's own 7.0 (`kh2slots`), read by
+//!    KH1's own pass on the holder.
 //!    - KH1's trail is an effect that follows a bone of its owner actor each frame
-//!      (`0x1402AC780`), read through the owner's model instance's world matrices. A point along
-//!      a bone is taken from its parent's world matrix and the bone's local offset
-//!      (`0x1401D41C0`): for the grip, the right hand's.
-//!    - Its owner here is a copy of Sora's actor. That copy's instance is a copy of his, with its
-//!      own matrices: every one of his moved by the turn that takes his right grip to the left
-//!      one, so whichever bones the trail reads (the hand, the grip, the blade) are the left
-//!      Keyblade's (the user: "the second keyblades' trail doesnt follow the second keyblade").
+//!      (`0x1402AC780`), read through the owner's model instance's world matrices.
 //!
 //! Everything is off with `valor_left_blade = off` (nothing installed). Every step is logged a
 //! few times.
@@ -89,30 +81,14 @@ const WEAPON_TABLE_OFFSETS_RVA: Rva = Rva(0x528D60);
 /// handle.
 const TRAIL_START_RVA: Rva = Rva(0x2C0160);
 const TRAIL_START_PROLOGUE: [u8; 5] = [0x48, 0x89, 0x5C, 0x24, 0x08];
-/// KH1's trail step `(actor)` (Steam; `push rdi; sub rsp, 0x20`, Checked (exe)) and its motion
-/// event level reader `(motion, type << 16 | id, time f32) -> key` (Steam, Checked (decomp)).
+/// KH1's trail step `(actor)` (Steam; `push rdi; sub rsp, 0x20`, Checked (exe)).
 const TRAIL_STEP_STEAM: usize = 0x2C1F20;
 const TRAIL_STEP_PROLOGUE: [u8; 6] = [0x40, 0x57, 0x48, 0x83, 0xEC, 0x20];
-const LEVEL_STEAM: usize = 0x394770;
-const LEVEL_PROLOGUE: [u8; 5] = [0x48, 0x89, 0x5C, 0x24, 0x10];
-/// An actor's motion table handle, its motion slot (u16) and time in it (f32).
-const ACTOR_MOTIONS: usize = 0x1D4;
-const ACTOR_SLOT: usize = 0x168;
-const ACTOR_TIME: usize = 0x16C;
 const EFFECT_KILL_RVA: Rva = Rva(0x1DE890);
-const TO_HANDLE_RVA: Rva = Rva(0x38B080);
-/// Actor fields: its size, its weapon object and model instance handles.
-const ACTOR_SIZE: usize = 0x4B0;
+/// Actor fields: its weapon object handle.
 const ACTOR_WEAPON: usize = 0x14C;
-const ACTOR_INSTANCE: usize = 0x15C;
-/// The actor's flags word holding the "trail wanted" bit (`combat::TRAIL_FLAG`).
-const ACTOR_TRAIL_FLAGS: usize = 0x1CC;
-const TRAIL_FLAG: u32 = 0x80_0000;
-/// A model instance's size, and the weapon object's effect data (the `.wpn`'s second section).
-const INSTANCE_SIZE: usize = 0x200;
+/// The weapon object's effect data (the `.wpn`'s second section).
 const OBJ_EFFECTS: usize = 0x18;
-/// Our owner block: the actor copy, the instance copy, the matrices.
-const FAKE_SIZE: usize = 0x8000;
 /// A weapon object's size and fields (KH1's, Steam `0x140286D60`, Checked (decomp)): `+0x00` the
 /// model container's handle, `+0x04` its mesh model's (`0x1401D6760`), `+0x0C..+0x0F` its draw
 /// colour (the draw-weapon step `0x1402A2E30` sets `ff ff ff 80`), `+0x18` the `.wpn`'s effect
@@ -137,8 +113,6 @@ const OBJ_MODEL_STEAM: usize = 0x1D6760;
 const OBJ_MODEL_PROLOGUE: [u8; 5] = [0x48, 0x89, 0x5C, 0x24, 0x08];
 /// A weapon row's size.
 const WEAPON_ROW_SIZE: usize = 0x58;
-const FAKE_INSTANCE: usize = 0x800;
-const FAKE_MATS: usize = 0x1000;
 
 /// A file record's buffer, size, and its file-type row (-1: no handler is called on release).
 const REC_BUFFER: usize = 0x658;
@@ -165,7 +139,6 @@ static INSTALLED: AtomicBool = AtomicBool::new(false);
 static BASE: AtomicUsize = AtomicUsize::new(0);
 static ORIG_QUEUE: AtomicUsize = AtomicUsize::new(0);
 static ORIG_DRAW: AtomicUsize = AtomicUsize::new(0);
-static IN_SECOND: AtomicBool = AtomicBool::new(false);
 /// Valor's form is out (`show` / `hide`).
 static SHOWN: AtomicBool = AtomicBool::new(false);
 /// The mesh model drawn in the left hand (0: none ready).
@@ -216,71 +189,18 @@ struct State {
 }
 
 static STATE: Mutex<State> = Mutex::new(State { loaded: None, pending: None, failed: Vec::new(), bufs: Vec::new() });
-/// KH2's left Keyblade this frame (KH2 model space), from `takeover`.
-/// Its last few steps, each with the body's root bone of the same step (`note_pose` takes the one
-/// whose body it is drawing, the user: the second Keyblade jittered as Valor fell in place).
-static KH2_LEFT: Mutex<std::collections::VecDeque<(u64, Vec<Mat4>, Instant)>> = Mutex::new(std::collections::VecDeque::new());
 
-/// A body pose's signature (its bones' places, bit for bit).
-fn body_sig(body: &[Mat4]) -> u64 {
-    use std::hash::{Hash, Hasher};
-    let mut h = std::collections::hash_map::DefaultHasher::new();
-    for m in body {
-        for v in m.w_axis.to_array() {
-            v.to_bits().hash(&mut h);
-        }
-    }
-    h.finish()
-}
-/// Sora's model-to-world as last posed (the left Keyblade's bones are kept in model space and put
-/// in the world with the frame's own placement: a pose a frame old no longer lags behind him).
-static TO_WORLD: Mutex<Option<Mat4>> = Mutex::new(None);
-/// The left hand's weapon bones in KH1's world, and the game frame they were made on.
-static LEFT: Mutex<Option<([Mat4; WEAPON_BONES], u64)>> = Mutex::new(None);
-
-/// The left hand's weapon bones in KH1's world now: on Valor's baked slots KH1's own pose of the
-/// holder motion (`posed_left`); else (Final Form, a move with no holder motion) `LEFT`, model
-/// space, by this frame's placement, if posed within 2 game frames.
-fn left_world() -> Option<[Mat4; WEAPON_BONES]> {
-    if let Some(m) = unsafe { posed_left() } {
-        return Some(m);
-    }
-    let frame = super::takeover::GAME_FRAME.load(Ordering::Relaxed);
-    let m = LEFT.try_lock().ok().and_then(|g| g.as_ref().filter(|(_, at)| frame.saturating_sub(*at) <= 2).map(|(m, _)| *m))?;
-    let w = TO_WORLD.try_lock().ok().and_then(|g| *g)?;
-    Some(m.map(|b| w * b))
-}
 static ORIG_TRAIL_START: AtomicUsize = AtomicUsize::new(0);
 static TRAIL_HOOKED: AtomicBool = AtomicBool::new(false);
 /// The trail id KH1 was last asked for Sora (`u32::MAX`: none yet).
 static ORIG_TRAIL_STEP: AtomicUsize = AtomicUsize::new(0);
 /// Inside our own call of KH1's trail request or step (for the holder).
 static IN_TRAIL: AtomicBool = AtomicBool::new(false);
-/// The holder's trail bit as last set (`trail_step`), kept by each fill.
-static TRAIL_ON: AtomicBool = AtomicBool::new(false);
-/// Our owner block (0: not made), the instance copy's and matrices' handles; whether it was
-/// filled this Valor.
-static FAKE: AtomicUsize = AtomicUsize::new(0);
-static FAKE_INSTANCE_H: AtomicU32 = AtomicU32::new(0);
-/// Our owner copy's own handle (0 when it doesn't resolve): `lefthits` puts it in its attack
-/// object's bone-source actor (`+0x90`) so KH1's builder lays the blade on the left Keyblade.
-static FAKE_ACTOR_H: AtomicU32 = AtomicU32::new(0);
 /// The left Keyblade's weapon object: one of KH1's own pool (0: none taken), and what it is made
 /// of (the loaded model's container and weapon row; 0 while none is loaded).
 static LEFT_OBJ: AtomicUsize = AtomicUsize::new(0);
 static OBJ_FROM: AtomicUsize = AtomicUsize::new(0);
 static OBJ_ROW_NOW: AtomicUsize = AtomicUsize::new(0);
-static FAKE_MATS_H: AtomicU32 = AtomicU32::new(0);
-static FAKE_FILLED: AtomicBool = AtomicBool::new(false);
-/// The left weapon's trail window is open (last KH2 step).
-static LEFT_OPEN: AtomicBool = AtomicBool::new(false);
-/// KH2's left weapon's trail ranges by motion id (the Valor moveset's left weapon motion set,
-/// trigger 12), read once.
-type Windows = std::collections::HashMap<u16, Vec<(u32, Option<u32>)>>;
-static TRAIL_WINDOWS: std::sync::OnceLock<Windows> = std::sync::OnceLock::new();
-
-/// KH2's bind pose of the Valor skeleton (for the hand offsets), made once.
-static KH2_BIND: Mutex<Option<Vec<Mat4>>> = Mutex::new(None);
 
 unsafe fn rd<T: Copy>(p: usize) -> T {
     std::ptr::read_unaligned(p as *const T)
@@ -334,24 +254,20 @@ pub unsafe fn install() {
     if !patched {
         return;
     }
-    // KH1's actor draw: the left Keyblade is drawn by it (`actor_draw`).
+    // KH1's actor draw (`actor_draw`: where KH1 drew the holder, for the trace).
     if super::hook::install(base + ACTOR_DRAW_STEAM, &ACTOR_DRAW_PROLOGUE, actor_draw as *const () as usize, &ORIG_DRAW, "actor draw (left Keyblade)").is_none() {
         super::hook::patch(slot, &ours, &want, "the .wpn release handler (back)");
         return;
     }
     INSTALLED.store(true, Ordering::Relaxed);
-    // The trail, KH1's own (fails alone: the Keyblade is still drawn): its request and its step,
-    // each asked for the holder after Sora; its event reader checked.
-    let level_ok = std::slice::from_raw_parts((base + LEVEL_STEAM) as *const u8, LEVEL_PROLOGUE.len()) == LEVEL_PROLOGUE;
-    if !level_ok {
-        log!(Animation, "left Keyblade: trail off (KH1's motion event reader not where expected)");
-    } else if super::hook::install(base + TRAIL_START_RVA, &TRAIL_START_PROLOGUE, trail_start as *const () as usize, &ORIG_TRAIL_START, "Keyblade trail request (left Keyblade)").is_none() {
+    // The trail, KH1's own (fails alone: the Keyblade is still drawn): its request asked for the
+    // holder after Sora; its step hooked for `cosmetics`.
+    if super::hook::install(base + TRAIL_START_RVA, &TRAIL_START_PROLOGUE, trail_start as *const () as usize, &ORIG_TRAIL_START, "Keyblade trail request (left Keyblade)").is_none() {
         log!(Animation, "left Keyblade: trail off (KH1's trail request not where expected)");
     } else if super::hook::install(base + TRAIL_STEP_STEAM, &TRAIL_STEP_PROLOGUE, trail_step as *const () as usize, &ORIG_TRAIL_STEP, "Keyblade trail step (left Keyblade)").is_none() {
         log!(Animation, "left Keyblade: trail off (KH1's trail step not where expected)");
     } else {
         TRAIL_HOOKED.store(true, Ordering::Relaxed);
-        std::thread::spawn(load_trail_windows);
     }
 }
 
@@ -462,37 +378,30 @@ pub fn hide() {
 }
 
 /// The left Keyblade's owner for KH1's own bindings (`kh2dpx`: KH2's second-weapon points 0x4004 /
-/// 0x4006 / 0x4008 on KH1's blade binding): our copy of Sora (the one its trail follows), filled
-/// now (`fill_owner`: his matrices as last posed, each moved onto the left Keyblade, and the left
-/// Keyblade's weapon row, so KH1's blade code 0x30 reads the left blade's range). None while the
-/// left Keyblade isn't drawn (out of Valor and Final, or its model not in yet).
-///
-/// t833: on Valor's KH1 states, the holder actor (`holder`: KH1's own actor on Sora's left palm,
-/// posed by KH1 with the left Keyblade's bones, its weapon object the left Keyblade's) while it
-/// carries the left Keyblade's object; the copy only under KH2's controller (Final Form).
+/// 0x4006 / 0x4008 on KH1's blade binding; `lefthits`): the holder actor (`holder`: KH1's own actor
+/// on Sora's left palm, posed by KH1 with the left Keyblade's bones, its weapon object the left
+/// Keyblade's, so KH1's blade code 0x30 reads the left blade's range) while it carries the left
+/// Keyblade's object (t833). None while the left Keyblade isn't drawn (out of the two-Keyblade
+/// forms, or its model not in yet) or with no holder actor (KH1's pool full). (t1035: the old
+/// controller's copy of Sora, `fill_owner`, is gone; every form runs on KH1's states.)
 pub fn left_owner() -> Option<usize> {
     if !INSTALLED.load(Ordering::Relaxed) || !(super::form::two_blades() && SHOWN.load(Ordering::Relaxed) && MESH.load(Ordering::Relaxed) != 0) {
         return None;
     }
-    // (On Valor's KH1 states the holder actor or nothing: no copy while KH1's pool is full.)
-    if super::form::native_now() {
-        let a = super::holder::actor()?;
-        let obj = LEFT_OBJ.load(Ordering::Relaxed);
-        let carried = obj != 0 && unsafe { rd::<u32>(a + ACTOR_WEAPON) } == super::pose::handle(obj) && super::holder::posed_instance().is_some();
-        return carried.then_some(a);
+    if !super::form::native_now() {
+        return None;
     }
-    unsafe { fill_owner() }.then(|| FAKE.load(Ordering::Relaxed)).filter(|&f| f != 0)
+    let a = super::holder::actor()?;
+    let obj = LEFT_OBJ.load(Ordering::Relaxed);
+    let carried = obj != 0 && unsafe { rd::<u32>(a + ACTOR_WEAPON) } == super::pose::handle(obj) && super::holder::posed_instance().is_some();
+    carried.then_some(a)
 }
 
-/// `left_owner`'s handle (KH1's 32-bit handle of the holder actor, or of our owner copy filled
-/// now), for KH1's own code that takes the bone-source actor by handle (`lefthits`: an attack
-/// object's `+0x90`).
+/// `left_owner`'s handle (KH1's 32-bit handle of the holder actor), for KH1's own code that takes
+/// the bone-source actor by handle (`lefthits`: an attack object's `+0x90`).
 pub fn left_owner_handle() -> Option<u32> {
     let a = left_owner()?;
-    if super::holder::actor() == Some(a) {
-        return Some(super::pose::handle(a)).filter(|&h| h != 0);
-    }
-    Some(FAKE_ACTOR_H.load(Ordering::Relaxed)).filter(|&h| h != 0)
+    Some(super::pose::handle(a)).filter(|&h| h != 0)
 }
 
 /// KH1's loader is done with our file (game thread, KH1's loader task).
@@ -731,73 +640,11 @@ unsafe fn free_object() {
 // ---------------------------------------------------------------------------------------------
 // Posing
 
-/// `takeover`, each KH2 step. Gets:
-/// - KH2's left Keyblade this frame (the rig's second weapon), if there is one;
-/// - the clip playing (`motion`, `frame`);
-/// - whether any of the clip's trail windows is open (`trail`, used if the left weapon's own
-///   ranges couldn't be read).
-pub fn kh2_left(bones: Option<&[Mat4]>, body: &[Mat4], motion: u16, frame: u32, trail: bool) {
+/// `pose`, a baked slot of a two-Keyblade form with no holder actor out: KH2's left Keyblade this
+/// frame (the rig's second weapon), if there is one, for KH2's player model (`model`). (t1035: the
+/// old controller's left draw and trail windows it also fed are gone.)
+pub fn kh2_left(bones: Option<&[Mat4]>) {
     super::model::note_left(bones);
-    if !INSTALLED.load(Ordering::Relaxed) {
-        return;
-    }
-    let valor = super::form::two_blades() && SHOWN.load(Ordering::Relaxed) && MESH.load(Ordering::Relaxed) != 0;
-    if valor {
-        if let (Ok(mut g), Some(b)) = (KH2_LEFT.try_lock(), bones.filter(|b| !b.is_empty())) {
-            g.push_back((body_sig(body), b.to_vec(), Instant::now()));
-            while g.len() > 6 {
-                g.pop_front();
-            }
-        }
-    }
-    note_left_window(valor, motion, frame, trail);
-}
-
-/// Base Sora's Keyblade root relative to his KH2 right hand bone in his idle (held), once.
-static HELD: std::sync::OnceLock<Option<Mat4>> = std::sync::OnceLock::new();
-
-/// Final Form's right Keyblade (`pose`, before the weapon bones are drawn): KH1's weapon bones
-/// (`kh1`, model space) moved from his hand to where KH2's own weapon motion floats it (the
-/// user: Final Form, its Keyblades floating as KH2's). The turn from KH2's held Keyblade root
-/// (base Sora's idle, at his hand) to KH1's grip as drawn is kept, and put on Final's root now;
-/// the left one then follows by the same turn (`note_pose`). `kh2_body`, `kh2_right`: KH2's body
-/// and right Keyblade of the drawn frame (model space); `ratio`: KH1's size against KH2's.
-pub fn final_float(kh1: &mut [Mat4], kh1_bind: &[Mat4], kh2_body: &[Mat4], kh2_right: &[Mat4], ratio: f32) {
-    static N: AtomicU32 = AtomicU32::new(0);
-    if !super::form::in_final() || kh1.len() < SORA_BONES || kh1_bind.len() < SORA_BONES || kh2_right.is_empty() {
-        return;
-    }
-    let Some(kh2) = super::pose::kh2() else { return };
-    let Some(form) = kh2.final_form.as_ref() else { return };
-    let Some(sr) = form.rig.weapons.first().and_then(|w| w.bone) else { return };
-    let held = *HELD.get_or_init(|| {
-        let w = kh2.rig.weapons.first()?;
-        let m = w.motions.get(&character_core::motion::IDLE).or_else(|| w.motions.get(&0))?;
-        let root = kh2_anim::evaluate(&w.skeleton, m, 0.0, kh2_anim::Options::default()).bones.first().copied()?;
-        log!(Animation, "Final Form: base Sora's held Keyblade root at {:.1?} from his hand bone", root.w_axis.truncate());
-        Some(root)
-    });
-    let Some(held) = held else { return };
-    if kh2_body.len() <= sr {
-        return;
-    }
-    let b2 = kh2_anim::Pose::bind(&form.rig.skeleton).bones;
-    if b2.len() <= sr {
-        return;
-    }
-    let k = if ratio.is_finite() && ratio > 0.1 { ratio } else { 1.0 };
-    let offset = kh1_bind[RIGHT_HAND].inverse() * scaled(b2[sr], k);
-    let held_root = kh1[RIGHT_HAND] * offset * scaled(held, k);
-    let turn = held_root.inverse() * kh1[GRIP];
-    let now_root = kh1[RIGHT_HAND] * offset * scaled(kh2_body[sr].inverse() * kh2_right[0], k);
-    let grip = now_root * turn;
-    if !grip.is_finite() {
-        return;
-    }
-    let inv = kh1[GRIP].inverse();
-    let moved: Vec<Mat4> = (0..WEAPON_BONES).map(|i| grip * inv * kh1[GRIP + i]).collect();
-    kh1[GRIP..GRIP + WEAPON_BONES].copy_from_slice(&moved);
-    log_n(&N, 3, || format!("Final Form: right Keyblade floated {:.0} units from his hand", (grip.w_axis - kh1[RIGHT_HAND].w_axis).truncate().length()));
 }
 
 /// A matrix with its translation times `k` (KH2 units to KH1's).
@@ -807,60 +654,10 @@ fn scaled(m: Mat4, k: f32) -> Mat4 {
     m
 }
 
-/// `pose`, after Sora's KH1 bones are drawn from KH2's pose: the left hand's weapon bones.
-///
-/// - `kh1`: KH1's bones as drawn (KH1 model space), `kh1_bind` KH1's bind; `kh2_body` and
-///   `kh2_right` KH2's body and right Keyblade (KH2 model space); `to_world` KH1's placement;
-///   `ratio` KH1's size against KH2's (`Retarget::hip_ratio`).
-/// - KH2's two Keyblades are one model on two hand bones (`sklt`): each weapon root relative to
-///   its hand bone is known for both. Each KH2 hand bone is put on KH1's hand by the bind poses'
-///   relation (both T-poses facing +z, same axes). The turn from KH2's right weapon root to KH1's
-///   grip (280, as `pose` drew it: KH1's grip, `flip_weapons`, teeth up) is then the same for the
-///   left, and the chain keeps the right one's shape.
-pub fn note_pose(kh1: &[Mat4], kh1_bind: &[Mat4], kh2_body: &[Mat4], kh2_right: &[Mat4], to_world: &Mat4, ratio: f32) {
-    if !INSTALLED.load(Ordering::Relaxed) || !SHOWN.load(Ordering::Relaxed) || !super::form::two_blades() || MESH.load(Ordering::Relaxed) == 0 {
-        return;
-    }
-    static N: AtomicU32 = AtomicU32::new(0);
-    if let Ok(mut w) = TO_WORLD.try_lock() {
-        *w = Some(*to_world);
-    }
-    // KH2's left Keyblade of the step whose body this is (else the latest).
-    let Some(left) = KH2_LEFT.try_lock().ok().and_then(|g| {
-        let fresh = |t: &Instant| super::frameadv::age(*t).as_secs_f32() < 0.15;
-        let sig = body_sig(kh2_body);
-        g.iter().rev().find(|(r, _, t)| *r == sig && fresh(t)).or_else(|| g.back().filter(|(_, _, t)| fresh(t))).map(|(_, b, _)| b[0])
-    }) else { return };
-    // (t1024: the form's own rig, Master's too; Valor's when none.)
-    let Some(rig) = super::pose::kh2().and_then(|k| super::form::current().and_then(|c| c.data(k)).or(k.valor.as_ref())).map(|f| f.rig.clone()) else { return };
-    let (Some(sr), Some(sl)) = (rig.weapons.first().and_then(|w| w.bone), rig.weapons.get(1).and_then(|w| w.bone)) else {
-        log_n(&N, 5, || "the Valor rig has no second weapon bone".into());
-        return;
-    };
-    if kh1.len() < SORA_BONES || kh1_bind.len() < SORA_BONES || kh2_body.len() <= sr.max(sl) || kh2_right.is_empty() {
-        return;
-    }
-    let Ok(mut bind) = KH2_BIND.try_lock() else { return };
-    let b2 = bind.get_or_insert_with(|| kh2_anim::Pose::bind(&rig.skeleton).bones);
-    if b2.len() <= sr.max(sl) {
-        return;
-    }
-    let Some((out, from_hand)) = left_bones(kh1, kh1_bind, b2, (sr, sl), kh2_body, kh2_right[0], left, ratio) else { return };
-    // (Final Form's floats away from his hand.)
-    let reach = if super::form::in_final() { 400.0 } else { 40.0 };
-    if from_hand > reach {
-        log_n(&N, 5, || format!("left grip {from_hand:.0} units from the left hand: not drawn this frame"));
-        return;
-    }
-    log_n(&N, 3, || format!("left grip posed, {from_hand:.1} units from the left hand"));
-    if let Ok(mut g) = LEFT.try_lock() {
-        *g = Some((out, super::takeover::GAME_FRAME.load(Ordering::Relaxed)));
-    }
-}
-
 /// The left hand's 13 weapon bones (KH1 model space) for one frame, and the grip's distance from
-/// the left hand: `note_pose`'s rule, also used at load to bake them into Valor's holder motions
-/// (`pose::Baker::holder_poses`, `kh2slots`). `kh1` / `kh1_bind`: KH1's pose and bind (model
+/// the left hand, as the old per-frame draw had them, used at load to bake them into the holder
+/// motions of a form without KH2's own left hold (`pose::Baker::holder_poses`, `kh2slots`; since
+/// t1035 Valor, Master and Final all have one). `kh1` / `kh1_bind`: KH1's pose and bind (model
 /// space); `b2`: KH2's bind of the form's skeleton; `(sr, sl)`: KH2's right / left weapon hand
 /// bones; `kh2_body`, `right_root`, `left_root`: KH2's body and both weapon roots (KH2 model
 /// space); `ratio`: KH1's size against KH2's. `None` when it isn't finite.
@@ -911,29 +708,6 @@ pub fn left_out() -> bool {
     left_shown()
 }
 
-/// The instance's world matrices (handle).
-const INST_WORLD_H: usize = 0x1B4;
-
-/// The left Keyblade's bones in KH1's world as KH1 last posed its holder actor (`holder`, t831):
-/// the actor is attached to Sora's left palm and plays the holder motion of Sora's motion (its
-/// weapon bones where they sit from the palm), so KH1's own pose task leaves them on the palm as
-/// drawn, through KH1's own blends. None without a holder (out of Valor on KH1's states: Final
-/// Form, KH2's controller) or before it was first posed.
-unsafe fn posed_left() -> Option<[Mat4; WEAPON_BONES]> {
-    if !super::form::native_now() {
-        return None;
-    }
-    let inst = super::holder::posed_instance()?;
-    let world = super::pose::ptr(rd::<u32>(inst + INST_WORLD_H));
-    if !readable(world + GRIP * 0x40, WEAPON_BONES * 0x40) {
-        return None;
-    }
-    let mut out = [Mat4::IDENTITY; WEAPON_BONES];
-    for (i, m) in out.iter_mut().enumerate() {
-        *m = Mat4::from_cols_array(&rd::<[f32; 16]>(world + (GRIP + i) * 0x40));
-    }
-    out.iter().all(|m| m.is_finite()).then_some(out)
-}
 
 
 // ---------------------------------------------------------------------------------------------
@@ -945,7 +719,7 @@ unsafe extern "system" fn queue(instance: usize, view: usize, params: usize, act
     let f: Queue = std::mem::transmute(ORIG_QUEUE.load(Ordering::Acquire));
     // KH2's player model: Sora's own draw (the field's, or the pause menu's copy) with his
     // meshes held back, and his Keyblade shrunk into his grip when KH2's replaces it.
-    let first = !IN_SECOND.load(Ordering::Relaxed) && readable(params, P_SIZE);
+    let first = readable(params, P_SIZE);
     let ours = if first && actor != 0 && actor == super::takeover::sora_actor() && instance == super::pose::SORA_INSTANCE.load(Ordering::Relaxed) {
         super::model::hide(params)
     } else if first && super::model::is_menu_copy(instance) {
@@ -993,63 +767,13 @@ unsafe fn collapse_weapon(instance: usize) -> Option<(usize, [u8; WEAPON_BONES *
 /// KH1's model queue on the instance's weapon bones (`+0x15C`'s world matrices, 280..292).
 type ActorDraw = unsafe extern "system" fn(usize, u32, u32, usize, f32);
 
-/// KH1's actor draw, hooked: after Sora's own draw, the left Keyblade's holder drawn by the same
-/// function with every body mesh hidden (`left_draw`).
+/// KH1's actor draw, hooked: where KH1 drew the holder, for the trace (t839). (t1035: the old
+/// controller's second draw of the left Keyblade on our copy of Sora, `left_draw`, is gone: KH1's
+/// own draw task draws the holder actor.)
 unsafe extern "system" fn actor_draw(actor: usize, mask: u32, p3: u32, colour: usize, p5: f32) {
     let f: ActorDraw = std::mem::transmute(ORIG_DRAW.load(Ordering::Acquire));
     f(actor, mask, p3, colour, p5);
-    // (t839: a measure of where KH1 drew the holder, for the trace.)
     super::holder::note_drawn(actor);
-    if !IN_SECOND.load(Ordering::Relaxed) && INSTALLED.load(Ordering::Relaxed) {
-        left_draw(f, actor, p3, colour, p5);
-    }
-}
-
-/// The left Keyblade drawn as KH1 draws Sora's own: KH1's actor draw run on its holder (our copy of
-/// Sora's actor, `fill_owner`: his flags, place and light; `+0x14C` the left Keyblade's KH1 weapon
-/// object, `left_object`) with KH1's own arguments for Sora's draw this frame and every body mesh
-/// hidden (mask `0xFFFFFFFF`), so KH1 queues only its weapon: the object's model and colour, on the
-/// holder's weapon bones, which hold the left hand's for the call (`left_world`). KH1 decides by its
-/// own test whether a weapon is drawn (flag `0x4000`, the object and its model).
-unsafe fn left_draw(f: ActorDraw, actor: usize, p3: u32, colour: usize, p5: f32) {
-    static N: AtomicU32 = AtomicU32::new(0);
-    if MESH.load(Ordering::Relaxed) == 0 || !SHOWN.load(Ordering::Relaxed) || !super::form::two_blades() || actor == 0 || actor != super::takeover::sora_actor() {
-        return;
-    }
-    // (t832: on Valor's KH1 states KH1 draws it on the holder actor, `holder`, by its own draw task;
-    // t833: with no holder actor there, none is drawn.)
-    if super::form::native_now() {
-        return;
-    }
-    // (KH2's model of the same Keyblade is drawn in its place.)
-    if super::model::left_is_ours() {
-        return;
-    }
-    // (Sora's field draw, not the pause menu's copy of him.)
-    if !readable(actor + ACTOR_INSTANCE, 4) || super::pose::ptr(rd::<u32>(actor + ACTOR_INSTANCE)) != super::pose::SORA_INSTANCE.load(Ordering::Relaxed) {
-        return;
-    }
-    let Some(left) = left_world() else { return };
-    if !fill_owner() {
-        return;
-    }
-    let fake = FAKE.load(Ordering::Relaxed);
-    let Some(obj) = left_object() else { return };
-    if rd::<u32>(fake + ACTOR_WEAPON) != super::pose::handle(obj) {
-        return;
-    }
-    // The holder's weapon bones: the left hand's for this draw (its others stay the trail's).
-    let at = fake + FAKE_MATS + GRIP * 0x40;
-    let mut saved = [0u8; WEAPON_BONES * 0x40];
-    std::ptr::copy_nonoverlapping(at as *const u8, saved.as_mut_ptr(), saved.len());
-    for (i, m) in left.iter().enumerate() {
-        std::ptr::write_unaligned((at + i * 0x40) as *mut [f32; 16], m.to_cols_array());
-    }
-    IN_SECOND.store(true, Ordering::Relaxed);
-    f(fake, 0xFFFF_FFFF, p3, colour, p5);
-    IN_SECOND.store(false, Ordering::Relaxed);
-    std::ptr::copy_nonoverlapping(saved.as_ptr(), at as *mut u8, saved.len());
-    log_n(&N, 3, || format!("drawn in the left hand by KH1's actor draw (object {obj:#x}, mesh {:#x}, grip at {:.0?})", super::pose::ptr(rd::<u32>(obj + OBJ_MESH)), left[0].w_axis.truncate()));
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1080,50 +804,15 @@ unsafe extern "system" fn trail_start(actor: usize, id: u32) {
 /// frame), then, while the actor's `+0x1CC` bit 0x800000 is set and it is alive (`0x140291FF0`),
 /// makes the trail (`0x1402AE290 (actor, +0x30, +0x38)`) into `+0x28`; a running one is kept while
 /// the actor's flags have `0xC001` and the bit is set, told to end (its end byte) when the bit goes,
-/// ended at once otherwise, and forgotten once it stops. Run after Sora's for the left Keyblade's
-/// holder, whose trail bit is the left Keyblade's own (`left_trail_on`).
+/// ended at once otherwise, and forgotten once it stops. KH1's own actor step runs it on the
+/// holder actor (t832), its bit from the holder motion's 7.0. (t1035: the old controller's second
+/// run on our copy of Sora is gone.)
 unsafe extern "system" fn trail_step(actor: usize) {
     let f: unsafe extern "system" fn(usize) = std::mem::transmute(ORIG_TRAIL_STEP.load(Ordering::Acquire));
     // (Cosmetics > Keyblade Trail: Always asks Sora's trail ahead of KH1's step; it hooks the step
     // itself only when this hook isn't in.)
     super::cosmetics::before_step(actor);
     f(actor);
-    if actor == 0 || actor != super::takeover::sora_actor() || IN_TRAIL.load(Ordering::Relaxed) {
-        return;
-    }
-    // (t832: the holder actor's trail is KH1's own step's, its bit from its holder motion's 7.0;
-    // t833: on Valor's KH1 states nothing of the copy's.)
-    if super::form::native_now() {
-        return;
-    }
-    let Some(holder) = trail_holder() else { return };
-    let obj = LEFT_OBJ.load(Ordering::Relaxed);
-    let shown = left_shown();
-    // (Out of the form, only to let KH1 end a trail still running.)
-    if !shown && rd::<u64>(obj + OBJ_TRAIL) == 0 {
-        return;
-    }
-    // (Always, Cosmetics > Keyblade Trail: the left Keyblade's trail wanted whenever it is out, and
-    // asked for as KH1's request would, with the id Sora's was asked with.)
-    let always = shown && super::cosmetics::always();
-    if always {
-        if let Some(id) = super::combat::swing_trail_id(actor) {
-            super::cosmetics::request(obj, id);
-        }
-    }
-    let on = shown && (always || left_trail_on(actor));
-    TRAIL_ON.store(on, Ordering::Relaxed);
-    let flags = rd::<u32>(holder + ACTOR_TRAIL_FLAGS);
-    std::ptr::write_unaligned((holder + ACTOR_TRAIL_FLAGS) as *mut u32, if on { flags | TRAIL_FLAG } else { flags & !TRAIL_FLAG });
-    let was = rd::<u64>(obj + OBJ_TRAIL);
-    IN_TRAIL.store(true, Ordering::Relaxed);
-    f(holder);
-    IN_TRAIL.store(false, Ordering::Relaxed);
-    let now = rd::<u64>(obj + OBJ_TRAIL);
-    if now != was {
-        static N: AtomicU32 = AtomicU32::new(0);
-        log_n(&N, 12, || if now != 0 { format!("trail {now:#x} made by KH1's trail step (id {:#x})", rd::<u32>(obj + OBJ_TRAIL_ID)) } else { format!("trail {was:#x} ended by KH1's trail step") });
-    }
 }
 
 /// KH1's trail step is hooked here (`cosmetics` leaves it to this hook).
@@ -1136,219 +825,16 @@ fn left_shown() -> bool {
     SHOWN.load(Ordering::Relaxed) && super::form::two_blades() && MESH.load(Ordering::Relaxed) != 0
 }
 
-/// The left Keyblade's holder for KH1's trail code: filled (`fill_owner`) and holding the left
-/// Keyblade's KH1 weapon object, still ours (`object_ours`).
+/// The left Keyblade's holder for KH1's trail code: the holder actor (`holder`) holding the left
+/// Keyblade's KH1 weapon object, still ours (`object_ours`), on KH1's states (t832 / t833).
 unsafe fn trail_holder() -> Option<usize> {
-    // (t832: the holder actor while it carries the left Keyblade's object; KH1's own step runs its
-    // trail step. t833: on Valor's KH1 states only it.)
-    if super::form::native_now() {
-        let Some(a) = super::holder::actor() else { return None };
-        let obj = LEFT_OBJ.load(Ordering::Relaxed);
-        let ok = obj != 0 && TRAIL_HOOKED.load(Ordering::Relaxed) && object_ours(obj, OBJ_FROM.load(Ordering::Relaxed), OBJ_ROW_NOW.load(Ordering::Relaxed)) && rd::<u32>(a + ACTOR_WEAPON) == super::pose::handle(obj);
-        return ok.then_some(a);
-    }
-    let fake = FAKE.load(Ordering::Relaxed);
-    let obj = LEFT_OBJ.load(Ordering::Relaxed);
-    if fake == 0 || obj == 0 || !FAKE_FILLED.load(Ordering::Relaxed) || !TRAIL_HOOKED.load(Ordering::Relaxed) {
-        return None;
-    }
-    if !object_ours(obj, OBJ_FROM.load(Ordering::Relaxed), OBJ_ROW_NOW.load(Ordering::Relaxed)) || rd::<u32>(fake + ACTOR_WEAPON) != super::pose::handle(obj) {
-        return None;
-    }
-    Some(fake)
-}
-
-/// Whether the left Keyblade's trail is on now. On KH1's own states (Valor's baked motions): KH1's
-/// level reader (`0x140394770 (motion, type << 16 | id, time)`, the one its pass reads 7.0, the
-/// right trail, with) asked for our 7.1 (`kh2slots::LEFT_TRAIL_ID`, the left weapon's own trail
-/// windows) on Sora's motion (`+0x1D4`'s table at slot `+0x168`) at his time (`+0x16C`). Else (KH2's
-/// controller has him) the left weapon's KH2 windows, as before (`LEFT_OPEN`, `kh2_left`).
-unsafe fn left_trail_on(sora: usize) -> bool {
     if !super::form::native_now() {
-        return LEFT_OPEN.load(Ordering::Relaxed);
+        return None;
     }
-    let table = super::pose::ptr(rd::<u32>(sora + ACTOR_MOTIONS));
-    let slot = rd::<u16>(sora + ACTOR_SLOT) as usize;
-    if !readable(table + slot * 4, 4) {
-        return false;
-    }
-    let motion = super::pose::ptr(rd::<u32>(table + slot * 4));
-    let time = rd::<f32>(sora + ACTOR_TIME);
-    if !readable(motion + 0x40, 4) || !time.is_finite() {
-        return false;
-    }
-    let level: unsafe extern "system" fn(usize, u32, f32) -> usize = std::mem::transmute(BASE.load(Ordering::Relaxed) + LEVEL_STEAM);
-    let key = level(motion, (super::kh2slots::LEFT_TRAIL_KIND as u32) << 16 | super::kh2slots::LEFT_TRAIL_ID as u32, time);
-    key != 0 && readable(key + 4, 1) && rd::<u8>(key + 4) != 0
-}
-
-/// KH2's left weapon's trail ranges, from the KH2 install (as `pose::load_kh2` finds it).
-fn load_trail_windows() {
-    let r = (|| -> Result<(String, Windows), String> {
-        let exe = format!("{}\\KINGDOM HEARTS II FINAL MIX.exe", super::exe_dir());
-        let install = kh2_data::Install::locate(&exe).map_err(|e| format!("KH2 install: {e}"))?;
-        let source = if install.has_backup() { kh2_data::Source::Backup } else { kh2_data::Source::Live };
-        // Valor's moveset (2): its left weapon's motion set name in 03system's `wmst`.
-        let name = install
-            .read_any(source, "03system.bin")
-            .ok()
-            .and_then(|b| kh2_formats::objentry::parse_wmst(&b).ok())
-            .and_then(|n| n.get(2 * 2 + 1).filter(|s| !s.is_empty()).cloned())
-            .unwrap_or_else(|| "W_EX010_BTLF_L".into());
-        let bytes = install.read_any(source, &format!("obj/{name}.mset")).map_err(|e| format!("{name}.mset: {e}"))?;
-        let mset = kh2_formats::motion::Mset::parse(&bytes).map_err(|e| format!("{name}.mset: {e}"))?;
-        let mut out = Windows::new();
-        for m in 0..=255u16 {
-            let Some(anb) = mset.slot_for(m as usize, true, true).and_then(|s| s.anb.as_ref()) else { continue };
-            let w: Vec<(u32, Option<u32>)> = anb
-                .triggers
-                .ranges
-                .iter()
-                .filter(|r| r.id == kh2_formats::motion::range_id::WEAPON_TRAIL)
-                .map(|r| (r.start.max(0) as u32, (r.end >= 0).then_some(r.end as u32)))
-                .collect();
-            if !w.is_empty() {
-                out.insert(m, w);
-            }
-        }
-        Ok((name, out))
-    })();
-    match r {
-        Ok((name, w)) => {
-            log!(Animation, "left Keyblade: trail windows of {name} for {} motions", w.len());
-            let _ = TRAIL_WINDOWS.set(w);
-        }
-        Err(e) => log!(Animation, "left Keyblade: trail windows not read ({e}); KH2's trail windows of either hand used"),
-    }
-}
-
-/// The left grip as a proper turn with the right grip's scale, where `left` is: KH1 makes an
-/// effect's angles from its matrix's rows, normalized (`0x1402A6D60`), which reads a mirrored or
-/// sheared matrix as a wrong turn (the user: the left trail floated off the blade). Mirrored, the
-/// axis across the blade the least (the blade: the right grip toward its last bone, `tip`) is
-/// the one turned round, so the blade keeps its way.
-fn proper_like(left: Mat4, right: Mat4, tip: Mat4) -> Mat4 {
-    let m = glam::Mat3::from_mat4(left);
-    let cols = [m.x_axis, m.y_axis, m.z_axis];
-    let d = right.inverse().transform_point3(tip.w_axis.truncate());
-    let d = [d.x.abs(), d.y.abs(), d.z.abs()];
-    let a = (0..3).max_by(|&i, &j| d[i].total_cmp(&d[j])).unwrap_or(0);
-    // Of the other two, the one along the blade more is kept; the last is made from them.
-    let (b, c) = {
-        let o: Vec<usize> = (0..3).filter(|&i| i != a).collect();
-        if d[o[0]] >= d[o[1]] { (o[0], o[1]) } else { (o[1], o[0]) }
-    };
-    let ca = cols[a].normalize_or_zero();
-    let cb = (cols[b] - ca * ca.dot(cols[b])).normalize_or_zero();
-    let cyclic = matches!((a, b, c), (0, 1, 2) | (1, 2, 0) | (2, 0, 1));
-    let cc = if cyclic { ca.cross(cb) } else { cb.cross(ca) };
-    let r = glam::Mat3::from_mat4(right);
-    let scale = [r.x_axis.length(), r.y_axis.length(), r.z_axis.length()];
-    let mut out = [glam::Vec3::ZERO; 3];
-    out[a] = ca * scale[a];
-    out[b] = cb * scale[b];
-    out[c] = cc * scale[c];
-    Mat4::from_cols(out[0].extend(0.0), out[1].extend(0.0), out[2].extend(0.0), left.w_axis)
-}
-
-/// Each KH2 step: our trail owner, a copy of Sora's actor and model instance whose world
-/// matrices are his as KH1 last drew him (the ones its own trail reads, his right one), each
-/// moved by the turn from his right grip to the left one as drawn (`LEFT`, the same frame): the
-/// left Keyblade's bones exactly, and whichever bone its trail reads beside them (the grip's
-/// parent, his hand) where it sits for the left. (s220 made them from our pose's matrices at
-/// draw time: the user saw the trail well off the blade.)
-unsafe fn fill_owner() -> bool {
-    static N: AtomicU32 = AtomicU32::new(0);
-    let base = BASE.load(Ordering::Relaxed);
-    let sora = super::takeover::sora_actor();
-    let inst = super::pose::SORA_INSTANCE.load(Ordering::Relaxed);
-    if !readable(sora, ACTOR_SIZE) || !readable(inst, INSTANCE_SIZE) {
-        return false;
-    }
-    let world = super::pose::ptr(rd::<u32>(inst + INST_WORLD));
-    if !readable(world, SORA_BONES * 0x40) {
-        return false;
-    }
-    let Some(left) = left_world() else { return false };
-    let mat = |i: usize| Mat4::from_cols_array(&rd::<[f32; 16]>(world + i * 0x40));
-    let right = mat(GRIP);
-    let grip = proper_like(left[0], right, mat(GRIP + WEAPON_BONES - 1));
-    let to_left = grip * right.inverse();
-    if !to_left.is_finite() {
-        return false;
-    }
-    let mut fake = FAKE.load(Ordering::Relaxed);
-    if fake == 0 {
-        fake = super::sys::VirtualAlloc(std::ptr::null_mut(), FAKE_SIZE, 0x3000, 0x04) as usize;
-        if fake == 0 {
-            log_n(&N, 3, || "trail: no memory for its owner".into());
-            return false;
-        }
-        let to_handle: unsafe extern "system" fn(usize) -> u32 = std::mem::transmute(base + TO_HANDLE_RVA);
-        let (ih, mh) = (to_handle(fake + FAKE_INSTANCE), to_handle(fake + FAKE_MATS));
-        let ah = to_handle(fake);
-        FAKE_ACTOR_H.store(if super::pose::ptr(ah) == fake { ah } else { 0 }, Ordering::Relaxed);
-        if super::pose::ptr(ih) != fake + FAKE_INSTANCE || super::pose::ptr(mh) != fake + FAKE_MATS {
-            log_n(&N, 3, || format!("trail: handles of its owner don't resolve ({ih:#x} {mh:#x}): no trail"));
-            TRAIL_HOOKED.store(false, Ordering::Relaxed);
-            return false;
-        }
-        FAKE_INSTANCE_H.store(ih, Ordering::Relaxed);
-        FAKE_MATS_H.store(mh, Ordering::Relaxed);
-        FAKE.store(fake, Ordering::Relaxed);
-        log_n(&N, 3, || format!("trail: its owner made at {fake:#x}"));
-    }
-    std::ptr::copy_nonoverlapping(sora as *const u8, fake as *mut u8, ACTOR_SIZE);
-    std::ptr::copy_nonoverlapping(inst as *const u8, (fake + FAKE_INSTANCE) as *mut u8, INSTANCE_SIZE);
-    std::ptr::write_unaligned((fake + ACTOR_INSTANCE) as *mut u32, FAKE_INSTANCE_H.load(Ordering::Relaxed));
-    std::ptr::write_unaligned((fake + FAKE_INSTANCE + INST_WORLD) as *mut u32, FAKE_MATS_H.load(Ordering::Relaxed));
-    // Its weapon object: the left Keyblade's own, from KH1's pool (`left_object`: its row, so its
-    // blade's range, and its effect data); while none can be had, Sora's (his right Keyblade).
-    if let Some(obj) = left_object() {
-        std::ptr::write_unaligned((fake + ACTOR_WEAPON) as *mut u32, super::pose::handle(obj));
-    }
-    // (The weapon bones too: a rigid copy of his right hand's Keyblade, so the trail is KH1's
-    // right one exactly, on the left grip.)
-    for i in 0..SORA_BONES {
-        let m = to_left * mat(i);
-        std::ptr::write_unaligned((fake + FAKE_MATS + i * 0x40) as *mut [f32; 16], m.to_cols_array());
-    }
-    // Its trail flag (`+0x1CC` 0x800000, which KH1 keeps set while a trail is wanted) follows the
-    // left window, not the right one's (in case the effect reads it from its owner).
-    let flags = rd::<u32>(fake + ACTOR_TRAIL_FLAGS);
-    let flags = if TRAIL_ON.load(Ordering::Relaxed) { flags | TRAIL_FLAG } else { flags & !TRAIL_FLAG };
-    std::ptr::write_unaligned((fake + ACTOR_TRAIL_FLAGS) as *mut u32, flags);
-    FAKE_FILLED.store(true, Ordering::Relaxed);
-    // (For the log: how far the left grip is from the right, and from his own position.)
-    static M: AtomicU32 = AtomicU32::new(0);
-    log_n(&M, 4, || {
-        let p = rd::<[f32; 3]>(sora + 0x10);
-        let d3 = |m: Mat4| glam::Mat3::from_mat4(m).determinant();
-        format!(
-            "trail owner filled: right grip at {:.0?} (det {:.2}), left grip at {:.0?} (det {:.2}, as used {:.2}), his position {:.0?}",
-            right.w_axis.truncate(),
-            d3(right),
-            left[0].w_axis.truncate(),
-            d3(left[0]),
-            d3(grip),
-            p
-        )
-    });
-    true
-}
-
-/// Whether the left weapon's KH2 trail is on at this frame of this motion (KH2's controller).
-fn left_window(motion: u16, frame: u32, either: bool) -> bool {
-    match TRAIL_WINDOWS.get() {
-        Some(w) => w.get(&motion).is_some_and(|v| v.iter().any(|&(s, e)| frame >= s && e.map_or(true, |e| frame < e))),
-        None => either,
-    }
-}
-
-/// Each KH2 step (`kh2_left`): the left weapon's KH2 trail window (for KH1's trail step on the
-/// holder while KH2's controller has him, `left_trail_on`).
-fn note_left_window(valor: bool, motion: u16, frame: u32, either: bool) {
-    LEFT_OPEN.store(valor && left_window(motion, frame, either), Ordering::Relaxed);
+    let a = super::holder::actor()?;
+    let obj = LEFT_OBJ.load(Ordering::Relaxed);
+    let ok = obj != 0 && TRAIL_HOOKED.load(Ordering::Relaxed) && object_ours(obj, OBJ_FROM.load(Ordering::Relaxed), OBJ_ROW_NOW.load(Ordering::Relaxed)) && rd::<u32>(a + ACTOR_WEAPON) == super::pose::handle(obj);
+    ok.then_some(a)
 }
 
 /// The left Keyblade's trail ended at once (its effect data or object is about to go), as KH1's

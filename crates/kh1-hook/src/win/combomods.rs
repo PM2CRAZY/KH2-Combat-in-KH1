@@ -218,7 +218,7 @@ fn ours_for(row: &ComboRow) -> Option<usize> {
     if let Some(n) = super::kh2table::now().and_then(|t| t.kh1_row(row.id)).filter(|&n| plays(n)) {
         return Some(n);
     }
-    k::by_kh2_row(row.id).filter(|&n| plays(n)).or_else(|| k::by_combo_motion(row.motion).filter(|&n| plays(n)))
+    k::by_kh2_row(row.id).filter(|&n| plays(n)).or_else(|| k::by_combo_row(row).filter(|&n| plays(n)))
 }
 
 /// KH2's pick `pick` (in the air or not, its hop `launch`) on a combo row of ours (`ours_for`): the

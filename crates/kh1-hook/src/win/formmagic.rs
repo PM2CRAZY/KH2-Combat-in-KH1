@@ -78,6 +78,7 @@ pub fn base_kh2_spell(spell: u8) -> bool {
 /// cast state as base Sora's KH2 spells are (`native`), at the form's magic sub (`form::magic_sub`).
 /// (t1027: per form, `form::Kind::kh2_magic`: Wisdom and Master, Master's own clips D370..D374 at
 /// sub + 20. Was `wisdom_kh2_spell`.)
+/// (t1040: Final too, its own clips E360..E374 at sub + 30.)
 pub fn form_kh2_spell(spell: u8) -> bool {
     spell <= 3 && super::form::native_form().is_some_and(|k| k.kh2_magic())
 }
@@ -141,6 +142,9 @@ fn who() -> &'static str {
     } else if super::form::in_master() {
         // (t1027.)
         "Master"
+    } else if super::form::in_final() {
+        // (t1040.)
+        "Final"
     } else {
         "KH2 magic"
     }
@@ -1242,6 +1246,8 @@ fn row(battle: &Battle, atk: u16, sub: u8, count: u8) -> Option<&Atkp> {
     // and Final have every sub). In Master the plain sub's row, as Reflect's rule for its finisher
     // subs (`reflect::row`, sub & !1). Assumption: what KH2 does for a missing sub isn't traced.
     // Every other form keeps the exact row.
+    // (t1040) Final needs no fallback: 248..251 and 502 have every sub 30..35 (Checked (files)
+    // `00battle.bin`), so its finisher casts find their own rows.
     battle.attack_for_level(atk, sub, count).or_else(|| if super::form::in_master() { battle.attack_for_level(atk, sub & !1, count) } else { None })
 }
 

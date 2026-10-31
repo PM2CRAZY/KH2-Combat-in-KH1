@@ -55,7 +55,9 @@ impl Table {
             .iter()
             .map(|r| {
                 let plays = |n: usize| k::OURS[n].attack && k::OURS[n].motion == r.motion;
-                k::by_kh2_row(r.id).filter(|&n| plays(n)).or_else(|| k::by_combo_motion(r.motion).filter(|&n| plays(n)))
+                // (By the row's motion and kind, t1034: Final's air 154 and its finisher 153 on rows
+                // of their own kind, `kh1rows::by_combo_row`.)
+                k::by_kh2_row(r.id).filter(|&n| plays(n)).or_else(|| k::by_combo_row(r).filter(|&n| plays(n)))
             })
             .collect();
         Table {

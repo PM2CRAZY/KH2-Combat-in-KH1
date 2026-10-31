@@ -308,6 +308,23 @@ To test in the game:
 6. Sora with 7 or 8 accessory slots (9 / 10 rows): scrolling, the last accessory, its help.
 7. Steam build: the same, and the install line without "some patches failed".
 
+**The form rows (t1025 M:, t1038 F:).** Sora's slots show one row per owned form with a Keyblade
+slot, V: (Valor), M: (Master), F: (Final), in that order under the weapon; a form not owned has
+no row, none owned leaves KH1's slots as they are. Rows 1..=k (k up to 3) are the forms', the
+accessories from row 1 + k, so the window takes up to 12 rows (8 visible). Checked (decomp,
+Steam `0x140306020`): the slots update draws from the window's first visible row (`+0xFC` >> 4)
+for visible + 1 rows below its row count (`+0xF8`), each row's item from the record's
+`+0x1C + row` (row 0 the weapon chosen), and the cursor / scroll (`0x1402EF670`) works from
+`+0xF8` / `+0xFA` alone, so 12 rows scroll as 10 did (not seen in game). The row stub takes rows
+1..=3 by their own cells (120 bytes; the cells and the shadow record moved up, disassembled with
+objdump). Each form's pick narrows KH1's list to its own candidates (`equip::candidates`: owned,
+with a copy free of the members and of the other two slots, Valor's slot keeping a shared copy
+first, then Master's, then Final's) and stores to its own byte. The label ("V: " / "M: " /
+"F: ") follows KH1's draw order since t1038: the n-th name call of a slots update is the n-th
+drawn row with an item, so an empty form row showing Sora's own Keyblade no longer labels the
+weapon row too, and rows on the same Keyblade each get their own letter; the page header labels
+only the row being picked for.
+
 ## 5. A spare save byte for the Valor Keyblade
 
 **`save + 0x488`** (and the three bytes after it):
@@ -330,6 +347,18 @@ To test in the game:
 - `+0x48A..+0x48B` (a u16) is the abilities' layout mark (`growth::LAYOUT_OFF`,
   `docs/abilities.md`). A second scan found no `0x489..0x48B` displacement, immediate or absolute
   address (`0x142DEA1E9..0x142DEA1EB`) anywhere in `.text`.
+
+**Master's and Final's bytes.** `+0x489` is Master's Keyblade (t1025, the byte after Valor's;
+the scan above). Final's is **`save + 0x894`** (t1038, the owner's answer 1 (a) after Final's
+research round 2): the byte after Master's level u16 (`+0x892..+0x893`) in the span
+`+0x888..+0xC00` that no KH1 field list describes (`formexp.rs`, Limit's notes). Checked (exe,
+Steam): no instruction names `0x142DE9BF4` (Steam save `0x142DE9360` + `0x894`) by address; the
+three `0x894` displacements are other objects (`0x140041980` and `0x140100170` stack frames,
+`rbp` taken from `rsp`; `0x14039DB44` an object of floats whose same run also writes `+0x880`,
+`+0x888`, `+0x890`). Nothing of ours used it before (Checked (code)). Assumption: nothing reaches
+it through a computed pointer. Both are checked on every read like Valor's (a value that isn't a
+Keyblade with a copy free is an empty slot and is cleared). The ability layout mark `+0x48A`
+isn't involved: no save migration is needed for either byte.
 
 Not usable: `+0x840..0x843` (a u32 KH1 sets to 1), `+0x848..` (a u16 array of counters indexed
 from `+0x848`), `+0x37..+0x3B` of Sora's record (no direct use found, but the record has uses

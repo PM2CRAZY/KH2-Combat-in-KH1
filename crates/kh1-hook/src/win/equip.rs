@@ -59,15 +59,32 @@ pub const VALOR_OFF: usize = 0x488;
 /// copy free is an empty slot (`master_holds`), and `valor::master_slot` clears it.
 pub const MASTER_OFF: usize = 0x489;
 
-/// The save byte of a form's Keyblade slot (t1025): Valor's and Master's (Final has none, it uses
-/// the Kingdom Key, `valor::FINAL_KEYBLADE`; KH2 gives forms 1 / 4 / 5 one, `0x1402FC860`).
+/// Final Form's Keyblade id in the save (t1038, the owner's answer 1 (a) after Final's research
+/// round 2): `+0x894`, the byte after Master's level u16 (`formexp::MASTER_LEVEL_OFF`, `+0x892..`)
+/// in the span `+0x888..+0xC00` no KH1 field list describes (`formexp`'s Limit notes). Checked
+/// (exe): no `.text` instruction names `0x142DE9BF4` (save `0x142DE9360` + `0x894`) by address,
+/// and the three `0x894` displacements are other objects: `0x140041980` and `0x140100170` a stack
+/// frame (`rbp` from `rsp`), `0x14039DB44` an object of floats whose same run also writes `+0x880` /
+/// `+0x888` / `+0x890`. Checked (code): nothing of ours used `+0x894` (Master's level is the u16
+/// `+0x892..+0x893`). Assumption: nothing reaches it through a computed pointer. An old save may
+/// hold anything there: a value that isn't a Keyblade with a copy free is an empty slot
+/// (`final_holds`), and `valor::final_slot` clears it.
+pub const FINAL_OFF: usize = 0x894;
+
+/// The save byte of a form's Keyblade slot (t1025; Final's since t1038): KH2 gives forms 1 / 4 / 5
+/// one (`0x1402FC860`).
 pub fn slot_off(kind: super::form::Kind) -> Option<usize> {
     match kind {
         super::form::Kind::Valor => Some(VALOR_OFF),
         super::form::Kind::Master => Some(MASTER_OFF),
+        super::form::Kind::Final => Some(FINAL_OFF),
         _ => None,
     }
 }
+
+/// The forms with a Keyblade slot, in the order their slots keep a shared copy (t1038): Valor
+/// first, then Master, then Final.
+pub const SLOT_FORMS: [super::form::Kind; 3] = [super::form::Kind::Valor, super::form::Kind::Master, super::form::Kind::Final];
 
 unsafe fn rd<T: Copy>(p: usize) -> T {
     std::ptr::read_unaligned(p as *const T)
@@ -134,22 +151,22 @@ pub unsafe fn owned_keyblades(base: usize) -> Vec<u8> {
 }
 
 /// The Keyblades Valor could take: owned, and a copy not equipped (so never Sora's own
-/// weapon unless he owns two), less the copy Master's slot holds (t1025).
+/// weapon unless he owns two), less the copies Master's slot (t1025) and Final's (t1038) hold.
 pub unsafe fn valor_candidates(base: usize) -> Vec<u8> {
     candidates(base, super::form::Kind::Valor)
 }
 
-/// The Keyblades a form's slot could take (t1025): owned, with a copy free of the members and of
-/// the other form's slot. KH2 (Checked (decomp), `docs/kh1-drive-forms-native.md` §22.5): a slotted
-/// Keyblade is out of the stock, so it is gone from the other forms' lists. With Master's slot
-/// empty Valor's list is what it was.
+/// The Keyblades a form's slot could take (t1025; three-way since t1038): owned, with a copy free
+/// of the members and of the other forms' slots (each copy another slot holds taken off). KH2
+/// (Checked (decomp), `docs/kh1-drive-forms-native.md` §22.5): a slotted Keyblade is out of the
+/// stock, so it is gone from the other forms' lists. With the other slots empty a list is what it
+/// was.
 pub unsafe fn candidates(base: usize, kind: super::form::Kind) -> Vec<u8> {
-    let other = match kind {
-        super::form::Kind::Valor => master_holds(base),
-        super::form::Kind::Master => valor_holds(base),
-        _ => return Vec::new(),
-    };
-    owned_keyblades(base).into_iter().filter(|&id| free(base, id) > (other == Some(id)) as u32).collect()
+    if slot_off(kind).is_none() {
+        return Vec::new();
+    }
+    let others: Vec<u8> = SLOT_FORMS.into_iter().filter(|&k| k != kind).filter_map(|k| slot_holds(base, k)).collect();
+    owned_keyblades(base).into_iter().filter(|&id| free(base, id) > others.iter().filter(|&&o| o == id).count() as u32).collect()
 }
 
 /// The Strength a Sora weapon adds (its weapon-table row's `+0x30`; KH1's `0x1402A2FA0`).
@@ -214,11 +231,29 @@ pub unsafe fn master_keyblade(base: usize) -> Option<u8> {
     master_holds(base).or_else(|| sora_own(base))
 }
 
-/// The copy a form's slot holds (t1025).
+/// The Keyblade Final's slot holds a copy of (t1038): the id stored (`FINAL_OFF`) while it is a
+/// Keyblade Sora owns with a copy free of the members and of Valor's and Master's slots (theirs
+/// keep their copies first, as Valor's does before Master's).
+pub unsafe fn final_holds(base: usize) -> Option<u8> {
+    let stored = save(base).map(|s| rd::<u8>(s + FINAL_OFF)).unwrap_or(0);
+    let taken = (valor_holds(base) == Some(stored)) as u32 + (master_holds(base) == Some(stored)) as u32;
+    (stored != 0 && is_keyblade(base, stored) && free(base, stored) > taken).then_some(stored)
+}
+
+/// The Keyblade Final uses in its left hand (t1038): the slot's; with the slot empty, Sora's own
+/// (KH2's resolver `0x1403DFEB0`, case 0x23B, as for Valor and Master; the owner's round 11 answer
+/// 1 (a), carried for Final). Hand 0 is Sora's own in every form (`0x1403D59C0`, Checked (decomp)),
+/// so an empty F: is Sora's own Keyblade in both hands.
+pub unsafe fn final_keyblade(base: usize) -> Option<u8> {
+    final_holds(base).or_else(|| sora_own(base))
+}
+
+/// The copy a form's slot holds (t1025; Final t1038).
 pub unsafe fn slot_holds(base: usize, kind: super::form::Kind) -> Option<u8> {
     match kind {
         super::form::Kind::Valor => valor_holds(base),
         super::form::Kind::Master => master_holds(base),
+        super::form::Kind::Final => final_holds(base),
         _ => None,
     }
 }

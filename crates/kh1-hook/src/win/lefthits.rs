@@ -37,6 +37,50 @@
 //!
 //! `bodyhits` owns the pass's entry hook (`0x1402B3800`, where `before_build` brings `+0x90` up to
 //! date), the pool helpers and our data copies; `takeover` calls `step`.
+//!
+//! (t1037) **The right Keyblade where no KH1 attack row runs.** KH1 makes its own Keyblade attack
+//! object only from an attack row (its swings, our combo and ability rows), so in a slot of ours
+//! that runs none (a jump, fall or landing, an item's use, a glide: `kh2slots::rowless_now`) the
+//! right Keyblade's windows (weapon 1) had no object. Final Form has them (`W_EX010_ULTF_R.mset`,
+//! Checked (files)): jump 3 ATKP 1273 at 2..12 then 1286 from 12 to the end, fall 4 1275 at 2..20,
+//! landing 5 1277 at 0..20, item use 9 1284 at 1..38 then 1449 at 38..46, glide 205 / 206 / 207
+//! 1281 all through (the left one's the same at the same frames: 1274 / 1287, 1276, 1278, 1285 /
+//! 1450, 1282). There a second object of the same kind is made for the right Keyblade (`RIGHT`):
+//! the same constructor and template data, on KH1's attack group 0 (the Keyblade's, whose HIT
+//! track every slot of ours already has from the clip's weapon-1 windows, `kh2slots::kh1_tracks`),
+//! with Sora's own weapon row as KH1's row maker puts it on his own Keyblade object and Sora as its
+//! bone-source actor (the constructor's own), re-armed at each new KH2 attack as the left one. So
+//! each blade's hit is made with its own Keyblade's row (blade range, radius, critical, priority),
+//! as Valor's two blades are; the Strength both hit with is Sora's live one, his Keyblade's plus
+//! the second one's (`valorstats::bonus`), as in Valor. **Assumption** (open): how KH2 splits the
+//! two Keyblades' strength between the two blades' hits is not traced.
+//! (t1037) A play of the same motion on the same request (KH1 looping it: the fall from frame 12,
+//! the glide) keeps both objects, so `step`'s rule decides whether it is a new KH2 attack: a window
+//! open all through the loop (the glide's) stays one attack, re-hit by its interval (`rehit`), as
+//! KH2's range handler keeps asserting the same ATKP; one that closed and opens again is a new one.
+//!
+//! (t1043) **Final's Keyblade guards** (the owner's answer "(a)": KH1's own guard object on each
+//! Keyblade). Final's ATKP 162 windows (kind 2 guard, power 0, refact self 2, reflect range 180,
+//! angle 0; Checked (files) `00battle.bin`) are on both Keyblades (`W_EX010_ULTF_R` / `_L.mset`,
+//! group 1, Checked (files)): 151 55..84 right / 55..89 left, 153 4..125, 183 4..165, the glide
+//! hover 208 from 1 to the end. KH1 makes its guard with its row maker `0x1402B3270` on its guard
+//! row 0x3D (Sora's table, `combomods::kh1_guard`), which is KH1's attack constructor
+//! `0x1402B2DC0` and the Keyblade row's part (Checked (decomp)): the object of KH1's guard data
+//! (bone 0x30, the blade; clash type 2, which KH1's pass never meets with a body, `0x1402B3BE0`;
+//! no power), tied to his motion (activity 2) and to its data's attack group. So for each blade
+//! with such windows in a Final slot, `new_play` makes that object with the same constructor (first
+//! bytes checked, `bodyhits::make_ok`) on a copy of KH1's guard row's data, the copy's group the
+//! blade's guard group (`kh2slots::guard_channels`), whose HIT track our slot carries over KH2's
+//! window frames (`kh2slots::guard_tracks`): KH1's own pass switches it on and off at those frames
+//! and frees it when the request ends; nothing of ours runs a frame for it. Its blade fields
+//! (radius, blade range) as the row maker gives them from that Keyblade's row (`blade_fields`), the
+//! left one's bone-source actor `leftblade`'s owner copy (`before_build`), as the left hit object.
+//! KH2's 162 lets the move go on (refact self 2): the object's priority is 100, so KH1's clash
+//! (`0x1402B4BC0`) returns at once for it, puts no clash record on Sora (no KH1 recoil, the motion
+//! goes on) and gives the attack meeting it KH1's clash (its owner's recoil, a shot turned back),
+//! as Guard Shape KH1's guard objects (`combat::Strikes::blade_guard`); KH1's guard request 0xD4
+//! is never started. Its arc KH2's: 162's reflect range 180 is every side by KH2's test
+//! (`character_core::reaction::clash_angle_ok`), KH1's data `+0x64` -1.
 
 use super::addr::Rva;
 use super::bodyhits::{rd, wr};
@@ -54,10 +98,38 @@ const FREE_ATTACK_RVA: Rva = Rva(0x2B13D0);
 const DATA: usize = 0x70;
 const KEY_MARK: u64 = 0xF0;
 
-/// The live object's address (0: none), for the per-object checks without the lock.
-static OBJ: AtomicUsize = AtomicUsize::new(0);
-static STATE: Mutex<Option<Left>> = Mutex::new(None);
+/// Our two objects: the left Keyblade's (weapon 2, in every slot of a two-bladed native form) and
+/// (t1037) the right one's where no KH1 attack row makes KH1's own (weapon 1, `kh2slots::rowless_now`).
+const LEFT: usize = 0;
+const RIGHT: usize = 1;
+const SIDES: [usize; 2] = [LEFT, RIGHT];
+
+/// Each live object's address (0: none), for the per-object checks without the lock.
+static OBJ: [AtomicUsize; 2] = [AtomicUsize::new(0), AtomicUsize::new(0)];
+static STATE: [Mutex<Option<Left>>; 2] = [Mutex::new(None), Mutex::new(None)];
 static LOGGED: AtomicU32 = AtomicU32::new(0);
+
+/// (t1043) Final's Keyblade guard objects (`LEFT` / `RIGHT`): each live one's address (0: none).
+static GUARD_OBJ: [AtomicUsize; 2] = [AtomicUsize::new(0), AtomicUsize::new(0)];
+static GUARD: [Mutex<Option<BladeGuard>>; 2] = [Mutex::new(None), Mutex::new(None)];
+/// KH1's guard row in Sora's table (`combat`'s, `combomods::kh1_guard`: request 0xD4, data 0x4DA8).
+const KH1_GUARD_ROW: usize = 0x3D;
+/// A KH1 guard's priority (`combat::GUARD_PRIORITY`): KH1's clash returns at once for it, no
+/// clash record on its owner (`0x1402B4BC0`, Checked (decomp)).
+const GUARD_PRIORITY: i32 = 100;
+/// Frames between KH1's re-arms of a guard object (`combat::GUARD_REARM`): an attack met is met
+/// again after that.
+const GUARD_REARM: f32 = 10.0;
+/// Our guard data copies' key mark (beside `KEY_MARK`).
+const GUARD_MARK: u64 = 0xF1;
+
+/// (t1043) One of Final's Keyblade guard objects: KH1's guard object on that blade for a play.
+struct BladeGuard {
+    obj: usize,
+    data: usize,
+    motion: u16,
+    req: u32,
+}
 
 fn note(s: impl FnOnce() -> String) {
     if super::log_on(super::LogCat::Combat) && LOGGED.fetch_add(1, Ordering::Relaxed) < 80 {
@@ -67,17 +139,21 @@ fn note(s: impl FnOnce() -> String) {
 
 /// Valor's left Keyblade's KH1 attack object for the motion playing: one object for all its hit
 /// windows (weapon 2), tied to their KH1 attack group (`kh2slots::left_channel`), re-armed at each
-/// new KH2 attack (`step`), as KH1's own Keyblade object is for the right one.
+/// new KH2 attack (`step`), as KH1's own Keyblade object is for the right one. (t1037) Or the
+/// right Keyblade's (weapon 1, group 0) in a slot that runs no KH1 attack row (`RIGHT`).
 struct Left {
     obj: usize,
     /// Its data now (the open window's).
     data: usize,
     motion: u16,
+    /// The request it is tied to (`+0x58`).
+    req: u32,
     windows: Vec<LeftWin>,
     /// The window open at the last step, and whether one was.
     cur: Option<usize>,
     was_open: bool,
-    /// The left Keyblade's weapon row (`btltbl.bin`'s, `leftblade`'s owner copy's), 0 for none.
+    /// The left Keyblade's weapon row (`btltbl.bin`'s, `leftblade`'s owner copy's; the right one's:
+    /// Sora's own), 0 for none.
     row: usize,
     /// Sora (the maker: the scale the radius takes).
     actor: usize,
@@ -121,19 +197,153 @@ unsafe fn bone_source(obj: usize) -> u32 {
 
 /// A new play of motion `m` in our slot (`bodyhits::frame`): the last play's object freed, and
 /// in Valor (on KH1's own states, two Keyblades) a new one for this play's left windows.
+/// (t1037) And the right Keyblade's in a Drive Form on KH1's own states, in a slot that runs no
+/// KH1 attack row (`kh2slots::rowless_now`). The same motion again on the same request (KH1
+/// looping it) keeps the objects KH1 hasn't freed (`step` then tells a new KH2 attack).
 pub unsafe fn new_play(actor: usize, m: u16, req: u32, air: bool, clip: &character_core::Clip) {
-    let Ok(mut g) = STATE.try_lock() else { return };
-    if let Some(l) = g.take() {
-        if still_ours(&l) {
-            let free: unsafe extern "system" fn(usize) = std::mem::transmute(super::bodyhits::base() + FREE_ATTACK_RVA);
-            free(l.obj);
+    for side in SIDES {
+        let Ok(mut g) = STATE[side].try_lock() else { continue };
+        if g.as_ref().is_some_and(|l| l.motion == m && l.req == req && still_ours(l)) {
+            continue;
+        }
+        if let Some(l) = g.take() {
+            if still_ours(&l) {
+                let free: unsafe extern "system" fn(usize) = std::mem::transmute(super::bodyhits::base() + FREE_ATTACK_RVA);
+                free(l.obj);
+            }
+        }
+        OBJ[side].store(0, Ordering::Relaxed);
+        let want = super::form::native_now() && if side == LEFT { super::form::two_blades() } else { super::kh2slots::rowless_now(actor) };
+        if want {
+            *g = make(side, actor, m, req, air, clip);
+            OBJ[side].store(g.as_ref().map_or(0, |l| l.obj), Ordering::Relaxed);
         }
     }
-    OBJ.store(0, Ordering::Relaxed);
-    if super::form::native_now() && super::form::two_blades() {
-        *g = make(actor, m, req, air, clip);
-        OBJ.store(g.as_ref().map_or(0, |l| l.obj), Ordering::Relaxed);
+    guards_new_play(actor, m, req, clip);
+}
+
+/// (t1043) A new play of motion `m`: the last play's guard objects freed, and in Final on KH1's own
+/// states one KH1 guard object for each blade with a guard window in the clip (`make_guard`). The
+/// same motion again on the same request keeps them, as `new_play` keeps the hit objects.
+unsafe fn guards_new_play(actor: usize, m: u16, req: u32, clip: &character_core::Clip) {
+    let on = super::form::native_now() && super::form::in_final();
+    let ch = if on { super::kh2slots::guard_channels(clip) } else { [None, None] };
+    for side in SIDES {
+        let Ok(mut g) = GUARD[side].try_lock() else { continue };
+        if g.as_ref().is_some_and(|x| x.motion == m && x.req == req && guard_ours(x)) {
+            continue;
+        }
+        if let Some(x) = g.take() {
+            if guard_ours(&x) {
+                let free: unsafe extern "system" fn(usize) = std::mem::transmute(super::bodyhits::base() + FREE_ATTACK_RVA);
+                free(x.obj);
+            }
+        }
+        GUARD_OBJ[side].store(0, Ordering::Relaxed);
+        if !on {
+            continue;
+        }
+        // (`guard_channels` is [right, left].)
+        match ch[if side == RIGHT { 0 } else { 1 }] {
+            Some(c) => {
+                *g = make_guard(side, actor, m, req, c, clip);
+                GUARD_OBJ[side].store(g.as_ref().map_or(0, |x| x.obj), Ordering::Relaxed);
+            }
+            None if !super::kh2slots::blade_guard_spans(clip, side == LEFT).is_empty() => {
+                note(|| format!("Final's {} Keyblade guard: motion {m} has no free KH1 attack group: left out", if side == LEFT { "left" } else { "right" }));
+            }
+            None => {}
+        }
     }
+}
+
+/// Our guard object is still the one we made (in use, our data).
+unsafe fn guard_ours(x: &BladeGuard) -> bool {
+    rd::<u32>(x.obj) & 0x800 != 0 && pose::ptr(rd::<u32>(x.obj + 0x5C)) == x.data
+}
+
+/// (t1043) Our copy of KH1's guard row's data for one blade's guard (`make_guard`): KH1's own
+/// (bone 0x30, clash type 2, no power; Checked (files) and (decomp), as `combat`'s Guard Shape KH1
+/// copy), its second word 0 as that copy's, its attack group `channel` (`+0x34`, which KH1's
+/// constructor puts in the object's flags), the arc the window's ATKP's (`+0x60` the angle x 2
+/// degrees in radians, `+0x64` cos(range), -1 for 0; KH1's angle test `0x1402B4640`, Checked
+/// (decomp), as `combat::Strikes::guard_data_of`). One per (ATKP, group, blade).
+unsafe fn guard_data(attack: u16, channel: u8, side: usize, range: u8, angle: i8) -> Option<usize> {
+    let key = (attack as u64) << 32 | (channel as u64) << 16 | (side as u64) << 8 | GUARD_MARK;
+    let d = super::bodyhits::data_copy(key)?;
+    let (src, _) = super::kh1rows::kh1_row(KH1_GUARD_ROW)?;
+    std::ptr::copy_nonoverlapping(src as *const u8, d as *mut u8, DATA);
+    wr(d + 8, 0u32);
+    if rd::<u32>(d + 0x10) != BLADE_BONE {
+        let was = rd::<u32>(d + 0x10);
+        note(|| format!("Final's Keyblade guard: KH1's guard row's bone is {was:#x}, not the blade: the blade taken"));
+        wr(d + 0x10, BLADE_BONE);
+    }
+    wr(d + 0x34, (rd::<u32>(d + 0x34) & !3) | channel as u32);
+    let cos = if range == 0 { -1.0f32 } else { (range as f32).to_radians().cos() };
+    wr(d + 0x60, (angle as f32 * 2.0).to_radians());
+    wr(d + 0x64, cos);
+    Some(d)
+}
+
+/// (t1043) One blade's KH1 guard object for a play of motion `m` (`guards_new_play`): KH1's attack
+/// constructor (`0x1402B2DC0`, as KH1's row maker `0x1402B3270` makes KH1's guard) on our copy of
+/// KH1's guard data (`guard_data`), with a hit bit of its own; the row maker's Keyblade part from
+/// that blade's own weapon row (`blade_fields`: radius, blade range; the left Keyblade's from
+/// `leftblade`'s owner copy) and its weapon object as the spark's source; its priority then KH1's
+/// guard's 100 (`GUARD_PRIORITY`), KH1's re-arm every `GUARD_REARM` frames, its request taken at
+/// once (`+0x58`), the left one's bone-source actor the left Keyblade's (`bone_source`). His
+/// "connected" word isn't given it (KH1's clash never writes it for priority 100).
+unsafe fn make_guard(side: usize, actor: usize, m: u16, req: u32, ch: u8, clip: &character_core::Clip) -> Option<BladeGuard> {
+    if !super::bodyhits::make_ok() {
+        return None;
+    }
+    let attack = clip.windows.iter().find_map(|w| match w.kind {
+        character_core::WindowKind::Guard { attack, weapon, .. } if if side == LEFT { weapon >= 2 } else { weapon == 1 } => Some(attack),
+        _ => None,
+    })?;
+    let kh2 = pose::kh2()?;
+    let (range, angle) = kh2.battle.attack_for_level(attack, 0, 0).map_or((0, 0), |a| (a.reflect_range, a.reflect_angle));
+    let data = guard_data(attack, ch, side, range, angle)?;
+    let base = super::bodyhits::base();
+    let make: unsafe extern "system" fn(usize, u32, usize) -> usize = std::mem::transmute(base + MAKE_STEAM);
+    let free_bit: unsafe extern "system" fn() -> u32 = std::mem::transmute(base + FREE_BIT_RVA);
+    let owner = if side == LEFT { super::leftblade::left_owner() } else { None };
+    let wobj = pose::ptr(rd::<u32>(owner.unwrap_or(actor) + 0x14C));
+    let bit = free_bit();
+    if bit == 0 {
+        note(|| format!("Final's Keyblade guard: no free hit bit (motion {m})"));
+        return None;
+    }
+    let obj = make(actor, bit, data);
+    if super::bodyhits::pool_index(obj).is_none() {
+        note(|| format!("Final's Keyblade guard: KH1's constructor gave {obj:#x} (pool full?)"));
+        return None;
+    }
+    if wobj > 0x10000 {
+        let row = rd::<u64>(wobj + 0x20) as usize;
+        if rd::<u32>(obj + 0x20) == BLADE_BONE && row > 0x10000 {
+            blade_fields(obj, data, actor, row);
+        }
+        wr(obj + 8, pose::handle(rd::<u64>(wobj + 0x18) as usize));
+    }
+    wr(obj + 0x68, GUARD_PRIORITY);
+    wr(obj + 0x50, GUARD_REARM);
+    wr(obj + 0x58, req);
+    if side == LEFT {
+        wr(obj + 0x90, bone_source(obj));
+    }
+    let spans = super::kh2slots::blade_guard_spans(clip, side == LEFT);
+    note(|| {
+        format!(
+            "Final's {} Keyblade guard: motion {m} (request {req:#x}): KH1's guard object {obj:#x} (KH1's guard row's data, ATKP {attack}, reflect range {range}) on KH1 group {ch}, KH1's blade r {:.1} range {:.2}..{:.2}, frames {spans:?}",
+            if side == LEFT { "left" } else { "right" },
+            rd::<f32>(obj + 0xC),
+            rd::<f32>(obj + 0x24),
+            rd::<f32>(obj + 0x28),
+        )
+    });
+    Some(BladeGuard { obj, data, motion: m, req })
 }
 
 /// Our attack data for one left window: a copy of Sora's KH1 swing row's (his finisher row's for
@@ -141,8 +351,11 @@ pub unsafe fn new_play(actor: usize, m: u16, req: u32, air: bool, clip: &charact
 /// and radius kept as they are; KH2's reaction on it (as our rows have, `kh1rows::make`), the
 /// left window's KH1 attack group, the Recoil row's clash rules (`kh1rows::kh2_clash`). Made the
 /// first time, refreshed each time (the clash rules can change).
-unsafe fn blade_data(motion: u16, window: usize, air: bool, channel: u8, a: &kh2_formats::battle::Atkp) -> Option<usize> {
-    let key = (motion as u64) << 32 | (window as u64 & 0xFF) << 16 | (air as u64) << 8 | KEY_MARK;
+/// (t1037) One copy per (ATKP, KH1 group, ground or air), what its contents are made from (before:
+/// per motion and window), so the two Keyblades' windows in Final's slots don't fill
+/// `bodyhits`' page of copies: Final's glide 205 / 206 / 207 share one 1281.
+unsafe fn blade_data(attack: u16, air: bool, channel: u8, a: &kh2_formats::battle::Atkp) -> Option<usize> {
+    let key = (attack as u64) << 32 | (channel as u64) << 16 | (air as u64) << 8 | KEY_MARK;
     let d = super::bodyhits::data_copy(key)?;
     let throws = super::kh1rows::throws(a);
     let (src, _) = super::kh1rows::kh1_row(super::bodyhits::template_row(air, throws))?;
@@ -205,34 +418,43 @@ unsafe fn blade_fields(obj: usize, data: usize, actor: usize, row: usize) {
 /// weapon row on it as KH1's row maker puts the right one's (`0x1402B3270`), its effect data as
 /// the spark's source, his "connected" word, and the left Keyblade's owner copy as its
 /// bone-source actor.
-unsafe fn make(actor: usize, m: u16, req: u32, air: bool, clip: &character_core::Clip) -> Option<Left> {
+/// (t1037) `RIGHT`: the right Keyblade's windows (weapon 1) on KH1's group 0, with Sora's own
+/// weapon row and effect data, Sora (the constructor's own) as its bone-source actor.
+unsafe fn make(side: usize, actor: usize, m: u16, req: u32, air: bool, clip: &character_core::Clip) -> Option<Left> {
     if !super::bodyhits::make_ok() {
         return None;
     }
-    let Some(ch) = super::kh2slots::left_channel(clip) else {
-        if clip.windows.iter().any(|w| matches!(w.kind, character_core::WindowKind::Hitbox { weapon, .. } if weapon >= 2)) {
-            note(|| format!("left Keyblade hits: motion {m} has no free KH1 attack group: left out"));
-        }
-        return None;
+    let mine = |weapon: u8| if side == LEFT { weapon >= 2 } else { weapon == 1 };
+    let ch = if side == LEFT {
+        let Some(ch) = super::kh2slots::left_channel(clip) else {
+            if clip.windows.iter().any(|w| matches!(w.kind, character_core::WindowKind::Hitbox { weapon, .. } if weapon >= 2)) {
+                note(|| format!("left Keyblade hits: motion {m} has no free KH1 attack group: left out"));
+            }
+            return None;
+        };
+        ch
+    } else {
+        // (KH1's Keyblade group, `kh2slots::kh1_tracks`' HIT track 0.)
+        0
     };
     let kh2 = pose::kh2()?;
     let base = super::bodyhits::base();
     let mut windows = Vec::new();
-    for (idx, w) in clip.windows.iter().enumerate() {
+    for w in &clip.windows {
         let character_core::WindowKind::Hitbox { attack, group, weapon, .. } = w.kind else { continue };
-        if weapon < 2 {
+        if !mine(weapon) {
             continue;
         }
         let Some(a) = kh2.battle.attack_for_level(attack, 0, 0).cloned() else { continue };
-        let Some(data) = blade_data(m, idx, air, ch, &a) else { continue };
+        let Some(data) = blade_data(attack, air, ch, &a) else { continue };
         windows.push(LeftWin { attack, group, start: w.start, end: w.end, data });
     }
     let first = windows.first().copied()?;
     let make: unsafe extern "system" fn(usize, u32, usize) -> usize = std::mem::transmute(base + MAKE_STEAM);
     let free_bit: unsafe extern "system" fn() -> u32 = std::mem::transmute(base + FREE_BIT_RVA);
     // The left Keyblade's weapon object (`leftblade`'s owner copy: the left Keyblade's row and
-    // effect data), else Sora's own.
-    let owner = super::leftblade::left_owner();
+    // effect data), else Sora's own. (The right Keyblade's: Sora's own.)
+    let owner = if side == LEFT { super::leftblade::left_owner() } else { None };
     let wobj = pose::ptr(rd::<u32>(owner.unwrap_or(actor) + 0x14C));
     let info = pose::ptr(rd::<u32>(actor + 0x14C));
     let bit = free_bit();
@@ -268,20 +490,24 @@ unsafe fn make(actor: usize, m: u16, req: u32, air: bool, clip: &character_core:
     }
     wr(obj + 0x58, req);
     // KH1's builder takes the blade's ends from this actor (`0x1402B3800`): the left Keyblade's.
-    wr(obj + 0x90, bone_source(obj));
+    // (The right one's: Sora, as the constructor set it.)
+    if side == LEFT {
+        wr(obj + 0x90, bone_source(obj));
+    }
     let list: Vec<String> = windows.iter().map(|w| format!("ATKP {} at {}..{:?}", w.attack, w.start, w.end)).collect();
     note(|| {
         format!(
-            "left Keyblade hits: motion {m} (request {req:#x}, {}): KH1 attack object {obj:#x} on KH1 group {ch}, KH1's blade r {:.1} range {:.2}..{:.2}{}: {}",
+            "{} Keyblade hits: motion {m} (request {req:#x}, {}): KH1 attack object {obj:#x} on KH1 group {ch}, KH1's blade r {:.1} range {:.2}..{:.2}{}: {}",
+            if side == LEFT { "left" } else { "right (no KH1 attack row here)" },
             if air { "air" } else { "ground" },
             rd::<f32>(obj + 0xC),
             rd::<f32>(obj + 0x24),
             rd::<f32>(obj + 0x28),
-            if owner.is_some() { "" } else { " (left Keyblade not drawn: on the right one)" },
+            if side == RIGHT || owner.is_some() { "" } else { " (left Keyblade not drawn: on the right one)" },
             list.join("; ")
         )
     });
-    Some(Left { obj, data: first.data, motion: m, windows, cur: None, was_open: false, row, actor })
+    Some(Left { obj, data: first.data, motion: m, req, windows, cur: None, was_open: false, row, actor })
 }
 
 /// Each frame KH1 has Sora (`takeover::physics`, beside `kh2slots::keyblade_rearm`, before KH1's
@@ -290,14 +516,23 @@ unsafe fn make(actor: usize, m: u16, req: u32, air: bool, clip: &character_core:
 /// `0x1403D25D0` keeps an attack per (group, weapon object), Checked (decomp)) re-arms the object
 /// with KH1's own re-arm (`rehit::new_attack`); each window's data (its reaction, clash rules,
 /// KH1 blade fields) goes on the object. (Its bone-source actor: `before_build`, once a build.)
+/// (t1037) Both objects, the left one's and the right one's (`RIGHT`); nothing with neither.
 pub unsafe fn step(actor: usize) {
-    if !super::bodyhits::native() || actor < 0x10000 || OBJ.load(Ordering::Relaxed) == 0 {
+    if !super::bodyhits::native() || actor < 0x10000 {
         return;
     }
-    let Ok(mut g) = STATE.try_lock() else { return };
+    for side in SIDES {
+        if OBJ[side].load(Ordering::Relaxed) != 0 {
+            step_one(side, actor);
+        }
+    }
+}
+
+unsafe fn step_one(side: usize, actor: usize) {
+    let Ok(mut g) = STATE[side].try_lock() else { return };
     if !g.as_ref().is_some_and(|l| still_ours(l)) {
         *g = None;
-        OBJ.store(0, Ordering::Relaxed);
+        OBJ[side].store(0, Ordering::Relaxed);
         return;
     }
     let obj = g.as_ref().map_or(0, |l| l.obj);
@@ -329,7 +564,7 @@ pub unsafe fn step(actor: usize) {
         super::rehit::new_attack(obj);
         static N: AtomicU32 = AtomicU32::new(0);
         if super::log_on(super::LogCat::Combat) && N.fetch_add(1, Ordering::Relaxed) < 40 {
-            log!(Combat, "left Keyblade hits: KH2's next attack (motion {m}, ATKP {} group {}, frame {t:.0}): its KH1 object re-armed", w.attack, w.group);
+            log!(Combat, "{} Keyblade hits: KH2's next attack (motion {m}, ATKP {} group {}, frame {t:.0}): its KH1 object re-armed", if side == LEFT { "left" } else { "right" }, w.attack, w.group);
         }
     }
 }
@@ -337,8 +572,9 @@ pub unsafe fn step(actor: usize) {
 /// `bodyhits`' hook on KH1's `0x1402B3800 (object, entries, count)`, before KH1's own builder runs
 /// for `obj`: for our object, its bone-source actor (`+0x90`) brought up to date (`leftblade`'s
 /// owner copy filled from this frame's matrices). KH1's builder does the rest.
+/// (t1043) And for Final's left Keyblade guard object, the same.
 pub unsafe fn before_build(obj: usize) {
-    if obj == 0 || OBJ.load(Ordering::Relaxed) != obj {
+    if obj == 0 || (OBJ[LEFT].load(Ordering::Relaxed) != obj && GUARD_OBJ[LEFT].load(Ordering::Relaxed) != obj) {
         return;
     }
     if rd::<u32>(obj) & 0x800 != 0 {
@@ -346,13 +582,19 @@ pub unsafe fn before_build(obj: usize) {
     }
 }
 
+/// Which of our objects `attack` is (`LEFT` / `RIGHT`).
+fn side_of(attack: usize) -> Option<usize> {
+    if attack == 0 {
+        return None;
+    }
+    SIDES.into_iter().find(|&s| OBJ[s].load(Ordering::Relaxed) == attack)
+}
+
 /// The window's ATKP for our object (`bodyhits::atkp`, `kh1rows::kh2_atkp`): the window open at
 /// the last step, else the first.
 pub unsafe fn atkp(attack: usize) -> Option<kh2_formats::battle::Atkp> {
-    if attack == 0 || OBJ.load(Ordering::Relaxed) != attack {
-        return None;
-    }
-    let g = STATE.try_lock().ok()?;
+    let side = side_of(attack)?;
+    let g = STATE[side].try_lock().ok()?;
     let l = g.as_ref().filter(|l| l.obj == attack && still_ours(l))?;
     let id = l.windows.get(l.cur.unwrap_or(0))?.attack;
     drop(g);
@@ -361,12 +603,10 @@ pub unsafe fn atkp(attack: usize) -> Option<kh2_formats::battle::Atkp> {
 
 /// `bodyhits::hit`: KH1's contact made a hit with our object (logged).
 pub unsafe fn hit(attack: usize, target: usize) {
-    if attack == 0 || OBJ.load(Ordering::Relaxed) != attack {
-        return;
-    }
-    let Ok(g) = STATE.try_lock() else { return };
+    let Some(side) = side_of(attack) else { return };
+    let Ok(g) = STATE[side].try_lock() else { return };
     let Some(l) = g.as_ref() else { return };
     let (atk, motion) = (l.windows.get(l.cur.unwrap_or(0)).map_or(0, |w| w.attack), l.motion);
     drop(g);
-    note(|| format!("KH2 left Keyblade hit: ATKP {atk} (motion {motion}) from KH1's pass on actor {target:#x}"));
+    note(|| format!("KH2 {} Keyblade hit: ATKP {atk} (motion {motion}) from KH1's pass on actor {target:#x}", if side == LEFT { "left" } else { "right" }));
 }

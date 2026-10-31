@@ -234,7 +234,7 @@ pub const PORTED_TO_VALOR: [u8; 1] = [37];
 
 /// Copies Sora's combo rows `rows` (and their motions: the clip, the body's and the first
 /// Keyblade's animation) into a form's data, where the form has no row of that id (the same
-/// skeleton, `load_form` checks it).
+/// skeleton, `load_form_noting` checks it).
 /// KH2 Sora's chest-opening motion as one of his motions (t783, the owner: Quick's Chest Animation row
 /// at KH2). It is in the treasure box's own motion set, not his: `obj/F_EX030.mset` entry 252, a capture
 /// set (BAR type 20) whose `0010` is his body and `0011` / `0012` his Keyblade, as KH2's reaction commands
@@ -304,12 +304,9 @@ fn port_moves(f: &mut Form, sora: &character_core::Character, sora_rig: &Rig, ro
     f.rig = Arc::new(rig);
 }
 
-fn load_form(install: &kh2_data::Install, source: kh2_data::Source, spec: kh2_data::sora::PlayerSpec, skeleton: usize) -> Result<Form, String> {
-    load_form_noting(install, source, spec, skeleton, false)
-}
-
-/// `load_form`; with `note`, every file read for it noted for the motion slot cache's manifest
-/// (`KH2_INPUTS`: a form baked into KH1 motion slots, Valor's, `kh2slots`).
+/// A Drive Form's files; with `note`, every file read for it noted for the motion slot cache's
+/// manifest (`KH2_INPUTS`: a form baked into KH1 motion slots, Valor's, `kh2slots`; every form
+/// since t1033, Final's too, so the plain `load_form` went).
 fn load_form_noting(install: &kh2_data::Install, source: kh2_data::Source, spec: kh2_data::sora::PlayerSpec, skeleton: usize, note: bool) -> Result<Form, String> {
     let data = if note {
         install.load_player_noting(source, spec, &|name, bytes| {
@@ -746,7 +743,9 @@ pub fn load_kh2() {
             };
             let final_form = if super::settings::get().drive {
                 let t = Instant::now();
-                match load_form(&install, source, kh2_data::sora::FORMS[4], rig.skeleton.len()) {
+                // (Its files noted for the slot cache: Final's moves are baked into KH1 motion slots,
+                // `kh2slots::FORM_SLOTS`, Final Form native, t1033.)
+                match load_form_noting(&install, source, kh2_data::sora::FORMS[4], rig.skeleton.len(), true) {
                     Ok(f) => {
                         log!(Animation,
                             "KH2 Final Form loaded: {} motions, {} combo rows, {} weapons (on bones {:?}), effects {}, in {:.1}s",
@@ -1424,9 +1423,16 @@ impl Baker {
         // (A slot longer than the clip, `kh1rows::Ours::frames`: the clip loops over it from its
         // own loop point, as KH2 plays it; the Aerial Dodge's 202.)
         let looping = frames as f32 > kh2_anim::length_frames(clip) + 1.0;
-        // (Valor's Keyblades held as KH2 holds them, `kh2_hold`: KH1's and KH2's binds.)
-        let valor = matches!(src.form, Some(super::form::Kind::Valor));
-        let binds = valor.then(|| (kh2_anim::Pose::bind(&self.skeleton).bones, kh2_anim::Pose::bind(&rig.skeleton).bones));
+        // (Valor's Keyblades held as KH2 holds them, `kh2_hold`: KH1's and KH2's binds. t1035:
+        // Final's too. `W_EX010_ULTF_R` (`03system` `wmst` row 10, Checked (files)) animates its
+        // bone 0 away from KH2's right palm 178 in every motion (idle x -72..-55, z 8..34; item use
+        // 9 up to about 120 out; glide 205 y about -100) and spins bone 2 (idle x 0 -> -2 pi a
+        // loop, glide z 0 -> -12 pi a 30-frame loop), so carrying bone 2 onto KH1's weapon bones
+        // 280..292 puts the float and the spin in every Final slot as data, no per-frame code. Not
+        // Master: its `_R` keeps bone 0 at (5.33, -2, 3) from the palm, held, and stays on
+        // `form_grip`.)
+        let kh2_held = matches!(src.form, Some(super::form::Kind::Valor | super::form::Kind::Final));
+        let binds = kh2_held.then(|| (kh2_anim::Pose::bind(&self.skeleton).bones, kh2_anim::Pose::bind(&rig.skeleton).bones));
         let right_palm = rig.weapons.first().and_then(|w| w.bone);
         for f in 0..=frames {
             let at = f as f32;
@@ -1439,8 +1445,8 @@ impl Baker {
                 }
             }
             let mut kh1 = self.retarget.pose(&body);
-            // Valor: its right Keyblade where KH2's weapon motion puts it (`kh2_hold`), in place of
-            // the teeth-up turn and `form_grip` below.
+            // Valor and Final: the right Keyblade where KH2's weapon motion puts it (`kh2_hold`), in
+            // place of the teeth-up turn and `form_grip` below.
             let held = match (&binds, right_palm) {
                 (Some((b1, b2)), Some(palm)) => kh2_hold(&mut kh1, &parents, b1, b2, &body, &weapon, (HANDS[0].0, palm), self.retarget.hip_ratio()),
                 _ => false,
@@ -1485,9 +1491,9 @@ impl Baker {
     /// main bake gives it) where they sit from the left hand (t831: in the palm's own space, the
     /// holder actor's root being Sora's left palm, `holder`). KH1's own pose task poses it on the
     /// holder actor at Sora's motion's time. `Err` names why it can't be made (no second weapon, a
-    /// mirrored grip, which KH1's channels can't hold). Valor's (t829) and Master's (t1024) are KH2's
-    /// left weapon bone 2 carried from KH2's left palm (86) onto KH1's (206) by `kh2_hold`, not
-    /// `left_bones`.
+    /// mirrored grip, which KH1's channels can't hold). Valor's (t829), Master's (t1024) and Final's
+    /// (t1035) are KH2's left weapon bone 2 carried from KH2's left palm (86) onto KH1's (206) by
+    /// `kh2_hold`, not `left_bones`.
     pub fn holder_poses(&self, src: &Src, motion: u16, field: bool, poses: &[Vec<Mat4>]) -> Result<(Vec<Vec<Mat4>>, f32), String> {
         let rig = src.rig;
         let clip = field.then(|| rig.field_motions.get(&motion)).flatten().or_else(|| rig.motions.get(&motion)).ok_or("KH2 has no animation for it")?;
@@ -1516,7 +1522,11 @@ impl Baker {
             // (Master, t1024: the same carry. Its `W_EX010_TRIF_L` animates its own bone 0 away from
             // KH2's left palm 86 in every motion (Checked (files)), so the float comes out of this
             // bake from data, no per-frame code.)
-            let (bones, from_hand) = if matches!(src.form, Some(super::form::Kind::Valor | super::form::Kind::Master)) {
+            // (Final, t1035: the same. `W_EX010_ULTF_L` (`wmst` row 11) animates its bone 0 away
+            // from palm 86 in every motion too (idle x -41..-33) and spins bone 2 (idle x 0 -> 2 pi
+            // a loop), Checked (files). `left_bones` hung it from the right hand, wrong for Final:
+            // each of its Keyblades floats from its own palm.)
+            let (bones, from_hand) = if matches!(src.form, Some(super::form::Kind::Valor | super::form::Kind::Master | super::form::Kind::Final)) {
                 let mut l = kh1.clone();
                 if !kh2_hold(&mut l, &parents, &kh1_bind, &b2, &body, &left, (hand, sl), ratio) {
                     return Err(format!("the left hold isn't finite at frame {f}"));
@@ -1614,8 +1624,7 @@ fn follow_baked(s: &mut Sora, slot: Option<usize>, to_world: &Mat4, motion: u16)
             // KH2's (the draw itself is still ours, a second queue of the model; after `wanted`,
             // `kh1_left_blade`).
             if two {
-                let trail = src.character.moveset.clips.get(&motion).is_some_and(|c| c.has(at as u32, |k| matches!(k, character_core::WindowKind::WeaponTrail { .. })));
-                super::leftblade::kh2_left((!left.is_empty()).then_some(left.as_slice()), &pose, motion, at as u32, trail);
+                super::leftblade::kh2_left((!left.is_empty()).then_some(left.as_slice()));
                 s.kh2_now = Some((pose, weapon));
             }
         }
@@ -2166,13 +2175,9 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
                 *h = Some(Hands { orig: o, drawn: o, at: Instant::now() });
             }
         }
-        // Valor Form on KH1's own states (a baked slot of Valor's, `follow_baked` noted its KH2
-        // frame): the left Keyblade from KH1's own drawing of the right one (`leftblade`).
-        if let (true, Some((body, weapon))) = (super::form::native_now() && super::form::two_blades(), s.kh2_now.as_ref()) {
-            let back = to_world.inverse();
-            let kh1: Vec<Mat4> = (0..SORA_BONES as usize).map(|i| back * mat(world + i * 0x40)).collect();
-            super::leftblade::note_pose(&kh1, &s.bind, body, weapon, &to_world, s.retarget.as_ref().map_or(1.0, |r| r.hip_ratio()));
-        }
+        // (t1035: the left Keyblade's pose from KH1's drawing of the right one, `leftblade::note_pose`,
+        // is gone with the old controller's left draw: on KH1's states the holder actor carries it,
+        // posed by KH1 from its holder motion.)
         // KH2's model (`model`) on KH1's own animation, as drawn.
         if let (true, Some(inv)) = (super::model::on(), s.inverse.as_ref()) {
             let back = to_world.inverse();
@@ -2218,10 +2223,8 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
     }
     // A dream weapon whole, as KH1 holds it.
     dream_hold(&mut pose, &s.parents, (!ours).then_some(world));
-    // Final Form's Keyblade floating where KH2's weapon motion has it.
-    if let (Some((body, weapon)), true) = (s.kh2_now.as_ref(), super::form::in_final()) {
-        super::leftblade::final_float(&mut pose, &s.bind, body, weapon, s.retarget.as_ref().map_or(1.0, |r| r.hip_ratio()));
-    }
+    // (t1035: Final Form's right Keyblade is no longer floated here each frame, `leftblade::final_float`:
+    // its float and spin are baked into every Final slot, `Baker::poses_of`'s `kh2_hold`.)
     for (i, m) in pose.iter().enumerate().take(SORA_BONES as usize) {
         std::ptr::write_unaligned((world + i * 0x40) as *mut [f32; 16], (to_world * *m).to_cols_array());
     }
@@ -2241,16 +2244,11 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
             *k = Some((o.0, o.1, to_world * pose[280], to_world * pose[283], ours));
         }
     }
-    // Valor's second Keyblade (`leftblade`): the left hand's weapon bones, from this pose and
-    // KH2's, handed to its draw (it does nothing outside Valor or with it off).
     // KH2's model (`model`): KH2's own pose, or KH1's (its own motion drawn) on KH2's skeleton.
     match (s.kh2_now.as_ref(), s.inverse.as_ref()) {
         (Some((body, weapon)), _) => super::model::note_pose(body, weapon, &to_world, r_ratio(s.retarget.as_ref())),
         (None, Some(inv)) if super::model::on() => super::model::note_pose(&inv.pose(&pose), &[], &to_world, r_ratio(s.retarget.as_ref())),
         _ => {}
-    }
-    if let Some((body, weapon)) = s.kh2_now.as_ref() {
-        super::leftblade::note_pose(&pose, &s.bind, body, weapon, &to_world, s.retarget.as_ref().map_or(1.0, |r| r.hip_ratio()));
     }
     if let Ok(mut h) = HANDS_NOW.lock() {
         let orig = orig_hands.or(h.map(|h| h.orig)).unwrap_or(drawn);

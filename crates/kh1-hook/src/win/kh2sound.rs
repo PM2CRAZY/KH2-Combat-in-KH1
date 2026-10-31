@@ -680,8 +680,11 @@ const KH1_TO_KH2: [(i32, i16); 3] = [(4, 4), (5, 5), (6, 6)];
 /// Sora's `motion` reached a KH2 event: its sound, if it has one.
 pub unsafe fn event(motion: u16, kind: character_core::EventKind) {
     use character_core::EventKind;
-    // (Valor's swings and voices are its own, whatever `kh2_sounds` lists: `start`.)
-    let valor = (super::form::in_valor() || super::form::in_final()) && matches!(kind, EventKind::Sound(_) | EventKind::Voice(_));
+    // (Valor's swings and voices are its own, whatever `kh2_sounds` lists: `start`. t1032, the owner
+    // (answer 2 after t1031: "(a)"): Limit's and Master's too, as Valor's; they played only when the
+    // ini's `kh2_sounds` listed the motion. A voice still plays only with Battle Quotes KH2 (the
+    // voice arm below).)
+    let valor = (super::form::in_valor() || super::form::in_final() || super::form::in_limit() || super::form::in_master()) && matches!(kind, EventKind::Sound(_) | EventKind::Voice(_));
     // (Battle quotes on every move, `kh2_voice`.)
     let quote = matches!(kind, EventKind::Voice(_)) && kh2_voice();
     if !(allowed(motion) || super::form::own_motion(motion) || valor || quote) {
