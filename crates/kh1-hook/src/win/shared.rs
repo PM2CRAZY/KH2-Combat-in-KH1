@@ -221,6 +221,10 @@ pub fn control(s: &Seen) -> u32 {
         // (Limit Form, t969: KH2's action button finds its guard (row 11, motion 173) and Dodge Roll
         // (its growth ability), base Sora's native paths below with its own clips and levels.)
         Some(super::form::Kind::Limit) => {}
+        // (Master Form, t1021: KH2's action button finds no guard (none in its 42 or PTYA set 4) and
+        // no roll; its jump in the air is its Aerial Dodge (its growth ability), base Sora's native
+        // path below with its own clip and levels.)
+        Some(super::form::Kind::Master) => {}
         Some(_) => {
             if s.state == 0 && square_fresh && s.can_act {
                 let _ = unsafe { quick_run_on_stick("Square in Wisdom Form (its growth ability)") };
@@ -881,6 +885,27 @@ pub mod physics {
     /// KH1's cut is closed on it and it always rises fully (`kh1_held_jump`).
     pub unsafe fn kh2_hop_held(actor: usize, height: f32, vel: [f32; 2]) {
         kh2_hop_as(actor, height, vel, true);
+    }
+
+    /// t1008: KH2's party-attack hop in a limit's KH1 state (Infinity's spins, `limitform`), whose
+    /// step is KH1's jump step `0x1402AF6A0` as KH1's Ragnarok's state 0x25 has it (Checked
+    /// (decomp)): KH1's arc fields set for KH2's height and sideways speed as `kh2_hop` sets them
+    /// (physics KH2: KH2's arc on KH2's gravity in KH1's fields, `kh1phys::Arc::from_kh2`; physics
+    /// KH1: KH1's rise of that height on KH1's gravity), but no arc of ours kept for state 2's step
+    /// (`air_step` moves only state 2; the limit's state is KH1's own step's).
+    pub unsafe fn limit_hop(actor: usize, height: f32, vel: [f32; 2]) {
+        let y: f32 = rd(actor + 0x14);
+        if !is_sora(actor) || !y.is_finite() || !height.is_finite() {
+            return;
+        }
+        let vel = kh1phys::carried(vel);
+        mark_hop(actor);
+        let kh1 = match if kh2() { numbers() } else { None } {
+            Some(n) => kh1phys::Arc::from_kh2(&Arc::new(height, n.gravity), y, n.gravity, n.fall_max),
+            None => kh1phys::Arc::hop(y, height),
+        };
+        set_kh1_motion(actor, &Motion { h: vel, arc: kh1 }, dt());
+        off_air();
     }
 
     unsafe fn kh2_hop_as(actor: usize, height: f32, vel: [f32; 2], holdable: bool) {
@@ -1594,6 +1619,12 @@ pub mod physics {
     /// its fall (below), as KH1 does. Here: this frame's step (KH1's step's result and the motion's
     /// travel KH1 adds after it, `+0x200`), on KH1's collision (`combomods::floor_gone`); with no
     /// floor, both lose their horizontal part.
+    /// t1011: KH2's edge stop in a limit's KH1 state (`limitform`, Ledges at KH2): the same stop as
+    /// on KH1's ground state's step, on our state's step result and the travel KH1 adds after it.
+    pub unsafe fn limit_edge_stop(actor: usize, disp: *mut [f32; 4]) {
+        edge_stop(actor, disp);
+    }
+
     unsafe fn edge_stop(actor: usize, disp: *mut [f32; 4]) {
         if disp.is_null() || !super::super::kh2slots::edge_stop(actor) {
             return;

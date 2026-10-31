@@ -25,7 +25,13 @@
 //!   Zero doesn't stop it. Assumption: every KH1 enemy gives its EXP through one of the two once
 //!   when defeated, and counts as a Heartless (KH1's ids aren't KH2's).
 //! - **Final, +1 per Nobody defeated**: KH1 has none, so Final gains nothing (asked).
-//! - Limit (its limits' finishers) and Master (Drive orbs) aren't on the testing branch.
+//! - Limit (t973): +1 per finishing follow-up of its limits (`follow_up`).
+//! - **Master (t1026), its Drive orbs**: KH2's prize pickup `0x1403DCA50` gives the orb's value
+//!   (the reward table `0x1405C7420` `+6`) to the gauge (`0x1403A9CF0`) and to `0x1403E8760 (value)`,
+//!   which adds it through `0x1403E8380` only while the player's form `+0xDE0` is 4 (Checked
+//!   (decomp)). Here KH1's prize pickup (hooked since t946, `driveorbs::pickup`) calls `orb` with the
+//!   orb's value (small 1, big 3, `drivegauge::SMALL_ORB` / `BIG_ORB`) after it has fed the gauge;
+//!   nothing per frame.
 //! - Base Sora's side (the tester, after m15, answer 6: "(c)"): his growth level from each form's
 //!   level (`base_growth`) and the fmlv rows' abilities (`rewards_due` / `rewarded`), given in
 //!   KH1's own ability lists by `menu::Growth::update`.
@@ -47,6 +53,12 @@ pub const FORM_LEVELS_OFF: usize = 0x882;
 /// `0x16C00` bytes are copied whole (`0x1402CF7E0`), so the record travels with it. (`+0x87E..`,
 /// inside KH1's 64-bit flag word `+0x878`, `0x140285790`, isn't free.)
 pub const LIMIT_LEVEL_OFF: usize = 0x890;
+/// Master Form's record (t1026, the owner's answer 1 after research round 2): save `+0x892`, the
+/// u16 after Limit's in the same unlisted span `+0x888..+0xC00` (Limit's notes above; Checked
+/// (exe), the scan of the whole disassembly; Assumption: nothing through a computed pointer). Our
+/// code used nothing there before (Checked (code)). An old save's u16 there reads by
+/// `Record::unpack` (0: never entered, Lv1).
+pub const MASTER_LEVEL_OFF: usize = 0x892;
 
 /// KH1's enemy scripts' EXP commands (Steam), their first whole instructions (`push rbx; sub
 /// rsp, 0x20; mov rbx, rcx` / `push rbx; sub rsp, 0x50`).
@@ -66,17 +78,20 @@ fn kh2_form(kind: Kind) -> u8 {
         Kind::Valor => formlevel::form::VALOR,
         Kind::Wisdom => formlevel::form::WISDOM,
         Kind::Limit => formlevel::form::LIMIT,
+        Kind::Master => formlevel::form::MASTER,
         Kind::Final => formlevel::form::FINAL,
     }
 }
 
 /// The form's u16 in the save (its offset): Valor, Wisdom, Final at `+0x882..`, Limit at
-/// `+0x890` (t973).
+/// `+0x890` (t973), Master at `+0x892` (t1026).
 fn slot(kind: Kind) -> Option<usize> {
     match kind {
         Kind::Valor => Some(FORM_LEVELS_OFF),
         Kind::Wisdom => Some(FORM_LEVELS_OFF + 2),
         Kind::Limit => Some(LIMIT_LEVEL_OFF),
+        // (Master, t1026: its own record; before it, LV1 by `Record::default`.)
+        Kind::Master => Some(MASTER_LEVEL_OFF),
         Kind::Final => Some(FORM_LEVELS_OFF + 4),
     }
 }
@@ -106,7 +121,7 @@ unsafe fn save() -> Option<usize> {
     if base == 0 {
         return None;
     }
-    super::menu::save_block(base).filter(|s| super::crash::readable(s + LIMIT_LEVEL_OFF + 2))
+    super::menu::save_block(base).filter(|s| super::crash::readable(s + MASTER_LEVEL_OFF + 2))
 }
 
 unsafe fn raw(save: usize, kind: Kind) -> u16 {
@@ -126,12 +141,13 @@ pub fn growth(kind: Kind) -> u8 {
 
 /// Base Sora's own growth levels from the forms' levels (KH2's `0x1403E8380`: one under the
 /// form's growth level, `formlevel::sora_growth`), for `growth::Kh1Sora::form_growth`: Valor's
-/// High Jump, Wisdom's Quick Run, Limit's Dodge Roll (t975), Final's Glide. All 0 without the
-/// table or the save.
+/// High Jump, Wisdom's Quick Run, Limit's Dodge Roll (t975), Master's Aerial Dodge (t1026: fmlv
+/// form 4's growth 1, 1, 2, 2, 3, 3, 4, so his own 0, 0, 1, 1, 2, 2, 3, Checked (files)), Final's
+/// Glide. All 0 without the table or the save.
 pub fn base_growth() -> crate::growth::FormGrowth {
     let Some(t) = table() else { return Default::default() };
     let g = |kind: Kind| formlevel::sora_growth(t, kh2_form(kind), unsafe { record(kind) }.level);
-    crate::growth::FormGrowth { high_jump: g(Kind::Valor), quick_run: g(Kind::Wisdom), glide: g(Kind::Final), dodge_roll: g(Kind::Limit) }
+    crate::growth::FormGrowth { high_jump: g(Kind::Valor), quick_run: g(Kind::Wisdom), glide: g(Kind::Final), dodge_roll: g(Kind::Limit), aerial_dodge: g(Kind::Master) }
 }
 
 /// The fmlv abilities the forms' levels have reached and Sora hasn't been given yet (KH2 gives
@@ -139,7 +155,10 @@ pub fn base_growth() -> crate::growth::FormGrowth {
 pub fn rewards_due() -> Vec<(Kind, u8, u16)> {
     let Some(t) = table() else { return Vec::new() };
     let mut out = Vec::new();
-    for kind in [Kind::Valor, Kind::Wisdom, Kind::Limit, Kind::Final] {
+    // (Master since t1026: fmlv form 4 gives Auto Master (387) at LV2, no KH1 counterpart, passed
+    // with a note as the other Auto abilities, and Air Combo Plus (163) at LV4 and LV6, Checked
+    // (files).)
+    for kind in [Kind::Valor, Kind::Wisdom, Kind::Limit, Kind::Master, Kind::Final] {
         let rec = unsafe { record(kind) };
         out.extend(formlevel::rewards_due(t, kh2_form(kind), &rec).into_iter().map(|(l, id)| (kind, l, id)));
     }
@@ -228,6 +247,26 @@ pub unsafe fn hit(owner: usize, target: usize, rec: usize) {
     }
     if owner == super::takeover::sora_actor() && super::form::current() == Some(Kind::Valor) {
         add(Kind::Valor, 1, "a hit landed");
+    }
+}
+
+/// KH2's Limit Form EXP (`0x1403E8730 (player, command)`, called from `0x1403D8B40`'s follow-up
+/// branch, Steam KH2, Checked (decomp) and (files)): in Limit Form, +1 for each finishing follow-up
+/// used: 686 Giga Impact, 700 Finish, 703 The End, 706 Judgment (one a limit, not one a hit).
+pub const LIMIT_FINISHERS: [u16; 4] = [686, 700, 703, 706];
+
+/// A limit's follow-up `command` (KH2's) used (`limitform::follow_up`).
+pub unsafe fn follow_up(command: u16) {
+    if super::form::current() == Some(Kind::Limit) && LIMIT_FINISHERS.contains(&command) {
+        add(Kind::Limit, 1, "a limit's finish");
+    }
+}
+
+/// A Drive orb of `value` picked up (`driveorbs::pickup`, t1026): Master's EXP while Sora is in
+/// Master (KH2's `0x1403E8760`, its form test 4, Checked (decomp)).
+pub unsafe fn orb(value: u8) {
+    if super::form::current() == Some(Kind::Master) {
+        add(Kind::Master, value as u32, "a Drive orb");
     }
 }
 

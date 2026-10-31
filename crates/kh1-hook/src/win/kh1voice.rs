@@ -21,7 +21,7 @@
 
 use super::addr::Rva;
 use super::log;
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 
 /// KH1's voice group play `(actor, group, other actor or 0)`.
 const GROUP_RVA: Rva = Rva(0x28E060);
@@ -99,6 +99,26 @@ pub unsafe fn dodge_roll(actor: usize) {
     play(actor, SWING_GROUP);
 }
 
+/// What a stand-in plays (t1017).
+#[derive(Clone, Copy)]
+enum Line {
+    /// The dodge roll's grunt.
+    Roll,
+    /// One of KH1's voice groups for Sora (4 swing grunts, 5 finisher lines, 6 the big line; his
+    /// voice table `btltbl.bin` +0xBC48, Checked (files)).
+    Group(i32),
+    /// The first Rave of a Sonic Rave silent, the rest a swing grunt (`RAVES`).
+    Rave,
+    /// "Give me strength!", the Drive's line (a limit's start: the owner's answer 1, t1012 round,
+    /// "Drive-style line").
+    Drive,
+}
+
+/// KH1's finisher-line and big-line groups (KH1's Sonic Blade ends on 6, Ars Arcanum on 5 then 6:
+/// their rows' `+0xF`, Checked (files)).
+const FINISHER_GROUP: i32 = 5;
+const BIG_GROUP: i32 = 6;
+
 /// KH1 lines standing in for a KH2 voice (its frame trigger 13 / 14) on a KH2 move KH1 gives no
 /// voice of its own: (KH2 motion, KH2 voice, what plays). KH1 plays Sora's battle voice only from
 /// code (attack rows, spells, hits, summons), never from a motion, and its roll has none
@@ -106,13 +126,97 @@ pub unsafe fn dodge_roll(actor: usize) {
 /// voice, so only row-less moves are here.
 /// - KH2's dodge roll (motion 209, voice 7 at frame 0, Checked (files)): a swing grunt (group 4),
 ///   the user's pick for it before ("one of the grunts during his first keyblade swing").
-const STAND_INS: [(u16, i16); 1] = [(character_core::motion::DODGE_ROLL, 7)];
+/// - t1017, Sonic Rave (the owner, t1012: "sonic rave is missing quotes for kh1"; Limit Form's rows
+///   carry no KH1 voice, `kh1rows`' limit moves). KH2's (Checked (files), Limit Form's motions'
+///   trigger 14): the start 211 voice 8, each Rave 212 voice 4, the Finish 213 voice 6, at frame 0.
+///   KH1's Sonic Blade (its rows 0x1B..0x21's `+0xF`, Checked (files)): its first dash silent, the
+///   next ones a swing grunt, the last the big line; the owner's answer 2: KH1's pattern (the first
+///   Rave silent, the rest grunts, the Finish the big line), the start the Drive's line (answer 1).
+/// - t1018, Last Arcanum (the owner, t1012: "last arcanum is missing qoutes"). KH2's (Checked
+///   (files)): the start 221 voice 6 at 0, 4 at 77, 5 at 104; Bash 1..4 (222..225) voice 7; Bash 5
+///   (226) voice 5; The End (227) voice 6. The owner's answer 3: by kind (KH2's 4 and 7 a swing
+///   grunt, 5 KH1's finisher line, 6 KH1's big line, as KH1's Ars Arcanum ends on 5 then 6), the
+///   start's frame-0 line the Drive's (answer 1).
+const STAND_INS: [(u16, i16, Line); 11] = [
+    (character_core::motion::DODGE_ROLL, 7, Line::Roll),
+    (211, 8, Line::Drive),
+    (212, 4, Line::Rave),
+    (213, 6, Line::Group(BIG_GROUP)),
+    (221, 6, Line::Drive),
+    (221, 4, Line::Group(SWING_GROUP)),
+    (221, 5, Line::Group(FINISHER_GROUP)),
+    (222, 7, Line::Group(SWING_GROUP)),
+    (223, 7, Line::Group(SWING_GROUP)),
+    (224, 7, Line::Group(SWING_GROUP)),
+    (225, 7, Line::Group(SWING_GROUP)),
+];
+/// (Last Arcanum's Bash 5 and The End, t1018.)
+/// t1019, Strike Raid and Infinity by the same rule (the owner's answer 4, "add them now"). KH2's
+/// (Checked (files)): Strike Raid's start 231 voice 8, each throw 232 voice 4 at frame 8, Judgment
+/// 233 voice 6, the catch 234 none; Infinity's start 241 voice 8, the spins 242 / 244 voice 4, the
+/// hover 246 voice 5, Shoot / Impact 247 voice 7, Giga Impact 248 voice 6.
+const STAND_INS_MORE: [(u16, i16, Line); 11] = [
+    (226, 5, Line::Group(FINISHER_GROUP)),
+    (227, 6, Line::Group(BIG_GROUP)),
+    (231, 8, Line::Drive),
+    (232, 4, Line::Group(SWING_GROUP)),
+    (233, 6, Line::Group(BIG_GROUP)),
+    (241, 8, Line::Drive),
+    (242, 4, Line::Group(SWING_GROUP)),
+    (244, 4, Line::Group(SWING_GROUP)),
+    (246, 5, Line::Group(FINISHER_GROUP)),
+    (247, 7, Line::Group(SWING_GROUP)),
+    (248, 6, Line::Group(BIG_GROUP)),
+];
+
+/// t1030, Master Form (the owner, §24.2 answer 7: KH1 stand-ins by t1017..t1019's rule). KH2's
+/// (Checked (files), `P_EX100_TRIF.mset` trigger 14, re-dumped): 181 / 182 / 185 voice 4 at frame 0;
+/// 183 voice 6 at 0, 4 at 50, 5 at 100; 184 voice 8 at 0, 5 at 190; the arrival 53 none. Each of
+/// these moves runs a KH1 attack row (the air combo on KH1's 0xCC..0xCE rows, ours "181" / "182" /
+/// "185" / "184" from KH1's air rows), whose start already says the row's voice at frame 0
+/// (`btltbl.bin` +0xA9F0 `+0xF`, Checked (files): rows 17 / 18 (0xCD / 0xCC) group 4, rows 16 / 19
+/// (0xCE) group 5; our combo rows keep their template's byte, `kh1rows`). So, as the rule's "only
+/// row-less moves", the frame-0 voices get no stand-in here (one would double the row's line);
+/// only the lines KH2 says later in the move, which no row covers: 183's 4 (a swing grunt) and 5
+/// (KH1's finisher line), 184's 5. Only in Master (`form::in_master`): the motion ids are shared
+/// with base Sora's and the other forms' moves, whose voices are left as they were.
+const MASTER_STAND_INS: [(u16, i16, Line); 3] = [(183, 4, Line::Group(SWING_GROUP)), (183, 5, Line::Group(FINISHER_GROUP)), (184, 5, Line::Group(FINISHER_GROUP))];
+
+/// The Raves of a Sonic Rave so far (the start's line resets it) and the game frame the last fired
+/// (the script starts the first Rave over on the frame KH1's queue started it, so a second key
+/// within two frames is the same Rave).
+static RAVES: AtomicU32 = AtomicU32::new(0);
+static RAVE_AT: AtomicU64 = AtomicU64::new(0);
 
 /// A KH2 voice key of a baked slot fired with Battle Quotes KH1 (`kh2slots::sound_event`): KH1's
 /// stand-in line, if the move has one (`STAND_INS`), on KH1's motion pass as the KH2 voice would be.
 pub unsafe fn stand_in(actor: usize, motion: u16, voice: i16) {
-    if STAND_INS.iter().any(|&(m, v)| m == motion && v == voice) {
-        dodge_roll(actor);
+    // (t1030: Master's own, only in Master, `MASTER_STAND_INS`.)
+    let master: &[(u16, i16, Line)] = if super::form::in_master() { &MASTER_STAND_INS } else { &[] };
+    let Some(&(_, _, line)) = master.iter().chain(STAND_INS.iter()).chain(STAND_INS_MORE.iter()).find(|&&(m, v, _)| m == motion && v == voice) else { return };
+    static N: AtomicU32 = AtomicU32::new(0);
+    match line {
+        Line::Roll => dodge_roll(actor),
+        Line::Group(g) => {
+            note(&N, || format!("KH2 motion {motion}'s voice {voice}: KH1's group {g}"));
+            play(actor, g);
+        }
+        Line::Drive => {
+            RAVES.store(0, Ordering::Relaxed);
+            give_me_strength(actor);
+        }
+        Line::Rave => {
+            let now = super::takeover::GAME_FRAME.load(Ordering::Relaxed);
+            let last = RAVE_AT.swap(now, Ordering::Relaxed);
+            if last != 0 && now.saturating_sub(last) <= 2 {
+                return;
+            }
+            let n = RAVES.fetch_add(1, Ordering::Relaxed);
+            note(&N, || format!("Sonic Rave's Rave {}: {}", n + 1, if n == 0 { "silent (KH1's first dash)" } else { "a swing grunt" }));
+            if n > 0 {
+                play(actor, SWING_GROUP);
+            }
+        }
     }
 }
 

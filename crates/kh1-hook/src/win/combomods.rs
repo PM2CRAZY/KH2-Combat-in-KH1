@@ -2360,8 +2360,8 @@ const SET_STATE_RVA: Rva = Rva(0x2AF7D0);
 /// note_launch`), once per air time (`shared::mark_air_dodged`). KH1's jump state (1, its
 /// take-off) is put in its air state first, as KH1's own launch `0x1402AF960` does (state 2, the
 /// jump's motion base `+0x3D0` 0, flag `0x10000` off). No borrow: KH2's controller doesn't take
-/// him. False (the borrow then) out of KH1's jump / air state, in a Drive Form, or with our
-/// request not built.
+/// him. False (the borrow then) out of KH1's jump / air state, in a Drive Form other than Master
+/// (t1021), or with our request not built.
 pub unsafe fn aerial_dodge(actor: usize) -> bool {
     let Some(g) = takeover::kh2_air_dodge_growth() else { return false };
     aerial_dodge_with(actor, g)
@@ -2371,7 +2371,8 @@ pub unsafe fn aerial_dodge(actor: usize) -> bool {
 /// borrow, where KH2's controller is held).
 pub unsafe fn aerial_dodge_with(actor: usize, (height, speed): (f32, f32)) -> bool {
     use character_core::motion::AERIAL_DODGE;
-    if actor < 0x10000 || super::form::in_form() {
+    // (t1021: in Master Form too, its growth ability, on its own slot of 202, `kh2slots::FORM_SLOTS`.)
+    if actor < 0x10000 || (super::form::in_form() && !super::form::in_master()) {
         return false;
     }
     let Some(n) = super::kh1rows::by_motion(AERIAL_DODGE) else { return false };

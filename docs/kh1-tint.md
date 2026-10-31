@@ -198,6 +198,9 @@ look, KH1's own texture back out of the form:
 - **Wisdom** (blue): the reds of `-1c0` / `-1c1` (hue shift to 225°), the shoes' yellow of `-1c3`,
   and the jacket's sleeves.
 - **Valor** (red): the sleeves, the belt, the hood's lining, the shoes' yellow.
+- **Master** (t1029, main's yellow spec): the belt's blue black first; the hood lining's blue, the jumpsuit's red on `-1c1`
+  and the collar's red strip on `-1c0` (main's region u 0..0.025 × v 0.34..0.70, leaving `-1c0`'s red oval on the shoe piece)
+  painted one bright yellow (hue 45°, saturation 0.85, brightness 0.55 + 0.45 × v, main's values); shoes and jacket kept.
 
 Where the parts are, from plotting the remastered mesh 1 (and 3)'s vertices on the texture by
 the bone each follows (`-c0.cvbl`: tag 0x11 chunks give matrix slot → bone at `+8` / `+0xC`, a

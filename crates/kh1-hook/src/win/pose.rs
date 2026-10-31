@@ -168,6 +168,8 @@ pub struct Kh2 {
     pub valor: Option<Form>,
     /// Limit Form (`form`, t969: `P_EX100_KH1F`, moveset 0x42, its moves on KH1's own states).
     pub limit_form: Option<Form>,
+    /// Master Form (`form`, t1021: `P_EX100_TRIF`, moveset 4, its moves on KH1's own states).
+    pub master: Option<Form>,
     /// Final Form (`form`, stage 231: `P_EX100_ULTF`, its floating Keyblades).
     pub final_form: Option<Form>,
     roots: HashMap<u16, Vec<[f32; 3]>>,
@@ -725,6 +727,23 @@ pub fn load_kh2() {
             } else {
                 None
             };
+            let master = if super::settings::get().drive {
+                let t = Instant::now();
+                // (Its files noted for the slot cache: Master's moves are baked into KH1 motion slots,
+                // `kh2slots::FORM_SLOTS`, Master Form native, t1021.)
+                match load_form_noting(&install, source, kh2_data::sora::FORMS[3], rig.skeleton.len(), true) {
+                    Ok(f) => {
+                        log!(Animation, "KH2 Master Form loaded: {} motions, {} combo rows, {} weapons, effects {}, in {:.1}s", f.rig.motions.len(), f.character.moveset.combo_rows.len(), f.rig.weapons.len(), if f.archive.is_some() { "read" } else { "missing" }, t.elapsed().as_secs_f32());
+                        Some(f)
+                    }
+                    Err(e) => {
+                        log!(Animation, "KH2 Master Form did not load: {e}");
+                        None
+                    }
+                }
+            } else {
+                None
+            };
             let final_form = if super::settings::get().drive {
                 let t = Instant::now();
                 match load_form(&install, source, kh2_data::sora::FORMS[4], rig.skeleton.len()) {
@@ -748,7 +767,7 @@ pub fn load_kh2() {
             } else {
                 None
             };
-            Ok(Kh2 { rig, character: sora.character.clone(), battle: Arc::new(sora.combat.battle.clone()), magi: sora.magi.clone(), wisdom, valor, limit_form, final_form, roots, ground })
+            Ok(Kh2 { rig, character: sora.character.clone(), battle: Arc::new(sora.combat.battle.clone()), magi: sora.magi.clone(), wisdom, valor, limit_form, master, final_form, roots, ground })
         })();
         if let Err(e) = &r {
             log!(Animation, "KH2 Sora did not load: {e}");
@@ -1466,8 +1485,9 @@ impl Baker {
     /// main bake gives it) where they sit from the left hand (t831: in the palm's own space, the
     /// holder actor's root being Sora's left palm, `holder`). KH1's own pose task poses it on the
     /// holder actor at Sora's motion's time. `Err` names why it can't be made (no second weapon, a
-    /// mirrored grip, which KH1's channels can't hold). Valor's (t829) are KH2's left weapon bone 2
-    /// carried from KH2's left palm (86) onto KH1's (206) by `kh2_hold`, not `left_bones`.
+    /// mirrored grip, which KH1's channels can't hold). Valor's (t829) and Master's (t1024) are KH2's
+    /// left weapon bone 2 carried from KH2's left palm (86) onto KH1's (206) by `kh2_hold`, not
+    /// `left_bones`.
     pub fn holder_poses(&self, src: &Src, motion: u16, field: bool, poses: &[Vec<Mat4>]) -> Result<(Vec<Vec<Mat4>>, f32), String> {
         let rig = src.rig;
         let clip = field.then(|| rig.field_motions.get(&motion)).flatten().or_else(|| rig.motions.get(&motion)).ok_or("KH2 has no animation for it")?;
@@ -1493,7 +1513,10 @@ impl Baker {
             };
             // (Valor, t829: KH2's left weapon bone 2 carried from its left palm onto KH1's, as the
             // right one is in the main bake, `kh2_hold`; no correction taken from the right hand.)
-            let (bones, from_hand) = if matches!(src.form, Some(super::form::Kind::Valor)) {
+            // (Master, t1024: the same carry. Its `W_EX010_TRIF_L` animates its own bone 0 away from
+            // KH2's left palm 86 in every motion (Checked (files)), so the float comes out of this
+            // bake from data, no per-frame code.)
+            let (bones, from_hand) = if matches!(src.form, Some(super::form::Kind::Valor | super::form::Kind::Master)) {
                 let mut l = kh1.clone();
                 if !kh2_hold(&mut l, &parents, &kh1_bind, &b2, &body, &left, (hand, sl), ratio) {
                     return Err(format!("the left hold isn't finite at frame {f}"));
@@ -1641,7 +1664,8 @@ fn follow(s: &mut Sora, slot: Option<usize>, to_world: &Mat4) -> Option<Vec<Mat4
     // (And base Sora's KH1 Gravity, Stop and Aero with the Magic style at KH2: his own KH2 cast
     // motions, `formmagic::BASE_KH1_CAST`.)
     let base_look = super::formmagic::BASE_KH1_CAST.load(std::sync::atomic::Ordering::Relaxed) && !super::form::in_form();
-    if super::form::in_wisdom() || base_look {
+    // (t1027: Master's too, its own D372 / D374 on the same motions, `form::in_kh2_magic_form`.)
+    if super::form::in_kh2_magic_form() || base_look {
         if let Some(spell @ 3..=6) = super::takeover::kh1_spell_now() {
             let air = super::takeover::air_cast().is_some();
             let motion = match (spell, air) {
@@ -2134,6 +2158,9 @@ unsafe fn check(instance: usize, via_ik: bool, param_world: usize) {
                 s.last_drawn = None;
             }
         }
+        // (Limit Form's Strike Raid, t992: his Keyblade where the script throws it, on his own
+        // weapon bones as KH1's Strike Raid has it, `limitform::thrown_world`.)
+        super::limitform::thrown_world(world);
         if let Some(o) = orig_hands {
             if let Ok(mut h) = HANDS_NOW.lock() {
                 *h = Some(Hands { orig: o, drawn: o, at: Instant::now() });

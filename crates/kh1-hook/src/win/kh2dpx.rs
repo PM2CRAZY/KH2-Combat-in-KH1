@@ -481,6 +481,8 @@ pub enum Pkg {
     Final,
     /// Limit Form's (`obj/P_EX100_KH1F.a.us`, t971).
     Limit,
+    /// Master Form's (`obj/P_EX100_TRIF.a.us`, t1028).
+    Master,
     /// One of the spell packages (`kh2fx::WISDOM`'s numbering): Reflect's levels 1..3, Wisdom's archive 4
     /// (`obj/P_EX100_MAGF.a.us`), then Fire, Blizzard, Thunder and Cure by level (Wisdom's and
     /// base Sora's KH2 magic, `formmagic`).
@@ -720,6 +722,8 @@ fn desired() -> Vec<(Pkg, String)> {
             super::form::Kind::Final => Pkg::Final,
             super::form::Kind::Wisdom => Pkg::Spell(super::kh2fx::WISDOM),
             super::form::Kind::Limit => Pkg::Limit,
+            // (t1028: Master's archive, as Limit's.)
+            super::form::Kind::Master => Pkg::Master,
         };
         v.push((pkg, String::new()));
     }
@@ -728,7 +732,8 @@ fn desired() -> Vec<(Pkg, String)> {
         if let Some(l) = unsafe { super::reflect::level_now() } {
             v.push((Pkg::Spell(l), String::new()));
         }
-        let wisdom = forms.contains(&super::form::Kind::Wisdom);
+        // (t1027: Master casts Wisdom's KH2 spells too, `form::Kind::kh2_magic`.)
+        let wisdom = forms.iter().any(|f| f.kh2_magic());
         for spell in 0..4u8 {
             // (Each spell's package when its row is KH2's, `formmagic::kh2_spell`.)
             if super::formmagic::kh2_spell(spell) || (wisdom && spell <= 2) {
@@ -917,6 +922,7 @@ fn source(kh2: &'static super::pose::Kh2, pkg: Pkg, sig: &str) -> Option<Source>
         Pkg::Valor => kh2.valor.as_ref().and_then(|f| point(&f.rig)),
         Pkg::Final => kh2.final_form.as_ref().and_then(|f| point(&f.rig)),
         Pkg::Limit => kh2.limit_form.as_ref().and_then(|f| point(&f.rig)),
+        Pkg::Master => kh2.master.as_ref().and_then(|f| point(&f.rig)),
         Pkg::Spell(l) if l == super::kh2fx::WISDOM => kh2.wisdom.as_ref().and_then(|f| point(&f.rig)),
         _ => point(&kh2.rig),
     };
@@ -935,10 +941,13 @@ fn source(kh2: &'static super::pose::Kh2, pkg: Pkg, sig: &str) -> Option<Source>
             s(pkg, "p_ex100", "obj/P_EX100.a.us", Some("p_ex"), None, None, sets, false, anchor, 0)
         }
         Pkg::Weapon => s(pkg, "w_ex010", "obj/W_EX010.a.us", None, None, Some(WEAPON_ON), Vec::new(), true, weapon_anchor, ENDS_WITH_MOTION),
-        Pkg::Valor | Pkg::Final | Pkg::Limit => {
+        Pkg::Valor | Pkg::Final | Pkg::Limit | Pkg::Master => {
             let (label, path, f) = match pkg {
                 Pkg::Valor => ("p_ex100_btlf", "obj/P_EX100_BTLF.a.us", kh2.valor.as_ref()?),
                 Pkg::Limit => ("p_ex100_kh1f", "obj/P_EX100_KH1F.a.us", kh2.limit_form.as_ref()?),
+                // (t1028: its motions' frame triggers 1, Checked (files): 53 → 1..12 and 100..102,
+                // 181 → 22, 182 → 23, 185 → 24, 183 → 25..32, 184 → 20 / 21.)
+                Pkg::Master => ("p_ex100_trif", "obj/P_EX100_TRIF.a.us", kh2.master.as_ref()?),
                 _ => ("p_ex100_ultf", "obj/P_EX100_ULTF.a.us", kh2.final_form.as_ref()?),
             };
             let sets = motion_sets(&f.character).into_iter().map(|x| x.1).collect();
@@ -2557,6 +2566,24 @@ const APPLY_STEAM: usize = 0x2ADB40;
 /// swapped, y reversed; its own inverse). A matrix that must be drawn as it is goes in as `M · P`.
 const KH1_APPLY_TURN: glam::Mat3 = glam::Mat3::from_cols(glam::Vec3::Z, glam::Vec3::NEG_Y, glam::Vec3::X);
 
+/// t1013: the package a script's package number stands for (`kh2fx`'s numbering: the spells' and
+/// Wisdom's `Spell`, then Valor's, Final's and Limit Form's archives, `kh2fx::VALOR` / `FINAL` /
+/// `LIMIT`). Limit Form's script effects (`formmagic`: `limi` on package `kh2fx::LIMIT`) looked for
+/// `Spell(19)`, which is never built: the form's archive is `Pkg::Limit` (`desired`), so every
+/// effect `limi` started was refused ("its package isn't built": Infinity's charge 20 and shots 23,
+/// Last Arcanum's 35 / 36, Strike Raid's catch flash 34; the owner, t1012: "infinity is missing its
+/// projectiles").
+pub fn pkg_of(level: u8) -> Pkg {
+    match level {
+        l if l == super::kh2fx::VALOR => Pkg::Valor,
+        l if l == super::kh2fx::FINAL => Pkg::Final,
+        l if l == super::kh2fx::LIMIT => Pkg::Limit,
+        // (t1028.)
+        l if l == super::kh2fx::MASTER => Pkg::Master,
+        l => Pkg::Spell(l),
+    }
+}
+
 /// What `spell_start` did.
 pub enum SpellStart {
     /// KH1 plays it: our handle (`NATIVE_SPELL` set).
@@ -2573,7 +2600,7 @@ pub enum SpellStart {
 /// and Sora's object going.
 pub fn spell_start(level: u8, el: u16) -> SpellStart {
     let base = unsafe { super::sys::GetModuleHandleA(std::ptr::null()) } as usize;
-    match start_el(Pkg::Spell(level), super::kh2fx::NO_MOTION, el as i16) {
+    match start_el(pkg_of(level), super::kh2fx::NO_MOTION, el as i16) {
         Started::NotMine => SpellStart::NotMine,
         Started::NotStarted => SpellStart::NotStarted,
         Started::Kh1(element, layer) => unsafe {

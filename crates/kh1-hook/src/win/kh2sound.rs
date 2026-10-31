@@ -188,7 +188,9 @@ pub fn start() {
         // its voices; its effect elements' sounds come with the forms' below (the user: "make
         // sure also that valor form has its proper sound FX").
         // (And Final Form's.)
-        for v in [kh2.valor.as_ref(), kh2.final_form.as_ref(), kh2.limit_form.as_ref()].into_iter().flatten() {
+        // (And Master Form's, t1028: its swings, frame trigger 8 bank 500 ids 40..55 on both
+        // weapons, and its voices, trigger 14, Checked (files).)
+        for v in [kh2.valor.as_ref(), kh2.final_form.as_ref(), kh2.limit_form.as_ref(), kh2.master.as_ref()].into_iter().flatten() {
             events.extend(v.character.moveset.clips.values().flat_map(|c| c.events.iter().map(|e| e.kind)).filter(|k| matches!(k, character_core::EventKind::Sound(_) | character_core::EventKind::Voice(_))));
         }
         // Reflect (the user: its sounds): its cast voices (MAGC, played by KH2's cast code, not a
@@ -725,6 +727,56 @@ pub unsafe fn spell_element(level: u8, el: u16) {
         }
         None if g.is_none() => note_play(|| format!("package {level}'s element {el}: KH2 sounds not loaded (yet)")),
         None => {}
+    }
+}
+
+/// t1014: an element's sound tied to its script's effect (KH2's rule, Steam KH2, Checked (decomp)):
+/// the bind node `0x1402C6B30` keeps the element's sound handle (`+0x60`, started by `0x1401DE150`)
+/// and, freed as its effect goes (a kill, a fade's end, `0x1402C4660` / `0x1402C63B0`), stops it
+/// with a fade (`0x1401DE500 (handle, 0x78)`). Ours went fire-and-forget into KH1's effect queue,
+/// so a looping one played on (the owner, t1012: Infinity's "charge sfx doesn't cut off but keeps
+/// playing": element 20's 999045, which `limi` fades over 8 at the follow-up or kills when the
+/// hover ends). `spell_element_tied` keeps the (bank, id) KH1's queue plays it by against the
+/// effect; `element_sound_stop` fades it out through KH1's own `kh1bank::fade_stop`.
+static TIED: Mutex<Vec<(u64, i32, i32)>> = Mutex::new(Vec::new());
+/// KH2's fade for it (`0x1401DE500`'s 0x78).
+const TIED_FADE: i32 = 0x78;
+
+/// `spell_element`, its sound kept against script effect `effect`.
+pub unsafe fn spell_element_tied(level: u8, el: u16, effect: u64) {
+    let Ok(g) = LOADED.try_lock() else { return };
+    match g.as_ref().and_then(|l| l.spell_elements.get(&(level, el))) {
+        Some(s) => {
+            match super::kh1bank::play_id(s.kh1, s.ms) {
+                Some(id) => {
+                    if let Ok(mut t) = TIED.lock() {
+                        t.retain(|x| x.0 != effect);
+                        if t.len() > 64 {
+                            t.remove(0);
+                        }
+                        t.push((effect, s.kh1, id));
+                    }
+                }
+                None => dropped(|| format!("se{}: KH1's effect queue or bank list can't take it now", s.kh1)),
+            }
+            note_play(|| format!("package {level}'s element {el} (tied to its effect)"));
+        }
+        None if g.is_none() => note_play(|| format!("package {level}'s element {el}: KH2 sounds not loaded (yet)")),
+        None => {}
+    }
+}
+
+/// The sound of script effect `effect`, if one is still tied to it, faded out (its kill or fade).
+pub unsafe fn element_sound_stop(effect: u64) {
+    let Some((_, no, id)) = TIED.lock().ok().and_then(|mut t| t.iter().position(|x| x.0 == effect).map(|i| t.remove(i))) else { return };
+    super::kh1bank::fade_stop(no, id, TIED_FADE);
+}
+
+/// Every tied sound faded out (the script that started them is over).
+pub unsafe fn element_sounds_stop_all() {
+    let all: Vec<(u64, i32, i32)> = TIED.lock().map(|mut t| std::mem::take(&mut *t)).unwrap_or_default();
+    for (_, no, id) in all {
+        super::kh1bank::fade_stop(no, id, TIED_FADE);
     }
 }
 

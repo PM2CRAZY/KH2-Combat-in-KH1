@@ -31,7 +31,10 @@ use std::sync::OnceLock;
 /// takes the next free ones, record 0x7F and word 0x1FD.)
 /// (Limit, t969: the next free record 0x80 and word 0x1FC, both empty in the player's `btltbl.bin`,
 /// Checked (files).)
-pub const FORMS: [(u8, u16, &str); 3] = [(0x7F, 0x1FD, "Valor Form"), (0x7E, 0x1FE, "Wisdom Form"), (0x80, 0x1FC, "Limit Form")];
+/// (Master, t1021: record 0x8E, the next after the limits' and follow-ups' 0x81..0x8D, and word
+/// 0x1EE, the next after Judgment's 0x1EF: the record empty in the player's `btltbl.bin` and no KH1
+/// record (0x00..0x7C, words up to 0x173) naming the word, Checked (files).)
+pub const FORMS: [(u8, u16, &str); 4] = [(0x7F, 0x1FD, "Valor Form"), (0x7E, 0x1FE, "Wisdom Form"), (0x80, 0x1FC, "Limit Form"), (0x8E, 0x1EE, "Master Form")];
 /// The record argument of form `k` (KH1's spells are 0..6, Reflect 7).
 pub const FORM_ARG: u8 = 0x10;
 /// Summon's command (its record opens the summon list) and the summon-is-out one.
@@ -54,6 +57,8 @@ static ON: AtomicBool = AtomicBool::new(false);
 /// The names: Drive, the forms, Revert, and KH2's "?" (command 0x68's name, the Drive slot with no
 /// form owned).
 /// (t976: then Limit Form's limits, and its top row's "Limit".)
+/// The limits' follow-ups' names (`limitform::FOLLOW_UPS`).
+static FOLLOW_NAMES: OnceLock<Vec<usize>> = OnceLock::new();
 static NAMES: OnceLock<(usize, Vec<usize>, usize, usize, Vec<usize>, usize)> = OnceLock::new();
 /// Magic's word (record 2's, `btltbl.bin`, Checked (files)): the top row Limit Form names "Limit".
 const MAGIC_WORD: i32 = 2;
@@ -188,7 +193,7 @@ pub unsafe fn fill(actor: usize, _flags: usize) {
     // list's own bit (`drive_row4`), page 2's from the forms (`cmdmenu`), so Revert stays usable.
     // (Limit Form, t976: its Limit list in Magic's place, `limit_list`.)
     if super::form::in_limit() && ensure_limit_records(base) {
-        limit_list(base);
+        limit_list(base, actor);
     } else if super::form::in_valor() || super::form::in_limit() {
         let top = base + MENU_RVA;
         if rd::<u8>(top + 0x14 + 1) == 2 {
@@ -210,12 +215,15 @@ pub unsafe fn fill(actor: usize, _flags: usize) {
 /// Our records for Limit Form's limits (`limitform::LIMITS`), as the forms'.
 unsafe fn ensure_limit_records(base: usize) -> bool {
     let record: unsafe extern "system" fn(u32) -> usize = std::mem::transmute(base + RECORD_RVA);
-    for (k, &(id, word, _, _, _)) in super::limitform::LIMITS.iter().enumerate() {
+    // (The limits', then their follow-ups', t981: Sonic Rave's Rave and Finish, offered on Triangle
+    // by the limit's script, `limitform::offer`.)
+    let follow = super::limitform::FOLLOW_UPS.iter().enumerate().map(|(j, f)| (f.0, f.1, super::limitform::FOLLOW_ARG + j as u8));
+    for (id, word, arg) in super::limitform::LIMITS.iter().enumerate().map(|(k, l)| (l.0, l.1, super::limitform::LIMIT_ARG + k as u8)).chain(follow) {
         let r = record(id as u32);
         if r < 0x10000 {
             return false;
         }
-        let want: [u8; 16] = [0x02, 0x00, 0xFF, 0x00, word as u8, (word >> 8) as u8, 0x02, super::limitform::LIMIT_ARG + k as u8, 0x00, 0xFF, 0x01, 0x02, 0, 0, 0, 0];
+        let want: [u8; 16] = [0x02, 0x00, 0xFF, 0x00, word as u8, (word >> 8) as u8, 0x02, arg, 0x00, 0xFF, 0x01, 0x02, 0, 0, 0, 0];
         let have = rd::<[u8; 16]>(r);
         if have != want {
             if have != [0u8; 16] && have[4..8] != want[4..8] {
@@ -235,16 +243,18 @@ unsafe fn ensure_limit_records(base: usize) -> bool {
 /// holds the four limits (KH1's spells and Reflect taken out, KH2's form 3 having no Magic), none
 /// greyed (the owner, round 12 answer 4 (a): usable under its MP cost; greyed while one runs comes
 /// with the limits), and the top's Magic row usable. Drive's row 4 then appends its entry after
-/// them as before (`drive_row4`).
-unsafe fn limit_list(base: usize) {
+/// them as before (`drive_row4`). (t990: all four greyed while a limit runs or with no MP at all,
+/// `limitform::greyed`.)
+unsafe fn limit_list(base: usize, actor: usize) {
     let magic = base + MAGIC_MENU_RVA;
     let n = super::limitform::LIMITS.len();
     for (k, l) in super::limitform::LIMITS.iter().enumerate() {
         wr(magic + 0x14 + k, l.0);
     }
     wr(magic + 0x10, n as i32);
+    let grey: u32 = if super::limitform::greyed(base, actor) { (1u32 << n) - 1 } else { 0 };
     for off in [4usize, 8] {
-        wr(magic + off, 0u32);
+        wr(magic + off, grey);
     }
     if rd::<i32>(magic + 0xC) >= n as i32 {
         wr(magic + 0xC, 0i32);
@@ -341,6 +351,9 @@ pub fn word(index: i32) -> Option<usize> {
     }
     if let Some(k) = super::limitform::LIMITS.iter().position(|l| l.1 as i32 == index) {
         return limits.get(k).copied();
+    }
+    if let Some(j) = super::limitform::FOLLOW_UPS.iter().position(|f| f.1 as i32 == index) {
+        return FOLLOW_NAMES.get().and_then(|v| v.get(j).copied());
     }
     if index == SUMMON as i32 && super::cmdmenu::drive_shown() {
         // (In the form the row is KH2's Revert; with no form owned KH2's "?", command 0x68: its
@@ -572,6 +585,7 @@ pub unsafe fn install() {
         super::limitform::LIMITS.iter().map(|l| Box::leak(super::menu::encode(l.2).into_boxed_slice()).as_ptr() as usize).collect(),
         Box::leak(super::menu::encode(super::limitform::ROW_NAME).into_boxed_slice()).as_ptr() as usize,
     ));
+    let _ = FOLLOW_NAMES.set(super::limitform::FOLLOW_UPS.iter().map(|f| Box::leak(super::menu::encode(f.2).into_boxed_slice()).as_ptr() as usize).collect());
     if !super::shortcuts::step_hooked()
         && hook::install(base + super::shortcuts::STEP_RVA, &super::shortcuts::STEP_PROLOGUE, step as *const () as usize, &ORIG_STEP, "command step (Drive)").is_none()
     {

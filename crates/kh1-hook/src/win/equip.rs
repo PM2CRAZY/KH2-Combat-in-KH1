@@ -51,6 +51,24 @@ const NOT_KEYBLADES: std::ops::RangeInclusive<u8> = 0x52..=0x55;
 /// (`valor_keyblade`), as old saves may hold anything.
 pub const VALOR_OFF: usize = 0x488;
 
+/// Master Form's Keyblade id in the save (t1025, the owner's answer 1 after research round 2):
+/// `+0x489`, the byte after Valor's. Checked (exe), `docs/kh1-equipment.md` §5: no displacement,
+/// immediate or absolute address `0x489..0x48B` in `.text`, and new game (`0x140283150`) writes
+/// nothing at `0x488..0x48B`; nothing of ours used it before (Checked (code); the layout mark is
+/// the u16 at `+0x48A`). An old save may hold anything there: a value that isn't a Keyblade with a
+/// copy free is an empty slot (`master_holds`), and `valor::master_slot` clears it.
+pub const MASTER_OFF: usize = 0x489;
+
+/// The save byte of a form's Keyblade slot (t1025): Valor's and Master's (Final has none, it uses
+/// the Kingdom Key, `valor::FINAL_KEYBLADE`; KH2 gives forms 1 / 4 / 5 one, `0x1402FC860`).
+pub fn slot_off(kind: super::form::Kind) -> Option<usize> {
+    match kind {
+        super::form::Kind::Valor => Some(VALOR_OFF),
+        super::form::Kind::Master => Some(MASTER_OFF),
+        _ => None,
+    }
+}
+
 unsafe fn rd<T: Copy>(p: usize) -> T {
     std::ptr::read_unaligned(p as *const T)
 }
@@ -116,9 +134,22 @@ pub unsafe fn owned_keyblades(base: usize) -> Vec<u8> {
 }
 
 /// The Keyblades Valor could take: owned, and a copy not equipped (so never Sora's own
-/// weapon unless he owns two).
+/// weapon unless he owns two), less the copy Master's slot holds (t1025).
 pub unsafe fn valor_candidates(base: usize) -> Vec<u8> {
-    owned_keyblades(base).into_iter().filter(|&id| free(base, id) > 0).collect()
+    candidates(base, super::form::Kind::Valor)
+}
+
+/// The Keyblades a form's slot could take (t1025): owned, with a copy free of the members and of
+/// the other form's slot. KH2 (Checked (decomp), `docs/kh1-drive-forms-native.md` §22.5): a slotted
+/// Keyblade is out of the stock, so it is gone from the other forms' lists. With Master's slot
+/// empty Valor's list is what it was.
+pub unsafe fn candidates(base: usize, kind: super::form::Kind) -> Vec<u8> {
+    let other = match kind {
+        super::form::Kind::Valor => master_holds(base),
+        super::form::Kind::Master => valor_holds(base),
+        _ => return Vec::new(),
+    };
+    owned_keyblades(base).into_iter().filter(|&id| free(base, id) > (other == Some(id)) as u32).collect()
 }
 
 /// The Strength a Sora weapon adds (its weapon-table row's `+0x30`; KH1's `0x1402A2FA0`).
@@ -160,7 +191,36 @@ pub unsafe fn valor_holds(base: usize) -> Option<u8> {
 /// own (KH2's weapon resolver `0x1403DFEB0`, case 0x23B: the form's weapon, else `0x140405190(0)`,
 /// Sora's). `None` only when Sora holds no Keyblade (a dream weapon or the wooden sword).
 pub unsafe fn valor_keyblade(base: usize) -> Option<u8> {
-    valor_holds(base).or_else(|| sora_weapon(base).filter(|&w| is_keyblade(base, w)))
+    valor_holds(base).or_else(|| sora_own(base))
+}
+
+/// Sora's own weapon when it is a Keyblade (an empty form slot's Keyblade).
+unsafe fn sora_own(base: usize) -> Option<u8> {
+    sora_weapon(base).filter(|&w| is_keyblade(base, w))
+}
+
+/// The Keyblade Master's slot holds a copy of (t1025): the id stored (`MASTER_OFF`) while it is a
+/// Keyblade Sora owns with a copy free of the members and of Valor's slot (Valor's slot keeps its
+/// copy first when both name the same Keyblade, so neither depends on the other twice).
+pub unsafe fn master_holds(base: usize) -> Option<u8> {
+    let stored = save(base).map(|s| rd::<u8>(s + MASTER_OFF)).unwrap_or(0);
+    let taken = (valor_holds(base) == Some(stored)) as u32;
+    (stored != 0 && is_keyblade(base, stored) && free(base, stored) > taken).then_some(stored)
+}
+
+/// The Keyblade Master uses (t1025): the slot's; with the slot empty, Sora's own (KH2's resolver
+/// `0x1403DFEB0`, case 0x23B, as for Valor; the owner's round 11 answer 1 (a)).
+pub unsafe fn master_keyblade(base: usize) -> Option<u8> {
+    master_holds(base).or_else(|| sora_own(base))
+}
+
+/// The copy a form's slot holds (t1025).
+pub unsafe fn slot_holds(base: usize, kind: super::form::Kind) -> Option<u8> {
+    match kind {
+        super::form::Kind::Valor => valor_holds(base),
+        super::form::Kind::Master => master_holds(base),
+        _ => None,
+    }
 }
 
 /// KH1's text for a handle (`0x14038B0B0`), 0 for none.

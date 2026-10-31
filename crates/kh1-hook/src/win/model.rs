@@ -69,7 +69,7 @@ struct Library {
     install: kh2_data::Install,
     source: kh2_data::Source,
     /// Base Sora, then Valor, Wisdom, Final.
-    bodies: [Option<Arc<Loaded>>; 5],
+    bodies: [Option<Arc<Loaded>>; 6],
     /// KH2's Keyblades: name (lower case) → model name.
     keyblades: Vec<(String, String)>,
     /// By model name.
@@ -265,8 +265,9 @@ pub fn load() {
             let install = kh2_data::Install::locate(&exe).map_err(|e| format!("KH2 install: {e}"))?;
             let source = if install.has_backup() { kh2_data::Source::Backup } else { kh2_data::Source::Live };
             let read = |name: &str| install.read_any(source, name).map_err(|e| format!("{name}: {e}"));
-            let mut bodies: [Option<Arc<Loaded>>; 5] = [None, None, None, None, None];
-            for (i, name) in ["P_EX100", "P_EX100_BTLF", "P_EX100_MAGF", "P_EX100_ULTF", "P_EX100_KH1F"].iter().enumerate() {
+            // (t1029: Master's own model, `P_EX100_TRIF`, as index 5.)
+            let mut bodies: [Option<Arc<Loaded>>; 6] = [None, None, None, None, None, None];
+            for (i, name) in ["P_EX100", "P_EX100_BTLF", "P_EX100_MAGF", "P_EX100_ULTF", "P_EX100_KH1F", "P_EX100_TRIF"].iter().enumerate() {
                 match read(&format!("obj/{name}.mdlx")).and_then(|b| Loaded::new(name, &b)) {
                     Ok(l) => {
                         log!(Animation,
@@ -328,6 +329,8 @@ fn body(lib: &Library) -> Option<Arc<Loaded>> {
         Some(Kind::Wisdom) => 2,
         Some(Kind::Final) => 3,
         Some(Kind::Limit) => 4,
+        // (t1029: Master's own KH2 model, as Valor's / Limit's are theirs.)
+        Some(Kind::Master) => 5,
         None => 0,
     };
     lib.bodies[i].clone().or_else(|| lib.bodies[0].clone())
@@ -385,13 +388,10 @@ unsafe fn held_weapon(base: usize) -> Option<u8> {
     (save >= 0x10000 && super::crash::readable(save + 0x36)).then(|| std::ptr::read_unaligned((save + 0x36) as *const u8))
 }
 
-/// The left Keyblade's KH1 item (Valor's, Final's), if he holds two.
+/// The left Keyblade's KH1 item (Valor's, Master's, Final's), if he holds two.
 unsafe fn left_weapon(base: usize) -> Option<u8> {
-    match super::form::current()? {
-        Kind::Final => Some(super::valor::FINAL_KEYBLADE),
-        Kind::Valor => super::equip::valor_keyblade(base),
-        Kind::Wisdom | Kind::Limit => None,
-    }
+    // (Master, t1024: Sora's own Keyblade until its M: slot, `valor::second_keyblade`.)
+    super::valor::second_keyblade(base)
 }
 
 /// `pose`, each frame KH2 poses him: the body and the right Keyblade (KH2 model space), KH1's

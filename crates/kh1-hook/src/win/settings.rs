@@ -171,6 +171,9 @@ drive_limits = kh2\r\n\
 limit_cost = kh2\r\n\
 ; limit_trinity: on = KH1's Trinity Limit can be used in Limit Form (on Triangle, as KH1 offers it); off = Limit Form's four (Config: Drive > Limit > Trinity Limit)\r\n\
 limit_trinity = off\r\n\
+; limit_ledges: kh2 = a limit's move keeps Sora on a ledge in KH2's edge-stop range and the limit goes on (KH2); kh1 = off a ledge he falls\r\n\
+;   and the limit ends, as KH1's limits (Config: Drive > Limit > Ledges)\r\n\
+limit_ledges = kh2\r\n\
 ; drive_recovery_sources: on = Drive Recovery and High Drive Recovery are sold in KH1's item shops once a\r\n\
 ;   Drive Form is open (and later dropped and found); off = nowhere (Config: Progression > Drive Recovery)\r\n\
 drive_recovery_sources = on\r\n\
@@ -575,6 +578,9 @@ pub struct Settings {
     /// KH1's Trinity Limit in Limit Form (`limit_trinity = on`; off by default); Config: Drive >
     /// Limit > Trinity Limit, t977; `limitform::trinity`.
     pub limit_trinity: bool,
+    /// A limit's move off a ledge KH1's way (`limit_ledges = kh1`: he falls and the limit ends; `kh2`,
+    /// KH2's edge stop, by default); Config: Drive > Limit > Ledges, t1011; `limitform::ledges_kh1`.
+    pub limit_ledges_kh1: bool,
     /// Where Drive Recovery items come from (`drive_recovery_sources = on`, the default; main's design);
     /// Config: Progression > Drive Recovery, t950; `driveitems::sources`.
     pub drive_recovery_sources: bool,
@@ -858,6 +864,7 @@ fn load(first: bool) -> Option<Settings> {
         drive_limits: on(&text, "drive_limits", "kh2", true),
         limit_cost_three: on(&text, "limit_cost", "3", false),
         limit_trinity: on(&text, "limit_trinity", "on", false),
+        limit_ledges_kh1: setting(&text, "limit_ledges").is_some_and(|v| v == "kh1"),
         drive_recovery_sources: on(&text, "drive_recovery_sources", "on", true),
         valor_left_blade: on(&text, "valor_left_blade", "on", true),
         styles: {

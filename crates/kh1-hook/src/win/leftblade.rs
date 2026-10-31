@@ -831,7 +831,8 @@ pub fn note_pose(kh1: &[Mat4], kh1_bind: &[Mat4], kh2_body: &[Mat4], kh2_right: 
         let sig = body_sig(kh2_body);
         g.iter().rev().find(|(r, _, t)| *r == sig && fresh(t)).or_else(|| g.back().filter(|(_, _, t)| fresh(t))).map(|(_, b, _)| b[0])
     }) else { return };
-    let Some(rig) = super::pose::kh2().and_then(|k| k.valor.as_ref()).map(|f| f.rig.clone()) else { return };
+    // (t1024: the form's own rig, Master's too; Valor's when none.)
+    let Some(rig) = super::pose::kh2().and_then(|k| super::form::current().and_then(|c| c.data(k)).or(k.valor.as_ref())).map(|f| f.rig.clone()) else { return };
     let (Some(sr), Some(sl)) = (rig.weapons.first().and_then(|w| w.bone), rig.weapons.get(1).and_then(|w| w.bone)) else {
         log_n(&N, 5, || "the Valor rig has no second weapon bone".into());
         return;

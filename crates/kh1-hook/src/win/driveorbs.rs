@@ -249,6 +249,9 @@ unsafe extern "system" fn pickup(prize: usize, pos: usize) -> usize {
         } else if !super::form::in_form() {
             super::drivegauge::add(value as i32, "a Drive orb");
         }
+        // (t1026: in Master the orb's value is Master's EXP too, KH2's `0x1403E8760` after the
+        // gauge, `formexp::orb`.)
+        super::formexp::orb(value);
     }
     who
 }

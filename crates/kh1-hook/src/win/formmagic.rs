@@ -75,9 +75,11 @@ pub fn base_kh2_spell(spell: u8) -> bool {
 /// Wisdom Form on KH1's own states casts KH2's `spell` (Fire 0 .. Cure 3) now: all four are KH2's
 /// in Wisdom (KH2's Wisdom casts KH2's Fire, Blizzard, Thunder and Cure, its own cast motions; a
 /// Drive Form ignores the Config rows, the tester, what-is-still-missing after m13), on KH1's own
-/// cast state as base Sora's KH2 spells are (`native`), at Wisdom's magic sub (`form::magic_sub`).
-pub fn wisdom_kh2_spell(spell: u8) -> bool {
-    spell <= 3 && super::form::native_form() == Some(super::form::Kind::Wisdom)
+/// cast state as base Sora's KH2 spells are (`native`), at the form's magic sub (`form::magic_sub`).
+/// (t1027: per form, `form::Kind::kh2_magic`: Wisdom and Master, Master's own clips D370..D374 at
+/// sub + 20. Was `wisdom_kh2_spell`.)
+pub fn form_kh2_spell(spell: u8) -> bool {
+    spell <= 3 && super::form::native_form().is_some_and(|k| k.kh2_magic())
 }
 
 /// Base Sora's cast of `spell` (Fire 0 .. Aero 6) plays KH2's cast motion now: by the spell's
@@ -136,6 +138,9 @@ pub fn set_kh1_cast(spell: u8, on: bool) {
 fn who() -> &'static str {
     if super::form::in_wisdom() {
         "Wisdom"
+    } else if super::form::in_master() {
+        // (t1027.)
+        "Master"
     } else {
         "KH2 magic"
     }
@@ -228,6 +233,11 @@ pub fn element_sounds(kh2: &pose::Kh2) -> Vec<(u8, u16, i32)> {
     if let Some(a) = kh2.limit_form.as_ref().and_then(|f| f.archive.as_ref()) {
         add(super::kh2fx::LIMIT, a);
     }
+    // (Master Form's, t1028: element 0's 999001, Disaster's 999020 / 999021, 999009 / 999006 /
+    // 999022 / 999023 on its finisher's, Checked (files).)
+    if let Some(a) = kh2.master.as_ref().and_then(|f| f.archive.as_ref()) {
+        add(super::kh2fx::MASTER, a);
+    }
     // (Also for base Sora's KH2 magic, `base_kh2_spell`, which the Config menu switches in game.)
     {
         for spell in 0..4u8 {
@@ -280,6 +290,10 @@ struct Runtime {
     /// (`kh1_step`, `kh2script`).
     world: Option<KhWorld>,
     actor: usize,
+    /// Limit Form's script (`limi`, t980) in `magic`, if it loaded.
+    limi: Option<usize>,
+    /// A limit asked for (its KH2 command), started at our next step (`limit_start`).
+    limit: Option<u16>,
 }
 
 static RT: Mutex<Option<Runtime>> = Mutex::new(None);
@@ -314,7 +328,28 @@ fn runtime(g: &mut Option<Runtime>) -> &mut Runtime {
                 }
             }
         });
-        Runtime { magic, wisd, files: HashMap::new(), package, fx: HashMap::new(), queued: Vec::new(), arrival: Vec::new(), arrival_age: 0, fresh: None, casting: None, kh1_clock: None, fired: 0, hits: 0, world: None, actor: 0 }
+        // (Limit Form's limits, t980: one script, `limi`, BAR type 3 of `P_EX100_KH1F.mdlx`, Checked
+        // (files); its effects the form's archive, `kh2fx::LIMIT`.)
+        let limi = pose::kh2().and_then(|k| k.limit_form.as_ref()).and_then(|f| {
+            let made = (|| {
+                let script = f.script.as_ref().ok_or("no script in its model")?;
+                let pax = f.archive.as_ref().and_then(|a| SpellFile::bar_entry(a, 18)).ok_or("no effects in its archive")?;
+                SpellFile::from_parts("P_EX100_KH1F", script, &pax)
+            })();
+            match made {
+                Ok(file) => {
+                    let i = magic.add_spell(file);
+                    package.insert(i, super::kh2fx::LIMIT);
+                    log!(Magic, "Limit Form's script ready (its limits)");
+                    Some(i)
+                }
+                Err(e) => {
+                    log!(Magic, "Limit Form's limits have no script: {e}");
+                    None
+                }
+            }
+        });
+        Runtime { magic, wisd, files: HashMap::new(), package, fx: HashMap::new(), queued: Vec::new(), arrival: Vec::new(), arrival_age: 0, fresh: None, casting: None, kh1_clock: None, fired: 0, hits: 0, world: None, actor: 0, limi, limit: None }
     })
 }
 
@@ -346,6 +381,54 @@ pub fn effect(n: i16) {
     }
 }
 
+/// Limit Form's script can run a limit (loaded, on KH1's script machine).
+pub fn limit_ready() -> bool {
+    let Ok(mut g) = RT.lock() else { return false };
+    let rt = runtime(&mut g);
+    rt.limi.is_some() && rt.magic.native.is_some()
+}
+
+/// A limit (its KH2 command) for Limit Form's script, started at our next step (`shots_step`).
+pub fn limit_start(command: u16) -> bool {
+    let Ok(mut g) = RT.lock() else { return false };
+    let rt = runtime(&mut g);
+    if rt.limi.is_none() {
+        return false;
+    }
+    rt.limit = Some(command);
+    true
+}
+
+/// A limit's follow-up (its KH2 command) to the running limit's script (trigger 0x17), at once:
+/// whether a limit took it.
+pub fn limit_command(command: u16) -> bool {
+    let Ok(mut g) = RT.try_lock() else { return false };
+    let Some(rt) = g.as_mut() else { return false };
+    let (Some(file), Some(mut world)) = (rt.limi, rt.world.take()) else { return false };
+    rt.magic.frametime = unsafe { frame_scale() };
+    let r = rt.magic.limit_command(file, command, &mut world);
+    rt.world = Some(world);
+    for e in rt.magic.take_events() {
+        log!(Magic, "Limit Form's script (follow-up {command}): {e:?}");
+    }
+    match r {
+        Ok(took) => took,
+        Err(e) => {
+            log!(Magic, "Limit Form's script: follow-up {command} failed ({e})");
+            false
+        }
+    }
+}
+
+/// A limit's script is asked for or runs (`limitform`'s end: KH1's end task waits on it). True
+/// when the runtime is busy this instant (it waits a frame).
+pub fn limit_alive() -> bool {
+    match RT.try_lock() {
+        Ok(g) => g.as_ref().is_some_and(|rt| rt.limit.is_some() || rt.limi.is_some_and(|f| rt.magic.limit_running(f))),
+        Err(_) => true,
+    }
+}
+
 /// Out of the form: its effects put out, its casts ended.
 pub fn end_all() {
     if let Ok(mut w) = WAITING.lock() {
@@ -358,6 +441,10 @@ pub fn end_all() {
     rt.fresh = None;
     rt.casting = None;
     rt.kh1_clock = None;
+    rt.limit = None;
+    if let Some(f) = rt.limi {
+        rt.magic.limit_end(f);
+    }
     rt.magic.cancel(SORA);
     for e in rt.magic.effects.iter_mut() {
         e.kill();
@@ -372,7 +459,7 @@ pub fn end_all() {
 
 /// Something of the scripts' still runs or plays (`takeover::native_spells` runs their frame).
 pub fn busy() -> bool {
-    RT.try_lock().is_ok_and(|g| g.as_ref().is_some_and(|rt| !rt.queued.is_empty() || rt.fresh.is_some() || rt.casting.is_some() || rt.kh1_clock.is_some() || !rt.magic.casts.is_empty() || !rt.magic.effects.is_empty() || !rt.fx.is_empty()))
+    RT.try_lock().is_ok_and(|g| g.as_ref().is_some_and(|rt| !rt.queued.is_empty() || rt.fresh.is_some() || rt.limit.is_some() || rt.casting.is_some() || rt.kh1_clock.is_some() || !rt.magic.casts.is_empty() || !rt.magic.effects.is_empty() || !rt.fx.is_empty()))
 }
 
 // ------------------------------------------------- KH2's spells in KH1's own cast state
@@ -507,7 +594,7 @@ unsafe fn time_kh1_spell(actor: usize, spell: u8, request: u32, started: u64) {
 /// start hooked, our slot of KH2's cast motion built for KH1's request (`kh2slots::CASTS`), and
 /// the spell's KH2 file and MAGC row there. Else KH2's controller borrows him for it, as before.
 pub unsafe fn native(spell: u8, air: bool) -> bool {
-    if !(base_kh2_spell(spell) || wisdom_kh2_spell(spell)) || !NATIVE_HOOKED.load(Ordering::Relaxed) || !super::shared::active() {
+    if !(base_kh2_spell(spell) || form_kh2_spell(spell)) || !NATIVE_HOOKED.load(Ordering::Relaxed) || !super::shared::active() {
         return false;
     }
     let request = if air { 0x83 } else { 0x36 } + spell as usize;
@@ -709,7 +796,8 @@ unsafe extern "system" fn spell_start(actor: usize, spell: i32, target: usize) -
     let sora = actor > 0x10000 && actor == super::takeover::sora_actor() && !super::form::in_form() && super::shared::active();
     // (Wisdom Form on KH1's own states, whatever the Magic Combo row says since t757: KH1's own
     // Gravity, Stop and Aero take their step too, `kh1_air_cast_step` / `ground_role`.)
-    let wisdom = actor > 0x10000 && actor == super::takeover::sora_actor() && wisdom_combo();
+    // (t1027: Master too, `form_combo`.)
+    let wisdom = actor > 0x10000 && actor == super::takeover::sora_actor() && form_combo();
     let count = if sora || wisdom { rd::<u32>(actor + QUEUE_COUNT) } else { 0 };
     let request = if (1..=8).contains(&count) { rd::<u32>(actor + QUEUE) & 0xFFFF } else { 0 };
     let f: unsafe extern "system" fn(usize, i32, usize) -> u64 = std::mem::transmute(ORIG_SPELL_START.load(Ordering::Acquire));
@@ -754,7 +842,7 @@ unsafe extern "system" fn spell_start(actor: usize, spell: i32, target: usize) -
 const KH1_AIR_REQUESTS: std::ops::RangeInclusive<u32> = 0x83..=0x8A;
 
 /// Wisdom Form on KH1's own states: KH1's own spells there (Gravity, Stop, Aero; Fire .. Cure are
-/// KH2's, `wisdom_kh2_spell`, and take their step already) take a step of the combo as base Sora's
+/// KH2's, `form_kh2_spell`, and take their step already) take a step of the combo as base Sora's
 /// do at Magic Combo KH2, and take KH2's roles (`roles_on`).
 ///
 /// Since t757 whatever the Magic Combo row says (the tester, drive-forms after m2: "drive forms
@@ -762,8 +850,12 @@ const KH1_AIR_REQUESTS: std::ops::RangeInclusive<u32> = 0x83..=0x8A;
 /// magic command counts every cast as a step of the combo (`0x1403D6CA0`, no setting, Checked
 /// (decomp)), so the form always casts by KH2's rules. The row covers base Sora only. Before
 /// t757 (m16 answer 8) Wisdom followed the row.
-pub unsafe fn wisdom_combo() -> bool {
-    super::form::native_form() == Some(super::form::Kind::Wisdom) && super::shared::active()
+///
+/// (t1027: per form, `form::Kind::kh2_magic`, so Master Form's Gravity, Stop and Aero take the
+/// same steps and roles on its own clips (the owner, §24.2 answer 3: "Wisdom's mapping (the clip
+/// decides the travel)"). Was `wisdom_combo`.)
+pub unsafe fn form_combo() -> bool {
+    super::form::native_form().is_some_and(|k| k.kh2_magic()) && super::shared::active()
 }
 
 /// The Magic Combo row at KH2 (the tester, what-is-still-missing m16 answer 8: "if kh2's own air
@@ -781,13 +873,13 @@ pub unsafe fn wisdom_combo() -> bool {
 /// step, 0 when it is the air combo's last; "connected" `+0x50` cleared, set by the spell's hit).
 /// No combo window is added on KH1's air cast: KH2's air casts have none (§4c.1, Checked (files)).
 /// Base Sora (not a KH2 spell, which takes its step already, `pick_cast`), and Wisdom's Gravity,
-/// Stop and Aero (`wisdom_combo`).
+/// Stop and Aero (`form_combo`).
 pub unsafe fn kh1_air_cast_step(spell: i32) -> bool {
     if !(0..=6).contains(&spell) || !super::shared::active() {
         return false;
     }
-    // (Wisdom whatever the Magic Combo row says, t757: `wisdom_combo`.)
-    if wisdom_combo() {
+    // (Wisdom whatever the Magic Combo row says, t757: `form_combo`; Master too, t1027.)
+    if form_combo() {
         return (4..=6).contains(&spell);
     }
     super::styles::kh2(super::styles::Kind::MagicCombo) && !super::form::in_form()
@@ -836,14 +928,14 @@ pub const THUNDER_FINISHER: u16 = 63;
 const ROLE_REQUESTS: [(u32, Role); 3] = [(0x3A, Role::Thunder), (0x3B, Role::Magnet), (0x3C, Role::Cure)];
 
 /// KH2's roles for KH1's Gravity, Stop and Aero apply now: base Sora on KH1's own states with the
-/// Magic Combo row at KH2, or Wisdom on them whatever the row says (`wisdom_combo`, t757); Valor
+/// Magic Combo row at KH2, or Wisdom on them whatever the row says (`form_combo`, t757); Valor
 /// has no magic and the forms on KH2's controller are left as they are.
 pub unsafe fn roles_on() -> bool {
     if !super::shared::active() {
         return false;
     }
     if super::form::in_form() {
-        return wisdom_combo();
+        return form_combo();
     }
     super::styles::kh2(super::styles::Kind::MagicCombo)
 }
@@ -897,7 +989,7 @@ const MAGNET_GROUND: u16 = 68;
 /// and stop as well if the config is set to can combo"): on KH2's cast animation (their
 /// animation row at KH2: KH2's Thunder cast 62 for Gravity, Cure's 65 for Stop) always, on KH1's
 /// own with the Magic Combo row at KH2. Base Sora on KH1's states; in a Drive Form only Wisdom's on
-/// KH1's own states, with the Magic Combo row at KH2 (`wisdom_combo`).
+/// KH1's own states, with the Magic Combo row at KH2 (`form_combo`).
 ///
 /// Since the tester's "aero is the same as kh2 cure, gravity is the same as thunder, stop is a
 /// finisher like magnet" (after m17), only at Magic Combo KH1: at KH2 the three take KH2's roles
@@ -1056,7 +1148,7 @@ pub unsafe fn kh1_cast_window(actor: usize) {
 /// queues after its first, is taken off the queue (KH2's one motion is the whole cast). Whether
 /// it was taken (else KH1's own script runs).
 unsafe fn kh1_spell_start(actor: usize, spell: u8) -> bool {
-    // (Wisdom on KH1's own states too, `wisdom_kh2_spell`; forms on KH2's controller cast theirs
+    // (Wisdom and Master on KH1's own states too, `form_kh2_spell`; forms on KH2's controller cast theirs
     // from its step.)
     if actor < 0x10000 || actor != super::takeover::sora_actor() || !super::shared::active() {
         return false;
@@ -1145,7 +1237,12 @@ unsafe fn wr<T: Copy>(p: usize, v: T) {
 
 
 fn row(battle: &Battle, atk: u16, sub: u8, count: u8) -> Option<&Atkp> {
-    battle.attack_for_level(atk, sub, count)
+    // (t1027) Master's finisher subs 21 / 23 / 25 have a `magi` row but no ATKP row of any spell's
+    // attack (Checked (files): 248..251 and 502 have subs 20 / 22 / 24 only in Master, where Wisdom
+    // and Final have every sub). In Master the plain sub's row, as Reflect's rule for its finisher
+    // subs (`reflect::row`, sub & !1). Assumption: what KH2 does for a missing sub isn't traced.
+    // Every other form keeps the exact row.
+    battle.attack_for_level(atk, sub, count).or_else(|| if super::form::in_master() { battle.attack_for_level(atk, sub & !1, count) } else { None })
 }
 
 /// An unlocked shot's target: the nearest enemy within `AUTO_RANGE` in front of him.
@@ -1259,7 +1356,7 @@ pub unsafe fn kh1_step(id: u64, ctx: kh2_magic::kh2_bdx::CtxId) -> bool {
 pub unsafe fn shots_step(actor: usize, out: &Output, airborne: bool, strikes: &mut combat::Strikes, battle: &Arc<Battle>, lock: Option<u32>) {
     let Ok(mut g) = RT.try_lock() else { return };
     let Some(rt) = g.as_mut() else { return };
-    if rt.queued.is_empty() && rt.fresh.is_none() && rt.casting.is_none() && rt.kh1_clock.is_none() && rt.magic.casts.is_empty() && rt.magic.effects.is_empty() && rt.fx.is_empty() {
+    if rt.queued.is_empty() && rt.fresh.is_none() && rt.limit.is_none() && rt.casting.is_none() && rt.kh1_clock.is_none() && rt.magic.casts.is_empty() && rt.magic.effects.is_empty() && rt.fx.is_empty() {
         return;
     }
     let mut world = world_now(actor, out, airborne, strikes, lock, 0x51A7_0000 ^ rt.fired.wrapping_mul(2_654_435_761));
@@ -1287,6 +1384,34 @@ pub unsafe fn shots_step(actor: usize, out: &Output, airborne: bool, strikes: &m
     if let (Some(m), Some(me)) = (starting, world.objs.first_mut()) {
         if out.motion != m {
             me.motion = m;
+        }
+    }
+    // (A limit's script, t980: the move it asked of KH1 and KH1 hasn't applied yet seen as playing,
+    // as KH2's motion start plays it at once.)
+    if rt.limi.is_some_and(|f| rt.limit.is_some() || rt.magic.limit_running(f)) {
+        if let (Some(m), Some(me)) = (super::limitform::asked_motion(actor), world.objs.first_mut()) {
+            me.motion = m;
+        }
+        // (The moves' own reaction offers, KH2's range 20: Last Arcanum's, t985.)
+        super::limitform::window_offers(actor);
+        // (Infinity's hover, KH2's range 3 on KH1's jump step's hold, t1009.)
+        super::limitform::hover(actor);
+        // (Their frame triggers 7, the script's trigger 0x11: Infinity's shots, t987.)
+        if let Some(file) = rt.limi {
+            for (p0, p1) in super::limitform::object_triggers(actor) {
+                match rt.magic.limit_object_trigger(file, p0, p1, &mut world) {
+                    Ok(_) => log!(Magic, "Limit Form's script: trigger 0x11 ({p0}, {p1})"),
+                    Err(e) => log!(Magic, "Limit Form's script: trigger 0x11 ({p0}, {p1}) failed ({e})"),
+                }
+            }
+        }
+    }
+    // A limit asked for this frame (Limit Form's script's trigger 0x16, `limitform`).
+    if let (Some(cmd), Some(file)) = (rt.limit.take(), rt.limi) {
+        let made = if rt.magic.native.is_some() { rt.magic.limit(file, SORA, cmd, &mut world) } else { Err(super::kh2script::off()) };
+        match made {
+            Ok(_) => log!(Magic, "Limit Form's script: limit {cmd} started (trigger 0x16 on KH1's script machine)"),
+            Err(e) => log!(Magic, "Limit Form's script: limit {cmd} didn't start ({e})"),
         }
     }
     // A spell cast this frame (trigger 20), its release (21) at the motion's magic-cast event.

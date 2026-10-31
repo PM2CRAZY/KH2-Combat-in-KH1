@@ -460,10 +460,12 @@ pub struct Growth {
     prompts: std::collections::VecDeque<(String, String, String)>,
     /// Frames KH1's prompt box has been free.
     idle: u32,
-    /// Quick Run's, High Jump's and KH2 Glide's levels last seen (None: not looked yet).
+    /// Quick Run's, High Jump's, KH2 Glide's and Aerial Dodge's (t1026) levels last seen (None: not
+    /// looked yet).
     qr_level: Option<u8>,
     hj_level: Option<u8>,
     gl_level: Option<u8>,
+    ad_level: Option<u8>,
     /// The abilities last given before the debug menu's growth overrides (`debugmenu::
     /// growth_overrides`), and the overrides' count when they were applied.
     given: Option<character_core::Abilities>,
@@ -505,7 +507,7 @@ pub unsafe fn growth_frame(base: usize) {
 
 impl Growth {
     pub fn new() -> Growth {
-        Growth { mode: super::settings::get().abilities, frames: 0, seen: None, applied: false, no_room: Vec::new(), yielded: Vec::new(), prompts: Default::default(), idle: 0, qr_level: None, hj_level: None, gl_level: None, given: None, ov_gen: 0, names: [None; 3] }
+        Growth { mode: super::settings::get().abilities, frames: 0, seen: None, applied: false, no_room: Vec::new(), yielded: Vec::new(), prompts: Default::default(), idle: 0, qr_level: None, hj_level: None, gl_level: None, ad_level: None, given: None, ov_gen: 0, names: [None; 3] }
     }
 
     /// Quick Run's (0), Glide's (1) or Aerial Dodge's (2) menu name at level `l` (his own), or at
@@ -850,9 +852,19 @@ impl Growth {
                 }
                 self.gl_level = Some(l);
             }
-            // Aerial Dodge stays LV1 (KH2 grows it with Master Form, not on KH1's states here).
-            let l = u8::from(now.has_ours(AERIAL_DODGE));
+            // Aerial Dodge (t1026): its level from Master Form's (KH2's only source of it), in its
+            // menu name and a box as it grows, as Quick Run's.
+            let l = if now.has_ours(AERIAL_DODGE) { now.aerial_dodge_now() } else { 0 };
             self.name(2, l);
+            if self.ad_level != Some(l) {
+                if let Some(old) = self.ad_level {
+                    if old > 0 && l > old {
+                        log!(Menus, "Aerial Dodge grows: {}", growth::aerial_dodge_name(l));
+                        self.prompts.push_back(("Ability Up".to_string(), growth::aerial_dodge_name(l), String::new()));
+                    }
+                }
+                self.ad_level = Some(l);
+            }
         }
         if self.seen.as_ref() == Some(&now) {
             return;

@@ -174,18 +174,8 @@ unsafe extern "system" fn exec(actor: usize, row: i32, dir: usize) {
         let f: ExecFn = std::mem::transmute(ORIG_EXEC.load(Ordering::Acquire));
         return f(actor, row, dir);
     }
-    // Valor Form: no KH1 attack row run for a command other than Attack (its specials, which the
-    // command step runs as attack rows; `command` refuses them, this in case one comes another
-    // way).
-    if actor == sora && command != 1 && super::form::two_blades() {
-        static N: AtomicU32 = AtomicU32::new(0);
-        if super::log_on(super::LogCat::Combat) && N.fetch_add(1, Ordering::Relaxed) < 30 {
-            log!(Combat, "KH1 attack row {row} for command {command:#x} refused: not in Valor Form");
-        }
-        let sound: unsafe extern "system" fn(i32) = std::mem::transmute(base + SOUND_RVA);
-        sound(4);
-        return;
-    }
+    // (t1023: no two-Keyblade refusal of KH1's attack rows here any more; a two-bladed form runs a
+    // command's row as Wisdom does, the owner's rule, `command_step`.)
     let f: ExecFn = std::mem::transmute(ORIG_EXEC.load(Ordering::Acquire));
     f(actor, row, dir)
 }
@@ -222,7 +212,7 @@ impl Drop for CostPatch {
     }
 }
 
-// (The command types that don't move Sora, `NOT_SORAS`, are `crate::formcmds` from t962.)
+// (t962's Valor command list, `formcmds::valor_allows`, is gone from t1023: no form refuses KH1's commands.)
 
 /// Phase 8: KH1's own commands stay KH1's. KH1's command step (`0x1402A5380`, from its think
 /// step `0x1402A4090`) runs a chosen command: Attack (type 1) becomes KH2's attack (`exec`);
@@ -305,7 +295,7 @@ fn kh2_spell_refused(arg: u8, state: i32, drive: bool) -> Option<Refusal> {
     if drive || matches!(state, 0 | 6 | 0x18 | 2 | 8) {
         return None;
     }
-    let kh2_spell = arg == super::reflect::SPELL || (arg <= 3 && (super::formmagic::base_kh2_spell(arg) || super::formmagic::wisdom_kh2_spell(arg)));
+    let kh2_spell = arg == super::reflect::SPELL || (arg <= 3 && (super::formmagic::base_kh2_spell(arg) || super::formmagic::form_kh2_spell(arg)));
     if !kh2_spell {
         return None;
     }
@@ -393,7 +383,10 @@ unsafe fn command_step(actor: usize, dir: usize) {
     // KH1's own commands (its spells at the KH1 style, items, specials, summons) are KH1's as
     // unmodded.
     if actor == sora && kind == 2 && super::settings::get().commands && takeover::ON.load(Ordering::Relaxed) && super::shared::active() {
-        let drive = super::drive::on() && arg >= super::drive::FORM_ARG;
+        // (t995: the forms' arguments only. From 0x20 up are Limit Form's limits and follow-ups,
+        // `limitform`, caught below: taken here for a form, they went to `drive::chosen` with no
+        // form of that index, which returned with nothing done.)
+        let drive = super::drive::on() && (super::drive::FORM_ARG..super::drive::FORM_ARG + super::drive::FORMS.len() as u8).contains(&arg);
         // A Drive Form run on KH1's own states (Valor, `form::native_choice`): its change and its
         // revert are KH1's states' own (KH1's request and action flag, no borrow; `form::native_frame`).
         if drive && super::form::native_choice((arg - super::drive::FORM_ARG) as usize) {
@@ -572,6 +565,11 @@ unsafe fn command_step(actor: usize, dir: usize) {
         super::limitform::chosen(base, (arg - super::limitform::LIMIT_ARG) as usize);
         return;
     }
+    // (A limit's follow-up on Triangle, t981: to the limit's script, `limitform::follow_up`.)
+    if actor == sora && kind == 2 && super::drive::on() && (super::limitform::FOLLOW_ARG..super::limitform::FOLLOW_ARG + super::limitform::FOLLOW_UPS.len() as u8).contains(&arg) {
+        super::limitform::follow_up(base, (arg - super::limitform::FOLLOW_ARG) as usize);
+        return;
+    }
     // Reflect where KH1's own cast state couldn't take it (above): KH1 has no spell 7 to run, so
     // KH1's "can't" (t875: its old wait for KH2's controller, `reflect::chosen`, is deleted).
     if actor == sora && kind == 2 && ((full >> 8) & 0xFF) as u8 == super::reflect::SPELL {
@@ -589,22 +587,11 @@ unsafe fn command_step(actor: usize, dir: usize) {
         cmd_log(|| format!("command {kind:#x} ({full:08x}) refused: KH1's limits aren't used in a Drive Form (Limits in Forms KH2)"));
         return;
     }
-    // Valor Form: none of KH1's specials (Sonic Blade, Strike Raid, ...: the user, "dont let
-    // sora use triangle moves (sonic blade, strike raid etc) in valor form"): KH1's moves (its
-    // limits, Counterattack 99, the summons, ...) other than Attack, magic (refused in Valor by the
-    // menu, `spell_not_yet`) and an item. (Type 99 too, which s222 let through: the command step
-    // runs it as attack row 0x3E, `0x1402A4760`; the user, s229: "valor form can still use strike
-    // raid, ragnarok".) Talk, Examine, a chest's Open, save points and every command an object
-    // offers are let through (t962, row 18: answer 1 (a), KH2's DisableForm 0; `formcmds`).
-    if actor == sora && super::form::two_blades() && !crate::formcmds::valor_allows(kind) {
-        static N: AtomicU32 = AtomicU32::new(0);
-        if super::log_on(super::LogCat::Combat) && N.fetch_add(1, Ordering::Relaxed) < 30 {
-            log!(Combat, "command {kind:#x} ({full:08x}) refused: not in Valor Form");
-        }
-        let sound: unsafe extern "system" fn(i32) = std::mem::transmute(base + SOUND_RVA);
-        sound(4);
-        return;
-    }
+    // (t1023: Valor's two-Keyblade refusal of KH1's commands, t962's `formcmds::valor_allows`, is
+    // gone. The owner (§24.2 answer 6): "valor and master shouldn't refuse commands, we'll hand
+    // tune which ones if something looks off, it should be the same as wisdom form". So a
+    // two-bladed form takes KH1's commands as Wisdom does: KH1's limits only by Drive > Limits in
+    // Forms (above), Valor's magic only by KH2's no-magic rule (`spell_not_yet`).)
     let ours = actor == sora && super::settings::get().commands && takeover::ON.load(Ordering::Relaxed);
     if ours && !matches!(kind, 0 | 1 | 2 | 99 | 0x47) && rd::<i32>(actor + 0x70) == 2 {
         static N: AtomicU32 = AtomicU32::new(0);
@@ -2128,7 +2115,7 @@ impl Strikes {
                     a.atk, a.sub, r.kind, r.element, r.enemy_reaction, r.effect_on_hit, r.damage_effect, r.random_effect, r.hit_sound, r.flags,
                     knock as usize, if knock { "ground finisher" } else { "ground swing" }
                 );
-                let fx = a.package.map(|package| Kh2Spark { pkg: super::kh2dpx::Pkg::Spell(package), effect_on_hit: r.effect_on_hit, random_effect: r.random_effect });
+                let fx = a.package.map(|package| Kh2Spark { pkg: super::kh2dpx::pkg_of(package), effect_on_hit: r.effect_on_hit, random_effect: r.random_effect });
                 let dealt = land(sora, &b.parts[ti], &a.shapes[ai], kh1, r.power, spell_data, fx, info);
                 MAGIC.store(false, Ordering::Relaxed);
                 note(|| format!("spell ATKP {} (power {}, reaction {}) hit actor {:#x} part {ti}: landed with KH1 row motion {} -> {dealt:?}", a.atk, r.power, r.enemy_reaction, b.actor, kh1.motion));
@@ -3567,7 +3554,10 @@ unsafe fn spell_not_yet(menu: usize, entry: i32) -> bool {
     }
     // A form from the Drive list: only on a frame Sora can change (`form::accept_now`: KH2's,
     // or a KH1 move's cut frame reached), the same as a spell (the user: no queue).
-    if kind == 2 && arg >= super::drive::FORM_ARG && super::drive::on() {
+    // (t994: the forms' arguments only; Limit Form's limits, 0x20.., and their follow-ups, 0x28..,
+    // were taken for forms here and never chosen. They go by the Command Lock rule below, as a
+    // spell: KH2 takes a limit when Sora can act.)
+    if kind == 2 && (super::drive::FORM_ARG..super::drive::FORM_ARG + super::drive::FORMS.len() as u8).contains(&arg) && super::drive::on() {
         // (Valor's change on KH1's own states: KH1's rule, `form::native_accept`.)
         if super::form::accept_now() || super::form::native_accept((arg - super::drive::FORM_ARG) as usize) {
             return false;

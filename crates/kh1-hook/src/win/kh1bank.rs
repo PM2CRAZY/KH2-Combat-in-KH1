@@ -395,16 +395,21 @@ unsafe fn queue_has(base: usize, no: i32, id: i32) -> bool {
 /// not in KH1's list, no Sora, the queue full): it isn't played, as KH1 drops its own then.
 /// `ms` is its length when known.
 pub unsafe fn play(no: i32, ms: Option<u32>) -> bool {
+    play_id(no, ms).is_some()
+}
+
+/// `play`, with the id KH1's queue holds it by (for `fade_stop`), if played.
+pub unsafe fn play_id(no: i32, ms: Option<u32>) -> Option<i32> {
     if Build::current() != Build::Steam {
-        return false;
+        return None;
     }
     let base = super::sys::GetModuleHandleA(std::ptr::null()) as usize;
     if base == 0 || rd::<usize>(base + SOUND_UP_STEAM) == 0 || !ready(base) || !present(no) {
-        return false;
+        return None;
     }
     let sora = super::takeover::sora_actor();
     if sora < 0x10000 {
-        return false;
+        return None;
     }
     let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
     let queue: unsafe extern "system" fn(i32, i32, usize, i32) = std::mem::transmute(base + QUEUE_STEAM);
@@ -414,7 +419,7 @@ pub unsafe fn play(no: i32, ms: Option<u32>) -> bool {
         if super::log_on(super::LogCat::Sound) && N.fetch_add(1, Ordering::Relaxed) < 10 {
             log!(Sound, "KH1 banks: KH1's effect queue is full; se{no} isn't played");
         }
-        return false;
+        return None;
     }
     if let Ok(mut p) = PLAYING.lock() {
         p.push(match ms {
@@ -426,7 +431,28 @@ pub unsafe fn play(no: i32, ms: Option<u32>) -> bool {
     if N.fetch_add(1, Ordering::Relaxed) < 40 {
         note(|| format!("KH1 banks: se{no} queued in KH1's effect queue (id {id:#x}, {})", ms.map_or("length unknown".to_string(), |m| format!("{m} ms"))));
     }
-    true
+    Some(id)
+}
+
+/// t1014: KH1's fading stop of a queued sound (Steam `0x140179A20 (no, id, fade)`, `sub rsp, 38h;
+/// mov r10d, [rip+..]`, Checked (decomp) and (exe)): it frees the slot (`+0x1C` = 0) and calls
+/// `0x1400D2FF0 (record, no, id, -1, fade)`, the engine's SslSeFade to nothing, a stop over `fade`.
+/// KH2 stops an effect element's sound so as its bind node goes (`0x1401DE500 (handle, 0x78)`,
+/// Checked (decomp)); Assumption: the fade's unit is the same in both (both go to the same
+/// engine call).
+const FADE_STOP_STEAM: usize = 0x179A20;
+const FADE_STOP_PROLOGUE: [u8; 7] = [0x48, 0x83, 0xEC, 0x38, 0x44, 0x8B, 0x15];
+
+pub unsafe fn fade_stop(no: i32, id: i32, fade: i32) {
+    if Build::current() != Build::Steam {
+        return;
+    }
+    let base = super::sys::GetModuleHandleA(std::ptr::null()) as usize;
+    if base == 0 || !starts_with(base + FADE_STOP_STEAM, &FADE_STOP_PROLOGUE) || !queue_has(base, no, id) {
+        return;
+    }
+    let stop: unsafe extern "system" fn(i32, i32, i32) = std::mem::transmute(base + FADE_STOP_STEAM);
+    stop(no, id, fade);
 }
 
 /// Once a frame: frees the slots of ours that have played (KH1's queue keeps a slot until its

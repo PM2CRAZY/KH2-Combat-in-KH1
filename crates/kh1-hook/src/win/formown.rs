@@ -69,6 +69,7 @@ pub fn form_id(kind: Kind) -> u8 {
         Kind::Valor => formlevel::form::VALOR,
         Kind::Wisdom => formlevel::form::WISDOM,
         Kind::Limit => formlevel::form::LIMIT,
+        Kind::Master => formlevel::form::MASTER,
         Kind::Final => formlevel::form::FINAL,
     }
 }
@@ -88,13 +89,15 @@ pub unsafe fn bits() -> Option<u8> {
     (b & owned::SET_UP != 0).then_some(b)
 }
 
-/// The forms testing has always given (Valor and Wisdom).
+/// The forms testing has always given (Valor and Wisdom; Limit and Master too since t1021, the
+/// owner's answer 2 after research round 2: with Story Unlocks off they are owned as Valor and
+/// Wisdom are).
 fn always() -> u8 {
-    owned::bit(formlevel::form::VALOR) | owned::bit(formlevel::form::WISDOM)
+    owned::bit(formlevel::form::VALOR) | owned::bit(formlevel::form::WISDOM) | owned::bit(formlevel::form::LIMIT) | owned::bit(formlevel::form::MASTER)
 }
 
 /// The forms Sora owns now (`formlevel::owned` bits, without bits 6 and 7). Story Unlocks off:
-/// Valor and Wisdom, and Final once entered; on: the forms given in the save.
+/// Valor, Wisdom, Limit and Master (t1021), and Final once entered; on: the forms given in the save.
 pub unsafe fn owned() -> u8 {
     let given = bits().unwrap_or(0) & 0x3F;
     if story_unlocks() {
@@ -163,7 +166,11 @@ unsafe fn story(save: usize, b: u8) {
     let n = b | new | STORY_READ;
     std::ptr::write_unaligned((save + OWNED_OFF) as *mut u8, n);
     if new & owned::bit(formlevel::form::VALOR) != 0 {
-        valor_slot();
+        form_slot(Kind::Valor);
+    }
+    // (t1025: Master's M: slot, after Valor's, so a single spare Keyblade goes to Valor first.)
+    if new & owned::bit(formlevel::form::MASTER) != 0 {
+        form_slot(Kind::Master);
     }
     if new != 0 {
         log!(Forms, "Story Unlocks: forms {new:#04x} given{} ({}; save +0x{OWNED_OFF:X} now {n:#04x})", if quiet { " silently (the save's first read)" } else { " (a gain during play)" }, f.describe());
@@ -175,7 +182,7 @@ unsafe fn story(save: usize, b: u8) {
 
 /// Forms gained during play (bits): KH1's prompt box "New Drive Form: <name>" for each that is in
 /// the Drive list (`form::Kind::ALL`; the owner, main s308: "the game should tell you when you get a
-/// drive form"; t929). Forms not built yet (Limit, Master; Final on hold) get theirs when they are
+/// drive form"; t929). Limit and Master are in it (t1021); Final (on hold) gets its box when it is
 /// built (answer 4 (a)); KH2 itself shows a gained form only as a line in its bonus window
 /// (`0x1403EDCA0`, Checked (decomp)).
 fn gained(bits: u8) {
@@ -187,25 +194,35 @@ fn gained(bits: u8) {
     }
 }
 
-/// Valor gained (t930, answer 5 (a)): KH2 puts the first owned Keyblade into an empty Keyblade slot
-/// of Valor, Master or Final when the form's item is added (`0x1403C3FE0`: item-table order, kind 2
-/// records, Checked (decomp)). Here Valor's slot (`equip::VALOR_OFF`, save `+0x488`), if empty,
-/// gets the first Keyblade with a copy not equipped (`equip::valor_candidates`, lowest id first);
-/// none: it stays empty, and Valor is refused without a spare Keyblade as before (testing's
-/// two-blade moveset). KH2 takes the Keyblade out of the inventory; KH1's free count already leaves
-/// it to Valor.
-unsafe fn valor_slot() {
+/// A form gained (Valor t930, answer 5 (a); Master t1025): KH2 puts the first owned Keyblade into an
+/// empty Keyblade slot of Valor, Master or Final when the form's item is added (`0x1403C3FE0`:
+/// item-table order, kind 2 records, Checked (decomp)). Here the form's slot (`equip::slot_off`:
+/// Valor `+0x488`, Master `+0x489`), if empty (an old save's byte that isn't a Keyblade it holds
+/// counts as empty), gets the first Keyblade with a copy free of the members and the other form's
+/// slot (`equip::candidates`, lowest id first); none: it stays empty, and the form uses Sora's own
+/// Keyblade (t966). KH2 takes the Keyblade out of the inventory; KH1's free count leaves it to the
+/// form (`valorslot`).
+unsafe fn form_slot(kind: Kind) {
     let base = super::takeover::game_base();
-    let Some(s) = super::menu::save_block(base) else { return };
-    let at = s + super::equip::VALOR_OFF;
-    if !super::crash::readable(at) || rd::<u8>(at) != 0 {
+    let (Some(s), Some(off)) = (super::menu::save_block(base), super::equip::slot_off(kind)) else { return };
+    let at = s + off;
+    if !super::crash::readable(at) {
         return;
     }
-    match super::equip::valor_candidates(base).first() {
+    // (Valor's rule as it was, any byte set; Master's byte is new at `+0x489`, so only a Keyblade it
+    // holds counts.)
+    let full = match kind {
+        Kind::Valor => rd::<u8>(at) != 0,
+        _ => super::equip::slot_holds(base, kind).is_some(),
+    };
+    if full {
+        return;
+    }
+    match super::equip::candidates(base, kind).first() {
         Some(&id) => {
             std::ptr::write_unaligned(at as *mut u8, id);
-            log!(Forms, "Valor Form gained: its Keyblade slot gets item {id:#04x} (the first spare Keyblade)");
+            log!(Forms, "{} gained: its Keyblade slot gets item {id:#04x} (the first spare Keyblade)", kind.name());
         }
-        None => log!(Forms, "Valor Form gained: no spare Keyblade for its slot (it stays empty)"),
+        None => log!(Forms, "{} gained: no spare Keyblade for its slot (it stays empty)", kind.name()),
     }
 }

@@ -110,7 +110,7 @@ impl Table {
 }
 
 static BASE: OnceLock<Table> = OnceLock::new();
-static FORMS: [OnceLock<Option<Table>>; 4] = [OnceLock::new(), OnceLock::new(), OnceLock::new(), OnceLock::new()];
+static FORMS: [OnceLock<Option<Table>>; 5] = [OnceLock::new(), OnceLock::new(), OnceLock::new(), OnceLock::new(), OnceLock::new()];
 
 /// The table of the moveset now: a Drive Form's on KH1's own states (`form::native_form`), else
 /// base Sora's. Built the first time it is asked for. `None` without KH2's data.
@@ -123,6 +123,7 @@ pub fn now() -> Option<&'static Table> {
                 form::Kind::Wisdom => 1,
                 form::Kind::Final => 2,
                 form::Kind::Limit => 3,
+                form::Kind::Master => 4,
             };
             FORMS[i].get_or_init(|| kind.data(kh2).map(|f| Table::of(&f.character))).as_ref()
         }

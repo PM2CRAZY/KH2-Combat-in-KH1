@@ -21,6 +21,8 @@ pub struct Statics {
     roty: u32,
     effect_pos: u32,
     shared: u32,
+    /// KH2's one result vector of `trap_vector_inter` / `_outer_product` / `_rot` (`0x1407535C8`).
+    vec: u32,
 }
 
 impl Statics {
@@ -30,7 +32,7 @@ impl Statics {
             vm.mem.set_f32(a + 12, 1.0).ok();
             a
         };
-        Statics { add: slot(), sub: slot(), mul: slot(), roty: slot(), effect_pos: slot(), shared: slot() }
+        Statics { add: slot(), sub: slot(), mul: slot(), roty: slot(), effect_pos: slot(), shared: slot(), vec: slot() }
     }
 }
 
@@ -102,6 +104,25 @@ pub(crate) fn run_ctx(magic: &mut Magic, cast: &mut Cast, only: Option<CtxId>, w
     let main_done = vm.ctxs[main].done && vm.ctxs[main].children.is_empty();
     cast.finished = main_done && cast.t.threads.is_empty() && cast.t.ext_threads.is_empty();
     Ok(())
+}
+
+/// Trigger `key` of the cast's program run at once to its end on a context of its own with the main
+/// context's work memory (a limit's follow-up, `Magic::limit_command`). False: no such trigger.
+pub(crate) fn run_trigger(magic: &mut Magic, cast: &mut Cast, key: i32, args: &[Cell], world: &mut dyn World) -> Result<bool, BdxError> {
+    let Some(entry) = cast.vm.prog.trigger(key) else { return Ok(false) };
+    let wp = cast.vm.ctxs[cast.main].wp;
+    let c = cast.vm.spawn(Some(wp));
+    cast.vm.start_at(c, entry, args)?;
+    let mut b = Bridge { magic, t: &mut cast.t, world };
+    cast.vm.owner = Some(cast.main);
+    let st = cast.vm.run(c, &mut b);
+    cast.vm.ctxs[c].done = true;
+    cast.vm.owner = None;
+    match st? {
+        kh2_bdx::Status::Yield => b.magic.events.push(Event::Error(format!("trigger {key:#x} halted (not run on)"))),
+        _ => {}
+    }
+    Ok(true)
 }
 
 /// One thread on the host's child process (its tree), dropped from the cast's once done.
@@ -259,6 +280,46 @@ impl Bridge<'_> {
         vm.mem.set_u32(rec + 8, 0)?;
         vm.mem.set_u32(rec + 12, 2)?;
         Ok(rec)
+    }
+
+    /// A thread of the cast's at `pc` with `args` (on a child of the host's process when the cast is
+    /// on one, as `trap_magic_start_thread`'s): the context and whether it is the host's. `None`: the
+    /// host had no process for it.
+    fn thread_at(&mut self, vm: &mut Vm, ctx: CtxId, pc: u32, args: &[Cell]) -> Result<Option<(CtxId, bool)>, BdxError> {
+        let owner = vm.owner.unwrap_or(ctx);
+        let wp = vm.ctxs[owner].wp;
+        let id = self.t.native_id;
+        let hosted = match (id, self.magic.native.as_mut()) {
+            (Some(id), Some(n)) => Some(n.thread(id, vm, wp)),
+            _ => None,
+        };
+        if let Some(None) = hosted {
+            return Ok(None);
+        }
+        let ext = hosted.flatten();
+        let c = ext.unwrap_or_else(|| vm.spawn(Some(wp)));
+        vm.start_at(c, pc, args)?;
+        match (ext, id, self.magic.native.as_mut()) {
+            (Some(_), Some(id), Some(n)) => {
+                n.store(id, vm, c);
+                self.t.ext_threads.push(c);
+                Ok(Some((c, true)))
+            }
+            _ => {
+                self.t.threads.push(c);
+                Ok(Some((c, false)))
+            }
+        }
+    }
+
+    /// A target record pointed at `o` (none: 0), its other words kept.
+    fn set_target(&mut self, vm: &mut Vm, rec: u32, o: Option<ObjId>) -> Result<(), BdxError> {
+        let h = match o {
+            Some(o) => obj_record(vm, self.t, o),
+            None => 0,
+        };
+        vm.mem.set_u32(rec, h)?;
+        vm.mem.set_u32(rec + 8, 0)
     }
 
     fn missing(&mut self, table: u8, index: u16) {
@@ -663,6 +724,366 @@ impl Host for Bridge<'_> {
                 };
                 Some(Cell::addr(h))
             }
+            // --- a limit's script (Limit Form's `limi`, `Magic::limit`; Steam KH2's traps, Checked
+            // (decomp) where noted in `docs/kh1-drive-forms-native.md` §23) ---
+            // (`trap_puts`: a debug print.)
+            (0, 2) => None,
+            (1, 4) => {
+                let o = self.obj_of_ref(vm, a(0).v);
+                let d = vec_in(vm, a(1).v)?;
+                if let Some(o) = o {
+                    self.world.wish_dir(o, Vec3::new(d.x, d.y, d.z));
+                }
+                None
+            }
+            (1, 11) | (1, 13) => {
+                if let Some(o) = self.obj_of_handle(a(0).v) {
+                    let (m, blend) = (a(1).v as u16, a(2).f());
+                    if index == 11 {
+                        self.world.motion_start(o, m, blend);
+                    } else {
+                        self.world.motion_push(o, m, blend);
+                    }
+                }
+                None
+            }
+            (1, 14) => Some(b(self.obj_of_handle(a(0).v).is_some_and(|o| self.world.motion_ended(o)))),
+            (1, 23) => Some(Cell::int(self.world.area_world())),
+            // `trap_obj_hook (obj, pc, arg)` (`0x14042CA20`): a thread at `pc` with the object (and
+            // `arg` when there is one), the object's hook; a new hook ends its last one.
+            (1, 112) => {
+                if let Some(o) = self.obj_of_ref(vm, a(0).v) {
+                    if let Some(i) = self.t.hooks.iter().position(|h| h.0 == o) {
+                        let (_, c, ext) = self.t.hooks.remove(i);
+                        if c != ctx {
+                            if ext {
+                                self.t.ext_threads.retain(|x| *x != c);
+                            } else {
+                                self.t.threads.retain(|x| *x != c);
+                            }
+                            vm.ctxs[c].done = true;
+                        }
+                    }
+                    let args = if a(2).v != 0 { vec![a(0), a(2)] } else { vec![a(0)] };
+                    if let Some((c, ext)) = self.thread_at(vm, ctx, a(1).v, &args)? {
+                        self.t.hooks.push((o, c, ext));
+                    }
+                }
+                None
+            }
+            (1, 150) => Some(b(self.obj_of_ref(vm, a(0).v).is_some_and(|o| self.world.motion_range(o, a(1).i().clamp(0, 255) as u8)))),
+            (1, 165) => {
+                if let Some(o) = self.obj_of_ref(vm, a(2).v) {
+                    self.world.command_override(a(0).i(), a(1).v as u16, o);
+                }
+                None
+            }
+            // `trap_obj_effect_start_bind (obj, element, .., ..)`: the script's effect element on the
+            // object, following it (Last Arcanum's 35 / 36 on Sora).
+            (1, 87) => {
+                let o = self.obj_of_ref(vm, a(0).v);
+                let pax = self.t.pax_rec;
+                let rec = match o {
+                    Some(o) => self.start_effect(vm, pax, a(1).v as u16, Some(o)),
+                    None => 0,
+                };
+                Some(Cell::addr(rec))
+            }
+            (1, 272) => Some(b(!self.obj_of_ref(vm, a(0).v).is_some_and(|o| self.world.exists(o)))),
+            // `trap_effect_loop_end_kill`: its loop ended (it dies when that ends).
+            (0, 85) => {
+                let now = self.effect(a(0).v).map(|e| {
+                    e.loop_end();
+                    e.clone()
+                });
+                if let Some(e) = now {
+                    if self.world.effect_end(&e) {
+                        if let Some(e) = self.effect(a(0).v) {
+                            e.host_ended = true;
+                        }
+                    }
+                }
+                None
+            }
+            // --- Infinity's shots (`limi`'s trigger 0x11; Steam KH2, Checked (decomp)) ---
+            // `trap_vector_normalize (v)` (`0x14041CFA0` → `0x140142080`): v's xyz made unit in place,
+            // its length into w and returned.
+            (0, 7) => {
+                let v = vec_in(vm, a(0).v)?;
+                let len = v.truncate().length();
+                let n = if len != 0.0 { v.truncate() / len } else { v.truncate() };
+                put(vm, a(0).v, n.extend(len))?;
+                Some(Cell::float(len))
+            }
+            // `trap_random_get (n)` / `_getf (x)` / `_range (a, b)`: the host's uniform draw (their
+            // KH2 bodies aren't in the decomp; Assumption: [0, n), [0, x), [a, b)).
+            (0, 16) => {
+                let n = a(0).i().max(0);
+                let r = self.world.random();
+                Some(Cell::int(((r * n as f32) as i32).min((n - 1).max(0))))
+            }
+            (0, 17) => {
+                let r = self.world.random();
+                Some(Cell::float(r * a(0).f()))
+            }
+            (0, 18) => {
+                let r = self.world.random();
+                let (lo, hi) = (a(0), a(1));
+                if matches!(lo.tag, kh2_bdx::Tag::Int) && matches!(hi.tag, kh2_bdx::Tag::Int) {
+                    Some(Cell::int(lo.i() + (r * (hi.i() - lo.i()) as f32) as i32))
+                } else {
+                    Some(Cell::float(lo.f() + r * (hi.f() - lo.f())))
+                }
+            }
+            // `trap_vector_inter (a, b, t)` (`0x14041D490` → `0x140140230`): a·(1 − t) + b·t.
+            (0, 78) => {
+                let (va, vb, t) = (vec_in(vm, a(0).v)?, vec_in(vm, a(1).v)?, a(2).f());
+                put(vm, s.vec, va * (1.0 - t) + vb * t)?;
+                Some(Cell::addr(s.vec))
+            }
+            // `trap_vector_outer_product (a, b)` (`0x14041D570` → `0x140142120`): a × b, w 0.
+            (0, 82) => {
+                let (va, vb) = (vec_in(vm, a(0).v)?.truncate(), vec_in(vm, a(1).v)?.truncate());
+                put(vm, s.vec, va.cross(vb).extend(0.0))?;
+                Some(Cell::addr(s.vec))
+            }
+            // `trap_vector_rot (axis, v, angle)` (`0x14041D650` → `0x1403B7560`): v turned about the
+            // axis (Rodrigues; Assumption: the sense, `0x1403B7560` isn't in the decomp; Infinity
+            // spreads its shots evenly round, so either sense gives the same ring).
+            (0, 83) => {
+                let k = vec_in(vm, a(0).v)?.truncate().normalize_or_zero();
+                let v = vec_in(vm, a(1).v)?;
+                let (sn, cs) = a(2).f().sin_cos();
+                let r = v.truncate() * cs + k.cross(v.truncate()) * sn + k * k.dot(v.truncate()) * (1.0 - cs);
+                put(vm, s.vec, r.extend(v.w))?;
+                Some(Cell::addr(s.vec))
+            }
+            // `trap_target_set_obj (target, obj)` (`0x140430470`).
+            (1, 160) => {
+                let o = self.obj_of_ref(vm, a(1).v);
+                self.set_target(vm, a(0).v, o)?;
+                None
+            }
+            // `trap_btlobj_lockon_target (obj)` (`0x140431AD0`: the player's lock-on target record).
+            (2, 56) => {
+                let o = self.obj_of_ref(vm, a(0).v).and_then(|o| self.world.lock_target(o)).filter(|o| self.world.exists(*o));
+                let rec = vm.mem.alloc(16);
+                vm.mem.set_u32(rec + 4, 0)?;
+                vm.mem.set_u32(rec + 12, 2)?;
+                self.set_target(vm, rec, o)?;
+                Some(Cell::addr(rec))
+            }
+            // `trap_target_searcher_init (searcher, n)` (`0x14053DCE0` → `0x14053FB60`): emptied.
+            (6, 3) => {
+                self.t.searchers.insert(a(0).v, Vec::new());
+                None
+            }
+            // `trap_target_seracher_search (searcher, target, pos, dir, .., .., ..)` (`0x14053DD20` →
+            // `0x14053FB80`): the next object the searcher hasn't found yet into the target, within
+            // the searcher's distances (`+0x10` / `+0x14`, the script's own), nearest first
+            // (Assumption: KH2's direction and flag tests left out).
+            (6, 5) => {
+                let (sr, rec) = (a(0).v, a(1).v);
+                let from = host(vec_in(vm, a(2).v)?);
+                let (lo, hi) = (vm.mem.f32(sr + 0x10).unwrap_or(0.0), vm.mem.f32(sr + 0x14).unwrap_or(1000.0));
+                let found = self.t.searchers.get(&sr).cloned().unwrap_or_default();
+                let mut c: Vec<(f32, ObjId)> = self.world.enemies(from, lo, hi).into_iter().filter(|o| !found.contains(o)).map(|o| (self.world.target_point(o).distance(from), o)).collect();
+                c.sort_by(|x, y| x.0.total_cmp(&y.0));
+                let pick = c.first().map(|x| x.1);
+                if let Some(o) = pick {
+                    self.t.searchers.entry(sr).or_default().push(o);
+                }
+                self.set_target(vm, rec, pick)?;
+                None
+            }
+            // `trap_target_dist (target, pos)` (`0x14053E3E0` → `0x1403BDD90`).
+            (6, 9) => {
+                let h = vm.mem.u32(a(0).v)?;
+                let p = host(vec_in(vm, a(1).v)?);
+                let d = self.obj_of_handle(h).map_or(f32::MAX, |o| self.world.target_point(o).distance(p));
+                Some(Cell::float(d))
+            }
+            // `trap_target_searcher_get_old (searcher, target, i)` (`0x14053E4F0`): the i-th found.
+            (6, 12) => {
+                let o = self.t.searchers.get(&a(0).v).and_then(|v| v.get(a(2).i().max(0) as usize).copied());
+                self.set_target(vm, a(1).v, o)?;
+                None
+            }
+            // `trap_target_clear (target)` (`0x14053E540` → `0x1403BDA50`).
+            (6, 16) => {
+                self.set_target(vm, a(0).v, None)?;
+                None
+            }
+            // `trap_target_get_group (target)` (`0x14053E5B0`: its `+4`).
+            (6, 57) => Some(Cell::int(vm.mem.u32(a(0).v + 4)? as i32)),
+            // `trap_party_get_weapon (obj, n)` (`0x140431310`, `obj + 0xD60 + n × 8`) / `trap_obj_is_attach
+            // (obj)` (`0x14042B980`, `+0x6A0` ≠ 0), t988: until the thrown Keyblade is an object of its own (its
+            // version), no weapon object and every weapon still in the hand, so Strike Raid's
+            // script plays its moves with the Keyblade held (its flight loop runs while the weapon
+            // isn't attached, `limi` pc 3418, Checked (files)).
+            (1, 234) => {
+                let w = self.obj_of_ref(vm, a(0).v).and_then(|o| self.world.weapon(o, a(1).v));
+                Some(Cell::addr(match w {
+                    Some(w) => obj_record(vm, self.t, w),
+                    None => 0,
+                }))
+            }
+            (1, 161) => Some(b(self.obj_of_ref(vm, a(0).v).map_or(true, |o| self.world.attached(o)))),
+            // --- Strike Raid's thrown Keyblade (t992; Steam KH2, Checked (decomp),
+            // `docs/kh1-strike-raid-research.md` §1) ---
+            // `trap_obj_attach (child, parent, bone, flags, n, ptr)` / `trap_obj_detach (obj)`.
+            (1, 18) | (1, 102) => {
+                if let Some(o) = self.obj_of_ref(vm, a(0).v) {
+                    self.world.attach(o, index == 18);
+                }
+                None
+            }
+            // `trap_obj_motion_sync` / `_unsync (master, slave)`: the weapon on Sora's motion while
+            // held; the host's weapon is drawn on his own bones then (nothing to do).
+            (1, 126) | (1, 236) => None,
+            // `trap_party_hand_to_bone (obj, hand)`: the hand's bone (the host attaches to the hand).
+            (1, 235) => Some(Cell::int(0)),
+            // `trap_obj_set_pos (obj, pos)` (`0x1403B64D0`: `+0x670`).
+            (1, 148) => {
+                let p = host(vec_in(vm, a(1).v)?);
+                if let Some(o) = self.obj_of_ref(vm, a(0).v) {
+                    self.world.set_pos(o, p);
+                }
+                None
+            }
+            // `trap_obj_move_request (obj, dir, speed)` (`0x1403B9A70`, used once by the move step
+            // `0x1403B89A0`: position += normalize(dir) × speed × the frame time).
+            (1, 89) => {
+                let d = flip(vec_in(vm, a(1).v)?.truncate()).normalize_or_zero();
+                if let Some(o) = self.obj_of_ref(vm, a(0).v) {
+                    let p = self.world.pos(o) + d * a(2).f() * ft;
+                    self.world.set_pos(o, p);
+                }
+                None
+            }
+            // `trap_obj_set_xyzrot (obj, rot)` (`0x1403B65F0`: `+0x680`).
+            (8, 2) => {
+                let r = vec_in(vm, a(1).v)?;
+                if let Some(o) = self.obj_of_ref(vm, a(0).v) {
+                    self.world.set_rot(o, Vec3::new(r.x, r.y, r.z));
+                }
+                None
+            }
+            // `trap_strike_raid_calc_xyzrot (dir, up)` (`0x14053EF90`): d = unit dir, u = unit up ((0,
+            // -1, 0) if the same); r0 = unit(u × d), r2 = -d, r1 = unit(r2 × r0); `up` overwritten
+            // with d × r0; the basis' angles returned (KH2's `0x1401AB290`; ours glam's XYZ angles of
+            // it, read back the same way by the host's `set_rot`, Assumption: the convention).
+            (6, 68) => {
+                let d = vec_in(vm, a(0).v)?.truncate().normalize_or_zero();
+                let mut u = vec_in(vm, a(1).v)?.truncate().normalize_or_zero();
+                if (u - d).length() < 1e-6 {
+                    u = Vec3::new(0.0, -1.0, 0.0);
+                }
+                let r0 = u.cross(d).normalize_or_zero();
+                let r2 = -d;
+                let r1 = r2.cross(r0).normalize_or_zero();
+                put(vm, a(1).v, d.cross(r0).extend(0.0))?;
+                let (x, y, z) = Quat::from_mat3(&glam::Mat3::from_cols(r0, r1, r2)).normalize().to_euler(glam::EulerRot::XYZ);
+                put(vm, s.vec, Vec4::new(x, y, z, 0.0))?;
+                Some(Cell::addr(s.vec))
+            }
+            // --- Strike Raid's trail, catch flash and hits (t993; Steam KH2, Checked (decomp)) ---
+            // `trap_obj_effect_start_bind_other (obj, id, other, .., ..)` (`0x1403B6670`): obj's
+            // effect element bound to `other` (the trail, 32, on the thrown Keyblade).
+            (1, 149) => {
+                let other = self.obj_of_ref(vm, a(2).v);
+                let pax = self.t.pax_rec;
+                let rec = match other {
+                    Some(o) => self.start_effect(vm, pax, a(1).v as u16, Some(o)),
+                    None => 0,
+                };
+                Some(Cell::addr(rec))
+            }
+            // `trap_obj_effect_start_pos (obj, id, pos, .., ..)` (`0x1403B66C0`): obj's effect element
+            // at `pos` (the catch flash, 34, where the Keyblade was).
+            (1, 22) => {
+                let p = host(vec_in(vm, a(2).v)?);
+                let pax = self.t.pax_rec;
+                let rec = self.start_effect(vm, pax, a(1).v as u16, None);
+                let now = self.effect(rec).map(|e| {
+                    e.placed = Some(p);
+                    e.pos = p;
+                    e.clone()
+                });
+                if let Some(e) = now {
+                    self.world.effect_place(&e);
+                }
+                Some(Cell::addr(rec))
+            }
+            // `trap_attack_set_obj_pax (attack, obj)` (`0x140432A90`: the hit's effects from that
+            // object's effect file): the host's hit effects come from the cast's package already
+            // (the limit's, `kh2fx::LIMIT`; Assumption: Raid's weapon effects are in it).
+            (2, 22) => None,
+            // `trap_vector_inner_prodcut (a, b)` (`0x14041D8B0`): the cosine of unit copies.
+            (0, 91) => {
+                let (va, vb) = (vec_in(vm, a(0).v)?.truncate().normalize_or_zero(), vec_in(vm, a(1).v)?.truncate().normalize_or_zero());
+                Some(Cell::float(va.dot(vb)))
+            }
+            // `trap_fixrad (a)` (`0x14041E5E0` → `0x1403B6F20`): into [-pi, pi]; not finite: 0.
+            (0, 43) => {
+                let v = a(0).f();
+                Some(Cell::float(if v.is_finite() { wrap(v) } else { 0.0 }))
+            }
+            (6, 67) => {
+                if let Some(o) = self.obj_of_ref(vm, a(0).v) {
+                    self.world.party_attack(o, a(1).v as u16);
+                }
+                None
+            }
+            (1, 151) => Some(b(self.obj_of_ref(vm, a(0).v).is_some_and(|o| self.world.motion_trigger(o, a(1).i().clamp(0, 255) as u8)))),
+            // `trap_obj_effect_unbind (obj, effect)` (`0x14042D650` → `0x1402C7340`): the effect no
+            // longer follows the object (it stays where it is).
+            (1, 169) => {
+                if let Some(e) = self.effect(a(1).v) {
+                    e.owner = None;
+                }
+                None
+            }
+            // `trap_obj_set_movement (obj, dir, speed)` (`0x14042FDA0` → `0x1403B9DA0`: the move
+            // direction `+0x10` and speed `+0x1C`, Checked (decomp)): Infinity's follow-ups set 0
+            // (stand still in the air) before their recoil (t1010: to the host, `World::set_movement`).
+            (1, 111) => {
+                let o = self.obj_of_ref(vm, a(0).v);
+                let d = vec_in(vm, a(1).v)?;
+                if let Some(o) = o {
+                    let s = a(2).f();
+                    self.world.set_movement(o, Vec3::new(d.x, d.y, d.z), if s.is_finite() { s } else { 0.0 });
+                }
+                None
+            }
+            (1, 183) => {
+                self.world.light_color(a(0).v, [a(1).i(), a(2).i(), a(3).i()], a(4).f());
+                None
+            }
+            (1, 222) => Some(Cell::int(self.obj_of_ref(vm, a(0).v).map_or(0, |o| self.world.entry_id(o)))),
+            // `trap_limit_player (limit)` / `trap_limit_friend (limit, n)`: the limit's player (the
+            // owner); a solo limit has no friend.
+            (2, 48) => {
+                let caster = self.t.caster;
+                Some(Cell::addr(obj_record(vm, self.t, caster)))
+            }
+            (2, 49) => Some(Cell::addr(0)),
+            // `trap_limit_start_thread (pc, arg)`: a thread at `pc` with `arg` (t984: the code at `limi`'s
+            // pc 5595 / 4978 pushes the pc first, Checked (files); t980 had them the other way).
+            (2, 54) => {
+                self.thread_at(vm, ctx, a(0).v, &[a(1)])?;
+                None
+            }
+            // `trap_limit_light (limit)`: the limit's light (one per limit: 1).
+            (2, 55) => Some(Cell::int(1)),
+            // `trap_limit_time (limit)` (limit `+0x118`): a solo limit has no partner time.
+            (2, 60) => Some(Cell::float(0.0)),
+            // `trap_limit_reference (limit)` (limit `+0x50`): nobody else holds a solo limit.
+            (2, 63) => Some(Cell::int(0)),
+            // `trap_obj_stop_end_all`.
+            (6, 47) => None,
+            // `trap_limit_start_command` (`0x1403D89F0`): the limit's command.
+            (7, 27) => Some(Cell::int(self.t.limit_command.map_or(0, |c| c as i32))),
             (2, 39) => Some(b(self.attack(a(0).v).is_some_and(|x| x.reflected))),
             (2, 66) => Some(Cell::int(self.attack(a(0).v).map_or(0, |x| x.reflect_count as i32))),
             _ => {

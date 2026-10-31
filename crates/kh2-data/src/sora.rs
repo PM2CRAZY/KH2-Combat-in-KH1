@@ -329,6 +329,7 @@ pub fn clip_from_anb(motion: u16, player: &Anb, weapons: &[Option<&Anb>], combat
                 range_id::DISABLE_COLLISION => WindowKind::DisableGroup(p(0) as u8),
                 29 => WindowKind::EdgeStop,
                 16..=18 => WindowKind::ScriptRange(r.id - 15),
+                20 => WindowKind::Command(p(0) as u16),
                 42 => WindowKind::KeepMomentum,
                 range_id::ALLOW_RC => WindowKind::AllowReactionCommand,
                 range_id::WEAPON_TRAIL => WindowKind::WeaponTrail { weapon: on_weapon },
@@ -349,6 +350,7 @@ pub fn clip_from_anb(motion: u16, player: &Anb, weapons: &[Option<&Anb>], combat
                 34 => EventKind::QuickRunCheck,
                 35 => EventKind::FallCheck,
                 31 => EventKind::Rumble(e.params.first().copied().unwrap_or(0)),
+                7 => EventKind::ObjectTrigger(e.params.first().copied().unwrap_or(0), e.params.get(1).copied().unwrap_or(0)),
                 other => EventKind::Other(other),
             };
             clip.events.push(Event { frame: e.frame.max(0) as u32, kind });
@@ -361,7 +363,9 @@ pub fn clip_from_anb(motion: u16, player: &Anb, weapons: &[Option<&Anb>], combat
 /// documented fallback order) and the matching weapon slots.
 fn moves(player: &Mset, weapons: &[Mset], combat: &CombatData) -> HashMap<u16, Clip> {
     let mut clips = HashMap::new();
-    for m in 0..=230u16 {
+    // (Every motion id a moveset can have, as `pose_motions`: t996, Limit Form's Strike Raid
+    // 231..234 and Infinity 241..248 were past the old 230 and had no clips, so no slots.)
+    for m in 0..=255u16 {
         let Some(ps) = player.slot_for(m as usize, true, true) else { continue };
         let Some(pa) = &ps.anb else { continue };
         let wa: Vec<Option<&Anb>> = weapons.iter().map(|w| w.slot_for(m as usize, true, true).and_then(|s| s.anb.as_ref())).collect();

@@ -74,6 +74,10 @@ const DRAIN_FRAMES: u32 = 3;
 const UPPER_SLASH: u16 = 95;
 /// KH2's magic sub offset in Wisdom Form.
 pub const MAGIC_SUB: i32 = 10;
+/// (t1027) KH2's magic sub offset in Master Form: pref `magi` rows 20..25 and the spells' ATKP rows
+/// at subs 20 / 22 / 24 (ATKP 248..251, 502, 573.., Checked (files)). The code adding 20 wasn't
+/// found in the decomp (Assumption, as Wisdom's + 10).
+pub const MASTER_MAGIC_SUB: i32 = 20;
 
 /// The forms (`drive::FORMS` in the same order).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -82,18 +86,22 @@ pub enum Kind {
     Wisdom,
     /// (t969, the main-branch port's round 12: KH2's Limit Form, form 3, on KH1's own states.)
     Limit,
+    /// (t1021: KH2's Master Form, form 4, `P_EX100_TRIF` moveset 4, on KH1's own states.)
+    Master,
     Final,
 }
 
 impl Kind {
     /// The Drive list's (Final is secret, `pad`).
-    pub const ALL: [Kind; 3] = [Kind::Valor, Kind::Wisdom, Kind::Limit];
-    const EVERY: [Kind; 4] = [Kind::Valor, Kind::Wisdom, Kind::Limit, Kind::Final];
+    /// (KH2's order, `0x1403F3110`: Valor, Wisdom, Limit, Master, then Final.)
+    pub const ALL: [Kind; 4] = [Kind::Valor, Kind::Wisdom, Kind::Limit, Kind::Master];
+    const EVERY: [Kind; 5] = [Kind::Valor, Kind::Wisdom, Kind::Limit, Kind::Master, Kind::Final];
     pub fn name(self) -> &'static str {
         match self {
             Kind::Valor => "Valor Form",
             Kind::Wisdom => "Wisdom Form",
             Kind::Limit => "Limit Form",
+            Kind::Master => "Master Form",
             Kind::Final => "Final Form",
         }
     }
@@ -109,12 +117,14 @@ impl Kind {
             Kind::Valor => kh2.valor.as_ref(),
             Kind::Wisdom => kh2.wisdom.as_ref(),
             Kind::Limit => kh2.limit_form.as_ref(),
+            Kind::Master => kh2.master.as_ref(),
             Kind::Final => kh2.final_form.as_ref(),
         }
     }
-    /// With a second Keyblade (Valor's slot's).
+    /// With a second Keyblade (Valor's slot's; Master's floating one, t1024: `W_EX010_TRIF_L`,
+    /// Checked (files); Final's Kingdom Key).
     pub fn two_blades(self) -> bool {
-        matches!(self, Kind::Valor | Kind::Final)
+        matches!(self, Kind::Valor | Kind::Master | Kind::Final)
     }
     /// Its KH2 model (`kh2_data::sora::FORMS`: its moveset's files), also the slot cache's key for
     /// its baked moves (`kh2slots::slot_key`).
@@ -123,22 +133,41 @@ impl Kind {
             Kind::Valor => "P_EX100_BTLF",
             Kind::Wisdom => "P_EX100_MAGF",
             Kind::Limit => "P_EX100_KH1F",
+            Kind::Master => "P_EX100_TRIF",
             Kind::Final => "P_EX100_ULTF",
         }
     }
     /// Runs on KH1's own states where it can (`native_ok`): its moves baked into KH1 slots
     /// (`kh2slots::FORM_SLOTS`), its numbers on KH1's states. The others can't be entered (t873: refused, no KH2 controller).
     pub fn native_capable(self) -> bool {
-        matches!(self, Kind::Valor | Kind::Wisdom | Kind::Limit)
+        matches!(self, Kind::Valor | Kind::Wisdom | Kind::Limit | Kind::Master)
     }
     /// Its growth ability (KH2's form growth: Valor High Jump, Wisdom Quick Run, Limit Dodge Roll
-    /// (fmlv form 3, Checked (files)), Final Glide).
+    /// (fmlv form 3, Checked (files)), Master Aerial Dodge (fmlv form 4, Checked (files)), Final
+    /// Glide).
     pub fn growth(self) -> &'static str {
         match self {
             Kind::Valor => "High Jump",
             Kind::Wisdom => "Quick Run",
             Kind::Limit => "Dodge Roll",
+            Kind::Master => "Aerial Dodge",
             Kind::Final => "Glide",
+        }
+    }
+    /// (t1027) Casts KH2's Fire, Blizzard, Thunder, Cure (and Reflect) on KH1's cast state with its
+    /// own cast clips, Wisdom's path (`formmagic::form_kh2_spell`): Wisdom and Master (their
+    /// movesets have the MAGC cast motions 56..73, Checked (files)). Valor has no magic (KH2's
+    /// Valor can't cast), Limit has its limits in Magic's place, Final stays as it is.
+    pub fn kh2_magic(self) -> bool {
+        matches!(self, Kind::Wisdom | Kind::Master)
+    }
+    /// (t1027) Its KH2 magic sub offset (`magic_sub`): Wisdom + 10, Master + 20 (Checked (files):
+    /// `magi` rows 10..15 / 20..25), else 0.
+    pub fn magic_sub(self) -> i32 {
+        match self {
+            Kind::Wisdom => MAGIC_SUB,
+            Kind::Master => MASTER_MAGIC_SUB,
+            _ => 0,
         }
     }
 }
@@ -184,6 +213,11 @@ pub fn in_limit() -> bool {
     current() == Some(Kind::Limit)
 }
 
+/// In Master Form (t1021).
+pub fn in_master() -> bool {
+    current() == Some(Kind::Master)
+}
+
 /// In Valor Form (no magic).
 pub fn in_valor() -> bool {
     current() == Some(Kind::Valor)
@@ -194,7 +228,7 @@ pub fn in_final() -> bool {
     current() == Some(Kind::Final)
 }
 
-/// In a form with a second Keyblade (Valor, Final).
+/// In a form with a second Keyblade (Valor, Master, Final).
 pub fn two_blades() -> bool {
     current().is_some_and(|k| k.two_blades())
 }
@@ -246,13 +280,15 @@ pub fn busy() -> bool {
     CHANGING.load(Ordering::Relaxed) || REQUEST.load(Ordering::Relaxed) != 0
 }
 
-/// KH2's magic sub offset now (`reflect`).
+/// KH2's magic sub offset now (`reflect`, `formmagic`): the form's (`Kind::magic_sub`, t1027:
+/// per form; Wisdom 10, Master 20), base Sora's 0.
 pub fn magic_sub() -> i32 {
-    if in_wisdom() {
-        MAGIC_SUB
-    } else {
-        0
-    }
+    current().map_or(0, |k| k.magic_sub())
+}
+
+/// (t1027) In a form that casts KH2's magic on KH1's states (`Kind::kh2_magic`): Wisdom, Master.
+pub fn in_kh2_magic_form() -> bool {
+    current().is_some_and(|k| k.kh2_magic())
 }
 
 unsafe fn rd<T: Copy>(p: usize) -> T {
@@ -490,7 +526,9 @@ pub unsafe fn possible(sora: usize) -> Vec<Kind> {
 unsafe fn own_needs(kind: Kind) -> Result<(), String> {
     match kind {
         Kind::Valor => super::valor::keyblade().map(|_| ()).ok_or_else(|| "no Keyblade for the second hand (one Sora owns that isn't equipped)".into()),
-        Kind::Wisdom | Kind::Limit | Kind::Final => Ok(()),
+        // (Master, t1024: its second Keyblade is Sora's own until its M: slot, the owner's empty-slot
+        // rule, round 11 answer 1 (a), so it needs nothing; t1025: an empty M: slot is the same.)
+        Kind::Wisdom | Kind::Limit | Kind::Master | Kind::Final => Ok(()),
     }
 }
 
@@ -571,7 +609,12 @@ pub fn battle(kh2: &pose::Kh2) -> &Arc<Battle> {
 /// table unlocked.
 pub fn form_abilities(sora: &Abilities, form: &Character, kind: Kind) -> Abilities {
     let mut a = Abilities {
-        guard: form.moveset.clips.contains_key(&character_core::motion::GUARD),
+        // (t1020) Guard only where the form's motion 42 has a guard window (KH2's range 10 hit with a
+        // guard ATKP, `WindowKind::Guard`): Valor's and Limit's 42 have one (ATKP 162), Master's 42 is
+        // its repel clip D350 with none (ranges 3 / 14 and a trail only, Checked (files)
+        // `P_EX100_TRIF.mset`), and KH2's Master has no guard row (PTYA set 4, Checked (files)). The
+        // clip's presence alone gave every form a guard.
+        guard: form.moveset.clips.get(&character_core::motion::GUARD).is_some_and(|c| c.windows.iter().any(|w| matches!(w.kind, character_core::WindowKind::Guard { .. }))),
         // (Sora's Aerial Recovery in the form, with its own recovery motion: the user, Wisdom and
         // Valor were "missing aerial recovery".)
         aerial_recovery: sora.aerial_recovery && form.moveset.clips.contains_key(&character_core::motion::AIR_RECOVERY),
@@ -607,6 +650,9 @@ fn form_growth(a: &mut Abilities, kind: Kind) {
         Kind::Valor => a.high_jump = g,
         Kind::Wisdom => a.quick_run = g,
         Kind::Limit => a.dodge_roll = g,
+        // (t1026: its Aerial Dodge at Master's own level, fmlv form 4: 1, 1, 2, 2, 3, 3, 4 by
+        // level, Checked (files); its record `formexp::MASTER_LEVEL_OFF`.)
+        Kind::Master => a.aerial_dodge = g,
         Kind::Final => a.glide = g,
     }
 }
@@ -620,6 +666,8 @@ unsafe fn drain_step(d: &mut Drive, actor: usize, battle: bool) {
             Kind::Valor => Some(super::tint::Look::Valor),
             // (Limit's look, the owner's black outfit, t974.)
             Kind::Limit => Some(super::tint::Look::Limit),
+            // (Master's look, the owner's §24.2 answer 4, main's yellow spec, t1029.)
+            Kind::Master => Some(super::tint::Look::Master),
             Kind::Final => None,
         }),
     );
@@ -628,10 +676,15 @@ unsafe fn drain_step(d: &mut Drive, actor: usize, battle: bool) {
     let Some(f) = d.form.as_mut() else { return };
     // (Valor: its Keyblade checked every 10 frames, so a change made in the menu reaches his
     // hand, `valor::keyblade`.)
-    if f.kind == Kind::Valor {
+    // (Master, t1024: the same check of its second Keyblade; t1025 its M: slot, `valor::master_slot`.)
+    if matches!(f.kind, Kind::Valor | Kind::Master) {
         static TICK: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
         if TICK.fetch_add(1, Ordering::Relaxed) % 10 == 0 {
-            super::valor::keyblade();
+            if f.kind == Kind::Valor {
+                super::valor::keyblade();
+            } else {
+                super::valor::master_slot();
+            }
         }
     }
     // (Form Cost on the Drive gauge, t933: KH2's form gauge, one tick a 60 Hz frame in battle and
@@ -870,6 +923,11 @@ pub unsafe fn native_frame(kh2: &pose::Kh2, actor: usize, battle: bool, steps: u
     }
     match REQUEST.swap(0, Ordering::Relaxed) {
         1 if d.form.is_none() && d.change.is_none() => native_start(d, actor),
+        // (t991: no Revert while one of Limit Form's limits runs: KH2's menu is locked for the
+        // limit, its revert only from the free state, `0x140404A40`, Checked (decomp).)
+        2 if d.form.is_some() && super::limitform::running() => {
+            log!(Forms, "Drive: Revert refused (a limit runs)");
+        }
         2 if d.form.is_some() => {
             native_revert(d, kh2, actor, "the Revert command");
             return;
@@ -916,7 +974,9 @@ pub unsafe fn native_frame(kh2: &pose::Kh2, actor: usize, battle: bool, steps: u
     for _ in 0..steps.max(1) {
         drain_step(d, actor, battle);
     }
-    if d.revert && native_can_change(actor) {
+    // (t991: KH2's revert comes only from its free-state step (`0x140404A40`, Checked (decomp)), so
+    // a running limit, which holds the player in its own state, puts it off until the limit ends.)
+    if d.revert && native_can_change(actor) && !super::limitform::running() {
         d.revert = false;
         let why = if d.form.as_ref().is_some_and(|f| f.gauge.is_some()) { "the form gauge out" } else { "out of MP" };
         native_revert(d, kh2, actor, why);
@@ -1033,6 +1093,7 @@ fn growth_name(a: &Abilities, kind: Kind) -> &'static str {
         Kind::Valor => a.high_jump,
         Kind::Wisdom => a.quick_run,
         Kind::Limit => a.dodge_roll,
+        Kind::Master => a.aerial_dodge,
         Kind::Final => a.glide,
     };
     ["none", "LV1", "LV2", "LV3", "MAX"][(level as usize).min(4)]
@@ -1102,7 +1163,8 @@ pub fn own_motion(motion: u16) -> bool {
 pub fn effect(motion: u16, n: i16) {
     if in_wisdom() {
         super::formmagic::effect(n);
-    } else if in_valor() || in_final() || in_limit() {
+    } else if in_valor() || in_final() || in_limit() || in_master() {
+        // (t1028: Master's elements from its own package, `kh2fx::MASTER`.)
         super::kh2fx::form_event(motion, n);
     }
 }

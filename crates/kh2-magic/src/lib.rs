@@ -108,6 +108,75 @@ pub trait World {
     }
     /// Uniform in [0, 1).
     fn random(&mut self) -> f32;
+    /// `trap_sysobj_motion_start (obj, motion, blend)`: `o` plays `motion` now, its queue cleared
+    /// (a limit's moves: Limit Form's script).
+    fn motion_start(&mut self, _o: ObjId, _motion: u16, _blend: f32) {}
+    /// `trap_sysobj_motion_push (obj, motion, blend)`: `motion` queued after the one playing.
+    fn motion_push(&mut self, _o: ObjId, _motion: u16, _blend: f32) {}
+    /// `trap_sysobj_motion_is_end (obj)`: the motion playing has ended.
+    fn motion_ended(&self, _o: ObjId) -> bool {
+        false
+    }
+    /// `trap_obj_wish_dir (obj, dir)`: the way `o` should face (the game's vector).
+    fn wish_dir(&mut self, _o: ObjId, _dir: Vec3) {}
+    /// `trap_light_set_color (light, r, g, b, frames)`: the limit light (`trap_limit_light`) fades to
+    /// the colour (128 = unchanged) over `frames`.
+    fn light_color(&mut self, _light: u32, _rgb: [i32; 3], _frames: f32) {}
+    /// `trap_obj_motion_check_range (obj, n)`: script range `n` (`clip::WindowKind::ScriptRange`) of
+    /// the motion `o` plays is open now.
+    fn motion_range(&self, _o: ObjId, _n: u8) -> bool {
+        false
+    }
+    /// `trap_command_override (slot, command, obj, 1)`: `command` offered in the player's reaction
+    /// slot this frame (a limit's follow-up).
+    fn command_override(&mut self, _slot: i32, _command: u16, _o: ObjId) {}
+    /// `trap_obj_set_movement (obj, dir, speed)` (Steam KH2 `0x14042FDA0` → `0x1403B9DA0`: the
+    /// object's move direction `+0x10` and speed `+0x1C`, Checked (decomp)).
+    fn set_movement(&mut self, _o: ObjId, _dir: Vec3, _speed: f32) {}
+    /// `trap_obj_party_attack (obj, row)` (Steam KH2 `0x14053EF20` → `0x1403D74E0` / `0x1403D78D0`):
+    /// `o`'s moveset's PTYA row `row` started on it (its motion, toward its target).
+    fn party_attack(&mut self, _o: ObjId, _row: u16) {}
+    /// `trap_obj_motion_check_trigger (obj, n)` (`0x14042D230`): the motion's frame trigger 8 + n
+    /// (KH2's frame triggers 9..12, `0x14040DD70`) fired this frame.
+    fn motion_trigger(&self, _o: ObjId, _n: u8) -> bool {
+        false
+    }
+    /// The objects a target search may find (`trap_target_seracher_search`): the host's enemies
+    /// whose distance from `from` is within `min..=max` (host units).
+    fn enemies(&self, _from: Vec3, _min: f32, _max: f32) -> Vec<ObjId> {
+        Vec::new()
+    }
+    /// `o`'s lock-on target (`trap_btlobj_lockon_target`), none without a lock.
+    fn lock_target(&self, _o: ObjId) -> Option<ObjId> {
+        None
+    }
+    /// `trap_party_get_weapon (obj, n)`: `o`'s weapon `n` as an object of its own, if the host has
+    /// one (Strike Raid's thrown Keyblade).
+    fn weapon(&self, _o: ObjId, _n: u32) -> Option<ObjId> {
+        None
+    }
+    /// `trap_obj_is_attach (obj)`: `o` hangs on another (a weapon in its hand). Every object is
+    /// unless the host says otherwise.
+    fn attached(&self, _o: ObjId) -> bool {
+        true
+    }
+    /// `trap_obj_attach (obj, parent, ..)` / `trap_obj_detach (obj)`: `o` back on its parent, or
+    /// left free where it is.
+    fn attach(&mut self, _o: ObjId, _on: bool) {}
+    /// `trap_obj_set_pos (obj, pos)` / `trap_obj_move_request`'s landing: a free object's place
+    /// (host units).
+    fn set_pos(&mut self, _o: ObjId, _p: Vec3) {}
+    /// `trap_obj_set_xyzrot (obj, rot)`: a free object's turn (the game's angles, as
+    /// `trap_strike_raid_calc_xyzrot` made them).
+    fn set_rot(&mut self, _o: ObjId, _rot: Vec3) {}
+    /// `trap_area_world`: the game's world number (KH2's numbering), or -1.
+    fn area_world(&self) -> i32 {
+        -1
+    }
+    /// `trap_obj_get_entry_id (obj)`: `o`'s object-table entry (KH2's numbering), or 0.
+    fn entry_id(&self, _o: ObjId) -> i32 {
+        0
+    }
 }
 
 /// One loaded spell file.
@@ -276,6 +345,14 @@ pub(crate) struct Tables {
     pub native_id: Option<u64>,
     /// The caster's battle target, picked when the cast starts.
     pub target: Option<ObjId>,
+    /// A limit's script (`Magic::limit`): the limit's command (`trap_limit_start_command`).
+    pub limit_command: Option<u16>,
+    /// Each object's hook thread (`trap_obj_hook`): the object, the thread, on the host's process.
+    pub hooks: Vec<(ObjId, CtxId, bool)>,
+    /// Each target searcher's found objects (`trap_target_searcher_init` / `_search`), by its record.
+    pub searchers: HashMap<u32, Vec<ObjId>>,
+    /// Hook threads of a limit's stepped ahead of its main context this host frame (`step_external`).
+    pub early: Vec<(CtxId, Option<u64>)>,
 }
 
 pub struct Cast {
@@ -399,6 +476,10 @@ impl Magic {
             threads: Vec::new(),
             ext_threads: Vec::new(),
             native_id: None,
+            limit_command: None,
+            hooks: Vec::new(),
+            searchers: HashMap::new(),
+            early: Vec::new(),
             target: if matches!(element, 0 | 1 | 2 | 4) { world.target_of(caster) } else { None },
         };
         let player = host::obj_record(&mut vm, &mut t, caster);
@@ -453,6 +534,10 @@ impl Magic {
             threads: Vec::new(),
             ext_threads: Vec::new(),
             native_id: None,
+            limit_command: None,
+            hooks: Vec::new(),
+            searchers: HashMap::new(),
+            early: Vec::new(),
             target: world.target_of(owner),
         };
         let obj = host::obj_record(&mut vm, &mut t, owner);
@@ -483,6 +568,137 @@ impl Magic {
             }
         }
         Ok(i)
+    }
+
+    /// A limit's script (Limit Form's `limi`, the model's own script, loaded as `file`): KH2's start
+    /// of a solo limit (Steam KH2 `0x1403D7FA0`, Checked (decomp)) runs the player's script's
+    /// trigger 0x16 with the limit object; the script asks the limit's command
+    /// (`trap_limit_start_command`), its player (`trap_limit_player`, the owner) and its light, and
+    /// plays the limit's moves on the player (`trap_obj_hook`, `trap_sysobj_motion_*`). Run at once,
+    /// as `object_effect`. Returns the cast's index.
+    pub fn limit(&mut self, file: usize, owner: ObjId, command: u16, world: &mut dyn World) -> Result<usize, BdxError> {
+        let f = self.spells.get(file).ok_or_else(|| BdxError::Trap("no such object script".into()))?;
+        let made = match self.native.as_mut() {
+            Some(n) => Some(n.machine(f, file, 0x16).ok_or_else(|| BdxError::Trap("the host has no process for it".into()))?),
+            None => None,
+        };
+        let (mut vm, native_main) = match made {
+            Some((vm, main)) => (vm, Some(main)),
+            None => (Vm::new(f.program.clone()), None),
+        };
+        vm.frametime = self.frametime;
+        let statics = host::Statics::new(&mut vm);
+        let mut t = Tables {
+            caster: owner,
+            spell: file,
+            objs: HashMap::new(),
+            obj_rec: HashMap::new(),
+            pax_rec: 0,
+            attacks: HashMap::new(),
+            effects: HashMap::new(),
+            targets: HashMap::new(),
+            teamwork: HashMap::new(),
+            statics,
+            threads: Vec::new(),
+            ext_threads: Vec::new(),
+            native_id: None,
+            target: world.target_of(owner),
+            limit_command: Some(command),
+            hooks: Vec::new(),
+            searchers: HashMap::new(),
+            early: Vec::new(),
+        };
+        host::obj_record(&mut vm, &mut t, owner);
+        t.pax_rec = vm.mem.alloc(16);
+        // (KH2's limit object is 0x128 bytes, `0x1403D7FA0`; the script only hands it to the
+        // limit's calls, which answer from the cast's tables.)
+        let limit = vm.mem.alloc(0x128);
+        let main = native_main.unwrap_or_else(|| vm.spawn(None));
+        vm.trigger(main, 0x16, &[Cell::addr(limit)])?;
+        let id = self.fresh_id();
+        let external = native_main.is_some();
+        if external && !self.native.as_mut().is_some_and(|h| h.started(id, &vm, main)) {
+            return Err(BdxError::Trap("the host couldn't take it".into()));
+        }
+        if external {
+            t.native_id = Some(id);
+        }
+        self.casts.push(Cast { vm, t, main, released: true, finished: false, fresh: false, object: true, held: false, id, external });
+        let i = self.casts.len() - 1;
+        self.run_cast(i, world);
+        if external {
+            let mut k = 0;
+            while let Some(ctx) = self.casts.iter().find(|c| c.id == id).and_then(|c| c.t.ext_threads.get(k).copied()) {
+                if self.step_external(id, ctx, world) || self.casts.iter().find(|c| c.id == id).and_then(|c| c.t.ext_threads.get(k).copied()) == Some(ctx) {
+                    k += 1;
+                }
+            }
+        }
+        Ok(i)
+    }
+
+    /// A limit's follow-up chosen (KH2: `0x1403D8B40` sends a command with no `limt` row of its own
+    /// to the running limit thread as trigger 0x17 with the command, `0x1403E1840`, Steam KH2,
+    /// Checked (decomp)): trigger 0x17 runs at once on a context of its own with the limit's work
+    /// memory (its code to the follow-up's hook has no `halt`, Checked (files)). Returns whether a
+    /// limit of `file` took it.
+    pub fn limit_command(&mut self, file: usize, command: u16, world: &mut dyn World) -> Result<bool, BdxError> {
+        self.limit_run(file, 0x17, |_| vec![Cell::int(command as i32)], world)
+    }
+
+    /// The limit's player's motion fired frame trigger 7 with `(p0, p1)` (Steam KH2 `0x14040DD70`
+    /// case 7: the object's script's trigger 0x11 with the object and both, Checked (decomp)): run
+    /// at once as `limit_command`'s trigger (Infinity's shots: its code starts a thread a shot).
+    pub fn limit_object_trigger(&mut self, file: usize, p0: i16, p1: i16, world: &mut dyn World) -> Result<bool, BdxError> {
+        self.limit_run(file, 0x11, |c| {
+            let caster = c.t.caster;
+            let obj = host::obj_record(&mut c.vm, &mut c.t, caster);
+            vec![Cell::addr(obj), Cell::int(p0 as i32), Cell::int(p1 as i32)]
+        }, world)
+    }
+
+    fn limit_run(&mut self, file: usize, key: i32, args: impl FnOnce(&mut Cast) -> Vec<Cell>, world: &mut dyn World) -> Result<bool, BdxError> {
+        let Some(i) = self.casts.iter().position(|c| c.t.spell == file && c.t.limit_command.is_some() && !c.finished) else { return Ok(false) };
+        let mut cast = std::mem::replace(&mut self.casts[i], placeholder());
+        if cast.external {
+            if let Some(n) = self.native.as_mut() {
+                n.load(cast.id, &mut cast.vm, cast.main);
+            }
+        }
+        let args = args(&mut cast);
+        let r = host::run_trigger(self, &mut cast, key, &args, world);
+        if cast.external {
+            if let Some(n) = self.native.as_mut() {
+                n.store(cast.id, &cast.vm, cast.main);
+            }
+        }
+        self.casts[i] = cast;
+        // (A hook it started on the host's process runs this same step, as `object_effect`'s.)
+        let id = self.casts[i].id;
+        if self.casts[i].external {
+            let mut k = 0;
+            while let Some(ctx) = self.casts.iter().find(|c| c.id == id).and_then(|c| c.t.ext_threads.get(k).copied()) {
+                if self.step_external(id, ctx, world) || self.casts.iter().find(|c| c.id == id).and_then(|c| c.t.ext_threads.get(k).copied()) == Some(ctx) {
+                    k += 1;
+                }
+            }
+        }
+        r
+    }
+
+    /// Whether a limit's script (`limit`) of `file` still runs.
+    pub fn limit_running(&self, file: usize) -> bool {
+        self.casts.iter().any(|c| c.t.spell == file && c.t.limit_command.is_some() && !c.finished)
+    }
+
+    /// Ends the limit scripts of `file` (out of the form).
+    pub fn limit_end(&mut self, file: usize) -> usize {
+        let mut n = 0;
+        for c in self.casts.iter_mut().filter(|c| c.t.spell == file && c.t.limit_command.is_some() && !c.finished) {
+            c.finished = true;
+            n += 1;
+        }
+        n
     }
 
     /// The cast motion reached its magic-cast event: trigger 21 on the
@@ -628,9 +844,44 @@ impl Magic {
             return true;
         }
         if ctx == main {
+            // (A limit's script, t998: its hooks first, then its main context. Its main loop ends the
+            // limit once the player's motion isn't the one the hook last started (`limi` pc 5644 /
+            // 5792 against wp0, set by pc 1994); the hook starts its next motion the frame the queue
+            // reaches it (pc 2629..2663). Run after it, the main context saw the queued motion before
+            // the hook restarted it and ended every limit after its first move (the owner's log:
+            // "its script is over" ~30 frames in). Assumption: KH2 runs an object's hook threads,
+            // attached to it (`0x1403D76D0`), before the limit's thread; the script needs it.)
+            if self.casts[i].t.limit_command.is_some() {
+                let frame = self.frame;
+                let hooks: Vec<CtxId> = self.casts[i].t.hooks.iter().filter(|h| h.2).map(|h| h.1).collect();
+                for h in hooks {
+                    if !self.casts[i].t.ext_threads.contains(&h) || self.casts[i].t.early.iter().any(|e| e.0 == h && e.1 == frame && frame.is_some()) {
+                        continue;
+                    }
+                    self.run_thread(i, id, h, world);
+                    if frame.is_some() {
+                        let c = &mut self.casts[i];
+                        c.t.early.retain(|e| e.0 != h);
+                        c.t.early.push((h, frame));
+                    }
+                }
+                if self.casts[i].finished {
+                    return false;
+                }
+            }
             self.run_cast(i, world);
             return !self.casts[i].finished;
         }
+        // (A hook already stepped ahead of its limit's main context this frame: not again.)
+        if self.frame.is_some() && self.casts[i].t.early.iter().any(|e| e.0 == ctx && e.1 == self.frame) {
+            return !self.casts[i].finished && self.casts[i].t.ext_threads.contains(&ctx);
+        }
+        self.run_thread(i, id, ctx, world)
+    }
+
+    /// One of a cast's threads on the host's child processes run once (its registers from and back
+    /// to its process). Whether it goes on.
+    fn run_thread(&mut self, i: usize, id: u64, ctx: CtxId, world: &mut dyn World) -> bool {
         let mut cast = std::mem::replace(&mut self.casts[i], placeholder());
         if let Some(n) = self.native.as_mut() {
             n.load(id, &mut cast.vm, ctx);
@@ -726,6 +977,10 @@ fn placeholder() -> Cast {
             threads: Vec::new(),
             ext_threads: Vec::new(),
             native_id: None,
+            limit_command: None,
+            hooks: Vec::new(),
+            searchers: HashMap::new(),
+            early: Vec::new(),
             target: None,
         },
         main: 0,

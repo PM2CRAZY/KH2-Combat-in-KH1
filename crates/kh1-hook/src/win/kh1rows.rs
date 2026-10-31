@@ -213,7 +213,7 @@ pub const NO_ROW: u8 = u8::MAX;
 /// his body, `P_EX100.mset`, Checked (files)) and Valor's arrival 53 (6 frames, guard and
 /// invulnerable all through, `P_EX100_BTLF.mset`, Checked (files)), their requests only, on KH1's
 /// ground swing as template (its sounds left out: KH2's own play, `kh2slots::tick`).
-pub const OURS: [Ours; 44] = [
+pub const OURS: [Ours; 64] = [
     Ours { name: "Upper Slash", kh2_row: 12, motion: 161, kind: Kind::Swing, rises: false, guard_break: false, attack: true, next_finisher: false, frames: None, own_sounds: false, combo: false, template: None, valor: false },
     Ours { name: "Finishing Leap", kh2_row: 37, motion: 167, kind: Kind::AirFinisher, rises: true, guard_break: false, attack: true, next_finisher: false, frames: None, own_sounds: false, combo: false, template: None, valor: false },
     Ours { name: "Horizontal Slash", kh2_row: 38, motion: 193, kind: Kind::AirSwing, rises: false, guard_break: false, attack: true, next_finisher: false, frames: None, own_sounds: false, combo: false, template: None, valor: false },
@@ -277,7 +277,59 @@ pub const OURS: [Ours; 44] = [
     Ours { name: "Sonic Rave", kh2_row: NO_ROW, motion: SONIC_RAVE_MOTIONS[0], kind: Kind::Swing, rises: false, guard_break: false, attack: true, next_finisher: false, frames: None, own_sounds: true, combo: false, template: None, valor: true },
     Ours { name: "Sonic Rave (Rave)", kh2_row: NO_ROW, motion: SONIC_RAVE_MOTIONS[1], kind: Kind::Swing, rises: false, guard_break: false, attack: true, next_finisher: false, frames: None, own_sounds: true, combo: false, template: None, valor: true },
     Ours { name: "Sonic Rave (Finish)", kh2_row: NO_ROW, motion: SONIC_RAVE_MOTIONS[2], kind: Kind::Swing, rises: false, guard_break: false, attack: true, next_finisher: false, frames: None, own_sounds: true, combo: false, template: None, valor: true },
+    // (Limit Form's Last Arcanum, t985: K410 its start, K411..K415 its Bashes, K416 The End, motions
+    // 221..227, Checked (files); `limi` starts 221, then 221 + the Bashes so far, then 227.)
+    limit_move("Last Arcanum", LAST_ARCANUM_MOTIONS[0]),
+    limit_move("Last Arcanum (Bash 1)", LAST_ARCANUM_MOTIONS[1]),
+    limit_move("Last Arcanum (Bash 2)", LAST_ARCANUM_MOTIONS[2]),
+    limit_move("Last Arcanum (Bash 3)", LAST_ARCANUM_MOTIONS[3]),
+    limit_move("Last Arcanum (Bash 4)", LAST_ARCANUM_MOTIONS[4]),
+    limit_move("Last Arcanum (Bash 5)", LAST_ARCANUM_MOTIONS[5]),
+    limit_move("Last Arcanum (The End)", LAST_ARCANUM_MOTIONS[6]),
+    // (Limit Form's Infinity, t986: K430 its start, K431..K434 its spins up (PTYA rows 52..56),
+    // K435 its hover, K436 Shoot / Impact, K437 Giga Impact; motions 241..248, Checked (files).)
+    limit_move("Infinity", INFINITY_MOTIONS[0]),
+    limit_move("Infinity (spin 1)", INFINITY_MOTIONS[1]),
+    limit_move("Infinity (spin 2)", INFINITY_MOTIONS[2]),
+    limit_move("Infinity (spin 3)", INFINITY_MOTIONS[3]),
+    limit_move("Infinity (spin 4)", INFINITY_MOTIONS[4]),
+    limit_move("Infinity (hover)", INFINITY_MOTIONS[5]),
+    limit_move("Infinity (Shoot)", INFINITY_MOTIONS[6]),
+    limit_move("Infinity (Giga Impact)", INFINITY_MOTIONS[7]),
+    // (Limit Form's Strike Raid, t988: K420 its start, K421 / K422 its throws, K423 its catch,
+    // motions 231..234, Checked (files).)
+    limit_move("Strike Raid", STRIKE_RAID_MOTIONS[0]),
+    limit_move("Strike Raid (throw)", STRIKE_RAID_MOTIONS[1]),
+    limit_move("Strike Raid (Judgment throw)", STRIKE_RAID_MOTIONS[2]),
+    limit_move("Strike Raid (catch)", STRIKE_RAID_MOTIONS[3]),
+    // (t1022) Master Form's 185, an air swing as its 181 / 182. Its PTYA set 4 (Checked (files)
+    // `00battle.bin`): every ground row is a hop (rows 0 / 4 / 5 / 6, motions 182 / 181 / 185 /
+    // 185, jump 41; row 1, 181, 14) and its finishers are air rows (7 / 25 184, 58 / 8 183, flag
+    // 1), so its ground combo is KH2's hops from the ground into its air combo, played on our air
+    // rows as base Sora's hops 0 / 1 are (`combomods::combo_row`). 185 (rows 5 / 6 from the
+    // ground, 20 / 22 / 23 in the air) had no row of ours: no attack. Built only from a moveset
+    // whose PTYA has 185 (`kh2slots::prepare`: Master's; base Sora's, Valor's, Wisdom's and Limit's
+    // sets have none, Checked (files)). Appended, so no other row's request moves.
+    combo("185", MASTER_SWING_MOTION, Kind::AirSwing),
 ];
+
+/// Master Form's own air swing (`OURS` "185", t1022).
+pub const MASTER_SWING_MOTION: u16 = 185;
+
+/// Strike Raid's motions in Limit Form's moveset (`OURS`, t988).
+pub const STRIKE_RAID_MOTIONS: [u16; 4] = [231, 232, 233, 234];
+
+/// Infinity's motions in Limit Form's moveset (`OURS`, t986).
+pub const INFINITY_MOTIONS: [u16; 8] = [241, 242, 243, 244, 245, 246, 247, 248];
+
+/// Last Arcanum's motions in Limit Form's moveset (`OURS`, t985).
+pub const LAST_ARCANUM_MOTIONS: [u16; 7] = [221, 222, 223, 224, 225, 226, 227];
+
+/// A limit's move of Limit Form's (as Sonic Rave's rows): an attack row on KH1's ground swing,
+/// KH2's own sounds only, built from the form's moveset alone.
+const fn limit_move(name: &'static str, motion: u16) -> Ours {
+    Ours { name, kh2_row: NO_ROW, motion, kind: Kind::Swing, rises: false, guard_break: false, attack: true, next_finisher: false, frames: None, own_sounds: true, combo: false, template: None, valor: true }
+}
 
 /// Sonic Rave's motions in Limit Form's moveset: start, Rave, Finish (`OURS`, t978).
 pub const SONIC_RAVE_MOTIONS: [u16; 3] = [211, 212, 213];
@@ -720,12 +772,12 @@ const QUEUE_BYTES: [u8; 10] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x57, 0x48, 0x83, 0
 
 /// Our row `n` started on `actor` by KH1's own row start (`0x1402A3980 (actor, row)`, Steam,
 /// Checked (decomp): its request with KH1's action flag, its attack object from its data, its
-/// trail, effect and voice bytes), then KH1's idle queued after it as KH1's row runner
+/// trail, effect and voice bytes), then (`idle`) KH1's idle queued after it as KH1's row runner
 /// `0x1402A68F0` queues it for a row not its own (`0x14029FA30 (actor, 0x40000000, 0)`). Not the
 /// runner itself: its press tally (`0x14028C660 (0x13)`) and its facing from the stick are an
 /// Attack press's, not a command's (Sonic Rave's start, t979, `limitform`). False (nothing
 /// started) when our table isn't on his character or a first-byte check fails.
-pub unsafe fn start_row(actor: usize, n: usize) -> bool {
+pub unsafe fn start_row(actor: usize, n: usize, idle: bool) -> bool {
     let Some((index, ours)) = TABLE.try_lock().ok().and_then(|g| g.as_ref().filter(|t| t.ours != t.kh1).map(|t| (t.index, t.ours))) else {
         return false;
     };
@@ -740,7 +792,9 @@ pub unsafe fn start_row(actor: usize, n: usize) -> bool {
     let start: unsafe extern "system" fn(usize, i32) -> usize = std::mem::transmute(base + ROW_START_STEAM);
     let queue: unsafe extern "system" fn(usize, u32, f32) -> usize = std::mem::transmute(base + QUEUE_STEAM);
     start(actor, row(n));
-    queue(actor, 0x4000_0000, 0.0);
+    if idle {
+        queue(actor, 0x4000_0000, 0.0);
+    }
     true
 }
 

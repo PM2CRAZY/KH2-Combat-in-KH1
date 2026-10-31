@@ -84,6 +84,8 @@ const ROWS: usize = 8;
 
 /// Sora in the spell scripts' world; enemies are `FOE0 + i`.
 pub(super) const SORA: ObjId = 1;
+/// Sora's Keyblade as the scripts' weapon object (Strike Raid's, t992, `limitform`).
+pub(super) const WEAPON: ObjId = 2;
 pub(super) const FOE0: ObjId = 100;
 /// Donald and Goofy (KH1's party slots 1 and 2) in the scripts' world: `PARTY0 + slot` (t822).
 pub(super) const PARTY0: ObjId = 50;
@@ -626,7 +628,9 @@ const QUEUE_MOTION_RVA: Rva = Rva(0x29D8A0);
 /// has them, Checked (files)), its MAGC row the same for every form (`0x1403C5170`, t719, Checked
 /// (decomp)). Valor has no magic; the other forms stay on KH2's controller.
 fn native_path() -> bool {
-    !super::form::in_form() || super::form::native_form() == Some(super::form::Kind::Wisdom)
+    // (t1027: Master too, its own 71 / 72 / 73 (D373, Checked (files)) at its sub + 20, ATKP 573 /
+    // 574 at 20 / 22 / 24 (Checked (files)): `form::Kind::kh2_magic`.)
+    !super::form::in_form() || super::form::native_form().is_some_and(|k| k.kh2_magic())
 }
 
 /// Our request for one of Reflect's cast motions, if it is built (`kh1rows`, `kh2slots`).
@@ -994,11 +998,22 @@ impl Sink {
             }
             SinkKind::Form(package) => {
                 let package = package.get(&e.spell).copied().unwrap_or(super::kh2fx::WISDOM);
+                // (t1013 / t1016) An effect bound to the thrown Keyblade (Strike Raid's 32,
+                // `obj_effect_start_bind_other (Sora, 32, weapon)`): started unbound and placed on
+                // the blade's root each frame it flies (`limitform::blade_effect`), never on Sora.
+                if e.owner == Some(WEAPON) {
+                    let h = super::kh2fx::spell_start(package, e.element.id);
+                    if let Some(h) = h {
+                        super::limitform::blade_effect(h);
+                    }
+                    super::kh2sound::spell_element_tied(package, e.element.id, e.id);
+                    return h;
+                }
                 let h = super::kh2fx::spell_start(package, e.element.id);
                 if let (Some(h), None) = (h, e.owner) {
                     super::kh2fx::spell_place(h, super::formmagic::place(e.pos, e.dir));
                 }
-                super::kh2sound::spell_element(package, e.element.id);
+                super::kh2sound::spell_element_tied(package, e.element.id, e.id);
                 h
             }
         }
@@ -1145,12 +1160,19 @@ const KH1_LEAF_BRACER: i32 = 62;
 
 impl World for KhWorld {
     fn exists(&self, o: ObjId) -> bool {
+        if o == WEAPON {
+            return super::limitform::running();
+        }
         self.actor(o).is_some_and(|a| unsafe { kh1_alive(a) })
     }
     fn pos(&self, o: ObjId) -> Vec3 {
+        if o == WEAPON {
+            return up(super::limitform::weapon_pos());
+        }
         self.actor(o).map_or(Vec3::ZERO, |a| up(unsafe { rd::<[f32; 3]>(a + 0x10) }))
     }
     fn facing(&self, o: ObjId) -> f32 {
+        let o = if o == WEAPON { SORA } else { o };
         // (KH1's yaw; KH2's controller writes its facing there each step, `takeover`.)
         self.actor(o).map_or(0.0, |a| unsafe { rd::<f32>(a + 0x3C) })
     }
@@ -1165,6 +1187,11 @@ impl World for KhWorld {
         self.airborne(o)
     }
     fn bone(&self, o: ObjId, code: u16) -> Option<Mat4> {
+        // (Strike Raid's thrown Keyblade, t993: any of its points at its place, turned as Sora.)
+        if o == WEAPON {
+            let _ = code;
+            return Some(Mat4::from_rotation_translation(Quat::from_rotation_y(self.facing(SORA)), self.pos(WEAPON)));
+        }
         let a = self.actor(o)?;
         let frame = |at: Vec3| Mat4::from_rotation_translation(Quat::from_rotation_y(self.facing(o)), at);
         let centre = || unsafe { takeover::kh1_bone_point(a, 0x8003, 1.0) }.map(up).unwrap_or_else(|| self.pos(o) + Vec3::Y * 90.0);
@@ -1282,6 +1309,7 @@ impl World for KhWorld {
         if let Some(h) = e.host.filter(|h| *h != 0) {
             super::kh2fx::spell_kill(h);
         }
+        unsafe { super::kh2sound::element_sound_stop(e.id) };
     }
     fn effect_end(&mut self, e: &kh2_magic::Effect) -> bool {
         // (Its instance's loop ended by the call, t826; none drawn: nothing to end.)
@@ -1295,6 +1323,8 @@ impl World for KhWorld {
         }
     }
     fn effect_fade(&mut self, e: &kh2_magic::Effect, frames: f32) -> bool {
+        // (t1014) Its sound faded out with it (KH2 stops it as the faded effect's node goes).
+        unsafe { super::kh2sound::element_sound_stop(e.id) };
         // (Its fade run on its instance by the effect tick, t826.)
         match e.host {
             Some(0) => true,
@@ -1325,6 +1355,105 @@ impl World for KhWorld {
         self.rng ^= self.rng >> 17;
         self.rng ^= self.rng << 5;
         (self.rng >> 8) as f32 / (1u32 << 24) as f32
+    }
+    // (A limit's script on Sora, Limit Form's `limi`, t980: its moves and light on KH1's own,
+    // `limitform`.)
+    fn motion_start(&mut self, o: ObjId, motion: u16, blend: f32) {
+        // (t1015) The thrown Keyblade's own motion (Strike Raid's spin, 235).
+        if o == WEAPON {
+            super::limitform::weapon_motion(motion);
+            return;
+        }
+        if o == SORA && unsafe { super::limitform::motion(motion, blend, false) } {
+            if let Some(me) = self.objs.iter_mut().find(|x| x.id == SORA) {
+                me.motion = motion;
+            }
+        }
+    }
+    fn motion_push(&mut self, o: ObjId, motion: u16, blend: f32) {
+        if o == SORA {
+            unsafe { super::limitform::motion(motion, blend, true) };
+        }
+    }
+    fn wish_dir(&mut self, o: ObjId, dir: Vec3) {
+        if o == SORA {
+            unsafe { super::limitform::face(dir.x, dir.z) };
+        }
+    }
+    fn motion_range(&self, o: ObjId, n: u8) -> bool {
+        o == SORA && unsafe { super::limitform::range_open(n) }
+    }
+    fn command_override(&mut self, _slot: i32, command: u16, o: ObjId) {
+        if o == SORA {
+            unsafe { super::limitform::offer(command) };
+        }
+    }
+    fn enemies(&self, from: Vec3, min: f32, max: f32) -> Vec<ObjId> {
+        // (The enemies our step saw near Sora, `world_now`, alive now and within the distances.)
+        self.objs.iter().map(|x| x.id).filter(|&o| o >= FOE0 && self.exists(o)).filter(|&o| {
+            let d = self.target_point(o).distance(from);
+            d >= min && d <= max
+        }).collect()
+    }
+    fn lock_target(&self, o: ObjId) -> Option<ObjId> {
+        if o == SORA {
+            self.locked()
+        } else {
+            None
+        }
+    }
+    fn weapon(&self, o: ObjId, n: u32) -> Option<ObjId> {
+        (o == SORA && n == 0 && super::limitform::running()).then_some(WEAPON)
+    }
+    fn attached(&self, o: ObjId) -> bool {
+        o != WEAPON || !super::limitform::thrown()
+    }
+    fn attach(&mut self, o: ObjId, on: bool) {
+        if o == WEAPON {
+            unsafe { super::limitform::attach(on) };
+        }
+    }
+    fn set_pos(&mut self, o: ObjId, p: Vec3) {
+        if o == WEAPON {
+            super::limitform::set_weapon_pos([p.x, -p.y, p.z]);
+        }
+    }
+    fn set_rot(&mut self, o: ObjId, r: Vec3) {
+        if o == WEAPON {
+            super::limitform::set_weapon_rot(r.to_array());
+        }
+    }
+    fn set_movement(&mut self, o: ObjId, dir: Vec3, speed: f32) {
+        if o == SORA {
+            unsafe { super::limitform::movement(dir.x, dir.z, speed) };
+        }
+    }
+    fn party_attack(&mut self, o: ObjId, row: u16) {
+        if o == SORA {
+            if let Some(m) = unsafe { super::limitform::party_attack(row) } {
+                if let Some(me) = self.objs.iter_mut().find(|x| x.id == SORA) {
+                    me.motion = m;
+                }
+            }
+        }
+    }
+    fn motion_ended(&self, o: ObjId) -> bool {
+        o == SORA && unsafe { super::limitform::motion_ended() }
+    }
+    fn motion_trigger(&self, o: ObjId, n: u8) -> bool {
+        o == SORA && unsafe { super::limitform::motion_trigger(n) }
+    }
+    fn light_color(&mut self, light: u32, rgb: [i32; 3], frames: f32) {
+        unsafe { super::limitform::light(light, rgb, frames) };
+    }
+    fn entry_id(&self, o: ObjId) -> i32 {
+        // (KH2's Limit Form entries are 2397..2401, which its script checks before playing a
+        // limit on its player, Checked (files); Assumption: the first stands for every world's.)
+        if o == SORA && super::form::in_limit() {
+            super::limitform::ENTRY_ID
+        } else {
+            0
+        }
     }
 }
 

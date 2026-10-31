@@ -620,6 +620,8 @@ unsafe extern "system" fn hit(attack: usize, target: usize) -> usize {
     // gauge in a form, `drivegauge::hit`, t932.)
     if r > 0x10000 && owner != 0 && owner == sora() {
         super::drivegauge::hit(attack, target);
+        // (KH2's HP drain, t982: Limit Form's limits' hits heal him, `limitform::hp_drain`.)
+        super::limitform::hp_drain(attack);
     }
     // (t338) Which hit effect KH1's contact will start for this hit (any attack on anyone but Sora).
     // (Debug only: the trace's and log's hit-effect notes, `debug_on`.)

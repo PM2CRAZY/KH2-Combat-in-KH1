@@ -68,8 +68,21 @@ const RED: f32 = 0.0;
 const SLEEVES: [[f32; 4]; 2] = [[0.035, 0.415, 0.236, 0.85], [0.236, 0.415, 0.215 + 0.025, 0.62]];
 const BELT: [f32; 4] = [0.035, 0.07, 0.57, 0.14];
 const HOOD_LINING: [f32; 4] = [0.755, 0.72, 1.0, 1.0];
+/// (t1029) The collar's red strip on `-1c0` (u0, v0, u1, v1): main's region (main `tint.rs`
+/// `COLLAR`: the texture's one large red run, about 3460 texels at u 0..0.018, v 0.35..0.69).
+/// `-1c0`'s other red, an oval on the shoe piece at u 0.40..0.49, v 0.63..0.70, is outside it, so
+/// Master's shoes keep their colours. Assumption: main's plot, not plotted again here.
+const COLLAR: [f32; 4] = [0.0, 0.34, 0.025, 0.70];
+/// (t1029) Master's yellow (main's spec, main `tint.rs`: its `LIMIT_BELT_*` values, which main's
+/// Master look paints with): hue 45, saturation 0.85, brightness from 0.55 up (`Op::Paint`), so a
+/// dark red or blue comes out a bright yellow near the shoes', its shading kept. (Main's note: a
+/// plain hue shift of the dark red and blue read olive.)
+const MASTER_YELLOW_HUE: f32 = 45.0;
+const MASTER_YELLOW_SAT: f32 = 0.85;
+const MASTER_YELLOW_LO: f32 = 0.55;
 
-/// A form's look (`form`): Wisdom's blue, Valor's red, Limit's black (t974).
+/// A form's look (`form`): Wisdom's blue, Valor's red, Limit's black (t974), Master's yellow
+/// (t1029).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Look {
     Wisdom,
@@ -78,6 +91,12 @@ pub enum Look {
     /// jacket, black hood lining, yellow belt, black shoes"; KH2's own Limit Form is KH1 Sora's
     /// outfit, so this is the owner's look, not KH2's).
     Limit,
+    /// Master Form (t1029; the owner, §24.2 answer 4: main's yellow spec, "jumpsuit, collar and
+    /// hood lining yellow, belt black"; main's s3xx words: "I want sora's jumpsuit to be yellow,
+    /// and the inside of sora's jacket's hood be yellow as well instead of blue. I want soras belt
+    /// to be black"). KH2's own Master Form wears its own outfit (`P_EX100_TRIF`), so on KH1's
+    /// model this is the owner's look, as Limit's.
+    Master,
 }
 
 /// How dark a blackened texel is: its brightness scaled to this (its shading kept).
@@ -96,12 +115,18 @@ enum Op {
     /// light unsaturated ones (as `Colourize` takes), made near black: no saturation, their
     /// brightness × `BLACK_V` (t974, Limit's look); within `rect` if given.
     Black { hue: Option<(f32, f32)>, min_v: f32, rect: Option<[f32; 4]> },
+    /// (t1029, Master's look; main's op of the same name) Saturated texels near hue `from`
+    /// (within `width`, as `Shift`) given hue `to` at saturation `sat`, brightness
+    /// `lo + (hi - lo) × v` (a dark colour made a bright one, its shading kept); within `rect` if
+    /// given.
+    Paint { from: f32, width: f32, to: f32, sat: f32, lo: f32, hi: f32, rect: Option<[f32; 4]> },
 }
 
 /// What each look does to each slot (`SLOTS` order); none: that slot isn't swapped.
 fn ops(look: Look, k: usize) -> Vec<Op> {
     let shift = |from, width, to| Op::Shift { from, width, to, min_v: 0.0, rect: None };
     let shoes = |to| Op::Shift { from: YELLOW_HUE, width: YELLOW_WIDTH, to, min_v: YELLOW_MIN_V, rect: None };
+    let paint_yellow = |from, width, rect| Op::Paint { from, width, to: MASTER_YELLOW_HUE, sat: MASTER_YELLOW_SAT, lo: MASTER_YELLOW_LO, hi: 1.0, rect };
     match (look, k) {
         // Wisdom (the user: "recolor KH1 Sora blue"): the reds and the shoes' yellow blue, and
         // the sleeves blue (the user, s232: "can you make his sleeves blue when in wisdom?").
@@ -134,6 +159,16 @@ fn ops(look: Look, k: usize) -> Vec<Op> {
             v
         }
         (Look::Limit, 2) => vec![Op::Black { hue: Some((YELLOW_HUE, YELLOW_WIDTH)), min_v: YELLOW_MIN_V, rect: None }],
+        // Master (t1029, main's spec): the belt's blue black first (so nothing after touches
+        // it; Limit's black, as Limit's hood lining); then the hood lining's blue and the reds
+        // (the jumpsuit on `-1c1`, the collar's strip on `-1c0`) one bright yellow (`Op::Paint`).
+        // The jacket, its blue trim outside the lining, the sleeves and the shoes stay.
+        (Look::Master, 0) => vec![paint_yellow(RED, RED_WIDTH, Some(COLLAR))],
+        (Look::Master, 1) => vec![
+            Op::Black { hue: Some((BLUE_HUE, BLUE_WIDTH)), min_v: 0.0, rect: Some(BELT) },
+            paint_yellow(BLUE_HUE, BLUE_WIDTH, Some(HOOD_LINING)),
+            paint_yellow(RED, RED_WIDTH, None),
+        ],
         _ => Vec::new(),
     }
 }
@@ -191,6 +226,7 @@ fn look_name(look: Look) -> &'static str {
         Look::Wisdom => "Wisdom",
         Look::Valor => "Valor",
         Look::Limit => "Limit",
+        Look::Master => "Master",
     }
 }
 
@@ -386,6 +422,7 @@ fn apply(p: &mut Pixels, op: Op) -> usize {
         Op::Shift { rect, .. } => rect,
         Op::Colourize { rect, .. } => Some(rect),
         Op::Black { rect, .. } => rect,
+        Op::Paint { rect, .. } => rect,
     };
     let [u0, v0, u1, v1] = rect.unwrap_or([0.0, 0.0, 1.0, 1.0]);
     let (x0, x1) = ((u0 * w as f32) as usize, ((u1 * w as f32).ceil() as usize).min(w));
@@ -419,6 +456,12 @@ fn apply(p: &mut Pixels, op: Op) -> usize {
                 Op::Black { hue: None, .. } => {
                     let k = ((0.3 - s) / 0.1).clamp(0.0, 1.0) * ((v - 0.3) / 0.15).clamp(0.0, 1.0);
                     (k, rgb(0.0, 0.0, v * BLACK_V))
+                }
+                Op::Paint { from, width, to, sat, lo, hi, .. } => {
+                    let dh = (hue - from).rem_euclid(360.0);
+                    let d = dh.min(360.0 - dh);
+                    let k = ((width - d) / RED_SOFT).clamp(0.0, 1.0) * ((s - SAT_FROM) / SAT_SOFT).clamp(0.0, 1.0);
+                    (k, rgb(to, sat, lo + (hi - lo) * v))
                 }
             };
             if k <= 0.0 {
@@ -579,6 +622,7 @@ unsafe fn ours_for(s: &mut Swap, k: usize, src: usize, look: Look) -> Option<u64
         Look::Wisdom => b"kh2combat_wisdom_blue\0",
         Look::Valor => b"kh2combat_valor_red\0",
         Look::Limit => b"kh2combat_limit_black\0",
+        Look::Master => b"kh2combat_master_yellow\0",
     };
     let t = create(r, &desc, p.bgra.as_ptr(), label.as_ptr(), 0);
     if t < 0x10000 {

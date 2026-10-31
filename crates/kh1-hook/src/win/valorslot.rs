@@ -20,6 +20,10 @@
 //!   "new" max MP = now + the hovered one's − the replaced one's. During a Valor pick ours puts
 //!   Valor's "now" figures in (his own Keyblade and the slot's, or his own twice with the slot
 //!   empty, the replaced item then his own) for KH1's draw, and the replaced item back after.
+//! - **Master's M: slot (t1025)** goes through the same two: the free count also takes off the copy
+//!   Master's slot holds (`equip::master_holds`), and during an M: pick the compare box shows
+//!   Master's "now" (his own Keyblade and the M: slot's), as Master adds its Keyblade as Valor does
+//!   (t1024). During a pick only the other form's copy is taken off.
 //! - Only with Drive on and on Steam. Both run when KH1 calls them (menus, shops), never each frame.
 
 use super::log;
@@ -69,26 +73,34 @@ pub unsafe fn install(base: usize) {
     super::hook::install(base + COMPARE_RVA, &COMPARE_BYTES, compare as *const () as usize, &ORIG_COMPARE, "KH1's weapon compare box (Valor's figures)");
 }
 
-/// KH1's free count, less the copy Valor's slot holds.
+/// KH1's free count, less the copies Valor's and Master's slots hold (Master's since t1025; during
+/// a form's pick, the other form's only).
 unsafe extern "system" fn free_count(item: u32) -> u64 {
     let f: unsafe extern "system" fn(u32) -> u64 = std::mem::transmute(ORIG_FREE.load(Ordering::Relaxed));
     let n = f(item);
-    if n == 0 || !(1..=255).contains(&item) || super::equipmenu::valor_picking().is_some() {
+    if n == 0 || !(1..=255).contains(&item) {
         return n;
     }
     let base = super::takeover::game_base();
-    if base != 0 && super::equip::valor_holds(base) == Some(item as u8) {
-        note(|| format!("item {item:#04x}: {n} free, {} with Valor's copy taken off", n - 1));
-        return n - 1;
+    if base == 0 {
+        return n;
     }
-    n
+    let picking = super::equipmenu::slot_picking().map(|(kind, _)| kind);
+    let mut left = n;
+    for kind in [super::form::Kind::Valor, super::form::Kind::Master] {
+        if picking != Some(kind) && left > 0 && super::equip::slot_holds(base, kind) == Some(item as u8) {
+            left -= 1;
+            note(|| format!("item {item:#04x}: {n} free, {left} with {}'s copy taken off", kind.name()));
+        }
+    }
+    left
 }
 
 /// KH1's compare box, with Valor's "now" during a Valor pick.
 unsafe extern "system" fn compare(window: usize) {
     let f: unsafe extern "system" fn(usize) = std::mem::transmute(ORIG_COMPARE.load(Ordering::Relaxed));
     let base = super::takeover::game_base();
-    let (Some(slot), Some((own, in_byte, _))) = (super::equipmenu::valor_picking(), super::equipmenu::valor_preview()) else {
+    let (Some((kind, slot)), Some((own, in_byte, _))) = (super::equipmenu::slot_picking(), super::equipmenu::valor_preview()) else {
         return f(window);
     };
     if base == 0 || window < 0x10000 {
@@ -117,5 +129,5 @@ unsafe extern "system" fn compare(window: usize) {
     }
     f(window);
     wr(current, was);
-    note(|| format!("compare box: Valor now Strength {strength}, max MP {max_mp} (his {own:#04x} and {second:#04x})"));
+    note(|| format!("compare box: {} now Strength {strength}, max MP {max_mp} (his {own:#04x} and {second:#04x})", kind.name()));
 }

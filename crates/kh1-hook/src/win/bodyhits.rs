@@ -876,8 +876,8 @@ unsafe fn place(sora: usize, attacks: &[super::combat::SpellAttack], row: &dyn F
         let knock = character_core::reaction::category(first.enemy_reaction) == 4 || k1 >= 100;
         // The spark: the spell package's effect list and KH2's group for the row.
         let spark = a.package.and_then(|p| {
-            let group = super::combat::kh2_group(super::combat::Kh2Spark { pkg: super::kh2dpx::Pkg::Spell(p), effect_on_hit: first.effect_on_hit, random_effect: first.random_effect });
-            let (list, _) = super::kh2dpx::hit_list(super::kh2dpx::Pkg::Spell(p), group)?;
+            let group = super::combat::kh2_group(super::combat::Kh2Spark { pkg: super::kh2dpx::pkg_of(p), effect_on_hit: first.effect_on_hit, random_effect: first.random_effect });
+            let (list, _) = super::kh2dpx::hit_list(super::kh2dpx::pkg_of(p), group)?;
             let h = pose::handle(list);
             (h != 0).then_some((h, group))
         });

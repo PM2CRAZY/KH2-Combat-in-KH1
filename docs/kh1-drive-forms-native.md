@@ -2656,7 +2656,225 @@ Full research: `docs/kh1-forms-research-r12.md`. Tags as elsewhere.
   MP: KH2's 60 of 100 as a share of KH1's maximum (`mpcost::pay_limit`), or all of it when short (answer 4 (a)); refused at
   0 MP (KH2 greys a limit only while MP Charge runs, which is when its MP is 0). Rows of ours with KH2's own sounds lose the
   template's voice and effect bytes.
-- Open: the Rave / Finish follow-ups, the script (`limi` as a KH1 process, t980..), the HP drain, the list greyed while a
+- t980: KH2's `limi` runs the limit as a KH1 script process (`formmagic`'s runtime, `kh2_magic::Magic::limit`: trigger
+  0x16 with a limit object of ours). Its calls: `trap_limit_player` (the owner) / `_friend` (none), `_start_command` (698),
+  `_light` / `trap_light_set_color` (KH1's limit light faded to the colour / 128), `_time` 0 (its partner thread ends at
+  once), `_reference` 0, `trap_area_world` -1 (KH2's world 13, Timeless River, isn't in KH1), `trap_obj_get_entry_id` 2397
+  for Sora in Limit Form (Assumption: one entry for every world's), `trap_obj_hook` (a thread of the cast's on a KH1 child
+  process; a new hook ends the last), `trap_sysobj_motion_start` (KH1's row start for an attack row of ours, else KH1's motion
+  request) and `_push` (KH1's queue; motion 0 = KH1's idle), `trap_obj_wish_dir` (KH1's wanted facing `+0x150`),
+  `trap_obj_stop_end_all` / `trap_puts` nothing. KH1's end task now waits on the script, not on the moves. The script's
+  view of Sora's motion takes the row KH1 was asked for before KH1 applies it.
+- t981: the follow-ups. `trap_obj_motion_check_range` reads our slot's clip's script ranges at KH1's time
+  (`kh2slots::now_playing`); `trap_command_override` puts our record (0x85 "Rave" 699, 0x86 "Finish" 700, words 0x1F7 /
+  0x1F6, argument 0x28 + j) in KH1's Triangle slot that frame (`0x140293000 (3, record)`, as KH1's limit offer); chosen,
+  KH1's command step hands it to the script as KH2's trigger 0x17 with the command (`Magic::limit_command`: a context of
+  its own on the limit's work memory, run to its end at once). The script counts the Raves (5) and then offers Finish.
+- t982: KH2's HP drain: a hit of Sora's whose KH2 ATKP has an HP drain (`+0x2F`; Sonic Rave's 5) gives him that many HP
+  through KH1's HP change (`probe::hit` → `limitform::hp_drain`). Assumption: KH2's owner method `+0xE8` adds HP.
+- t983: KH2's Limit EXP, +1 per finishing follow-up used (686 / 700 / 703 / 706, `0x1403E8730`), when KH1's command
+  step hands it to the script (`formexp::follow_up`).
+- t984: fix, `trap_limit_start_thread`'s arguments are (pc, arg).
+- t985: Last Arcanum (701). KH2 (Checked (files)): `limi` lights (80, 64, 64) over 16, starts a thread binding effect
+  elements 35 / 36 on Sora (`trap_obj_effect_start_bind`) until the limit's moves end, and hooks 221 (K410) then 0. Its
+  follow-ups aren't the script's: each move's range 20 offers the next command (K410..K414: 702 Bash, K415: 703 The End),
+  which KH2's range step puts in the reaction slot each frame (`0x14040D810` case 0x14, Checked (decomp)). Bash plays
+  221 + the Bashes so far (222..226), The End 227. Built: rows of ours for 221..227, `WindowKind::Command` (range 20),
+  `limitform::window_offers` (each frame a limit runs, KH1's Triangle slot), records 0x87 / 0x88 (words 0x1F5 / 0x1F4),
+  `trap_obj_effect_start_bind`, `trap_obj_is_dead`, `trap_effect_loop_end_kill`.
+- t986: Infinity (683), its moves. KH2 (Checked (files) and (decomp)): `limi` lights (64, 80, 64), hooks K430 (241), then
+  while each spin plays starts the next by PTYA rows 52..56 (`trap_obj_party_attack`, `0x14053EF20`: the row's motion), up
+  to the hover K435 (246), whose range 20 offers Shoot 684, Impact 685 and Giga Impact 686 in turn; its frame trigger 9 starts
+  the charge effect (`trap_obj_motion_check_trigger`, frame triggers 9..12 → `+0x2AD`, `0x14040DD70`). Shoot / Impact: K436
+  (247) with a push back of 50 / 100, Giga Impact K437 (248) with 200, then the fall. Built: rows of ours for 241..248, records
+  0x89..0x8B (words 0x1F3..0x1F1), `trap_obj_party_attack`, `trap_obj_motion_check_trigger`, `trap_obj_effect_unbind`,
+  `trap_obj_set_movement` (nothing: the motions carry the movement, Assumption).
+- t987: Infinity's shots. KH2 (Checked (decomp) and (files)): frame trigger 7 sends the object's script trigger 0x11 with
+  (object, p0, p1) (`0x14040DD70` case 7); K436 / K437 carry (100, 0) at frame 2; `limi`'s 0x11 with 100 starts a thread a
+  shot, as many as the follow-up stored (Shoot 10, Impact 17, Giga Impact 25), spread evenly round Sora's facing
+  (`trap_vector_rot`). Each shot takes the lock-on target, else searches up to 10 enemies within 0..1000 and picks one at
+  random, homes on it and makes its attack. Built: `EventKind::ObjectTrigger` (frame trigger 7), `Magic::limit_object_trigger`
+  (run at once, as the follow-ups), `limitform::object_triggers` (each frame a limit runs), and the calls
+  `trap_vector_normalize` / `_inter` / `_outer_product` / `_rot`, `trap_random_get` / `_getf` / `_range`,
+  `trap_target_set_obj` / `_clear` / `_get_group` / `_dist`, `trap_btlobj_lockon_target`, `trap_target_searcher_init` /
+  `_search` / `_get_old`. Assumptions: the random calls' ranges (not in the decomp), the rotation's sense, the search's
+  direction and flag tests left out (nearest first).
+- t988: Strike Raid (704), its moves. KH2 (Checked (files) and (decomp)): `limi` lights (80, 64, 80), hooks K420
+  (231), throws with K421 (232) / K422 (233, Judgment), catches with K423 (234), whose script ranges 1 / 2 (0..38) offer Raid
+  705 (3 left) and Judgment 706. Built: rows of ours for 231..234, records 0x8C / 0x8D (words 0x1F0 / 0x1EF), and the throw's
+  weapon calls answering "no weapon object, still attached" (`trap_party_get_weapon` 0, `trap_obj_is_attach` true), so the
+  Keyblade stays in his hand and the throws hit nothing until the thrown Keyblade is built.
+- t990: the Limit list greyed (all four, KH1's own grey bits) while a limit runs (ours or KH1's) or with no MP at all,
+  KH2's state 5 (`0x1403D88E0`); under the cost they stay usable.
+- t991: the revert waits for a running limit (its gauge or MP out, as KH2's revert comes only from the free state,
+  `0x140404A40`), and the Revert command is refused during one. A knock-out still reverts at once (the limit's script ends
+  with the form, `formmagic::end_all`).
+- t992: Strike Raid's thrown Keyblade, KH1's way (KH1's own Strike Raid throws it on Sora's own weapon bones, its state
+  turning his cull off, Checked (decomp)): the script's weapon is his Keyblade; detached, his weapon bones are drawn whole
+  where the script flies it and turned by its angles; back in his hand at the catch, when a throw is cut short, or at the
+  limit's end. KH2's weapon motion 235 (its spin) isn't played (Assumption).
+- t993: Strike Raid's trail (`trap_obj_effect_start_bind_other`, element 32 on the thrown Keyblade), catch flash
+  (`trap_obj_effect_start_pos`, 34 where it was), and its hits: the script's attacks (Raid 1866 radius 160, Judgment 1867
+  radius 190) already become KH1 attack objects moved with the flight (`attack_new` / `_set_radius` /
+  `_set_pos`); `trap_attack_set_obj_pax` nothing (the limit's effects package). The thrown Keyblade's points for its effects
+  are its place (`KhWorld::bone`).
+- Open: the list greyed while a
   limit runs (refused with KH1's "can't" for now), the revert during a limit (KH2 waits), KH2's light fade-out time (KH1's 30
   ticks used), limits in the air (refused: Assumption).
 
+### 23.4 Fixes after the owner's first limit tests (t994..)
+- t994 / t995: Limit Form's limits (argument 0x20..) and follow-ups (0x28..) were taken for Drive forms (argument 0x10..) in
+  KH1's menu entry run and in the command step, so nothing happened; only the forms' own arguments are forms now.
+- t996: KH2 movesets' clips read for every motion id 0..255 (`kh2-data::sora::moves`, was 0..230): Strike Raid's 231..234
+  and Infinity's 241..248 had no clips, so no slots ("slot isn't built").
+- t997: the follow-ups on Triangle KH1's way. KH1's command fill `0x1402948F0` clears the command slots each frame and
+  then calls the reaction provider KH1's limit states set (`0x140293180`: Sonic Blade `0x14039ED70`, Ars Arcanum
+  `0x14039F1E0`, Strike Raid `0x1403A0230`, each offering its follow-up with `0x140293000` from there; Checked (decomp)).
+  Ours offered from the script's step was wiped by the next fill (the owner: no reaction command). Now the script's and the
+  moves' offers are noted and a provider of ours, set while one of our limits runs as KH1's limits set theirs, offers it.
+- t998: a limit's hook threads step before its main context each frame (`kh2_magic::Magic::step_external`). The main loop
+  ends the limit once the player's motion isn't the one the hook last started; the hook restarts the queued motion the frame
+  the queue reaches it. With the main context first, every limit ended after its first move (the owner's log: "its script is
+  over" about 30 frames in, so no follow-up window was ever reached). Assumption: KH2 runs an object's hooks before the
+  limit's thread.
+- t999: the limit runs in a KH1 state of its own, as KH1's limits do (Checked (decomp): each registers its state with
+  `0x1402B1B80` at its start and enters it with `0x1402B1960`; Strike Raid's 0x27: flags 4, enter sets its reaction provider
+  and turns the cull off, leave clears both, transition `0x1402B1840` keeps him in it, its last move ends it in state 0).
+  Ours, `limitform::LIMIT_STATE` 0x2D (free): registered by KH1's own call each start, KH1's own stay-transition and cull
+  calls, our enter / leave (provider, cull, a thrown Keyblade back) and a step adding nothing (the moves' root travel, which
+  KH1 adds after the step, moves him: no walk speed, no gravity; Assumption: KH2's limit actions add none). The limit's end
+  puts him in state 0. KH1's `+0` 0x200080 bits aren't set: KH2's invulnerability stays its moves' range 27.
+- t1000: `trap_sysobj_motion_is_end` answers (KH2's motion block `+0x18C` bit 1, `0x14042B440`): our slot's clip at its last
+  frame, or wrapped round. It was always false, so Infinity's and Strike Raid's scripts waited forever on their start move
+  (nothing queued after it): the owner's "starting loop".
+- t1001: the follow-ups go through when pressed (the owner, t999: "sonic rave and last arcanums reaction commands won't
+  work"). KH1 (Checked (decomp) and (exe)): using a slot's command (`0x140293480`) refuses a kind-2 record with an argument
+  (ours) and KH1's own limit follow-ups unless `0x1402A2EC0 (sora)` passes: Sora free (`0x140297870`: `+0` bit 4, `+0x88`
+  bit 0x20, `+0x444` bit 0 clear) or in KH1's combo window (`+0x1CC` bit 22, the playing motion's event bits). A limit move
+  is an action request (`0x14029F980`: bit 24 sets `+0` bit 4), so he is never free in one; KH1's limit moves carry the
+  window in their motion data and their providers keep the offer only while it's open (`0x14039ED70`, `0x1403A0230`). Ours
+  had none, so the offer showed but the press was refused. Now our provider opens bit 22 on `+0x1CC` for the frame it
+  places the offer (the fill runs inside KH1's command step before the press is read; the next motion step rewrites it).
+  Our state's flags (4) keep the Attack slot greyed (`0x140294220`), so no KH1 swing takes the window. KH1's Triangle box
+  (Checked (decomp), `0x140277CF0`: hidden, sliding in, shown, sliding out in `0x142852814`) takes a record without flag
+  0x10 only once it is fully shown (about 7 frames after it appears; a new record slides in again), as it does for the
+  chest's Open; Assumption: KH2's reaction slot takes the press as soon as it shows. Log: "Limit: follow-up record …".
+- t1002: `motion_ended` counts a queued move at KH1's count `+0x178` >= 1 (Checked (decomp): the count holds only what is
+  still to play; the apply `0x14029FC40` counts the head off; KH1's end rule `0x14029F6E0` reads `0 < count`). At >= 2
+  Strike Raid's throw (232, catch 234 queued) read as ended a frame early, so `limi` skipped the catch and its main loop
+  ended the limit on 234 before Raid was offered. Log: "Limit: KH2 motion … ended for its script".
+- t1003: `asked_motion` reads a request KH1 hasn't applied yet (`+0x160` bit 0, the request at `+0x17C`; KH1's motion step
+  copies it into `+0x164` later, `0x14029FC40`, Checked (decomp)). From `+0x164` alone a Bash chosen in KH1's command step
+  was seen as the move before by the next script step, so `limi`'s main loop ended Last Arcanum while KH1 played the Bash.
+- t1004: KH1's Triangle box takes our follow-ups the frame they show (the owner's answer 1 (a)). KH1 exempts only Ars
+  Arcanum's 0x58 / 0x59 from the box's slide-in wait (`0x140293B46`, Checked (exe)); that compare now jumps to KH1's same
+  test with our records 0x85..0x8D added, then back to KH1's two exits. The box's drawing is KH1's as before.
+- t1005: a limit script's wanted facing turns Sora at once (the owner's answer 2 (a)) through `kh2slots::turn_to`, the turn
+  `turn_to_lock` makes (its travel so far and step turned with him). KH1's gradual turn (about pi/16 a frame) bent each
+  Rave's dash when nothing was locked. Assumption: KH2 turns to the wish at once (its body turn not found in the decomp).
+- t1006: KH2's motion 4 (the fall) asked by a limit's script is KH1's Ragnarok fall: motion 6 queued with bit 30 and the
+  entry callback `0x14039FFB0` (state 2 as the entry starts, Checked (decomp)), or state 2 and motion 6 at once for a start.
+  Dropped before, so Infinity sat in Shoot (or the hover) for good: the script's main loop runs while he's in 241..248.
+- t1007: `trap_obj_party_attack` hands its motion to the script's view of Sora (as a motion start does) and pushes the
+  row's next motion with its blend (KH2's `0x1403D78D0`, Checked (decomp)): `limi` restarts the motion the party attack
+  gave (pc 1701..1714), and with the old view it restarted Infinity's 241.
+- t1008: Infinity's spins rise (the owner's answer 3 (a)): its state steps on KH1's jump step `0x1402AF6A0` as Ragnarok's
+  0x25 does (Checked (decomp)), and each party attack's KH2 hop (PTYA rows 52..56, KH2's rule on KH1's target) is written
+  into KH1's arc fields (`shared::physics::limit_hop`; gravity per the Physics row, as KH2's other hops on KH1).
+- t1009: Infinity's hover: KH2's no-gravity range 3 on our slot (KH1's level reader) holds him with KH1's jump step's own
+  hold (`+0` bit 12, Ragnarok's way, Checked (decomp)); the arc's height and air speed zeroed at its start so he falls from
+  rest at its end.
+- t1010: `trap_obj_set_movement` (KH2's move direction and speed, `0x1403B9DA0`, Checked (decomp)) on KH1's move direction
+  `+0x20` / speed `+0x2C` and, on the jump step, its air speed `+0x3C0`: Infinity's follow-ups stop him before the push back.
+- t1011: off a ledge, Config > Drive > Limit > Ledges (KH2 by default; ini `limit_ledges`). KH1: our state's transition is
+  KH1's Sonic Blade's `0x14039EBA0` (no floor: fall motion 6, state 2, the limit ends; Checked (decomp)). KH2: KH2's edge
+  stop (range 29) on our step, and that fall only with no floor and no ground-hold range (KH2's mover `0x1403B9090`).
+  Infinity keeps the stay transition.
+- t1013: Limit Form's script effects play: `kh2dpx::pkg_of` gives the form's archive (`Pkg::Limit`) for its package number
+  (19), which `spell_start` had looked for as `Spell(19)`, never built (the t1012 log: elements 20 / 23 / 34 / 35 / 36
+  "isn't built"). The hit sparks of its attacks use the same mapping.
+- t1014: a form script effect's sound is tied to the effect (KH2's bind node keeps it, `0x1402C6B30`, and fades it out as the
+  effect goes, `0x1401DE500 (h, 0x78)`, Checked (decomp)): a kill or fade of the effect fades its sound with KH1's own
+  `0x140179A20 (no, id, fade)`. Infinity's charge sound now stops at the follow-up or the hover's end.
+- t1015: Strike Raid's thrown Keyblade spins: the script's start of KH2's weapon motion 235 (bone 2 turned 4 pi about its z
+  every 30 frames, looping, Checked (files)) turns the whole thrown Keyblade about KH1's blade bone 282's z on KH1's pose
+  (`thrown_world`). The keychain's sway and the spin's sense on KH1's bone are Assumptions.
+- t1016: Strike Raid's element 32 on the thrown Keyblade: KH2 binds it to the weapon's root; ours starts it unbound (KH1's own
+  start) and places it on the blade's root (its place and the script's angles) each frame it flies (`thrown_world`), as
+  Wisdom's shots are placed. The catch's unbind and loop end end it as KH2's.
+- t1017: Sonic Rave's KH1 quotes (Battle Quotes KH1): KH1 stand-ins for its KH2 voice keys (`kh1voice::STAND_INS`): the start
+  "Give me strength!", the first Rave silent and the rest a swing grunt (KH1's Sonic Blade), the Finish KH1's big line.
+- t1018: Last Arcanum's KH1 quotes by kind: the start "Give me strength!" (then a grunt and the finisher line in it), Bash
+  1..4 a swing grunt, Bash 5 KH1's finisher line, The End KH1's big line (Ars Arcanum's ending).
+- t1019: Strike Raid's and Infinity's KH1 quotes by the same rule: the starts "Give me strength!", each throw / spin a swing
+  grunt, Judgment and Giga Impact the big line, the hover the finisher line, Shoot / Impact a grunt.
+
+### 23.5 Limit Form: unfinished (the owner, after t1019: "note that limit is unfinished")
+
+Paused here to move on to the next form; t1013..t1019 are untested in game. Open, to pick up later:
+
+- **Effect slots** (the owner: "run out of effect slots"): Infinity's 10 / 17 / 25 shots (element 23 each, plus their
+  attacks) never started before t1013, so whether KH1's element / effect slots run out isn't known. The t1012 log has no
+  "not started (no free element or effect slot)" line, but that line is logged only for the first 20 starts of a session
+  (`kh2dpx` `STARTED`), and "doesn't play" once per element. Next: a per-start count of the script's shots started and
+  refused, not capped; if KH1 runs short, decide with the owner (KH1's pool size vs fewer drawn shots).
+- **Strike Raid's spin** (t1015): the axis and sense on KH1's blade bone 282, the keychain's sway (bones 3..11 of KH2's
+  235) and bone 0's quarter turn are Assumptions; KH2's `obj_set_xyzrot` Euler order (X, Y, Z) is an Assumption
+  (t1015 / t1016). Element 33 starts twice per catch (234 restarted; KH2 likely the same, Assumption).
+- **Sounds** (t1014): KH2's 0x78 fade read as KH1's unit (Assumption); whether 999045 loops (se999 not checked).
+- **Sonic Rave**: the script restarts 212 on the frame KH1's queue started it (frame 0 twice); KH2's turn to the wish
+  read as instant (t1005, Assumption).
+- **Infinity**: the hop's fall uses KH1's gravity at Physics KH1 (the Physics rule); KH2's jump start (`+0x18` of the
+  player) not followed; `trap_limit_reference` answers 0; a Revert out of MP during the shots would kill them
+  (`formmagic::end_all`, untested); whether its shots hit (Magic log off in the t1012 test).
+- **Strike Raid**: KH2's catch (234) has no invulnerability range (range 27 covers 231..233 only); kept KH2's.
+- **Quotes** (t1017..t1019): what KH2's clips 25 / 32 / 33 say (unheard); Battle Quotes KH2 on the limits not yet
+  confirmed in a log (Sound category off).
+- Research notes for all of it: the research rounds' reports (Sonic Blade / Sonic Rave, Ars Arcanum / Last Arcanum,
+  Strike Raid, Ragnarok / Infinity) are summed up in §23.4's t1002..t1019 notes and the AGENTS stages.
+
+## 24. Master Form on KH1's states (the owner, after t1019: "move onto the new form", 2026-10-30)
+
+### 24.1 KH2 (Checked (files): `P_EX100_TRIF.mset` / `.mdlx` / `.a.us`, `W_EX010_TRIF_R` / `_L`, 00battle, 03system; (decomp) where noted)
+
+- Cost 4 bars, both partners, owned after Anti-Sora (already built). PTYA set 4: ground 185 / 181 / 182, finishers 183 / 184
+  (184 the long body-hit finisher, ATKP 1100 / 1101), air 185 / 181 / 182, air finisher 184; no guard, Square or ability rows.
+- Motions 41 / 42 / 43 are its repel clip D350: no guard window (Limit's and Valor's 42 have ATKP 162).
+- Casts D370..D374 (one per spell, ground, finisher and air); root travel: Fire 799 forward, Blizzard out 347 and back to 106,
+  Thunder 718 sideways and 769 forward, Cure none, Reflect 93. Magic sub +20 (`magi` rows 20..25, ATKP 502 subs 20 / 22 / 24).
+- The off-hand Keyblade floats: `W_EX010_TRIF_L`'s bone 0 is animated away from the left palm (up to about 106) in every motion;
+  `_R` is held. Data, from the left palm (`sklt` row 1: palms 178 / 86; Master's objentry joint an Assumption).
+- Effects: `P_EX100_TRIF.a.us` (29 elements), started by its motions' frame triggers; no script in the model.
+- EXP: a Drive orb picked up in form 4 adds its value (1 / 3) to Master's EXP (`0x1403E8760`, Checked (decomp)). Levels: Aerial
+  Dodge 1, 1, 2, 2, 3, 3, 4; EXP 40 / 80 / 140 / 224 / 448 / 668; rewards Auto Master (387) at LV2, Air Combo Plus at LV4 / LV6.
+- Not checked: the "+20" code, Master's objentry weapon joint, KH2's per-form command disabling for form 4.
+- Correction (t1031): Master has item use 9, in its field slot only (`A110`, as Wisdom's and Limit's); KH2's lookup
+  `0x1403C7C50` tries the id's four slots (table `0x1405C5D38`), so it plays its own (Checked (files) / (decomp)).
+
+### 24.2 The owner's answers (2026-10-30)
+
+1. Save bytes: Master's Keyblade at `+0x489`, its level at `+0x892` (next to Limit's `+0x890`).
+2. Story Unlocks off: Master (and Limit) owned as Valor and Wisdom are.
+3. KH1's Gravity / Stop / Aero in Master: Wisdom's mapping (the clip decides the travel).
+4. The look: main's yellow spec (jumpsuit, collar and hood lining yellow, belt black).
+5. The Equipment rows: V: and M: both hidden until the form is owned.
+6. KH1 commands (2026-10-30, with "go ahead"): "valor and master shouldn't refuse commands, we'll hand tune which ones if
+   something looks off, it should be the same as wisdom form" (Valor's two-Keyblade refusal goes, for both).
+7. KH1 battle-quote stand-ins for Master: yes (by t1017..t1019's rule).
+8. Item use (Master has no motion 9): what KH2 plays in its place, found first.
+
+### 24.3 Plan and built (one system a version)
+
+- t1020: guard only from a guard window in motion 42 (every form); Master's 42 has none.
+- t1021: Master on KH1's states: `Kind::Master`, Drive record 0x8E / word 0x1EE (Checked (files)), `MASTER_SPECS` (reactions, recoils 41 / 43, fall / land, jump 3, air combo 181 / 182 / 185 on 0xCC..0xCE), Aerial Dodge 202 / Air Recovery 40 on our rows, Aerial Dodge LV1 until t1025.
+  Story Unlocks off: Limit and Master owned as Valor and Wisdom. One Keyblade, Sora's look, no package, base Sora's ground combo slots (Master has none on the ground yet): test with t1022.
+- t1022: Master's ground combo. PTYA set 4's ground rows all hop (41; row 1 14) and its finishers 183 / 184 are air rows (Checked (files)), so the ground combo is KH2's hops into the air combo, on our air rows as base Sora's hops 0 / 1. 185 (ground rows 5 / 6, air rows 20 / 22 / 23) gets a row of ours (`kh1rows` "185", air swing), built only from Master's moveset. No ground rows or ground slots were needed.
+- t1023: KH1 commands in Valor and Master as in Wisdom (answer 6): the two-Keyblade refusal (`formcmds::valor_allows`, `combat` command step and attack-row run) is gone. Limits in Forms and Valor's no-magic rule unchanged.
+- t1024: Master two-bladed: its `_L` carried from KH2's left palm 86 by `kh2_hold` in the holder bake (the float from `_L`'s bone 0, data, no per-frame code), `_L`'s hits and trail as Valor's, the second Keyblade Sora's own until the M: slot (stats added as Valor's empty slot).
+- t1025: the M: slot. Master's Keyblade at save `+0x489` (answer 1), empty = Sora's own (round 11 answer 1 (a)); an old save's byte that isn't a free Keyblade is cleared. V: and M: rows in Equipment only once the form is owned (answer 5). Free count, compare box, pick list and the fill on gain as Valor's (`equip::candidates` keeps the two slots' copies apart; Valor's first). `valor::master_keyblade` reads it for the left hand and the stats.
+- t1026: Master's level record at save `+0x892` (answer 1), next to Limit's. A Drive orb picked up in Master adds its value (1 / 3) to Master's EXP (KH2 `0x1403E8760`, at `driveorbs::pickup`, no per-frame code). Levels by fmlv form 4 (EXP 40 / 80 / 140 / 224 / 448 / 668); its Aerial Dodge 1, 1, 2, 2, 3, 3, 4 and base Sora's one under (menu name and box); Air Combo Plus at LV4 / LV6 given, Auto Master (LV2) has no KH1 counterpart.
+- t1027: Master's magic as Wisdom's (per form: `Kind::kh2_magic`, sub + 20): KH2's Fire / Blizzard / Thunder / Cure and Reflect on its own D370..D374 casts on KH1's cast requests; KH1's Gravity / Stop / Aero on Thunder's / Cure's clips (answer 3); finisher subs 21 / 23 / 25 fall back to the plain ATKP row (Assumption).
+- t1028: Master's effects and sounds as Limit's (t971): `Pkg::Master` (`obj/P_EX100_TRIF.a.us`), `kh2fx::MASTER` = 20, its trigger-1 elements and their sounds; its swings / voices loaded and played by the generic slot events (swings only with `kh2_sounds = all`, as Limit's).
+- t1029: Master's look (answer 4): main's yellow spec, from main's `tint.rs` (belt black; hood lining, jumpsuit and collar strip one bright yellow by `Op::Paint`, main's values), `tint::Look::Master`, built once into the tint cache; Player Model kh2 draws `P_EX100_TRIF`.
+- t1030: Master's KH1 battle quotes (answer 7): the row-less lines only, in Master: 183 voice 4 → group 4, 183 / 184 voice 5 → group 5 (`kh1voice::MASTER_STAND_INS`); the frame-0 lines are KH1's row voices already (4 on 181 / 182 / 185, 5 on 183 / 184).
+- t1031: Item use in Master (answer 8): Master has motion 9 in its field slot only (`A110`, as Wisdom's and Limit's, Checked (files)); KH2's lookup `0x1403C7C50` tries the id's four slots by the table at `0x1405C5D38` and nothing else (Checked (decomp) / (exe)), so Master plays its own. `MASTER_SPECS` gets the item specs (0x3E / 0x3F).

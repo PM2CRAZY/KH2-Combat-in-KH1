@@ -55,6 +55,11 @@ pub enum WindowKind {
     /// `+0x154`, Steam KH2, Checked (decomp)). Limit Form's Sonic Rave opens 1 and 2 in its Rave
     /// (K401) for its follow-ups (`P_EX100_KH1F.mset`, Checked (files)).
     ScriptRange(u8),
+    /// KH2's motion-data reaction offer (range id 20, its parameter a command): the range step
+    /// `0x14040D810` puts the command in the reaction slot (`0x1403B2850 / 0x1403B25C0 (menu, 1,
+    /// command, ..)`) each frame the range is open (Steam KH2, Checked (decomp)). Limit Form's Last
+    /// Arcanum offers its Bash (702) and The End (703) this way (`P_EX100_KH1F.mset`, Checked (files)).
+    Command(u16),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -93,6 +98,9 @@ pub enum EventKind {
     /// Start the pad's vibration pattern `n` (frame trigger 31: `00battle.bin` vbrt's id; Steam
     /// KH2 `0x14040DD70` case 0x1F → `0x1403EEFC0` → `0x14019AE60`).
     Rumble(i16),
+    /// The object's script's trigger 0x11 with the two parameters (frame trigger 7; Steam KH2
+    /// `0x14040DD70` case 7, Checked (decomp)): Limit Form's Infinity shots (`(100, 0)`).
+    ObjectTrigger(i16, i16),
     Other(u8),
 }
 

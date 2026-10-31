@@ -387,7 +387,7 @@ pub struct FormSlots {
     ours: &'static [u16],
 }
 
-pub const FORM_SLOTS: [FormSlots; 3] = [
+pub const FORM_SLOTS: [FormSlots; 4] = [
     FormSlots { kind: super::form::Kind::Valor, specs: &VALOR_SPECS, ours: &[] },
     // (Wisdom's Quick Run, its growth ability: its own 203 and its stop 204 on our Quick Run rows,
     // `quickrun`; its own Reflect 71 / 72 / 73 on our Reflect rows, `reflect::native_path`.)
@@ -397,6 +397,86 @@ pub const FORM_SLOTS: [FormSlots; 3] = [
         ours: &[super::quickrun::RUN_MOTION, super::quickrun::STOP_MOTION, super::reflect::GROUND_MOTION, super::reflect::FINISHER_MOTION, super::reflect::AIR_MOTION],
     },
     FormSlots { kind: super::form::Kind::Limit, specs: &LIMIT_SPECS, ours: &[] },
+    // (Master, t1021: its own Aerial Dodge 202, its growth ability, and Air Recovery 40 on our rows
+    // of them, `kh1rows` "Aerial Dodge" / "Aerial Recovery".)
+    // (t1027: its own Reflect 71 / 72 / 73 (D373, Checked (files)) on our Reflect rows, as Wisdom's,
+    // `reflect::native_path`.)
+    FormSlots {
+        kind: super::form::Kind::Master,
+        specs: &MASTER_SPECS,
+        ours: &[character_core::motion::AERIAL_DODGE, character_core::motion::AIR_RECOVERY, super::reflect::GROUND_MOTION, super::reflect::FINISHER_MOTION, super::reflect::AIR_MOTION],
+    },
+];
+
+/// Master Form's motions on KH1's own requests (t1021, the owner after t1019: "move onto the new
+/// form"), each the same KH1 request and template as base Sora's move of that kind, from
+/// `P_EX100_TRIF.mset` (moveset 4, Checked (files): motions 0..7, its reactions 10..15, recoils 41 /
+/// 43 (its repel clip D350), 40, 53, its casts 56..73, its combo 181..185, Aerial Dodge 202, item use
+/// 9 (t1031: in its field slot only, below); no High Jump 201, roll 209 or guard 173). Its air combo 181 / 182 / 185 on KH1's air
+/// requests (PTYA set 4's air rows, Checked (files)); its ground combo is KH2's hops into the air
+/// (every ground row of set 4 hops, 41 high; its finishers 183 / 184 are air rows, Checked (files)),
+/// on our air rows 181 / 182 and, from t1022, 185 (`kh1rows` "185"), so no ground swing or finisher
+/// of KH1's plays here; its casts on KH1's cast requests (t1027). Its
+/// jump is 3 on both takeoffs (no High Jump in its file). Its hits are its own ATKP rows
+/// (`form::battle`).
+const MASTER_SPECS: [Spec; 34] = [
+    Spec { motion: 181, stands_for: 102, request: 0xCC, kind: Kind::AirCombo },
+    Spec { motion: 182, stands_for: 103, request: 0xCD, kind: Kind::AirCombo },
+    // (t1022: KH1's air finisher request plays a finisher, 183 as every form's does (Master's 183 is
+    // an air finisher, PTYA set 4 rows 8 / 58, Checked (files)); its swing 185 is our row "185",
+    // `kh1rows`, and its 184 our row "184". t1021 had 185 here.)
+    Spec { motion: 183, stands_for: 104, request: 0xCE, kind: Kind::AirCombo },
+    reaction_spec(0),
+    reaction_spec(1),
+    reaction_spec(2),
+    reaction_spec(3),
+    reaction_spec(4),
+    reaction_spec(5),
+    recoil_spec(0),
+    recoil_spec(1),
+    FALL,
+    jump_spec(0),
+    Spec { motion: character_core::motion::JUMP, stands_for: 12, request: 0x9, kind: Kind::Jump },
+    LAND,
+    CHEST,
+    // (t1031) Its item use on KH1's item requests 0x3E / 0x3F, as Wisdom's and Limit's (`ITEMS`).
+    // Master's motion 9 is only in its field-without-weapon slot (`P_EX100_TRIF.mset` entry 9 × 4
+    // + 2, `A110`, 23238 bytes; the battle slots 0 / 1 / 3 empty, Checked (files)), as Wisdom's and
+    // Limit's are (the same size and frame triggers, Checked (files)). KH2's motion lookup
+    // (Steam KH2 `0x1403C7C50`, Checked (decomp)) never leaves the motion id: for a multi-slot set
+    // (its flag `+0xC` bit 0) it tries the id's four slots `id × 4 + r` in the order the state
+    // picks from the table at `0x1405C5D38` (rows 0,1,3,2 / 1,0,2,3 / 2,3,1,0 / 3,2,0,1, Checked
+    // (exe)), the holder's second set first, and plays the first present; so KH2's Master uses
+    // its own A110 in battle. Our clips come by the same order (`kh2_data::sora::moves`, battle
+    // with weapon), so this is Master's own item use (before: base Sora's slot of it, as no Master
+    // move had the request). Assumption: the holder's second set (`+8`) is empty in battle (it is
+    // set by a script call, `0x14042F460` → `0x1403C7C10`, Checked (decomp); not traced in game).
+    item_spec(0),
+    item_spec(1),
+    // (t1027) Its casts on KH1's cast requests, as Wisdom's (`WISDOM_SPECS`, base Sora's `CASTS`):
+    // its own clips of the MAGC motions, Checked (files) `P_EX100_TRIF.mset`: Fire 56 / 57 / 58
+    // D371, Blizzard 59 / 60 / 61 D370, Thunder 62 / 63 / 64 D372, Cure / Magnet 65 / 67 / 68 / 70
+    // D374 (one clip per spell for ground, finisher and air). KH1's Gravity on Thunder's 62 / 64,
+    // Stop / Aero on 68 / 65 / 67 (the owner, §24.2 answer 3: Wisdom's mapping, the clip decides
+    // the travel: Gravity on D372 goes about 1052, Stop / Aero on D374 none). Its finisher casts
+    // 57 / 60 / 63 are built after, `CAST_FINISHERS` (the same clips). Their root travel is the
+    // generic form cast travel (`redirect`, `air_root_form`).
+    cast_spec(0),
+    cast_spec(1),
+    cast_spec(2),
+    cast_spec(3),
+    cast_spec(4),
+    cast_spec(5),
+    cast_spec(6),
+    cast_spec(7),
+    cast_spec(8),
+    cast_spec(9),
+    cast_spec(10),
+    cast_spec(11),
+    cast_spec(12),
+    cast_spec(13),
+    cast_spec(14),
+    cast_spec(15),
 ];
 
 /// Limit Form's motions on KH1's own requests (t969, the main-branch port's round 12 answer 1 (a):
@@ -1014,8 +1094,8 @@ fn holder_key(template: &[u8], (motion, field): (u16, bool), frames: u32, form: 
     if let Some(k) = form {
         h.str(k.model());
         // (t829: Valor's left Keyblade from KH2's weapon bone 2, `pose::kh2_hold`; t831: in the
-        // left palm's own space, for the holder actor.)
-        if k == super::form::Kind::Valor {
+        // left palm's own space, for the holder actor. t1024: Master's the same.)
+        if matches!(k, super::form::Kind::Valor | super::form::Kind::Master) {
             h.str("kh2 hold");
             h.str("palm space");
             // (t841: no root travel, the template's travel helper's channels dropped.)
@@ -1542,6 +1622,18 @@ pub unsafe fn turn_to_lock(actor: usize) {
     if !f.is_finite() {
         return;
     }
+    turn_to(actor, yaw, f);
+    static N: AtomicU32 = AtomicU32::new(0);
+    if super::log_on(super::LogCat::Animation) && N.fetch_add(1, Ordering::Relaxed) < 40 {
+        log!(Animation, "KH2's turn to the target (KH2 motion {} frame {:.0}, up to {:.2} a frame): {:.2} -> {f:.2} (the target at {:.2}); travel so far turned with him", m.motion, t, max, yaw, want);
+    }
+}
+
+/// Sora (or `actor`) turned from `yaw` to `f` at once, as `turn_to_lock` turns him (t1005: shared
+/// with a limit script's wanted facing, `limitform::face`): KH1's facing fields, the yaw he turns
+/// toward, on the ground the move vector, and the motion's travel so far and this frame's step
+/// turned with him (the t-turn notes below).
+pub unsafe fn turn_to(actor: usize, yaw: f32, f: f32) {
     wr(actor + 0x30, [f.sin(), 0.0, f.cos(), f]);
     wr(actor + 0x150, f);
     // (t-turn) KH1's move vector (`+0x20`: its x / z; its y and the speed `+0x2C` kept) turned with
@@ -1588,10 +1680,6 @@ pub unsafe fn turn_to_lock(actor: usize) {
         // that step through `0x1403B7CA0`, turned by his yaw `+0x68C` as it is then).
         let st: [f32; 4] = rd(actor + 0x200);
         wr(actor + 0x200, [st[0] * c + st[2] * s, st[1], -st[0] * s + st[2] * c, st[3]]);
-    }
-    static N: AtomicU32 = AtomicU32::new(0);
-    if super::log_on(super::LogCat::Animation) && N.fetch_add(1, Ordering::Relaxed) < 40 {
-        log!(Animation, "KH2's turn to the target (KH2 motion {} frame {:.0}, up to {:.2} a frame): {:.2} -> {f:.2} (the target at {:.2}); travel so far turned with him", m.motion, t, max, yaw, want);
     }
 }
 
@@ -2593,14 +2681,15 @@ pub fn holder_motion(motion: usize) -> Option<usize> {
     HOLDER_AT.try_lock().ok()?.iter().find(|h| h.0 == motion).map(|h| h.1)
 }
 
-/// The holder motion of Valor's idle (KH2 motion 0), for a slot of KH1's own with none (`holder`,
-/// t831: the left Keyblade held at KH2's Valor idle grip, KH2's left weapon staying on its palm),
-/// else any Valor holder motion.
+/// The holder motion of the two-bladed form's idle (KH2 motion 0), for a slot of KH1's own with
+/// none (`holder`, t831: the left Keyblade held at KH2's Valor idle grip, KH2's left weapon staying
+/// on its palm; t1024: Master's own idle float in Master), else any holder motion.
 pub fn rest_holder() -> Option<usize> {
     let b = built()?;
     let at = MOTION_AT.try_lock().ok()?;
     let main = |m: &Move| at.iter().find(|x| x.1 == m.slot).map(|x| x.0);
-    let valor = |m: &&Move| m.form == Some(super::form::Kind::Valor) && m.holder;
+    let now = super::form::current().filter(|k| k.two_blades()).unwrap_or(super::form::Kind::Valor);
+    let valor = |m: &&Move| m.form == Some(now) && m.holder;
     let idle = b.moves.iter().filter(valor).find(|m| m.motion == character_core::motion::IDLE).and_then(main);
     drop(at);
     if let Some(h) = idle.and_then(holder_motion) {

@@ -66,6 +66,11 @@ pub const FINAL: u8 = VALOR + 1;
 /// Limit Form's (`P_EX100_KH1F.a.us`, t971), after Final's.
 pub const LIMIT: u8 = FINAL + 1;
 
+/// (t1028) Master Form's (`P_EX100_TRIF.a.us`, PAX "p_ex", 29 elements, Checked (files)), after
+/// Limit's. (The numbering: Reflect 1..3, Wisdom 4, the spells 5..`form::LAST_PACKAGE` (16), Valor
+/// 17, Final 18, Limit 19, Master 20; `kh2dpx::pkg_of` reads it back.)
+pub const MASTER: u8 = LIMIT + 1;
+
 /// A frame trigger 1 of Valor's or Final's motion (`takeover`, `form::takes`): its element from
 /// that form's package, on Sora; one that ends with its motion ends when the motion changes.
 pub fn form_event(motion: u16, el: i16) {
@@ -76,6 +81,9 @@ pub fn form_event(motion: u16, el: i16) {
         (super::kh2dpx::Pkg::Final, FINAL)
     } else if super::form::in_limit() {
         (super::kh2dpx::Pkg::Limit, LIMIT)
+    } else if super::form::in_master() {
+        // (t1028.)
+        (super::kh2dpx::Pkg::Master, MASTER)
     } else {
         (super::kh2dpx::Pkg::Valor, VALOR)
     };
@@ -110,7 +118,7 @@ pub fn spell_start(level: u8, el: u16) -> Option<u32> {
 
 /// A spell package is built and entered in KH1 (for the log).
 pub fn spell_ready(level: u8) -> bool {
-    super::kh2dpx::ready(super::kh2dpx::Pkg::Spell(level))
+    super::kh2dpx::ready(super::kh2dpx::pkg_of(level))
 }
 
 /// What the spell script did to an effect it started: ended its loop (`end`), killed it, or set

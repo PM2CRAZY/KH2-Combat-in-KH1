@@ -1,7 +1,7 @@
 //! KH1's limits in a Drive Form (the owner, the main-branch port's round 9, row 19: answer 2 (b),
 //! a Config toggle; t963). Drive > Limits in Forms: KH2 (the default) = no KH1 limit offered or
 //! used in any form, as KH2, where a form takes the partners its limits need; KH1 = KH1's offer as
-//! it is (Valor keeps refusing them, `formcmds::valor_allows`). Notes:
+//! it is, in every form alike (t1023: Valor's own refusal is gone, as Wisdom). Notes:
 //! `docs/kh1-drive-forms-native.md` §20; the rule: `crate::formcmds`.
 //!
 //! Steam KH1, Checked (decomp) and (exe):

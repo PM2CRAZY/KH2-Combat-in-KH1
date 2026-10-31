@@ -1,4 +1,4 @@
-//! Valor Form's Keyblade in KH1's Equipment page (`docs/kh1-equipment.md`, section 4): Sora's
+//! Valor Form's (and since t1025 Master Form's) Keyblade in KH1's Equipment page (`docs/kh1-equipment.md`, section 4): Sora's
 //! slots get a row under his weapon, "V: <Keyblade>", the Keyblade Valor uses (`equip::
 //! valor_keyblade`, kept at `save + equip::VALOR_OFF`). Picking it opens KH1's own weapon list,
 //! narrowed to the Keyblades Valor may take; the pick is stored and Sora's own weapon is left
@@ -25,8 +25,17 @@
 //!   label while the slots window or the page header draws the Valor Keyblade.
 //! - The help line (`0x140549080`) shows the Valor Keyblade's help on its row and the right
 //!   accessory's on the others.
+//! - **t1025: the M: row, and both rows only once owned.** The owner's answer 5 after research round
+//!   2: "both master and valor should be hidden before owned". The form rows are V: (Valor) and M:
+//!   (Master, `equip::MASTER_OFF`), each shown only while `formown::owns` the form (Story Unlocks
+//!   off: both owned, t1021), in that order under the weapon: rows 1..=k, accessories from row
+//!   1 + k. With neither owned Sora's slots are KH1's own (no shadow, no extra row). The row stub
+//!   takes rows 1 and 2 by their own cells and notes the row picked; everything above works per row
+//!   (the pick's form, its list `equip::candidates`, its slot byte). Assumption: KH1's slots window
+//!   scrolls with up to 11 rows (8 accessories) as it did with 10; to check in game.
 
 use super::addr::Rva;
+use super::form::Kind;
 use super::{equip, hook, log};
 use std::sync::atomic::{AtomicU32, AtomicU8, AtomicUsize, Ordering};
 
@@ -101,13 +110,19 @@ static ORIG_FILL: AtomicUsize = AtomicUsize::new(0);
 /// Our memory near the game: the stubs, their cells and the shadow record.
 static MEM: AtomicUsize = AtomicUsize::new(0);
 /// While our slots / page wrappers run: label the Valor Keyblade's name.
+/// (1 the slots, 2 the page header.)
 static LABEL_ON: AtomicU8 = AtomicU8::new(0);
-/// The id the label was made for, and the label (KH1 text codes).
-static LABEL_ID: AtomicU8 = AtomicU8::new(0);
-static LABEL_BUF: AtomicUsize = AtomicUsize::new(0);
+/// Per form row (V:, M:): the id the label was made for, and the label (KH1 text codes).
+static LABEL_ID: [AtomicU8; 2] = [AtomicU8::new(0), AtomicU8::new(0)];
+static LABEL_BUF: [AtomicUsize; 2] = [AtomicUsize::new(0), AtomicUsize::new(0)];
 const LABEL_LEN: usize = 64;
-/// The last Valor Keyblade logged / Sora rows count logged (logs on change only).
-static LOGGED_ID: AtomicU32 = AtomicU32::new(u32::MAX);
+/// Name calls of one slots update that matched both form rows' Keyblade (both rows the same one).
+static LABEL_SEQ: AtomicU8 = AtomicU8::new(0);
+/// The form of each form row shown (t1025): 0 none, 1 Valor, 2 Master.
+static ROW_FORMS: [AtomicU8; 2] = [AtomicU8::new(0), AtomicU8::new(0)];
+/// The last Keyblade logged per form (Valor, Master) / Sora rows count logged (logs on change
+/// only).
+static LOGGED_ID: [AtomicU32; 2] = [AtomicU32::new(u32::MAX), AtomicU32::new(u32::MAX)];
 static LOGGED_ROWS: AtomicU32 = AtomicU32::new(u32::MAX);
 /// Sora's own weapon while a Valor pick's preview may have put another in his weapon byte
 /// (0: none): kept from the list's opening until his byte holds it again with the list closed.
@@ -118,15 +133,18 @@ static HOVER_LOGS: AtomicU32 = AtomicU32::new(0);
 
 // Layout of `MEM`.
 const STUB_R12: usize = 0x00;
+/// (The row stub is 106 bytes since t1025: the cells moved up past it.)
 const STUB_ROW: usize = 0x40;
-/// u64: the shadow record's address while Sora's slots show the Valor row, else 0.
-const CELL_SHADOW: usize = 0xA0;
-/// u64: 0 no Valor row, 1 a Valor row with a Keyblade, 2 a Valor row with none.
-const CELL_ROW: usize = 0xA8;
-/// u8: set by the row stub when Sora's row 1 is confirmed (a Valor pick is under way).
-const CELL_PICK: usize = 0xB0;
-const SHADOW: usize = 0xC0;
-const MEM_SIZE: usize = 0x100;
+/// u64: the shadow record's address while Sora's slots show a form row, else 0.
+const CELL_SHADOW: usize = 0xB0;
+/// u64: row 1's form row: 0 none, 1 a form row with a Keyblade, 2 a form row with none.
+const CELL_ROW: usize = 0xB8;
+/// u8: set by the row stub to the form row confirmed (1 or 2: a form pick is under way).
+const CELL_PICK: usize = 0xC0;
+/// u64: row 2's form row, as `CELL_ROW` (t1025).
+const CELL_ROW2: usize = 0xC8;
+const SHADOW: usize = 0xD0;
+const MEM_SIZE: usize = 0x120;
 
 unsafe fn rd<T: Copy>(p: usize) -> T {
     std::ptr::read_unaligned(p as *const T)
@@ -171,28 +189,33 @@ pub(crate) fn stub_r12(at: usize, cell: usize, back: usize) -> Vec<u8> {
 }
 
 /// The row stub at `at` (entered with `ebx` = the confirmed row): row 0 the weapon way; row 1
-/// with the row cell 1: the weapon way with the pick cell set; with 2: sound 4, then the
-/// drawing part; else the accessory way.
-pub(crate) fn stub_row(at: usize, row_cell: usize, pick_cell: usize, weapon: usize, accessory: usize, draw: usize, sound: usize) -> Vec<u8> {
+/// (row 2, t1025) with its row cell 1: the weapon way with the pick cell set to the row; with 2:
+/// sound 4, then the drawing part; with 0, or any other row: the accessory way.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn stub_row(at: usize, row_cell: usize, row2_cell: usize, pick_cell: usize, weapon: usize, accessory: usize, draw: usize, sound: usize) -> Vec<u8> {
     let mut b = vec![
         0x85, 0xDB, // 0: test ebx, ebx
-        0x74, 30, // 2: jz weapon (34)
+        0x74, 43, // 2: jz weapon (47)
         0x83, 0xFB, 0x01, // 4: cmp ebx, 1
-        0x75, 39, // 7: jne accessory (48)
-        0x48, 0x8B, 0x05, // 9: mov rax, [rip + row_cell]
+        0x74, 14, // 7: je row 1 (23)
+        0x83, 0xFB, 0x02, // 9: cmp ebx, 2
+        0x75, 47, // 12: jne accessory (61)
+        0x48, 0x8B, 0x05, // 14: mov rax, [rip + row2_cell]
     ];
-    b.extend_from_slice(&rel32(at + 16, row_cell));
-    b.extend_from_slice(&[0x48, 0x85, 0xC0]); // 16: test rax, rax
-    b.extend_from_slice(&[0x74, 27]); // 19: jz accessory (48)
-    b.extend_from_slice(&[0x48, 0x83, 0xF8, 0x02]); // 21: cmp rax, 2
-    b.extend_from_slice(&[0x74, 35]); // 25: je refused (62)
-    b.extend_from_slice(&[0xC6, 0x05]); // 27: mov byte [rip + pick_cell], 1
-    b.extend_from_slice(&rel32(at + 34, pick_cell));
-    b.push(1);
-    debug_assert_eq!(b.len(), 34);
-    jmp_abs(&mut b, weapon); // 34
-    jmp_abs(&mut b, accessory); // 48
-    b.extend_from_slice(&[0xB9, 4, 0, 0, 0]); // 62: mov ecx, 4
+    b.extend_from_slice(&rel32(at + 21, row2_cell));
+    b.extend_from_slice(&[0xEB, 7]); // 21: jmp check (30)
+    b.extend_from_slice(&[0x48, 0x8B, 0x05]); // 23: mov rax, [rip + row_cell]
+    b.extend_from_slice(&rel32(at + 30, row_cell));
+    b.extend_from_slice(&[0x48, 0x85, 0xC0]); // 30: test rax, rax
+    b.extend_from_slice(&[0x74, 26]); // 33: jz accessory (61)
+    b.extend_from_slice(&[0x48, 0x83, 0xF8, 0x02]); // 35: cmp rax, 2
+    b.extend_from_slice(&[0x74, 34]); // 39: je refused (75)
+    b.extend_from_slice(&[0x88, 0x1D]); // 41: mov byte [rip + pick_cell], bl (the row, 1 or 2)
+    b.extend_from_slice(&rel32(at + 47, pick_cell));
+    debug_assert_eq!(b.len(), 47);
+    jmp_abs(&mut b, weapon); // 47
+    jmp_abs(&mut b, accessory); // 61
+    b.extend_from_slice(&[0xB9, 4, 0, 0, 0]); // 75: mov ecx, 4
     b.extend_from_slice(&[0x48, 0xB8]); // mov rax, sound
     b.extend_from_slice(&(sound as u64).to_le_bytes());
     b.extend_from_slice(&[0xFF, 0xD0]); // call rax
@@ -239,11 +262,14 @@ pub unsafe fn install() {
     std::ptr::write_bytes(m as *mut u8, 0, MEM_SIZE);
     let a = stub_r12(m + STUB_R12, m + CELL_SHADOW, base + R12_BACK);
     std::ptr::copy_nonoverlapping(a.as_ptr(), (m + STUB_R12) as *mut u8, a.len());
-    let b = stub_row(m + STUB_ROW, m + CELL_ROW, m + CELL_PICK, base + WEAPON_WAY, base + ACCESSORY_WAY, base + DRAW_PART, base + SOUND_FN);
+    let b = stub_row(m + STUB_ROW, m + CELL_ROW, m + CELL_ROW2, m + CELL_PICK, base + WEAPON_WAY, base + ACCESSORY_WAY, base + DRAW_PART, base + SOUND_FN);
+    debug_assert!(STUB_ROW + b.len() <= CELL_SHADOW);
     std::ptr::copy_nonoverlapping(b.as_ptr(), (m + STUB_ROW) as *mut u8, b.len());
     MEM.store(m, Ordering::Release);
-    let label = vec![0u8; LABEL_LEN].into_boxed_slice();
-    LABEL_BUF.store(Box::leak(label).as_mut_ptr() as usize, Ordering::Release);
+    for buf in &LABEL_BUF {
+        let label = vec![0u8; LABEL_LEN].into_boxed_slice();
+        buf.store(Box::leak(label).as_mut_ptr() as usize, Ordering::Release);
+    }
 
     // Wrappers first (they only add to KH1's), then the code patches.
     ORIG_SLOTS.store(base + SLOTS_UPDATE, Ordering::Release);
@@ -307,11 +333,53 @@ pub unsafe fn valor_preview() -> Option<(u8, u8, u8)> {
     (now != 0).then_some((own, now, hovered))
 }
 
-/// A Valor pick's list is open (KH1's weapon list from Sora's V: row): the slot's Keyblade, the
-/// item being replaced (`valorslot`, t967 / t968).
-pub unsafe fn valor_picking() -> Option<u8> {
+/// The form rows' forms, in KH1's slot order under the weapon (t1025): V: then M:, each only once
+/// the form is owned (`formown::owns`; the owner's answer 5: "both master and valor should be
+/// hidden before owned").
+unsafe fn form_rows() -> Vec<Kind> {
+    [Kind::Valor, Kind::Master].into_iter().filter(|&k| super::formown::owns(super::formown::form_id(k))).collect()
+}
+
+fn row_code(kind: Kind) -> u8 {
+    match kind {
+        Kind::Valor => 1,
+        _ => 2,
+    }
+}
+
+/// The form of form row `i` (0 or 1) as `prepare` set it.
+fn row_form(i: usize) -> Option<Kind> {
+    match ROW_FORMS.get(i)?.load(Ordering::Relaxed) {
+        1 => Some(Kind::Valor),
+        2 => Some(Kind::Master),
+        _ => None,
+    }
+}
+
+/// How many form rows Sora's slots show now (`prepare`'s cells).
+unsafe fn shown(m: usize) -> usize {
+    if m == 0 {
+        return 0;
+    }
+    (rd::<u64>(m + CELL_ROW) != 0) as usize + (rd::<u64>(m + CELL_ROW2) != 0) as usize
+}
+
+/// A form pick's list is open (KH1's weapon list from Sora's V: or M: row): the form and its slot's
+/// Keyblade, the item being replaced (`valorslot`, t967 / t968; M: t1025).
+pub unsafe fn slot_picking() -> Option<(Kind, u8)> {
     let m = mem();
-    (m != 0 && g::<i32>(STATE) == 2 && rd::<u8>(m + CELL_PICK) != 0).then(|| g::<i32>(CURRENT) as u8)
+    if m == 0 || g::<i32>(STATE) != 2 {
+        return None;
+    }
+    let row = rd::<u8>(m + CELL_PICK);
+    let kind = row_form((row as usize).checked_sub(1)?)?;
+    Some((kind, g::<i32>(CURRENT) as u8))
+}
+
+/// The form being picked for (a pick cell set), whether its list is open yet or not.
+unsafe fn pick_form(m: usize) -> Option<Kind> {
+    let row = rd::<u8>(m + CELL_PICK) as usize;
+    row_form(row.checked_sub(1)?)
 }
 
 /// Sora's own weapon while a Valor pick's preview may hold another in his weapon byte; the
@@ -339,71 +407,94 @@ unsafe fn with_real_weapon<R>(save: usize, f: impl FnOnce() -> R) -> R {
     r
 }
 
-/// The Valor Keyblade (0 for none): `valor::keyblade`, which keeps `save + VALOR_OFF` up to
-/// date (the slot refilled when its Keyblade stops being free); during a pick, the stored one
-/// as it is (the preview's Keyblade in Sora's byte would look equipped).
-unsafe fn valor_id(save: usize) -> u8 {
+/// A form row's Keyblade (0 for none): `valor::keyblade` / `valor::master_slot` (t1025), which keep
+/// the slot's save byte up to date (the slot emptied when its Keyblade stops being free); during a
+/// pick, the stored one as it is (the preview's Keyblade in Sora's byte would look equipped).
+unsafe fn slot_id(save: usize, kind: Kind) -> u8 {
+    let Some(off) = equip::slot_off(kind) else { return 0 };
     let id = if pick_guard(save).is_some() {
-        rd::<u8>(save + equip::VALOR_OFF)
+        rd::<u8>(save + off)
+    } else if kind == Kind::Master {
+        super::valor::master_slot().unwrap_or(0)
     } else {
         super::valor::keyblade().unwrap_or(0)
     };
-    if LOGGED_ID.swap(id as u32, Ordering::Relaxed) != id as u32 {
-        log!(Menus, "Equipment: Valor row shows {id:#04x} (candidates {:02x?})", equip::valor_candidates(base()));
+    let i = (row_code(kind) - 1) as usize;
+    if LOGGED_ID[i].swap(id as u32, Ordering::Relaxed) != id as u32 {
+        log!(Menus, "Equipment: {} row shows {id:#04x} (candidates {:02x?})", kind.name(), equip::candidates(base(), kind));
     }
     id
 }
 
-/// Sora's slots window with the Valor row: `accessories + 2` rows (KH1 makes `+ 1`), visible
-/// rows and height as KH1 works them out (8 at most).
-unsafe fn fix_rows(win: usize, acc: u16) {
-    if win < 0x10000 || !super::crash::readable(win + 0x100) {
+/// Sora's slots window with `forms` form rows (t1025: 0..2; 1 before): `accessories + 1 + forms`
+/// rows (KH1 makes `+ 1`), visible rows and height as KH1 works them out (8 at most).
+unsafe fn fix_rows(win: usize, acc: u16, forms: u16) {
+    if forms == 0 || win < 0x10000 || !super::crash::readable(win + 0x100) {
         return;
     }
     let rows = rd::<u16>(win + 0xF8);
     if rows != acc + 1 {
         return;
     }
-    let want = acc + 2;
+    let want = acc + 1 + forms;
     let vis = want.min(8);
     let (h, gap) = (g::<i32>(ROW_H) as i16, g::<i32>(ROW_GAP) as i16);
     wr(win + 0xF8, want);
     wr(win + 0xFA, vis);
     wr(win + 0xE6, ((h + gap) * vis as i16 - gap) * 16);
     if LOGGED_ROWS.swap(want as u32, Ordering::Relaxed) != want as u32 {
-        log!(Menus, "Equipment: Sora's slots {} rows (weapon, Valor, {acc} accessories)", want);
+        log!(Menus, "Equipment: Sora's slots {} rows (weapon, {forms} form rows, {acc} accessories)", want);
     }
 }
 
-/// Before KH1's slots update: rows, the shadow record and the row cell for this frame.
+/// Before KH1's slots update: rows, the shadow record and the row cells for this frame (t1025: a
+/// row per owned form, V: then M:; none owned, KH1's own slots).
 unsafe fn prepare(save: usize, win: usize) -> bool {
     let m = mem();
     let slot = g::<i32>(CURSOR_SLOT);
-    if m == 0 || !sora_in(save, slot) {
+    let forms = if m != 0 && sora_in(save, slot) { form_rows() } else { Vec::new() };
+    if forms.is_empty() {
         if m != 0 {
             wr(m + CELL_SHADOW, 0u64);
             wr(m + CELL_ROW, 0u64);
+            wr(m + CELL_ROW2, 0u64);
+        }
+        for r in &ROW_FORMS {
+            r.store(0, Ordering::Relaxed);
         }
         return false;
     }
     let acc = rd::<u8>(save + ACC_COUNT).min(8);
     if win != 0 {
-        fix_rows(win, acc as u16);
+        fix_rows(win, acc as u16, forms.len() as u16);
     }
-    let id = valor_id(save);
     let sh = m + SHADOW;
     std::ptr::write_bytes(sh as *mut u8, 0, 0x40);
-    wr(sh + ACC_FIRST, id);
+    let cells = [m + CELL_ROW, m + CELL_ROW2];
+    for (i, cell) in cells.into_iter().enumerate() {
+        match forms.get(i) {
+            Some(&kind) => {
+                let id = slot_id(save, kind);
+                wr(sh + ACC_FIRST + i, id);
+                wr(cell, if id != 0 { 1u64 } else { 2 });
+                ROW_FORMS[i].store(row_code(kind), Ordering::Relaxed);
+            }
+            None => {
+                wr(cell, 0u64);
+                ROW_FORMS[i].store(0, Ordering::Relaxed);
+            }
+        }
+    }
     for i in 0..acc as usize {
-        wr(sh + ACC_FIRST + 1 + i, rd::<u8>(save + ACC_FIRST + i));
+        wr(sh + ACC_FIRST + forms.len() + i, rd::<u8>(save + ACC_FIRST + i));
     }
     wr(m + CELL_SHADOW, sh as u64);
-    wr(m + CELL_ROW, if id != 0 { 1u64 } else { 2 });
     true
 }
 
-/// After a KH1 update that may have opened a list from Sora's slots: an accessory row is one
-/// lower than KH1 took it; a Valor pick replaces Sora's weapon as the item being replaced.
+/// After a KH1 update that may have opened a list from Sora's slots: an accessory row is as many
+/// lower than KH1 took it as there are form rows; a form pick replaces Sora's weapon as the item
+/// being replaced.
 unsafe fn after(save: usize) {
     let m = mem();
     if g::<i32>(STATE) != 2 {
@@ -413,17 +504,20 @@ unsafe fn after(save: usize) {
         pick_guard(save);
         return;
     }
-    if rd::<u8>(m + CELL_PICK) != 0 {
-        let id = rd::<u8>(m + SHADOW + ACC_FIRST);
+    let pick = rd::<u8>(m + CELL_PICK);
+    if pick != 0 {
+        let id = rd::<u8>(m + SHADOW + ACC_FIRST + (pick as usize - 1).min(1));
         if g::<i32>(CURRENT) != id as i32 {
             s(CURRENT, id as i32);
-            log!(Menus, "Equipment: Valor row picked (Keyblade {id:#04x}): KH1's weapon list for Valor");
+            let name = pick_form(m).map_or("?", |k| k.name());
+            log!(Menus, "Equipment: {name} row picked (Keyblade {id:#04x}): KH1's weapon list for it");
         }
         return;
     }
+    let forms = shown(m) as i32;
     let row = g::<i32>(ROW_PICKED);
-    if row >= 2 && g::<i32>(ACC_INDEX) == row - 1 {
-        let k = row - 2;
+    if row >= 1 + forms && g::<i32>(ACC_INDEX) == row - 1 {
+        let k = row - 1 - forms;
         s(ACC_INDEX, k);
         s(CURRENT, rd::<u8>(save + ACC_FIRST + k as usize) as i32);
         log!(Menus, "Equipment: Sora's row {row} is accessory slot {k}");
@@ -436,6 +530,7 @@ unsafe extern "system" fn slots_update(win: usize) {
     if !prepare(save, win) {
         return f(win);
     }
+    LABEL_SEQ.store(0, Ordering::Relaxed);
     LABEL_ON.store(1, Ordering::Relaxed);
     f(win);
     LABEL_ON.store(0, Ordering::Relaxed);
@@ -456,7 +551,7 @@ unsafe extern "system" fn members_update(win: usize) {
         return;
     }
     let slots = rd::<u64>(c + 0x20) as usize;
-    fix_rows(slots, rd::<u8>(save + ACC_COUNT).min(8) as u16);
+    fix_rows(slots, rd::<u8>(save + ACC_COUNT).min(8) as u16, form_rows().len() as u16);
 }
 
 /// The page: its header names the item being replaced (labelled when it is Valor's), and its
@@ -466,22 +561,24 @@ unsafe extern "system" fn page_update(win: usize) {
     let Some(save) = save() else { return f(win) };
     let m = mem();
     let sora = m != 0 && sora_in(save, g::<i32>(SLOT));
-    LABEL_ON.store(sora as u8, Ordering::Relaxed);
+    LABEL_SEQ.store(0, Ordering::Relaxed);
+    LABEL_ON.store(if sora { 2 } else { 0 }, Ordering::Relaxed);
     f(win);
     LABEL_ON.store(0, Ordering::Relaxed);
-    if sora && rd::<u64>(m + CELL_ROW) != 0 {
+    if sora && shown(m) != 0 {
         after(save);
     }
 }
 
 /// The slots' help line: KH1 takes row 0 as the weapon and row n as accessory n - 1 (from the
-/// visible cursor only). For Sora: row 1 is the Valor Keyblade (shown through accessory 0 for
-/// the call), row n >= 2 accessory n - 2.
+/// visible cursor only). For Sora with k form rows (t1025: 0..2): rows 1..=k are the forms'
+/// Keyblades (each shown through accessory 0 for the call), row n > k accessory n - 1 - k.
 unsafe extern "system" fn help_update(win: usize) {
     let f: unsafe extern "system" fn(usize) = std::mem::transmute(ORIG_HELP.load(Ordering::Acquire));
     let m = mem();
     let Some(save) = save() else { return f(win) };
-    if m == 0 || rd::<u64>(m + CELL_ROW) == 0 || g::<u64>(RECORD) as usize != save + 4 || g::<i32>(STATE) != 1 {
+    let forms = shown(m) as i32;
+    if forms == 0 || g::<u64>(RECORD) as usize != save + 4 || g::<i32>(STATE) != 1 {
         return f(win);
     }
     let (scroll, cursor) = (g::<i32>(SCROLL), g::<i32>(CURSOR));
@@ -490,29 +587,30 @@ unsafe extern "system" fn help_update(win: usize) {
         return f(win);
     }
     s(SCROLL, 0i32);
-    if row == 1 {
+    if row <= forms {
         let acc0 = rd::<u8>(save + ACC_FIRST);
-        wr(save + ACC_FIRST, rd::<u8>(m + SHADOW + ACC_FIRST));
+        wr(save + ACC_FIRST, rd::<u8>(m + SHADOW + ACC_FIRST + (row - 1) as usize));
         s(CURSOR, 1i32);
         f(win);
         wr(save + ACC_FIRST, acc0);
     } else {
-        s(CURSOR, row - 1);
+        s(CURSOR, row - forms);
         f(win);
     }
     s(SCROLL, scroll);
     s(CURSOR, cursor);
 }
 
-/// KH1's weapon list fill; during a Valor pick only the Keyblades Valor may take stay, the
-/// cursor on the current one.
+/// KH1's weapon list fill; during a form pick only the Keyblades that form's slot may take stay
+/// (`equip::candidates`, t1025), the cursor on the current one.
 unsafe extern "system" fn fill() {
     let f: unsafe extern "system" fn() = std::mem::transmute(ORIG_FILL.load(Ordering::Acquire));
     f();
     let m = mem();
-    if m == 0 || rd::<u8>(m + CELL_PICK) == 0 {
+    if m == 0 {
         return;
     }
+    let Some(kind) = pick_form(m) else { return };
     // (Sora's own weapon noted as the list opens, before any preview; a rebuild of the open
     // list by the page counts with it too.)
     if let Some(save) = save() {
@@ -523,10 +621,10 @@ unsafe extern "system" fn fill() {
         }
     }
     let keep = match save() {
-        Some(save) => with_real_weapon(save, || equip::valor_candidates(base())),
-        None => equip::valor_candidates(base()),
+        Some(save) => with_real_weapon(save, || equip::candidates(base(), kind)),
+        None => equip::candidates(base(), kind),
     };
-    let current = rd::<u8>(m + SHADOW + ACC_FIRST) as i32;
+    let current = rd::<u8>(m + SHADOW + ACC_FIRST + (rd::<u8>(m + CELL_PICK) as usize - 1).min(1)) as i32;
     let n = g::<i32>(LIST_LEN).clamp(0, 256) as usize;
     let (list, counts) = (base() + LIST, base() + LIST_COUNTS);
     let before: Vec<i32> = (0..n).map(|i| rd::<i32>(list + i * 4)).collect();
@@ -545,7 +643,7 @@ unsafe extern "system" fn fill() {
     let (top, cur) = if (k as i32) < 7 { (0, at) } else { let t = at.min(k as i32 - 7); (t, at - t) };
     s(LIST_SCROLL, top);
     s(LIST_CURSOR, cur);
-    log!(Menus, "Equipment: weapon list for Valor: {before:02x?} -> {:02x?}", (0..k).map(|i| rd::<i32>(list + i * 4)).collect::<Vec<_>>());
+    log!(Menus, "Equipment: weapon list for {}: {before:02x?} -> {:02x?}", kind.name(), (0..k).map(|i| rd::<i32>(list + i * 4)).collect::<Vec<_>>());
 }
 
 /// The weapon list during a Valor pick: KH1's live preview shows the hovered Keyblade in
@@ -556,6 +654,7 @@ unsafe extern "system" fn list_update(win: usize) {
     let m = mem();
     let save = save();
     let (Some(save), true) = (save, m != 0 && rd::<u8>(m + CELL_PICK) != 0) else { return f(win) };
+    let Some(kind) = pick_form(m) else { return f(win) };
     let slot = g::<i32>(SLOT).clamp(0, 3) as usize;
     let (loaded_at, chosen_at) = (base() + LOADED + slot * 4, base() + CHOSEN + slot * 4);
     let chosen = rd::<i32>(chosen_at);
@@ -571,7 +670,8 @@ unsafe extern "system" fn list_update(win: usize) {
     if LOGGED_HOVER.swap(hovered as u32, Ordering::Relaxed) != hovered as u32 && HOVER_LOGS.fetch_add(1, Ordering::Relaxed) < 24 {
         let name = if (1..=255).contains(&hovered) { equip::item_name(base(), hovered as u8).unwrap_or_default() } else { String::new() };
         log!(Menus,
-            "Equipment: Valor pick hovers {hovered:#04x} {name} (row {at} of {n}; preview loads {:#04x}, Sora's byte {:#04x}, his own {weapon:#04x})",
+            "Equipment: {} pick hovers {hovered:#04x} {name} (row {at} of {n}; preview loads {:#04x}, Sora's byte {:#04x}, his own {weapon:#04x})",
+            kind.name(),
             rd::<i32>(loaded_at),
             rd::<u8>(save + WEAPON)
         );
@@ -585,22 +685,43 @@ unsafe extern "system" fn list_update(win: usize) {
         let refresh: unsafe extern "system" fn() = std::mem::transmute(base() + REFRESH_FN);
         refresh();
         wr(m + CELL_PICK, 0u8);
-        if (1..=255).contains(&picked) && equip::valor_candidates(base()).contains(&(picked as u8)) {
-            wr(save + equip::VALOR_OFF, picked as u8);
+        let off = equip::slot_off(kind);
+        if let (Some(off), true) = (off, (1..=255).contains(&picked) && equip::candidates(base(), kind).contains(&(picked as u8))) {
+            wr(save + off, picked as u8);
             let name = equip::item_name(base(), picked as u8).unwrap_or_default();
             log!(Menus,
-                "Equipment: Valor's Keyblade stored: {picked:#04x} {name} (Sora keeps {weapon:#04x}; model loaded {:#04x}, put back by KH1)",
+                "Equipment: {}'s Keyblade stored: {picked:#04x} {name} (Sora keeps {weapon:#04x}; model loaded {:#04x}, put back by KH1)",
+                kind.name(),
                 rd::<i32>(loaded_at)
             );
         } else {
-            log!(Menus, "Equipment: Valor pick {picked:#x} isn't a free Keyblade: not stored (Sora keeps {weapon:#04x})");
+            log!(Menus, "Equipment: {} pick {picked:#x} isn't a free Keyblade: not stored (Sora keeps {weapon:#04x})", kind.name());
         }
         pick_guard(save);
     }
 }
 
-/// The name of a row's item (`0x140304F30`): "V: " and the Keyblade's name on the Valor row
-/// (while the slots or the page header draw for Sora), KH1's otherwise.
+/// The form row a name call is for (t1025): the rows whose Keyblade is `item` (with one); in the
+/// page header the row being picked for; with both rows on the same Keyblade, V: on the slots
+/// update's first such call and M: after (KH1 draws its rows top down: Assumption).
+unsafe fn label_row(m: usize, item: u32) -> Option<usize> {
+    let cells = [m + CELL_ROW, m + CELL_ROW2];
+    let hits: Vec<usize> = (0..2).filter(|&i| rd::<u64>(cells[i]) == 1 && rd::<u8>(m + SHADOW + ACC_FIRST + i) as u32 == item).collect();
+    match hits.as_slice() {
+        [] => None,
+        [i] => Some(*i),
+        _ => {
+            let pick = rd::<u8>(m + CELL_PICK) as usize;
+            if LABEL_ON.load(Ordering::Relaxed) == 2 && (1..=2).contains(&pick) {
+                return Some(pick - 1);
+            }
+            Some((LABEL_SEQ.fetch_add(1, Ordering::Relaxed) as usize).min(1))
+        }
+    }
+}
+
+/// The name of a row's item (`0x140304F30`): "V: " / "M: " (t1025) and the Keyblade's name on a
+/// form row (while the slots or the page header draw for Sora), KH1's otherwise.
 unsafe extern "system" fn item_name(item: u32) -> usize {
     let f: unsafe extern "system" fn(u32) -> usize = std::mem::transmute(base() + NAME_FN);
     let kh1 = f(item);
@@ -608,16 +729,16 @@ unsafe extern "system" fn item_name(item: u32) -> usize {
     if LABEL_ON.load(Ordering::Relaxed) == 0 || m == 0 || kh1 == 0 || item == 0 || item > 255 {
         return kh1;
     }
-    let id = rd::<u8>(m + SHADOW + ACC_FIRST);
-    if id as u32 != item || rd::<u64>(m + CELL_ROW) != 1 {
-        return kh1;
-    }
-    let buf = LABEL_BUF.load(Ordering::Acquire);
+    let Some(row) = label_row(m, item) else { return kh1 };
+    let Some(kind) = row_form(row) else { return kh1 };
+    let id = item as u8;
+    let li = (row_code(kind) - 1) as usize;
+    let buf = LABEL_BUF[li].load(Ordering::Acquire);
     if buf == 0 {
         return kh1;
     }
-    if LABEL_ID.load(Ordering::Relaxed) != id {
-        let mut b = super::menu::encode("V: ");
+    if LABEL_ID[li].load(Ordering::Relaxed) != id {
+        let mut b = super::menu::encode(if kind == Kind::Master { "M: " } else { "V: " });
         b.pop();
         for i in 0..40 {
             let c = rd::<u8>(kh1 + i);
@@ -629,7 +750,7 @@ unsafe extern "system" fn item_name(item: u32) -> usize {
         b.truncate(LABEL_LEN - 1);
         b.push(0);
         std::ptr::copy_nonoverlapping(b.as_ptr(), buf as *mut u8, b.len());
-        LABEL_ID.store(id, Ordering::Relaxed);
+        LABEL_ID[li].store(id, Ordering::Relaxed);
     }
     buf
 }

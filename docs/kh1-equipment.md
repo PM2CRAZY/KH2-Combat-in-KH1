@@ -323,6 +323,10 @@ To test in the game:
 - It travels with the save like `+0x847` (the whole block is the save data).
 - Old saves may hold anything there, so the id is checked on every read (`valor_keyblade`). If a
   marker is wanted, `+0x489` can hold one.
+- `+0x489` is Master Form's Keyblade since t1025 (the owner's answer 1 after Master's research round
+  2, `docs/kh1-drive-forms-native.md` §24): checked on every read the same way (`equip::master_holds`:
+  a Keyblade Sora owns with a copy free of the members and of Valor's slot), and a value that isn't
+  one is cleared (`valor::master_slot`).
 - `+0x48A..+0x48B` (a u16) is the abilities' layout mark (`growth::LAYOUT_OFF`,
   `docs/abilities.md`). A second scan found no `0x489..0x48B` displacement, immediate or absolute
   address (`0x142DEA1E9..0x142DEA1EB`) anywhere in `.text`.
