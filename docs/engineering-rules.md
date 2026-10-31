@@ -27,5 +27,8 @@ Goal: reduce overhead. In the main branch, KH2's systems (its controller, animat
 ## Keep the docs current
 When we verify something in the decomp, record it in a doc in this folder: the address, what it does, and a Checked tag (Checked in the exe, Checked in a trace, or Assumption). Findings that only live in the chat get lost between sessions.
 
+## Shared findings go to kh-blender too
+Engine and format facts about KH1 or KH2 that we find here (file formats, structs, Steam addresses, script calls, collision types, game behavior confirmed by decomp or trace) also go into the kh-blender repo, under `docs/research/kh1/` or `docs/research/kh2/`, with the same tag (Checked exe / decomp / files / trace, or Assumption) and the version they came from (for example "KH2-Combat-in-KH1 t886"). Project-specific decisions, versions and tester threads stay here only. If the same note exists in both repos, keep them in step; the newer one wins. kh-blender's own rules are in its `AGENTS.md` and `docs/research/README.md` (owner's call, 2026-10-31).
+
 ## Versioning
 Any source change bumps the version (VERSION in lib.rs plus a matching AGENTS.md stage). TESTBRANCH uses the letter T (t300 onward). One system per version, and no edits to unrelated code, so a bug traces back to the change that caused it. After a fix, state only the update name (e.g. "t306").

@@ -489,7 +489,7 @@ pub mod physics {
     use super::super::addr::Rva;
     use crate::kh1phys::{self, Motion};
     use character_core::{Arc, Character, Output};
-    use std::sync::atomic::{AtomicU32, AtomicU64, AtomicU8, AtomicUsize, Ordering};
+    use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicU8, AtomicUsize, Ordering};
     use std::sync::Mutex;
 
     pub use crate::kh1phys::Rule;
@@ -1408,6 +1408,17 @@ pub mod physics {
     /// `0x1403B7AD0`, range 42) brakes that speed and he doesn't turn until 12, as ours does.
     /// Checked (decomp).
     static GROUND_V: Mutex<Option<[f32; 2]>> = Mutex::new(None);
+    /// (t1058) Set by KH1's air step for Sora, taken by his next ground frame (`ground_inertia`):
+    /// a fresh ground velocity takes KH1's air speed (`+0x3C0`) only on the landing frame. KH1
+    /// writes `+0x3C0` in the air and never clears it on the ground (Checked (trace): the owner's
+    /// t1057 traces hold (-6.89, -10.81) from the landing at f61575 through a revert and two new
+    /// Drives), so a fresh start anywhere else (a form's first frame, a re-entry) took the last
+    /// jump's speed as momentum: Final at f61999 and Wisdom at f62626 slid 12.7 / 12.4 a frame
+    /// from rest with the stick neutral, braking at 0.99. Elsewhere a fresh start is at rest.
+    /// **Assumption**: KH2 starts a form at rest (its arrival 53 stands still and an action change
+    /// restarts its velocity clock, `0x1403B89A0`, Checked (decomp); the form change zeroing the
+    /// velocity itself not traced).
+    static FROM_AIR: AtomicBool = AtomicBool::new(false);
 
     /// KH2's ground inertia on KH1's ground state for a Drive Form whose `prty` has one (Wisdom's
     /// acceleration 0.85, brake 0.97, `P_EX100_MAGF` moveset 3, Checked (files)), the tester (what-is-
@@ -1433,6 +1444,8 @@ pub mod physics {
     /// (`+0x200`, the root) is added by KH1 after.
     /// False (KH1's step as it is) for base Sora and forms with no inertia.
     unsafe fn ground_inertia(actor: usize, disp: *mut [f32; 4]) -> bool {
+        // (t1058) Whether this ground frame is his landing (KH1's air step ran since his last one).
+        let landing = FROM_AIR.swap(false, Ordering::Relaxed);
         let Some(n) = numbers().filter(|n| n.acceleration > 0.0 && super::super::form::native_form().is_some()) else {
             if let Ok(mut g) = GROUND_V.try_lock() {
                 *g = None;
@@ -1462,10 +1475,11 @@ pub mod physics {
             *tick += 2.0;
         }
         // (Coming onto the ground: KH1's sideways speed in its air state, `+0x3C0`, per 60 Hz frame;
-        // **Assumption** that KH1 still holds it on the landing frame, else 0.)
+        // **Assumption** that KH1 still holds it on the landing frame. (t1058) Only on the landing
+        // frame: any other fresh start, a form's first frame included, is at rest, `FROM_AIR`.)
         let mut v = g.unwrap_or_else(|| {
             let h: [f32; 4] = rd(actor + VEL);
-            if h[0].is_finite() && h[2].is_finite() { [h[0], h[2]] } else { [0.0; 2] }
+            if landing && h[0].is_finite() && h[2].is_finite() { [h[0], h[2]] } else { [0.0; 2] }
         });
         let d = &mut *disp;
         // The stick's target: KH1's own walk / run direction outside its actions (its move this
@@ -1819,6 +1833,8 @@ pub mod physics {
             if let Ok(mut g) = GROUND_V.try_lock() {
                 *g = None;
             }
+            // (t1058) His next ground frame is a landing: it may take the air speed.
+            FROM_AIR.store(true, Ordering::Relaxed);
             // (t870) KH2's push added to the ground move ends with it here (**Assumption**: off the
             // ground KH2's push would go on; none of the pushes it carries, Blizzard's, starts in
             // the air on this path, `inertia_push` takes only the ground state.)

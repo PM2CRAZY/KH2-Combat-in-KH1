@@ -26,6 +26,7 @@ HARD RULES
 - Steam addresses only. New hooks check the function's exact first bytes and refuse on a mismatch.
 - No decompiled code or game files in the repo or docs: plain-language notes with a tag (Checked exe / decomp / files / trace, or Assumption).
 - Replaced systems must still satisfy what KH1's events and scripts read from them.
+- Engine and format facts about KH1 or KH2 (formats, structs, addresses, script calls, game behavior) also go into the kh-blender repo's docs/research/kh1 or kh2, tagged, with the version they came from. Project decisions and tester threads stay here.
 
 VERSIONS
 Any change under crates/ bumps VERSION (lib.rs) and adds a matching AGENTS.md stage. One system per version, no unrelated edits, docs-only changes don't bump. After a fix, state the version name (e.g. t306), the 1:1 check you made and what you couldn't check. Don't say whether it was compiled. Run cargo test before pushing.
