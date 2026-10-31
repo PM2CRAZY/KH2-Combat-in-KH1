@@ -1040,7 +1040,7 @@ pub(super) fn counter_attack(a: &kh2_magic::MagicAttack, battle: &Battle, levels
     if shapes.is_empty() || first.kind == 3 {
         return None;
     }
-    Some(combat::SpellAttack { kh1_data: None, package: Some(levels.get(a.spell).copied().unwrap_or(1)), key: a.id | SPELL_KEY, group: if first.combo_group != 0 { first.combo_group as i64 } else { a.group }, atk: a.atk, sub: a.sub, shapes })
+    Some(combat::SpellAttack { kh1_data: None, package: Some(levels.get(a.spell).copied().unwrap_or(1)), key: a.id | SPELL_KEY, group: if first.combo_group != 0 { first.combo_group as i64 } else { a.group }, atk: a.atk, sub: a.sub, shapes, send_off: a.sub & 1 == 1 })
 }
 
 /// The barrier's shapes (ATKP 573, the script's own, KH2 Sora's size) at KH1 Sora's size: their

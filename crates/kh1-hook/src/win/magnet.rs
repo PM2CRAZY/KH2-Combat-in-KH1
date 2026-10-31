@@ -351,6 +351,12 @@ fn get(actor: usize) -> Option<Held> {
     HELD.try_lock().ok()?.iter().find(|h| h.actor == actor).copied()
 }
 
+/// (t1049) Whether the Magnet holds `actor` now (`combat::blow_as_launch` leaves a held enemy's KH2
+/// blow on KH1's knock-back, where `knocked_back` above ends the catch).
+pub fn holds(actor: usize) -> bool {
+    get(actor).is_some()
+}
+
 /// Our state's step (KH1's physics step calls it with the displacement to fill): KH2's suction
 /// toward the Magnet's place, no gravity; KH1's mover moves it after.
 unsafe extern "system" fn step(actor: usize, disp: *mut [f32; 4]) -> usize {

@@ -1859,6 +1859,271 @@ Ours (`bodyhits`):
   numbers as every row of ours does (KH1 has no launch motion for them anyway). **Assumption**: KH2
   bone shapes with an offset take it in KH1's bone frame (none of Sora's body attack shapes has
   one). Not checked in game.
+- **Our attack data copies are reused** (t1045). They sit on one page near KH1's battle data
+  block (64 copies of 0x80), shared since t1037 with `lefthits`' blade and guard objects and the
+  spell objects (`spell_place`, Reflect's). They were keyed and never freed, so a long Final Form
+  session (about 40 attacks per blade) filled the page and every later copy was refused: Explosion,
+  Vicinity Break, Magnet Burst and new Final hits got no objects until a fresh start. Now a new key
+  on a full page frees the copies nothing uses and takes one of them (the key mapping dropped). In
+  use (**Checked (decomp)**, Steam): any attack pool object with `+0` bit `0x800` (one KH1 marked
+  dead, `0x200000`, keeps it until freed) by its data handle `+0x5C` (written by the constructor
+  `0x1402B2DC0`); any hit record in use (KH1's record maker `0x1402BF630`: 64 records of 0x40 at
+  `0x142DE5E10`, 128 at `0x142DE6E10`, a spare at `0x142DE5DD0`; in use `+0` bit 1, reset by
+  `0x1402BF560`) by the data handle it keeps at `+0x2C`, so a hit still being handled keeps its
+  data; every window's copy of a live `lefthits` object (its step swaps them in later); anything
+  handed out this game frame or the last (a blade object being made takes its windows' copies
+  first). The record pools are checked once against `0x1402BF560`'s two `lea`s (**Checked
+  (exe)**); on a mismatch nothing is reused. Stale entries of ours (object freed by KH1) are
+  forgotten before a reuse, here and in `lefthits`, so none mistakes a reused pool object with a
+  reused copy for its own. The scan runs only when the page is full and a new key comes; nothing
+  per frame. Logged (Combat): the reclaim count, and "no room" only when every copy is in use.
+  **Assumption**: nothing else of KH1's keeps an attack's data past its object and hit records.
+- **Crits only on a move's last blow** (t1046, the owner's answer 1 (b): one roll per finisher, as
+  KH1). KH1 rolls its critical in its damage function (`0x1402BFA80`) from the attack's chance
+  `+0x94`, which its constructor sets once from the data (`0x1402B2DC0`: data `+0x18` × 0.05 × stats
+  `+0xD8`; bonus `+0x98` = data `+0x1C`; the row maker `0x1402B3270` multiplies by the Keyblade row's
+  `+0x31` × 0.05 and adds `+0x32` on a blade) (**Checked (decomp)**). Only KH1's finisher data
+  `0x4C58`, Blitz `0x4D38` and rows 12 / 15 have a chance (4); plain swings, Ripple Drive and all nine
+  KH1 spell entries have 0 (**Checked (files)** `btltbl.bin`). Before, every KH2 blow window took the
+  finisher data, and KH2's re-hit makes a new record per hit, so Explosion rolled on every 911 hit.
+  Now:
+  - **Finishers only** (the owner's answer (c)): in a move playing on a finisher request
+    (`kh1rows::finisher_request`: KH1's 0xCB / 0xCE or a finisher-kind attack row of ours), the
+    clip's **last blow window per carrier** (`kh1rows::last_blow`: his body, the right Keyblade, the
+    left Keyblade; the blow window that starts last) takes the finisher row's data. Every other blow
+    window, and every window of a swing, jump, item use, glide or cast, takes the swing row's data
+    with the blow's kind 5 kept, so `combat::scale_record` still gives KH2's arc; spark and sound
+    bytes stay the blow's. Body: Explosion 912 (911 on the swing data), Magnet Burst 1903 (1901 on the
+    swing data), Final's 154 1737. Blades (`lefthits`): each blade's last blow in Final 153, 154 and
+    183; Final's 181, jump, item use, glide and casts never roll on either blade. The object's
+    critical is put on it at each window switch as the constructor and row maker would
+    (`lefthits::crit_fields`, KH1 sets it only at make).
+  - A **row of ours' Keyblade object** (one KH1 object for the whole motion, its chance from the row's
+    data): KH1's damage gets chance 0 for a right-Keyblade hit outside the clip's last right blow
+    window (`kh1rows::may_crit` in `kh2damage`). Final's 153 is on the "153 (finisher)" row since t1034
+    (finisher data, **Checked (code)** `by_combo_row`), so both its blades now roll on their last blow
+    only. A swing row of ours never rolls (its data has no chance); a finisher clip with no blow on
+    the right Keyblade keeps its row's rolls as before.
+  - **One roll per window per target**: a hit KH2's re-hit interval let in again (`rehit::again`,
+    marked when `rehit::tick` takes the bit off) reads chance 0. Marks go with the object (not in
+    use, another bit), a new KH2 attack on it, or ours freeing it.
+  - **KH2 spells** with no KH1 spell data of their own that knock away (finisher data) have chance and
+    bonus 0: KH1's spells never roll, and which hit of a spell script is its last can't be told from
+    one attack object (decided, not asked).
+  - Logged (Combat): "the last blow: KH1's finisher data" on the body objects, "no critical roll" on
+    gated hits. Per frame: a prune of the re-hit marks while any exist; the rest per hit or per make.
+  - **Assumption**: KH1's crit roll happens in the damage call of each record only (Checked (decomp)
+    for `0x1402BFA80`; no other reader of `+0x94` was searched).
+- **KH2 Damage off: a multi-hit move with a blow shares one KH1 hit** (t1047, the owner's answer 2
+  (b), and only moves with a blow, a hit of reaction group 4 somewhere in the move). KH1's
+  damage (`0x1402BFA80`, **Checked (decomp)**) looks the hit up in its curve (pointer `0x142DE5DC0`)
+  at data power (`+0x48` vs enemies) + the attack's stat term (`+0x2C`, which the constructor
+  `0x1402B2DC0` sets from the data's stat source: Strength, or max MP × 3 on Ripple Drive's source 4)
+  − the target's Defense, then clamps. The power index is additive, so a share can't be put on the
+  data; it goes on the same curve copy KH2 Damage On uses (`kh2damage`, one call): each value × the
+  hit's ATKP power / the move's whole KH2 power, rounded up. The whole power (`kh1rows::move_power`)
+  counts every hit window that plays (body, right Keyblade, left Keyblade in a two-bladed form; power
+  0 guards left out) at its most hits: length / re-hit interval rounded up (open-ended windows to the
+  clip's end), 1 without an interval. A Strength-based hit takes KH1's finisher row's power points
+  for the call (4), so the hits add up to one KH1 finisher. A Magic-based move (Explosion, Magnet
+  Burst) is on Ripple Drive's damage fields on every window already (`kh1rows::kh1_magic`): one
+  Ripple Drive hit in all. Moves with no blow (plain two-blade swings of Valor, Master and Final:
+  Final's 151, 152, 182), single-hit moves, KH2 spells and KH2 Damage On are unchanged: a full KH1
+  hit per hit. Sharing moves (**Checked (files)** `00battle.bin` with
+  `W_EX010_ULTF_R` / `_L.mset`, `P_EX100_ULTF.mset`, `W_EX010.mset`; base `P_EX100.mset` isn't in
+  the uploads, so Explosion's and Magnet Burst's body windows are from §7.z.8's earlier read):
+  - Explosion 166: 911 (32..57 every 8: 4 × 25) + 912 150 = 250. 911 10% a hit, 912 60%.
+  - Magnet Burst 197: 1900 power 0 (left out), 1901 25, 1903 150 = 175. 1901 14.3%, 1903 85.7%
+    (**Assumption**: 1901 one window, as the research read it).
+  - Aerial Finish 194 (right Keyblade): 915 50, 916 25, 917 25, 927 200 = 300. 16.7 / 8.3 / 8.3 / 66.7%.
+  - Final 154: right 1402 3 × 33 + 1458 33, left 1401 3 × 33 + 1457 33, body 1456 5 × 50 + 1737 100
+    = 614. 1402 / 1401 / 1458 / 1457 5.4% a hit, 1456 8.1%, 1737 16.3%.
+  - Final 153: each blade 1404 / 1403 (2 + 3 hits × 20) and three 50s (1423 / 1425 / 1427, 1422 / 1424
+    / 1426) = 500. 20s 4%, 50s 10%.
+  - Final 183: each blade 2 × 20, 7 × 25, 4 × 50, 1 × 100 = 515; 1030. 1.9 / 2.4 / 4.9 / 9.7%.
+  - Final 181 (its hits are blows, reaction 4): 285 (1405 / 1406 4 × 20 each, the 25s once): 7.0% /
+    8.8%.
+  - Final item use 9: 560 (1284 / 1285 4 × 20, 1449 / 1450 200): 3.6% / 35.7%.
+  - Final casts 56 / 58: 360 (1429 3 × 20, 1428 3 × 100): 5.6% / 27.8%.
+  - Final jump 3 and glide 205..207 (blows, reaction 4): open-ended windows, counted to the clip's
+    end at run time (the glide per loop).
+  - Not shared (no blow): Final's 151 (249), 152 (200), 182 (231), and any two-bladed swing of
+    plain flinches.
+  Logged (Combat): "KH2 damage off: ATKP .. power .. of its move's .. (..%)". Per hit only.
+- **KH2's pop and pull on enemies KH1 keeps on the ground** (t1048, `combat::knocked_back`). The
+  owner's log (t1045, **Checked (log)**): all 30 of Explosion's 911 hits on Shadows (object 321, state
+  4) and a flier (object 301, state 0) asked KH2's blow (up 3, sideways -1) and then ran KH1's ground
+  knock-back (motion 0x4C), never lifted, so they went KH1's distance. KH1 (**Checked (decomp)**):
+  - Its knock-back `0x1402B77D0` takes its airborne branch (0x50 / 0x51 and KH2's arc,
+    `knockback::fly_blow`) only for an enemy not in a class-2 state (`0x1402B1AE0`) and in the air
+    (`0x1402B1B10`); else its ground branch `0x1402B8CC0` (0x4C / 0x4D, or its launch 0x52 with no
+    0x4C). KH1's state table (rows registered by `0x1402B1B80` at start) makes state 4 class 2:
+    that is the ground knock-back's slide (its step `0x1402CC000` moves the enemy by `+0x3C0`), and
+    state 0 class 0 (on the ground by both tests, a flier too). KH1's hit pass (`0x1402B8E10`) sends
+    a launch (kind 5) on a class-2 enemy to the knock-back, so KH1 itself never puts an enemy in its
+    knock-back slide into an air reaction, finisher launches included. The lift stays refused there.
+  - KH1's ground branch sets no distance (it turns the enemy to the hit, queues the motion and its
+    idle, zeroes `+0x3CC`). Its slide is state 4's `+0x3C0`.
+  - Now each refusal is logged once per enemy object and reason (lying down, class 2, already in
+    the air, no 0x50; with its state and which of 0x4C / 0x50 / 0x52 / 0x5C it has).
+  - Where KH1's ground knock-back runs for a KH2 blow, KH2's numbers go in KH1's way: the blow's
+    whole sideways travel (`Launch::travel`: KH2's arc to its start height, negative toward Sora,
+    × `knockback::launch_factor` as the airborne path) through KH1's own push `0x1402C7300` (first
+    bytes checked; it zeroes `+0x3C0` and moves the enemy that distance through KH1's physics and
+    collision, × 0.8 a frame), and the blow's height as a hop through KH1's hop `0x1402AF960`, only
+    for an enemy KH1 itself puts in its air state (no refusal but the missing 0x50, and a launch
+    motion 0x52 / 0x5C) and never from a class-2 state. KH1 weight 0: left as KH1 has it. Explosion's
+    911 (up 3, sideways -1): a few units toward Sora, a hop of about 7 where allowed.
+  - **Assumptions**: the ground knock-back motion 0x4C has no root travel of its own on these
+    enemies (their motion files aren't in the uploads); a hop after KH1 queued 0x4C lands as the
+    lift's does. The flier (state 0) has no flier reaction in KH1's knock-back: it takes the ground
+    branch like any grounded enemy, so it gets the push (and a hop only if it has KH1's launch).
+    The Knock-back Numbers row is Sora's hit reactions' (`hitreact`); the airborne blow path doesn't
+    read it, so neither does this. Nothing per frame (KH1's push steps itself).
+- **KH2 blows as KH1's launch on enemies without 0x50** (t1049, `combat::blow_as_launch`, the owner's
+  approval). His log (t1048, **Checked (log)**): objects 300 / 301 / 302 have 0x52 and 0x5C but no
+  0x50, so they were refused the lift, took KH1's ground knock-back plus our push (912 slid them
+  about 300) and only 3 of 911's hits hopped; the Shadow (321) has 0x50 and was refused only mid-slide
+  (class 2). KH1 (**Checked (decomp)**): the hit pass `0x1402B8E10` sends a launch (kind 5) to KH1's
+  launch `0x1402B8530` only for an enemy not in a class-2 state; the launch takes 0x5C in the air and
+  0x52 on the ground (`0x1402B1B10`) and with that motion missing hands the record to its knock-back.
+  Now, where the record's kind is chosen (`scale_record`, before KH1's hit pass), an enemy not in
+  class 2, without 0x50 and with the launch motion KH1's launch would pick for where it is gets KH1's
+  launch kind 5, and `kh2_launch` puts KH2's numbers in KH1's launch: 911 (up 3, sideways -1) a tiny
+  pop and pull toward Sora, 912 (up 15, sideways 30) a real launch, both through KH1's launch motion,
+  air state and landing. Unchanged (t1048): enemies with 0x50, class-2 enemies (a Shadow's re-hit
+  mid-slide keeps the small pull), lying down (**Assumption**: no KH1 launch from lying down
+  checked), Magnet-held enemies (the catch still ends in KH1's knock-back), scripted enemies. A
+  record sent as a launch that reaches KH1's knock-back anyway goes on the t1048 path. Logged
+  (Combat): "KH2 blow as KH1's launch on object N ...". Nothing per frame.
+- **Body window log** (t1050, `bodyhits::window_log`, the owner's approval; log only, nothing
+  changes). Why: Explosion seems to miss fliers 200+ above Sora although our shape is KH2's
+  (centre 120 above his feet, 350 across, half height 180, the same test formula as KH2's: the
+  shape research, **Checked (files)** and **(decomp)**). The variable is the enemy side, whose sizes aren't in the uploads
+  (**Assumption** until logged). While KH1's pass builds one of our body objects (Explosion,
+  Vicinity Break, Magnet Burst, Final's 154 body), every enemy within 800 of Sora is logged
+  (Combat) on the window's first frame it is seen, and once at window close with its frame of
+  closest approach:
+  - the enemy: object id, actor, KH1 state (`+0x70`), distance;
+  - KH1's hittable test as the pass `0x1402B4460` asks it before putting an actor's parts in
+    (`0x140292070`, **Checked (decomp)**): a part table with a count, byte `+6` not 2, flags word
+    `& 0x8048` == `0x8000` (0x40 is KH1's untouchable flag, its dodge roll's), one part not off;
+    and the hit bit (`+0x3E0 & object +0x54`, held = KH1's entry test `0x1402B3BE0` skips it);
+  - each part (`[[actor+0x134]+0x18]`, 0x14 bytes, off by `+0x3A8` bit i) placed by KH1's own
+    placement `0x1402B5E50` (first bytes checked, **Checked (exe)**): type, bone code, centre
+    height above Sora's feet and horizontal distance, radius, half height, on / off, our normalised
+    squared gap of KH1's formula (`0x1402B5EF0`, **Checked (decomp)**: below 1 meets; ellipsoid and
+    column cases, n/a for a box) against every entry of ours this frame (shape and sweep), and
+    KH1's own overlap answer for it;
+  - our shape: type, centre (height above feet, distance), radius, half height, entry count, and
+    the attack object's own refusal of bodies if any (dead, 0x400, result 0x30, clash types 1 / 2 /
+    4, a used one-hit; `0x1402B3BE0`, **Checked (decomp)**);
+  - at close: "KH1 made contact at +N" (our hit hook), else the reason at the closest frame: not
+    hittable, the attack object refused, hit bit already held, part off, outside the shape (or
+    "would meet but no contact came", cause not read).
+  Bounded: Combat logging on only, only inside open windows, 16 enemies and 8 windows tracked, 12
+  parts per line, 160 lines a session. Outside windows: one atomic load per frame.
+- **KH2 blow watch** (t1051, `combat::watch_blow` / `script_move` / `blow_watch`, the owner's
+  approval; log only, nothing changes). Why: after a KH2 blow, script-driven fliers (object 321)
+  travel about 300 to 700 away, which is neither KH2's number nor our push; the research
+  (`knockback_travel` §1) points at the enemy's own AI script moving it in state 4. What KH1 has
+  (**Checked (decomp + exe)**): the script natives `0x1402BACB0` (state 4, class 2) and
+  `0x1402BB030` (state 7, class 1) take two handles (the actor and a vector, KH1's resolver
+  `0x14038ADC0`), set the state through KH1's set-state `0x1402B1960` and write `+0x3C0` = the
+  vector times its w. They don't touch `+0x20` / `+0x2C`, the target the state's step `0x1402CC000`
+  eases `+0x3C0` toward. Both are hooked (first bytes checked) and run unchanged. For an enemy that
+  took one of our KH2 blows in the last 40 frames (noted in `scale_record` with its ATKP and path:
+  as KH1's launch, KH1's knock-back, KH1's launch for a scripted enemy; `knocked_back` updates it to
+  the ground push, the airborne knock-back or the launch fallback), each call is logged (Combat):
+  object, actor, frames since the blow, state before and after, the vector and its w, the
+  resulting `+0x3C0` and its speed a frame, `+0x20` / `+0x2C` before and after, kind and script
+  bit. From `kh2slots::frame` (each frame Sora is posed), every 4 frames for those 40 frames: state,
+  `+0x3C0`, the target `+0x20` times `+0x2C`, KH1's push flag (`+0x88 & 0x40`), position, distance
+  and height from Sora, kind, script bit (`+0x374 & 0x10000`) and whether KH1 lets the script run
+  this frame (`0x140297870`: `+0 & 4`, `+0x88 & 0x20`, `+0x444 & 1` all clear, **Checked
+  (decomp)**). The "KH2 blow asked", "KH2 launch asked" and "as KH1's launch" lines now carry the
+  kind and the script bit too (`scripted` itself still asks only the kind). Bounded: Combat logging
+  on only, 16 enemies, 200 lines a session per log. Nothing watched: one atomic load per frame and
+  per script move call.
+- **KH2's numbers in KH1's scripted launch for a KH2 blow** (t1052, `combat::script_launched`, the
+  owner's approval; the knock-back research §4 B). Gap (**Checked (code)**): a kind-3 enemy (KH1's
+  enemy think) whose script takes its hits (`+0x374 & 0x10000`; KH1's hit apply `0x1402B7B90` hands
+  the record to the script, **Checked (decomp)**) has its KH2 blow on `BLOWS`; `script_launched`
+  only took `LAUNCHES`, so a script answering the blow with KH1's scripted launch (`0x1402BBC80` ->
+  `0x1402B79F0`) flew by the script's own height and speed. Now it takes a blow record too and puts
+  KH2's numbers in KH1's launch (`kh2_launch`: KH2's blow flown to its apex, sideways speed along
+  KH1's direction, enemy weight, KH2's flight), only when KH1's launch did launch (motion base the
+  script's or 0x52 / 0x5C, air state 2). With no launch motion KH1's scripted launch hands the record
+  to its knock-back `0x1402B77D0` (**Checked (decomp)**), whose hook takes the blow as before.
+  `scripted()` is not widened to kind 3 with the script bit: its one caller is `scale_record`, and
+  objects 300 / 301 / 302 and 321 have the bit (**Checked (log)**), so it would move 301's working
+  `blow_as_launch` path and 321's ground push onto a bare launch record (no knock-back fallback, no
+  push). Which enemies' scripts call the scripted launch for a hit is an **Assumption** (bandits /
+  monkeys likely; the AI script data isn't in the uploads). Nothing per frame.
+- **KH2 blows that aren't a finisher's last blow on KH1's flinch** (t1053, `combat::blow_as_flinch`,
+  `kh1rows::finishing_blow`; the owner's rule, distance answer (a), no rise). KH1's knock-back
+  0x4C / 0x4D carries enemies about 390 by its motion's root travel (**Checked (log)**,
+  `docs/research/reaction-root-travel.md`), so a multi-hit move's later hits missed. Now only a
+  finisher move's last blow (t1046's definition: the last blow window of its carrier, body / right /
+  left blade, in a clip on a finisher request; a single-hit finisher keeps its blow) stays KH1's
+  knock-back or launch. Every other blow gets KH1's flinch kind 3 on its record, so KH1's hit pass
+  runs its ground flinch `0x1402B9230` (0x48..0x4B, the other of the pair on a re-hit, and its push
+  `0x1402B7E60`), its air flinch `0x1402B8B90` in the air, or the push alone lying down (**Checked
+  (decomp)**). Its push is KH2's whole sideways travel for the blow (`Launch::travel`), on KH2's
+  curve and the enemy weight like every KH2 flinch push (`knockback::flinch_push`; in the air KH2's
+  air flinch drift from it, with that flinch's own hop); negative pulls toward Sora. KH1's flinch
+  motions' travel bit is per-enemy table data (**Assumption**, `docs/research/kh1-flinch-travel.md`).
+  KH2 spells keep their blows (a cast has no finisher windows; its last hit can't be told from one
+  attack). A blow-as-flinch on a Magnet-held enemy ends the catch first, as before. Moves (**Checked
+  (files)**): Explosion 911 (912 keeps), Aerial Finish 915 / 916 / 917 (927 keeps), Aerial Sweep 909,
+  Horizontal Slash 963 (967 is a flinch already), Aerial Spiral (1131 is a flinch already), Magnet
+  Burst 1901 (1903 keeps), Final's multi-hit blows (181's all; 153's, 154's and 183's but their last right /
+  left / body blows). Per hit only.
+- **A finisher's last blow on KH1's ground knock-back: KH1's own distance** (t1054, `combat::
+  knocked_back`; the owner's choice). After t1053 only a finisher move's last blow (and a KH2 spell's
+  knocking hit) reaches KH1's knock-back. An enemy with KH1's launch motion keeps t1049's path (KH2's
+  numbers in KH1's launch). One KH1 sends to its ground knock-back `0x1402B8CC0` (0x4C / 0x4D,
+  **Checked (decomp)**), class-2 enemies mid-reaction included, now moves only by KH1's own
+  knock-back distance, its reaction motion's root travel (about 390 for object 321, **Checked
+  (log)**): t1048's extra KH2 push and hop (`ground_blow`) are removed. The "not lifted" log stays;
+  the knock-back log line says KH1's own distance is used. KH1's airborne knock-back with KH2's arc
+  (an enemy with 0x50) is unchanged. Nothing per frame.
+- **A plain KH2 flinch with a negative push pulls toward Sora** (t1055, `knockback::flinch_push`).
+  KH2's push `0x1403D4960` flips its direction when the distance is negative, so the enemy is pulled
+  toward the attacker (**Checked (decomp)**, `docs/research/kh2-hit-pipeline.md`). Before, only
+  t1053's blows-as-flinch were turned; a plain reaction-3 hit with a negative first knock-back number
+  gave a speed below 1, which turned our push off and KH1's own push with it (the enemy didn't move).
+  Now it takes the same turn as a blow's pull: KH1's push direction (the record's) reversed and
+  flattened, the distance as a length, on KH2's 0.1 / 0.9 curve times the enemy weight. In the air the
+  sign already carried into KH2's air flinch drift. Sora's hits with one (**Checked (files)**
+  `W_EX010_ULTF_R` / `_L`, `00battle.bin`): Final's first ground attack 151 (E300), right 1394 at
+  55..64 and 1398 at 76..84, left 1393 at 55..64 and 1397 at 80..89, all −25 (1390..1392 / 1395 /
+  1396 push 75). ATKP 23 / 26 (−50) and 109 (−200) are in no Sora file in the uploads (forms'
+  `P_EX100_*` and every `W_EX010*`; base `P_EX100.mset` isn't uploaded), so their owner is not known:
+  other characters' moves (**Assumption**). Per hit only.
+- **KH2 spells' blows: KH1's flinch except on the finisher's cast and Thunder** (t1056,
+  `bodyhits::last_blow`, `combat::SpellAttack::send_off`; the owner: "fire should flinch until its
+  finisher, thunder does an air launch, blizzard should flinch until finisher"). Since t1053 a spell's
+  blows all stayed blows. Now a spell object says whether its cast keeps them: the combo finisher's
+  cast (its sub odd: level × 2 − 2 + 1, form offsets 10 / 20 / 30 even, **Checked (code + log)**) and
+  Thunder's every cast (ATKP 250 / 251 are blows at every sub, **Checked (files)**) keep t1049 /
+  t1054's paths; any other cast's blows go through t1053's KH1 flinch (`blow_as_flinch`, KH2's
+  sideways travel as the push: 0 for every spell blow but Blizzaga's finisher, no rise). Wisdom's
+  shots (not a spell cast) unchanged. Per spell and sub (**Checked (files)** `00battle.bin`,
+  `docs/research/kh2-spell-reactions.md`): Fire 502's hits are small straight-up blows but the last,
+  which is a flinch (plain) or a flinch with push 500 / 750 (finisher); Blizzard 248 / 249 flinches
+  except Blizzaga's finisher blow 4 / 80 (Wisdom 4 / 40), Master's blows 10 / −1 and Final's 249
+  (−100 plain, 40 finisher); Thunder 250 / 251 blows on every cast; Reflect 574 / 667 flinches. Open:
+  a Fire finisher cast's earlier blows stay blows by the rule. t1046's chance 0 and t1047's share
+  unchanged; the non-native fallback sweep unchanged. Per hit only.
+- **Fire's finisher cast flinches until its last hit** (t1057, `formmagic::spell_attack`; the
+  owner's answer (a) to t1056's open point, Fire only). Fire's attacks now never keep their blows
+  (`send_off` false on every cast, finisher included), so the finisher's early small up-blows (up
+  1..6, sideways 0) go through t1053's KH1 flinch with no push, and only its last hit, a flinch
+  (reaction 6) with KH2's push 500 (base, Final) / 750 (Wisdom) (**Checked (files)** `00battle.bin`),
+  sends the enemy away (t1055's flinch push). Master's Fire has only plain-sub rows (blow 20 / 0;
+  its finisher falls back to them), so in Master no Fire hit knocks away. Blizzard and Thunder keep
+  t1056's rule. Per hit only.
 
 ### 7.z.10 KH2's air combo picks on KH1's flight attack (what-is-still-missing m6, answer 2 (a))
 

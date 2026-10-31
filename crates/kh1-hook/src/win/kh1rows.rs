@@ -513,6 +513,175 @@ pub fn throws(a: &kh2_formats::battle::Atkp) -> bool {
     character_core::reaction::category(a.enemy_reaction) == 4
 }
 
+/// (t1046) What carries a clip's hit windows: his body (weapon 0, `bodyhits`), the right Keyblade
+/// (1: KH1's row object, or `lefthits`' right one where no row runs) or the left one (2..,
+/// `lefthits`).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Carrier {
+    Body,
+    Right,
+    Left,
+}
+
+impl Carrier {
+    fn has(self, weapon: u8) -> bool {
+        match self {
+            Carrier::Body => weapon == 0,
+            Carrier::Right => weapon == 1,
+            Carrier::Left => weapon >= 2,
+        }
+    }
+}
+
+/// (t1046) The start frame of the last KH2 blow window (`throws`) `carrier` has in `clip`, if any:
+/// the one window of a move whose hits may roll KH1's critical (the owner's answer 1 (b): "only
+/// the move's last blow rolls", as KH1 rolls only on its finisher rows' data: chance `+0x18` and
+/// bonus `+0x1C` are 4 only on finisher data `0x4C58`, Blitz `0x4D38` and rows 12 / 15, 0 on every
+/// plain swing, Ripple Drive and KH1 spell, Checked (files) `btltbl.bin`). Explosion 166: 912 (body);
+/// Final's 154: 1458 right, 1457 left, 1737 body; 153: its last right / left windows; Magnet Burst:
+/// 1903 (body).
+pub fn last_blow(clip: &character_core::Clip, carrier: Carrier) -> Option<u32> {
+    use character_core::WindowKind as W;
+    let kh2 = pose::kh2()?;
+    clip.windows
+        .iter()
+        .filter_map(|w| match w.kind {
+            W::Hitbox { attack, weapon, .. } if carrier.has(weapon) => Some((w.start, attack)),
+            _ => None,
+        })
+        .filter(|&(_, a)| kh2.battle.attack_for_level(a, 0, 0).is_some_and(|a| throws(a)))
+        .map(|(s, _)| s)
+        .max()
+}
+
+/// (t1047) A KH2 move's whole power in `clip` for the owner's answer 2 (b) (KH2 Damage off: one KH1
+/// hit shared across a multi-hit move's hits by KH2's power ratios, `kh2damage::share_of`): every
+/// hit window that plays (his body's first three, `kh2slots::body_windows`; the right Keyblade's;
+/// the left one's in a two-bladed form, `lefthits`) counted at its most hits, its length (to the
+/// clip's end when open-ended) over its ATKP's re-hit interval rounded up (`rehit`'s first hit at
+/// the window's start, again every interval while it is open), 1 without an interval; windows of
+/// power 0 (the guards, ATKP 162) left out. (total power, hits, whether one is a blow).
+/// Explosion 166: 911 32..57 every 8 = 4 × 25, 912 150: 250 over 5 hits.
+pub fn move_power(clip: &character_core::Clip) -> Option<(u32, u32, bool)> {
+    use character_core::WindowKind as W;
+    let kh2 = pose::kh2()?;
+    let two = super::form::two_blades();
+    let (mut total, mut hits, mut blow, mut body) = (0u32, 0u32, false, 0usize);
+    for w in &clip.windows {
+        let W::Hitbox { attack, weapon, .. } = w.kind else { continue };
+        if weapon == 0 {
+            body += 1;
+            if body > super::kh2slots::BODY_CHANNELS {
+                continue;
+            }
+        }
+        if weapon >= 2 && !two {
+            continue;
+        }
+        let Some(a) = kh2.battle.attack_for_level(attack, 0, 0) else { continue };
+        if a.power == 0 {
+            continue;
+        }
+        let len = w.end.unwrap_or(clip.length).saturating_sub(w.start).max(1);
+        let i = a.interval as u32;
+        let n = if i > 0 { (len + i - 1) / i } else { 1 };
+        total += a.power as u32 * n;
+        hits += n;
+        blow |= throws(a);
+    }
+    Some((total, hits, blow))
+}
+
+/// (t1047) KH2's ATKP `id` is one of `clip`'s hit windows'.
+pub fn in_clip(clip: &character_core::Clip, id: u16) -> bool {
+    clip.windows.iter().any(|w| matches!(w.kind, character_core::WindowKind::Hitbox { attack, .. } if attack == id))
+}
+
+/// (t1046) The request playing (`+0x164`) is a finisher's: KH1's own ground / air finisher request
+/// (0xCB / 0xCE, `Kind::template_request`) or an attack row of ours of a finisher kind (not a
+/// cast). The owner's answer (c): only a finisher's last blow takes KH1's finisher data, as only
+/// KH1's finisher rows have a critical chance; a swing, jump, item use, glide or cast never rolls.
+pub fn finisher_request(req: u32) -> bool {
+    let r = req & 0xFFFF;
+    if r == Kind::Finisher.template_request() || r == Kind::AirFinisher.template_request() {
+        return true;
+    }
+    r.checked_sub(FIRST_REQUEST).and_then(|n| OURS.get(n as usize)).is_some_and(|o| o.attack && o.kind.finisher() && !o.kind.cast())
+}
+
+/// (t1046) KH1's critical roll may run for this hit of Sora's `attack` on `target` (`kh2damage`,
+/// the owner's answer 1 (b): one roll per finisher, KH1's rule). Not for a hit KH2's re-hit
+/// interval let in again (`rehit::again`: that window's first hit on that target had its roll),
+/// nor, on a row of ours' Keyblade object (KH1's row maker makes one object for the whole motion,
+/// its chance from the row's data then, `0x1402B2DC0` / `0x1402B3270`, Checked (decomp)), for a
+/// right-Keyblade window that isn't the clip's last blow (`last_blow`; a clip with no blow on the
+/// right Keyblade keeps its row's rolls as before). Our body, blade and spell objects take their
+/// chance from each window's own data (`bodyhits::data_for`, `lefthits::blade_data`), so only the
+/// re-hit rule is theirs here.
+pub unsafe fn may_crit(attack: usize, target: usize, sora: usize) -> bool {
+    use character_core::WindowKind as W;
+    if attack < 0x10000 {
+        return true;
+    }
+    if super::rehit::again(attack, target) {
+        return false;
+    }
+    if super::bodyhits::atkp(attack).is_some() {
+        return true;
+    }
+    let data = pose::ptr(rd::<u32>(attack + 0x5C));
+    if data == 0 || !DATA_AT.iter().any(|d| d.load(Ordering::Relaxed) == data) {
+        return true;
+    }
+    let Some((_, clip, t)) = super::kh2slots::playing_clip(sora) else { return true };
+    let Some(last) = last_blow(clip, Carrier::Right) else { return true };
+    let f = t as u32;
+    let right = |w: &&character_core::Window| matches!(w.kind, W::Hitbox { weapon: 1, .. });
+    match clip.windows.iter().filter(right).find(|w| w.contains(f)) {
+        Some(w) => w.start == last,
+        // (A hit landing after its window closed: the right window that opened last before now.)
+        None => clip.windows.iter().filter(right).filter(|w| w.start <= f).map(|w| w.start).max() == Some(last),
+    }
+}
+
+/// (t1053) Whether a KH2 blow (`throws`) Sora's `attack` just landed is a finisher move's last blow
+/// (the owner's rule for KH2's blows: only that one stays KH1's knock-back or launch; every other blow
+/// goes to KH1's flinch, `combat::scale_record`). The same definition as t1046's critical: the last
+/// blow window (`last_blow`) its carrier has in a clip playing on a finisher request
+/// (`finisher_request`), per carrier (his body, the right blade, the left blade). A finisher with one
+/// blow keeps it. Our body, blade and spell objects say it themselves (`bodyhits::last_blow`; t1056:
+/// a spell by its cast, the combo finisher's and Thunder's keep their blows); a row
+/// of ours' Keyblade object (KH1's row object, one for the whole motion) by the right window open now,
+/// as `may_crit`. An attack this can't place keeps its blow (as before t1053).
+pub unsafe fn finishing_blow(attack: usize) -> bool {
+    use character_core::WindowKind as W;
+    if attack < 0x10000 {
+        return true;
+    }
+    if let Some(last) = super::bodyhits::last_blow(attack) {
+        return last;
+    }
+    let data = pose::ptr(rd::<u32>(attack + 0x5C));
+    if data == 0 || !DATA_AT.iter().any(|d| d.load(Ordering::Relaxed) == data) {
+        return true;
+    }
+    let sora = super::takeover::sora_actor();
+    if sora < 0x10000 {
+        return true;
+    }
+    if !finisher_request(rd::<u32>(sora + 0x164)) {
+        return false;
+    }
+    let Some((_, clip, t)) = super::kh2slots::playing_clip(sora) else { return true };
+    let Some(last) = last_blow(clip, Carrier::Right) else { return true };
+    let f = t as u32;
+    let right = |w: &&character_core::Window| matches!(w.kind, W::Hitbox { weapon: 1, .. });
+    match clip.windows.iter().filter(right).find(|w| w.contains(f)) {
+        Some(w) => w.start == last,
+        None => clip.windows.iter().filter(right).filter(|w| w.start <= f).map(|w| w.start).max() == Some(last),
+    }
+}
+
 /// Each frame base Sora is posed (`kh2slots::frame`, ours built): his character's row table is
 /// ours (made the first time from KH1's). Only once our slots are on his request tables, so a row
 /// of ours never asks for a request KH1 can't play.

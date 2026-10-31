@@ -1052,6 +1052,14 @@ landed them with KH1's row reactions only; the spark group is picked once per at
 `random_effect` was picked per hit). Still ours: the scripts themselves (`kh2-magic`), Reflect's
 barrier meeting enemy attacks (`Strikes::barrier_meet`). Not checked in game.
 
+**Knocking hits by cast (t1056).** A spell hit whose KH2 reaction is a blow goes through KH1's
+flinch (t1053's path, KH2's sideways travel as the push, no rise) unless its cast is the combo
+finisher's (an odd sub) or it is Thunder (blows on every cast), which keep KH1's knock-back or launch
+with KH2's numbers (t1049 / t1054); (t1057) Fire's blows go through KH1's flinch on every cast,
+its finisher's too (its send-off is its last hit's big-push flinch). The owner's rule; the per-sub data is in
+`docs/research/kh2-spell-reactions.md` (**Checked (files)**). Details: `docs/kh1-anim-slots.md`
+§7.z.8.
+
 ## 4p. Spells in the states KH1 casts nothing in (what-is-still-missing m6, answer 1)
 
 The tester: "(b) if you have magic set to kh2 those magics should be 1:1, the reverse is true

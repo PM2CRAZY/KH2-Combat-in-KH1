@@ -275,13 +275,49 @@ pub fn current() -> Option<Kh2Hit> {
     CURRENT.lock().ok().and_then(|c| *c)
 }
 
-/// `combat::scale_record`: KH1's record `rec` was made by this KH2 hit.
+/// `combat::scale_record`: KH1's record `rec` was made by this KH2 hit. (t1053) A blow distance left
+/// on the record by an earlier hit (`note_blow_flinch`) goes: KH1 reuses its records.
 pub fn note_record(rec: usize, hit: Kh2Hit) {
     if let Ok(mut v) = RECORDS.lock() {
         let now = now_ms();
         v.retain(|(r, _, t)| *r != rec && now.saturating_sub(*t) < FRESH_MS);
         v.push((rec, hit, now));
     }
+    if let Ok(mut v) = BLOW_FLINCH.lock() {
+        v.retain(|(r, _, _)| *r != rec);
+    }
+}
+
+/// (t1053) KH2 blows `combat::scale_record` sent to KH1's flinch (kind 3): (record, KH2's whole
+/// sideways travel for the blow, negative toward Sora; when).
+static BLOW_FLINCH: std::sync::Mutex<Vec<(usize, f32, u64)>> = std::sync::Mutex::new(Vec::new());
+
+/// (t1053) `combat::scale_record`: KH1's record `rec` is a KH2 blow sent to KH1's flinch; its push
+/// distance is `d` (KH2's blow flown out, `combat::Launch::travel`; negative pulls toward Sora).
+pub fn note_blow_flinch(rec: usize, d: f32) {
+    if let Ok(mut v) = BLOW_FLINCH.lock() {
+        let now = now_ms();
+        v.retain(|(r, _, t)| *r != rec && now.saturating_sub(*t) < FRESH_MS);
+        if v.len() > 64 {
+            v.remove(0);
+        }
+        v.push((rec, d, now));
+    }
+}
+
+/// (t1053) The blow distance on a fresh record (`note_blow_flinch`), taken off the list.
+fn take_blow_flinch(rec: usize) -> Option<f32> {
+    let now = now_ms();
+    BLOW_FLINCH.lock().ok().and_then(|mut v| {
+        v.retain(|(_, _, t)| now.saturating_sub(*t) < FRESH_MS);
+        v.iter().position(|(r, _, _)| *r == rec).map(|i| v.remove(i).1)
+    })
+}
+
+/// (t1053) Whether `rec` has a fresh blow distance waiting (left on the list).
+fn has_blow_flinch(rec: usize) -> bool {
+    let now = now_ms();
+    BLOW_FLINCH.lock().ok().is_some_and(|v| v.iter().any(|(r, _, t)| *r == rec && now.saturating_sub(*t) < FRESH_MS))
 }
 
 fn record(rec: usize) -> Option<Kh2Hit> {
@@ -318,6 +354,8 @@ static ORIG_FLINCH_PUSH: std::sync::atomic::AtomicUsize = std::sync::atomic::Ato
 /// (decomp)): speed `+0x3FC` (KH1 starts it at distance × 0.22314355 and keeps × 0.8 a frame),
 /// on while `+0x88` bit 0x40.
 const PUSH_SPEED: usize = 0x3FC;
+/// (t1053) Its direction (`0x1402C7300` copies the vector's x / y / z there; Checked (decomp)).
+const PUSH_DIR: usize = 0x3F0;
 const PUSH_FLAGS: usize = 0x88;
 const PUSH_ON: u32 = 0x40;
 const KH1_DECAY: f32 = 0.8;
@@ -332,20 +370,48 @@ unsafe fn wr<T: Copy>(p: usize, v: T) {
     std::ptr::write_unaligned(p as *mut T, v)
 }
 
+/// (t1053) A KH2 blow sent to KH1's flinch (`note_blow_flinch`, the owner's answer (a)): its push is
+/// KH2's whole sideways travel for the blow, through the same KH2 curve and weight as a flinch's;
+/// negative, the push is turned to point back toward the attacker (KH1's push takes a direction and a
+/// distance: the record's direction reversed, flattened). A blow on an enemy the Magnet holds ends the
+/// catch first, as KH2's blow does (`magnet::knocked_back`, t866: a held flier back in its own state).
+/// (t1055) A plain KH2 flinch with a negative push (its ATKP's first knock-back number below 0) is
+/// pulled toward the attacker the same way: KH2's push `0x1403D4960` flips the direction for a
+/// negative distance (Checked (decomp), `docs/research/kh2-hit-pipeline.md`). Before, only blows
+/// were turned and a plain negative push read as "too slow" and turned KH1's own push off too.
+/// Sora's moves with one (Checked (files) `W_EX010_ULTF_R` / `_L`, `00battle.bin`): Final's first
+/// ground attack 151, its spinning hits 1394 / 1398 (right) and 1393 / 1397 (left), −25.
 unsafe extern "system" fn flinch_push(actor: usize, rec: usize) {
     let f: unsafe extern "system" fn(usize, usize) = std::mem::transmute(ORIG_FLINCH_PUSH.load(Ordering::Acquire));
+    if actor > 0x10000 && has_blow_flinch(rec) && super::magnet::holds(actor) {
+        super::magnet::knocked_back(actor);
+    }
     f(actor, rec);
     let Some(hit) = record(rec) else {
         drop_push(actor);
         return;
     };
-    let Some(d) = push_distance(&hit) else { return };
+    let blow = take_blow_flinch(rec);
+    let Some(d) = blow.or_else(|| push_distance(&hit)) else { return };
     // KH1's weight: none means KH1 doesn't move this enemy (big and fixed ones): KH1's own stays.
     let w = kh1_weight(actor);
     if w == Some(0.0) {
         return;
     }
     let d = if weight() { d * w.unwrap_or(1.0) } else { d };
+    // (t1053) A pull: KH1's push direction reversed (flattened), its distance as a length; (t1055)
+    // for a plain flinch's negative push as for a blow's.
+    let pull = d < 0.0;
+    let d = if pull {
+        let r: [f32; 4] = rd(rec + 0x10);
+        let n = r[0].hypot(r[2]);
+        if n > 1e-4 {
+            wr(actor + PUSH_DIR, [-r[0] / n, 0.0, -r[2] / n]);
+        }
+        -d
+    } else {
+        d
+    };
     let v = d * KH2_START;
     wr(actor + PUSH_SPEED, v);
     let flags = rd::<u32>(actor + PUSH_FLAGS);
@@ -361,7 +427,7 @@ unsafe extern "system" fn flinch_push(actor: usize, rec: usize) {
     }
     static N: AtomicU32 = AtomicU32::new(0);
     if super::log_on(super::LogCat::Combat) && N.fetch_add(1, Ordering::Relaxed) < 40 {
-        log!(Combat, "KH2's push on {actor:#x} (reaction {}, knock-back {} / {}): {d:.0} (weight {:?}{}), {v:.1} a frame, x{KH2_DECAY} a frame", hit.reaction, hit.k1, hit.k2, w, if weight() { "" } else { ", off" });
+        log!(Combat, "KH2's push on {actor:#x} (reaction {}, knock-back {} / {}{}): {d:.0}{} (weight {:?}{}), {v:.1} a frame, x{KH2_DECAY} a frame", hit.reaction, hit.k1, hit.k2, blow.map_or(String::new(), |b| format!(", a KH2 blow as KH1's flinch: its sideways travel {:.1}{}", b.abs(), if b < 0.0 { " toward Sora" } else { " away" })), if pull { " pulled toward Sora" } else { "" }, w, if weight() { "" } else { ", off" });
     }
 }
 
@@ -414,6 +480,11 @@ const KH2_AIR_HOP: f32 = 50.0;
 const ARC_T: usize = 0x3B0;
 const ARC_Y0: usize = 0x3B4;
 
+/// (t1053) A KH2 blow sent to KH1's flinch (`note_blow_flinch`) on an enemy in the air: this air
+/// flinch, KH2's drift rule with the blow's whole sideways travel as its distance (negative: the
+/// drift points back toward the attacker). KH2's air flinch's own hop stays, as for any flinch.
+/// (t1055) A plain flinch's negative push drifts toward the attacker too: its sign carries into the
+/// drift, as KH2's `0x1403D4800` takes the signed distance (Checked (decomp)).
 unsafe extern "system" fn air_flinch(actor: usize, rec: usize, front: f32) {
     let f: unsafe extern "system" fn(usize, usize, f32) = std::mem::transmute(ORIG_AIR_FLINCH.load(Ordering::Acquire));
     f(actor, rec, front);
@@ -421,7 +492,8 @@ unsafe extern "system" fn air_flinch(actor: usize, rec: usize, front: f32) {
         land_kh1(actor);
         return;
     };
-    let Some(d) = push_distance(&hit) else {
+    let blow = take_blow_flinch(rec);
+    let Some(d) = blow.or_else(|| push_distance(&hit)) else {
         land_kh1(actor);
         return;
     };
@@ -449,7 +521,7 @@ unsafe extern "system" fn air_flinch(actor: usize, rec: usize, front: f32) {
     start(Flight { actor, fly: Fly::Hop { arc, vel }, up_t: arc.uptime, h: KH2_AIR_HOP, frames: 0 });
     static N: AtomicU32 = AtomicU32::new(0);
     if super::log_on(super::LogCat::Combat) && N.fetch_add(1, Ordering::Relaxed) < 40 {
-        log!(Combat, "KH2's air flinch on {actor:#x} (reaction {}, knock-back {} / {}): hop {KH2_AIR_HOP:.0}, drift {speed:.1} a frame (push {d:.0}, weight {w:?}{})", hit.reaction, hit.k1, hit.k2, if weight() { "" } else { ", off" });
+        log!(Combat, "KH2's air flinch on {actor:#x} (reaction {}, knock-back {} / {}{}): hop {KH2_AIR_HOP:.0}, drift {speed:.1} a frame (push {d:.0}, weight {w:?}{})", hit.reaction, hit.k1, hit.k2, if blow.is_some() { ", a KH2 blow as KH1's flinch: its sideways travel" } else { "" }, if weight() { "" } else { ", off" });
     }
 }
 

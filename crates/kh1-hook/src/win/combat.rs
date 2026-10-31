@@ -2059,6 +2059,12 @@ pub struct SpellAttack {
     pub atk: u16,
     pub sub: u8,
     pub shapes: Vec<Shape>,
+    /// (t1056) Its KH2 blows stay blows (KH1's knock-back or launch, `bodyhits::last_blow`): the
+    /// combo finisher's cast (an odd sub: level × 2 − 2 + 1, the form offsets 10 / 20 / 30 even),
+    /// Thunder on every cast (KH2's Thunder rows are blows at every sub), and what isn't a spell
+    /// cast (Wisdom's shots, as before). Otherwise a blow goes to KH1's flinch, as t1053's.
+    /// (t1057) Fire never: its finisher's send-off is its last hit's big-push flinch.
+    pub send_off: bool,
 }
 
 impl Strikes {
@@ -3058,7 +3064,11 @@ pub unsafe fn scale_record(rec: usize, attack: usize, target: usize) {
     if let Some(h) = hit {
         super::knockback::note_record(rec, h);
     }
-    let own_launch = own.as_ref().filter(|a| !softened && super::kh1rows::throws(a)).and_then(|a| {
+    // (t1053) A KH2 blow that isn't a finisher move's last blow (`kh1rows::finishing_blow`, the
+    // owner's rule): KH1's flinch, the path a plain swing's reaction-3 hit takes (`blow_as_flinch`),
+    // not KH1's knock-back or launch.
+    let as_flinch = own.as_ref().is_some_and(|a| !softened && super::kh1rows::throws(a) && !super::kh1rows::finishing_blow(attack));
+    let own_launch = own.as_ref().filter(|a| !softened && !as_flinch && super::kh1rows::throws(a)).and_then(|a| {
         let r = &pose::kh2()?.character.reaction;
         Some(Launch::kh2(a.knockback_1, a.knockback_2, r))
     });
@@ -3075,7 +3085,39 @@ pub unsafe fn scale_record(rec: usize, attack: usize, target: usize) {
     // runs with KH2's numbers (`script_launched`).
     if let Some(l) = own_launch.or_else(|| if own.is_some() || softened { None } else { PENDING.lock().ok().and_then(|g| *g) }) {
         let who = if own.is_some() { target } else { TARGET.load(Ordering::Relaxed) };
-        if who > 0x10000 && !scripted(who) {
+        // (t1049) An enemy with KH1's launch motion but no airborne knock-back motion 0x50, not in a
+        // class-2 state (`blow_as_launch`): KH1's own launch (kind 5) with KH2's numbers.
+        let as_launch = if who > 0x10000 && !scripted(who) { blow_as_launch(who) } else { None };
+        // (t1051, log only) This enemy watched for the frames after the blow.
+        let atkp = own.as_ref().map_or(0, |a| a.id as u32);
+        watch_blow(who, atkp, if as_launch.is_some() { "as KH1's launch" } else if who > 0x10000 && !scripted(who) { "KH1's knock-back" } else { "KH1's launch, scripted" });
+        if let Some((m, air)) = as_launch {
+            wr(rec + 0xC, (rd::<u32>(rec + 0xC) & !0x1F) | 5);
+            let now = takeover_ms();
+            if let Ok(mut v) = BLOWS.lock() {
+                v.retain(|(r, _, t)| *r != rec && now.saturating_sub(*t) < LAUNCH_FRESH_MS);
+            }
+            if let Ok(mut v) = LAUNCHES.lock() {
+                v.retain(|(r, _, t)| *r != rec && now.saturating_sub(*t) < LAUNCH_FRESH_MS);
+                v.push((rec, l, now));
+            }
+            if let Ok(mut v) = AS_LAUNCH.lock() {
+                v.retain(|(r, t)| *r != rec && now.saturating_sub(*t) < LAUNCH_FRESH_MS);
+                v.push((rec, now));
+            }
+            static A: AtomicU32 = AtomicU32::new(0);
+            if super::log_on(super::LogCat::Combat) && A.fetch_add(1, Ordering::Relaxed) < 40 {
+                log!(Combat,
+                    "KH2 blow as KH1's launch on object {} ({who:#x}, state {}, {}, {}): record {rec:#x} made KH1's launch, kind 5 (no 0x50, has {m:#x}; KH2's start: up {:.0}, sideways {:.0} a frame)",
+                    super::probe::object_id(who),
+                    rd::<i32>(who + 0x70),
+                    if air { "in the air" } else { "on the ground" },
+                    script_note(who),
+                    l.up,
+                    l.speed
+                );
+            }
+        } else if who > 0x10000 && !scripted(who) {
             wr(rec + 0xC, (rd::<u32>(rec + 0xC) & !0x1F) | 4);
             if let Ok(mut v) = BLOWS.lock() {
                 let now = takeover_ms();
@@ -3084,7 +3126,7 @@ pub unsafe fn scale_record(rec: usize, attack: usize, target: usize) {
             }
             static S: AtomicU32 = AtomicU32::new(0);
             if super::log_on(super::LogCat::Combat) && S.fetch_add(1, Ordering::Relaxed) < 40 {
-                log!(Combat, "KH2 blow asked: record {rec:#x} made a knock-back, KH1's kind 4 (KH2's start: up {:.0}, sideways {:.0} a frame)", l.up, l.speed);
+                log!(Combat, "KH2 blow asked: record {rec:#x} made a knock-back, KH1's kind 4 for object {} ({who:#x}, {}) (KH2's start: up {:.0}, sideways {:.0} a frame)", super::probe::object_id(who), script_note(who), l.up, l.speed);
             }
         } else {
             wr(rec + 0xC, (rd::<u32>(rec + 0xC) & !0x1F) | 5);
@@ -3095,9 +3137,12 @@ pub unsafe fn scale_record(rec: usize, attack: usize, target: usize) {
             }
             static N: AtomicU32 = AtomicU32::new(0);
             if super::log_on(super::LogCat::Combat) && N.fetch_add(1, Ordering::Relaxed) < 40 {
-                log!(Combat, "KH2 launch asked: record {rec:#x} made a launch for {} (KH2's start: up {:.0}, sideways {:.0} a frame)", if who > 0x10000 { "a scripted enemy" } else { "an unknown target" }, l.up, l.speed);
+                let whom = if who > 0x10000 { format!("a scripted enemy, object {} ({who:#x}, {})", super::probe::object_id(who), script_note(who)) } else { "an unknown target".to_string() };
+                log!(Combat, "KH2 launch asked: record {rec:#x} made a launch for {whom} (KH2's start: up {:.0}, sideways {:.0} a frame)", l.up, l.speed);
             }
         }
+    } else if let Some(a) = own.as_ref().filter(|_| as_flinch) {
+        blow_as_flinch(rec, a, target);
     } else if let Some(h) = hit.filter(|_| softened) {
         // The rewritten reaction on KH1's record: a push only is KH1's push-only kind 2, a stagger
         // with a push its flinch, kind 3 (neither is KH1's knock-back or launch).
@@ -3147,6 +3192,50 @@ pub unsafe fn scale_record(rec: usize, attack: usize, target: usize) {
     LAST_DAMAGE.store(scaled as u32, Ordering::Relaxed);
 }
 
+/// (t1053) A KH2 blow (reaction group 4) that isn't a finisher move's last blow
+/// (`kh1rows::finishing_blow`) on KH1's flinch, the owner's choice: KH2's blows kept enemies far
+/// (KH1's knock-back 0x4C / 0x4D carries them by its motion's root travel, about 390, Checked (log),
+/// `docs/research/reaction-root-travel.md`), so the next hits of a multi-hit move missed. KH1's own
+/// combos connect on its flinch, and its flinch motions show no such travel
+/// (`docs/research/kh1-flinch-travel.md`: per-enemy table data, an Assumption; the t1052 log agrees).
+/// - The record's kind is KH1's flinch, 3: KH1's hit pass `0x1402B8E10` then runs its ground flinch
+///   `0x1402B9230` (motion 0x48..0x4B, the other one of the pair on a re-hit, and its push
+///   `0x1402B7E60`), its air flinch `0x1402B8B90` for an enemy in the air and not in a class-2 state,
+///   or the push alone for one lying down (Checked (decomp)). The same path as a plain swing's
+///   reaction-3 hit, with our hooks on the push (`knockback::flinch_push`) and the air flinch
+///   (`knockback::air_flinch`).
+/// - Its distance: KH2's whole sideways travel for the blow (the owner's answer (a); `Launch::travel`,
+///   KH2's blow from its ATKP's knock-back numbers flown back to its start height, sstm's 24 / 40 when
+///   both are 0; Checked (decomp)), negative = pulled toward Sora; no rise (the owner). It is the
+///   push's distance on KH2's 0.1 / 0.9 curve, times KH1's weight with Enemy Weight on, as for every
+///   KH2 flinch push (`knockback::note_blow_flinch`); in the air, KH2's air flinch drift from it.
+/// The damage (t1047's share) and the data (t1046's critical: only the last blow is on the finisher's
+/// data) are as they were. Per hit only; nothing per frame.
+unsafe fn blow_as_flinch(rec: usize, a: &kh2_formats::battle::Atkp, who: usize) {
+    wr(rec + 0xC, (rd::<u32>(rec + 0xC) & !0x1F) | 3);
+    // (A blow left on this reused record by an earlier hit isn't this one's.)
+    let now = takeover_ms();
+    if let Ok(mut v) = BLOWS.lock() {
+        v.retain(|(r, _, t)| *r != rec && now.saturating_sub(*t) < LAUNCH_FRESH_MS);
+    }
+    if let Ok(mut v) = LAUNCHES.lock() {
+        v.retain(|(r, _, t)| *r != rec && now.saturating_sub(*t) < LAUNCH_FRESH_MS);
+    }
+    if let Ok(mut v) = AS_LAUNCH.lock() {
+        v.retain(|(r, t)| *r != rec && now.saturating_sub(*t) < LAUNCH_FRESH_MS);
+    }
+    let Some(p) = pose::kh2().map(|k| k.character.reaction.clone()) else { return };
+    let (side, _) = Launch::kh2(a.knockback_1, a.knockback_2, &p).travel(&p);
+    super::knockback::note_blow_flinch(rec, side);
+    // (t1051's watch, log only: the frames after it, to see the flinch keep the enemy close.)
+    watch_blow(who, a.id as u32, "as KH1's flinch");
+    static N: AtomicU32 = AtomicU32::new(0);
+    if super::log_on(super::LogCat::Combat) && N.fetch_add(1, Ordering::Relaxed) < 60 {
+        let whom = if who > 0x10000 { format!("object {} ({who:#x}, state {})", super::probe::object_id(who), rd::<i32>(who + 0x70)) } else { "an unknown target".to_string() };
+        log!(Combat, "KH2 blow as KH1's flinch: ATKP {} (reaction {}, knock-back {} / {}) on {whom}, not a finisher's last blow: record {rec:#x} made KH1's flinch, kind 3; push {:.1}{}", a.id, a.enemy_reaction, a.knockback_1, a.knockback_2, side.abs(), if side < 0.0 { " toward Sora" } else { " away" });
+    }
+}
+
 /// A KH2 launch for KH1's launch reaction: KH2's starting speeds, per 60 Hz frame (Steam KH2
 /// `0x1403CEA00`: the ATKP's first knockback number is the up speed and its second the sideways
 /// one; only when both are 0 sstm's defaults, 24 up and 40 sideways; Checked (decomp)). The
@@ -3187,6 +3276,24 @@ impl Launch {
         }
         (h.max(1.0), t.max(2.0))
     }
+
+    /// (t1048) KH2's whole blow flown until it is back at its start height (`Blow`, a 30 Hz tick, as
+    /// `apex`): its sideways travel along the hit (negative: back toward the attacker) and its
+    /// highest point. (t1053) The push of a KH2 blow sent to KH1's flinch (`blow_as_flinch`).
+    fn travel(self, p: &character_core::reaction::ReactionParams) -> (f32, f32) {
+        let mut b = character_core::reaction::Blow::new([0.0, self.speed], self.up, p);
+        let (mut y, mut h, mut side) = (0.0f32, 0.0f32, 0.0f32);
+        for _ in 0..200 {
+            let d = b.tick(2.0, p);
+            y += d[1];
+            side += d[2];
+            h = h.max(y);
+            if y <= 0.0 {
+                break;
+            }
+        }
+        (side, h)
+    }
 }
 
 static PENDING: std::sync::Mutex<Option<Launch>> = std::sync::Mutex::new(None);
@@ -3224,10 +3331,16 @@ fn has_launch(rec: usize) -> bool {
 /// 0x5C, air state 2).
 unsafe extern "system" fn launched(actor: usize, rec: usize) {
     let f: unsafe extern "system" fn(usize, usize) = std::mem::transmute(ORIG_LAUNCH.load(Ordering::Acquire));
+    let ours_before = has_launch(rec);
     f(actor, rec);
     // Only a launch asked just now: KH1 reuses its hit records, so one left over (a boss that
     // can't be launched) would otherwise land on a later hit's enemy.
     let Some(l) = take_launch(rec) else {
+        // (t1049) A KH2 blow sent as KH1's launch that KH1's launch passed on to its knock-back
+        // (no launch motion after all): `knocked_back` took it as a blow, so its flight stays.
+        if ours_before {
+            return;
+        }
         static M: AtomicU32 = AtomicU32::new(0);
         if super::log_on(super::LogCat::Combat) && M.fetch_add(1, Ordering::Relaxed) < 20 {
             log!(Combat, "KH1 launch reaction on {actor:#x} for record {rec:#x} (not a KH2 launch)");
@@ -3235,7 +3348,8 @@ unsafe extern "system" fn launched(actor: usize, rec: usize) {
         super::knockback::land_kh1(actor);
         return;
     };
-    kh2_launch(actor, l, &[0x52, 0x5C], "KH1's launch");
+    let via = if take_as_launch(rec) { "a KH2 blow as KH1's launch" } else { "KH1's launch" };
+    kh2_launch(actor, l, &[0x52, 0x5C], via);
 }
 
 /// KH1's scripted launch `0x1402B79F0 (actor, record, motion base, height, speed, down time)`
@@ -3247,23 +3361,45 @@ unsafe extern "system" fn launched(actor: usize, rec: usize) {
 /// speed), so a KH2 blow on such an enemy flew by its script's numbers, not KH2's (the tester,
 /// thread kh2s-combo-row-selection m34: Aerial Finish's first hit sent the foe far). KH1's runs;
 /// for a KH2 launch's record its flight is then KH2's, as `launched`.
+/// (t1052) Also a KH2 blow's record (`BLOWS`): an enemy KH1 gives the enemy think (kind 3) whose
+/// script takes its hits (`+0x374 & 0x10000`: KH1's hit apply `0x1402B7B90` hands the record to the
+/// script, event 1; Checked (decomp)) has its blow on `BLOWS`, not `LAUNCHES` (`scale_record`), so a
+/// script answering it with this launch flew by the script's own height and speed (the knock-back
+/// research §4 B, Checked (code)). KH1's launch runs as before; KH2's numbers go in it
+/// (`kh2_launch`) as for a launch. With no launch motion KH1 hands the record to its knock-back
+/// (`0x1402B77D0`, Checked (decomp)), whose hook takes the blow there as before.
 unsafe extern "system" fn script_launched(actor: usize, rec: usize, base: i32, height: f32, speed: f32, down: f32) {
     let f: unsafe extern "system" fn(usize, usize, i32, f32, f32, f32) = std::mem::transmute(ORIG_SCRIPT_LAUNCH.load(Ordering::Acquire));
-    let ours_before = has_launch(rec);
+    let ours_before = has_launch(rec) || has_blow(rec);
     f(actor, rec, base, height, speed, down);
-    let Some(l) = take_launch(rec) else {
-        // (KH1's fallback inside, `0x1402B77D0`, can reach `launched` itself, which then took it.)
-        if !ours_before {
-            super::knockback::land_kh1(actor);
-        }
-        return;
+    let (l, blow) = match take_launch(rec) {
+        Some(l) => (l, false),
+        None => match take_blow(rec) {
+            Some(l) => (l, true),
+            None => {
+                // (KH1's fallback inside, `0x1402B77D0`, can reach `launched` / `knocked_back`
+                // itself, which then took it.)
+                if !ours_before {
+                    super::knockback::land_kh1(actor);
+                }
+                return;
+            }
+        },
     };
     let bases: &[u16] = if base > 0 && base < 0x10000 { &[base as u16] } else { &[0x52, 0x5C] };
     static N: AtomicU32 = AtomicU32::new(0);
     if super::log_on(super::LogCat::Combat) && N.fetch_add(1, Ordering::Relaxed) < 30 {
-        log!(Combat, "KH1's scripted launch on {actor:#x} (motion base {base:#x}, the script's height {height:.0}, speed {speed:.1}): KH2's numbers in it");
+        log!(Combat,
+            "KH1's scripted launch on object {} ({actor:#x}, {}) for a KH2 {} (motion base {base:#x}, the script's height {height:.0}, speed {speed:.1}): KH2's numbers in it",
+            super::probe::object_id(actor),
+            script_note(actor),
+            if blow { "blow" } else { "launch" }
+        );
     }
-    kh2_launch(actor, l, bases, "KH1's scripted launch");
+    if blow {
+        watch_via(actor, "KH1's scripted launch");
+    }
+    kh2_launch(actor, l, bases, if blow { "KH1's scripted launch, a KH2 blow" } else { "KH1's scripted launch" });
 }
 
 /// After one of KH1's launches ran on `actor` for a KH2 launch `l`: if it did launch (its motion
@@ -3320,11 +3456,278 @@ fn has_blow(rec: usize) -> bool {
     BLOWS.lock().ok().is_some_and(|v| v.iter().any(|(r, _, t)| *r == rec && now.saturating_sub(*t) < LAUNCH_FRESH_MS))
 }
 
+/// (t1049) Records whose KH2 blow `scale_record` sent as KH1's launch (`blow_as_launch`): (record,
+/// when). Their launch is on `LAUNCHES`.
+static AS_LAUNCH: std::sync::Mutex<Vec<(usize, u64)>> = std::sync::Mutex::new(Vec::new());
+
+/// (t1049) Whether `rec` was a KH2 blow sent as KH1's launch (taken off the list).
+fn take_as_launch(rec: usize) -> bool {
+    let now = takeover_ms();
+    AS_LAUNCH.lock().ok().is_some_and(|mut v| {
+        v.retain(|(_, t)| now.saturating_sub(*t) < LAUNCH_FRESH_MS);
+        v.iter().position(|(r, _)| *r == rec).map(|i| v.remove(i)).is_some()
+    })
+}
+
+/// (t1049) Whether a KH2 blow on `actor` goes through KH1's own launch (kind 5) with KH2's numbers
+/// (`kh2_launch`), instead of KH1's knock-back with our push (the owner's approval; his log, t1048,
+/// Checked (log): objects 300 / 301 / 302 have 0x52 and 0x5C but no 0x50, were refused the lift and
+/// slid about 300 on the ground for 912, with a hop on only 3 of 911's hits). The same KH1 checks as
+/// `lift_for_blow` (Steam, Checked (decomp)):
+/// - KH1's hit pass `0x1402B8E10` sends kind 5 to its launch `0x1402B8530` only for an enemy not in
+///   a class-2 state (`0x1402B1AE0`); a class-2 one goes to its knock-back, so a class-2 enemy (a
+///   Shadow mid-slide, state 4) keeps the t1048 pull: refused here.
+/// - KH1's launch takes motion 0x5C for an enemy in the air (`0x1402B1B10`), else 0x52, and with
+///   that motion missing hands the record to its knock-back. So: no 0x50, and the launch motion
+///   KH1's launch would pick for where it is now (ground 0x52, air 0x5C: the airborne case too).
+/// - An enemy with 0x50 keeps the lift into KH1's airborne knock-back; lying down (motion `+0x164`
+///   = base + 3 / + 8) keeps KH1's knock-back push as t1048; one the Magnet holds keeps KH1's
+///   knock-back, where the catch ends (`magnet::knocked_back`).
+/// Returns the launch motion and whether it is in the air. Per blow hit only.
+unsafe fn blow_as_launch(actor: usize) -> Option<(u32, bool)> {
+    if !knock_back_fns() || super::magnet::holds(actor) {
+        return None;
+    }
+    let since = rd::<i32>(actor + 0x164) - rd::<u16>(actor + 0x3EA) as i32;
+    if (0..=9).contains(&since) && since % 5 == 3 {
+        return None;
+    }
+    let base = BASE.load(Ordering::Relaxed);
+    let class2: unsafe extern "system" fn(usize) -> i32 = std::mem::transmute(base + CLASS2_STEAM);
+    let airborne: unsafe extern "system" fn(usize) -> i32 = std::mem::transmute(base + AIRBORNE_STEAM);
+    let has_motion: unsafe extern "system" fn(usize, u32) -> i32 = std::mem::transmute(base + HAS_MOTION_STEAM);
+    if class2(actor) != 0 || has_motion(actor, AIR_KNOCK_BACK[0]) != 0 {
+        return None;
+    }
+    let air = airborne(actor) != 0;
+    let m = LAUNCH_MOTIONS[air as usize];
+    (has_motion(actor, m) != 0).then_some((m, air))
+}
+
 /// Whether `actor`'s think is KH1's object think, its hit records handed to its script: actor kind
 /// (byte `+0x6`) 4, 5, 9 or 10 (Steam `0x140297B5A`, the think picker: kind 3 gets the enemy think
 /// `0x1402B7260`, 4 / 5 / 9 / 10 the object think `0x1402C2C90`; Checked (exe)).
+/// (t1052) A kind-3 enemy whose script takes its hits (`+0x374 & 0x10000`) is deliberately not counted:
+/// `scale_record` is the only caller, and counting it would move objects 300 / 301 / 302 (bit set,
+/// Checked (log)) off `blow_as_launch` (KH1's launch with KH2's numbers, t1049) and object 321 off the
+/// t1048 ground push, onto a bare launch record with neither fallback. Its blow stays on `BLOWS`, which
+/// `knocked_back` and (t1052) `script_launched` both take, whichever of KH1's reactions its script runs.
 unsafe fn scripted(actor: usize) -> bool {
     matches!(rd::<u8>(actor + 0x6), 4 | 5 | 9 | 10)
+}
+
+/// (t1051) `scripted`'s inputs for the log: KH1's actor kind (byte `+0x6`) and the script bit
+/// `+0x374 & 0x10000` (KH1's hit apply `0x1402B7B90` hands the record to the enemy's AI script, event
+/// 1, when it is set, and the enemy think `0x1402B7260` runs that script each frame; Checked (decomp)).
+/// Log only: `scripted` itself still asks only the kind.
+unsafe fn script_note(actor: usize) -> String {
+    format!(
+        "kind {}, script bit 0x10000 {}",
+        rd::<u8>(actor + 0x6),
+        if rd::<u32>(actor + 0x374) & 0x10000 != 0 { "set" } else { "clear" }
+    )
+}
+
+/// (t1051, log only) Enemies that took one of our KH2 blows (`scale_record`), watched for
+/// `BLOW_WATCH_FRAMES` frames: KH1's AI-script movement natives on them (`script_moved`) and a line
+/// every `BLOW_WATCH_EVERY` frames (`blow_watch`). Filled only with Combat logging on.
+#[derive(Clone, Copy)]
+struct BlowWatch {
+    actor: usize,
+    obj: u32,
+    frame: u64,
+    atkp: u32,
+    via: &'static str,
+    next: u64,
+}
+static BLOW_WATCH: std::sync::Mutex<Vec<BlowWatch>> = std::sync::Mutex::new(Vec::new());
+/// Whether `BLOW_WATCH` has entries (the per-frame and per-native cost while it doesn't: one load).
+static BLOW_WATCHING: AtomicBool = AtomicBool::new(false);
+const BLOW_WATCH_FRAMES: u64 = 40;
+const BLOW_WATCH_EVERY: u64 = 4;
+const BLOW_WATCH_MAX: usize = 16;
+/// Lines a session, each of the two logs.
+const BLOW_WATCH_LINES: u32 = 200;
+static BLOW_WATCH_N: AtomicU32 = AtomicU32::new(0);
+static SCRIPT_MOVE_N: AtomicU32 = AtomicU32::new(0);
+
+fn game_frame() -> u64 {
+    super::takeover::GAME_FRAME.load(Ordering::Relaxed)
+}
+
+/// (t1051) A KH2 blow on `actor` (`scale_record`'s path for it): watched from now.
+unsafe fn watch_blow(actor: usize, atkp: u32, via: &'static str) {
+    if actor < 0x10000 || !super::log_on(super::LogCat::Combat) || BLOW_WATCH_N.load(Ordering::Relaxed) >= BLOW_WATCH_LINES {
+        return;
+    }
+    let now = game_frame();
+    let Ok(mut v) = BLOW_WATCH.lock() else { return };
+    v.retain(|w| w.actor != actor && now.saturating_sub(w.frame) <= BLOW_WATCH_FRAMES);
+    if v.len() >= BLOW_WATCH_MAX {
+        v.remove(0);
+    }
+    v.push(BlowWatch { actor, obj: super::probe::object_id(actor), frame: now, atkp, via, next: now + 1 });
+    BLOW_WATCHING.store(true, Ordering::Relaxed);
+}
+
+/// (t1051) Which of KH1's reactions took the watched blow (`knocked_back`), for the log.
+fn watch_via(actor: usize, via: &'static str) {
+    if !BLOW_WATCHING.load(Ordering::Relaxed) {
+        return;
+    }
+    if let Ok(mut v) = BLOW_WATCH.lock() {
+        if let Some(w) = v.iter_mut().find(|w| w.actor == actor) {
+            w.via = via;
+        }
+    }
+}
+
+/// (t1051) The watched entry for `actor`, if its blow is fresh and it is the same enemy object.
+unsafe fn watched(actor: usize) -> Option<BlowWatch> {
+    if !BLOW_WATCHING.load(Ordering::Relaxed) || actor < 0x10000 {
+        return None;
+    }
+    let now = game_frame();
+    let v = BLOW_WATCH.lock().ok()?;
+    v.iter().find(|w| w.actor == actor && now.saturating_sub(w.frame) <= BLOW_WATCH_FRAMES && super::probe::object_id(actor) == w.obj).copied()
+}
+
+/// (t1051) KH1's AI-script movement natives (Steam, script native table `0x1405299F0`; Checked
+/// (decomp + exe)): `0x1402BACB0` (state 4, class 2) and `0x1402BB030` (state 7, class 1). Each takes
+/// the script's argument words (two handles, resolved by KH1's `0x14038ADC0`: the actor and a vector),
+/// sets the state through KH1's set-state `0x1402B1960` (its leave / enter callbacks run) and writes
+/// `+0x3C0` = the vector's x / y / z × its w, w kept (`0x140386D00`). They don't write `+0x20` / `+0x2C`
+/// (the target state 4 / 7's step `0x1402CC000` eases `+0x3C0` toward), unless a state's enter callback
+/// does: logged before and after. Both start `mov [rsp+8], rbx; mov [rsp+0x10], rsi; push rdi;
+/// sub rsp, 0x20` (Checked (exe)).
+const SCRIPT_MOVE4_STEAM: usize = 0x2BACB0;
+const SCRIPT_MOVE7_STEAM: usize = 0x2BB030;
+const SCRIPT_MOVE_PROLOGUE: [u8; 15] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x74, 0x24, 0x10, 0x57, 0x48, 0x83, 0xEC, 0x20];
+static ORIG_SCRIPT_MOVE4: AtomicUsize = AtomicUsize::new(0);
+static ORIG_SCRIPT_MOVE7: AtomicUsize = AtomicUsize::new(0);
+/// KH1's handle to address `0x14038ADC0 (handle) -> address` (0 for 0; Checked (decomp)): `test ecx,
+/// ecx; jnz +3; xor eax, eax; ret; jmp ...` (Checked (exe)). Checked once: 0 not yet, 1 refused, 2 matched.
+const RESOLVE_STEAM: usize = 0x38ADC0;
+const RESOLVE_BYTES: [u8; 8] = [0x85, 0xC9, 0x75, 0x03, 0x33, 0xC0, 0xC3, 0xE9];
+static RESOLVE_FN: AtomicU8 = AtomicU8::new(0);
+
+unsafe fn resolve_handle(h: u32) -> usize {
+    let base = BASE.load(Ordering::Relaxed);
+    let ok = match RESOLVE_FN.load(Ordering::Relaxed) {
+        0 => {
+            let ok = base != 0 && std::slice::from_raw_parts((base + RESOLVE_STEAM) as *const u8, RESOLVE_BYTES.len()) == RESOLVE_BYTES;
+            if !ok {
+                log!(Combat, "KH2 blow watch: KH1's handle resolver doesn't match the Steam exe; the script movement log is off");
+            }
+            RESOLVE_FN.store(1 + ok as u8, Ordering::Relaxed);
+            ok
+        }
+        v => v == 2,
+    };
+    if !ok || h == 0 {
+        return 0;
+    }
+    let f: unsafe extern "system" fn(u32) -> usize = std::mem::transmute(base + RESOLVE_STEAM);
+    f(h)
+}
+
+unsafe extern "system" fn script_move4(args: *const u32) -> u64 {
+    script_move(args, 4, &ORIG_SCRIPT_MOVE4)
+}
+
+unsafe extern "system" fn script_move7(args: *const u32) -> u64 {
+    script_move(args, 7, &ORIG_SCRIPT_MOVE7)
+}
+
+/// (t1051, log only) KH1's native runs unchanged; for a watched enemy (`watched`) a Combat line of
+/// what it did.
+unsafe fn script_move(args: *const u32, to: i32, orig: &AtomicUsize) -> u64 {
+    let f: unsafe extern "system" fn(*const u32) -> u64 = std::mem::transmute(orig.load(Ordering::Acquire));
+    if !BLOW_WATCHING.load(Ordering::Relaxed) || args.is_null() || !super::log_on(super::LogCat::Combat) || SCRIPT_MOVE_N.load(Ordering::Relaxed) >= BLOW_WATCH_LINES {
+        return f(args);
+    }
+    let actor = resolve_handle(*args);
+    let Some(w) = watched(actor) else { return f(args) };
+    let vec_at = resolve_handle(*args.add(1));
+    let v: [f32; 4] = if vec_at > 0x10000 { rd(vec_at) } else { [0.0; 4] };
+    let state0 = rd::<i32>(actor + 0x70);
+    let dir0: [f32; 3] = rd(actor + 0x20);
+    let speed0 = rd::<f32>(actor + 0x2C);
+    let r = f(args);
+    SCRIPT_MOVE_N.fetch_add(1, Ordering::Relaxed);
+    let vel: [f32; 4] = rd(actor + 0x3C0);
+    let dir1: [f32; 3] = rd(actor + 0x20);
+    let speed1 = rd::<f32>(actor + 0x2C);
+    log!(Combat,
+        "KH1 script move (state {to} native) on object {} ({actor:#x}) {} frames after KH2 ATKP {} ({}): state {state0} -> {}, vector [{:.2} {:.2} {:.2}] w {:.2} -> +0x3C0 [{:.2} {:.2} {:.2}] ({:.2} a frame) w {:.2}; +0x20 [{:.2} {:.2} {:.2}] -> [{:.2} {:.2} {:.2}], +0x2C {speed0:.2} -> {speed1:.2}; {}",
+        w.obj,
+        game_frame().saturating_sub(w.frame),
+        w.atkp,
+        w.via,
+        rd::<i32>(actor + 0x70),
+        v[0], v[1], v[2], v[3],
+        vel[0], vel[1], vel[2], vel[0].hypot(vel[2]), vel[3],
+        dir0[0], dir0[1], dir0[2], dir1[0], dir1[1], dir1[2],
+        script_note(actor)
+    );
+    r
+}
+
+/// (t1051, log only) Each frame Sora is posed (`kh2slots::frame`), while an enemy that took a KH2
+/// blow is watched: every `BLOW_WATCH_EVERY` frames for `BLOW_WATCH_FRAMES`, its state, velocity
+/// `+0x3C0`, the target `+0x20` × `+0x2C` its state-4 / 7 step eases toward (`0x1402CC000`), KH1's push
+/// flag (`+0x88 & 0x40`, `0x1402C7300`), position, distance from Sora, the script bit and whether KH1
+/// lets its script run this frame (`0x140297870`: `+0 & 4`, `+0x88 & 0x20` and `+0x444 & 1` all clear;
+/// Checked (decomp)). One atomic load while nothing is watched.
+pub unsafe fn blow_watch(sora: usize) {
+    if !BLOW_WATCHING.load(Ordering::Relaxed) {
+        return;
+    }
+    let now = game_frame();
+    let due: Vec<BlowWatch> = {
+        let Ok(mut v) = BLOW_WATCH.try_lock() else { return };
+        v.retain(|w| now.saturating_sub(w.frame) <= BLOW_WATCH_FRAMES);
+        if v.is_empty() {
+            BLOW_WATCHING.store(false, Ordering::Relaxed);
+            return;
+        }
+        let mut due = Vec::new();
+        for w in v.iter_mut().filter(|w| now >= w.next) {
+            w.next = now + BLOW_WATCH_EVERY;
+            due.push(*w);
+        }
+        due
+    };
+    if !super::log_on(super::LogCat::Combat) || sora < 0x10000 {
+        return;
+    }
+    let s: [f32; 3] = rd(sora + 0x10);
+    for w in due {
+        if super::probe::object_id(w.actor) != w.obj || BLOW_WATCH_N.fetch_add(1, Ordering::Relaxed) >= BLOW_WATCH_LINES {
+            continue;
+        }
+        let a = w.actor;
+        let p: [f32; 3] = rd(a + 0x10);
+        let vel: [f32; 4] = rd(a + 0x3C0);
+        let dir: [f32; 3] = rd(a + 0x20);
+        let runs = rd::<u8>(a) & 4 == 0 && rd::<u8>(a + 0x88) & 0x20 == 0 && rd::<u8>(a + 0x444) & 1 == 0;
+        log!(Combat,
+            "KH2 blow watch: object {} ({a:#x}) +{} frames after ATKP {} ({}): state {}, +0x3C0 [{:.2} {:.2} {:.2}] ({:.2} a frame), target +0x20 [{:.2} {:.2} {:.2}] x +0x2C {:.2}, KH1 push {}, at [{:.0} {:.0} {:.0}], {:.0} from Sora (height {:.0}), {}, script {} this frame",
+            w.obj,
+            now.saturating_sub(w.frame),
+            w.atkp,
+            w.via,
+            rd::<i32>(a + 0x70),
+            vel[0], vel[1], vel[2], vel[0].hypot(vel[2]),
+            dir[0], dir[1], dir[2], rd::<f32>(a + 0x2C),
+            if rd::<u8>(a + 0x88) & 0x40 != 0 { "on" } else { "off" },
+            p[0], p[1], p[2],
+            (p[0] - s[0]).hypot(p[2] - s[2]),
+            p[1] - s[1],
+            script_note(a),
+            if runs { "runs" } else { "paused" }
+        );
+    }
 }
 
 /// KH1's enemy knock-back reaction (Steam `0x1402B77D0 (actor, record)`, kind 4 of the hit pass; also
@@ -3359,6 +3762,10 @@ const AIRBORNE_BYTES: [u8; 4] = [0x48, 0x63, 0x51, 0x70];
 const HOP_BYTES: [u8; 6] = [0x40, 0x53, 0x48, 0x83, 0xEC, 0x30];
 /// KH1's airborne knock-back motions (front / back).
 const AIR_KNOCK_BACK: [u32; 2] = [0x50, 0x51];
+/// (t1048) KH1's ground knock-back motions (`0x1402B8CC0`: 0x4D in front, 0x4C behind) and its
+/// launch motions (ground 0x52, air 0x5C: KH1's own reactions that put an enemy in its air state).
+const GROUND_KNOCK_BACK: [u32; 2] = [0x4C, 0x4D];
+const LAUNCH_MOTIONS: [u32; 2] = [0x52, 0x5C];
 /// The hop KH1's airborne knock-back sets (`0x14042F968` = 20.0), and ours to lift a grounded enemy into it.
 const KNOCK_BACK_HOP: f32 = 20.0;
 /// The four KH1 functions above, checked once: 0 not yet, 1 refused, 2 matched.
@@ -3380,31 +3787,114 @@ unsafe fn knock_back_fns() -> bool {
     }
 }
 
+/// (t1048) Why `lift_for_blow` left an enemy on the ground (logged once per enemy object and reason,
+/// `note_no_lift`).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum NoLift {
+    /// KH1's motion / state / hop functions aren't the Steam exe's.
+    Fns,
+    /// Lying down (motion `+0x164` = base `+0x3EA` + 3 or + 8): KH1's knock-back pushes it.
+    LyingDown,
+    /// KH1's state table makes air state 2 a class-2 state.
+    AirClass2,
+    /// In a class-2 state (`0x1402B1AE0`): KH1's knock-back and launch both take the ground branch.
+    Class2,
+    /// Already in the air (`0x1402B1B10`): KH1's airborne branch is its own.
+    Airborne,
+    /// No airborne knock-back motion 0x50.
+    NoAirKnockBack,
+}
+
+impl NoLift {
+    fn says(self) -> &'static str {
+        match self {
+            NoLift::Fns => "KH1's functions don't match",
+            NoLift::LyingDown => "lying down",
+            NoLift::AirClass2 => "KH1's air state is class 2",
+            NoLift::Class2 => "in a class-2 state (KH1 answers its knock-back and launch on the ground there)",
+            NoLift::Airborne => "already in KH1's air state",
+            NoLift::NoAirKnockBack => "no airborne knock-back motion 0x50",
+        }
+    }
+}
+
 /// Lifts a grounded enemy for a KH2 blow so KH1's knock-back takes its own airborne branch (KH2's
 /// blow lifts the enemy at any height): only an enemy KH1's knock-back would answer on the ground
 /// (not lying down, not in a class-2 state, not in the air) that has the airborne knock-back motion
-/// 0x50; otherwise KH1's ground branch runs as KH1 does.
-unsafe fn lift_for_blow(actor: usize) -> bool {
+/// 0x50; otherwise KH1's ground branch runs as KH1 does. (t1048) The reason when it doesn't.
+/// A class-2 state stays a refusal (Checked (decomp)): KH1's state table (`0x1402B1B80`'s rows,
+/// registered at start) gives state 4, KH1's ground knock-back slide (its step `0x1402CC000` moves
+/// it by `+0x3C0`), class 2, and KH1's hit pass sends a launch (kind 5) on a class-2 enemy to its
+/// knock-back (`0x1402B8E10`), whose class-2 case is its ground branch: KH1 never takes an enemy in
+/// its knock-back slide into its air reactions, finisher launches included.
+unsafe fn lift_for_blow(actor: usize) -> Result<(), NoLift> {
     if !knock_back_fns() {
-        return false;
+        return Err(NoLift::Fns);
     }
     let base = BASE.load(Ordering::Relaxed);
     let since = rd::<i32>(actor + 0x164) - rd::<u16>(actor + 0x3EA) as i32;
     if (0..=9).contains(&since) && since % 5 == 3 {
-        return false;
+        return Err(NoLift::LyingDown);
     }
     let class2: unsafe extern "system" fn(usize) -> i32 = std::mem::transmute(base + CLASS2_STEAM);
     let airborne: unsafe extern "system" fn(usize) -> i32 = std::mem::transmute(base + AIRBORNE_STEAM);
     let has_motion: unsafe extern "system" fn(usize, u32) -> i32 = std::mem::transmute(base + HAS_MOTION_STEAM);
     // KH1's state table (`0x142DB3840`, 0x40 bytes a state, the low 2 bits its class) must not make
     // air state 2 a class-2 state, or the lifted enemy would still take the ground branch.
-    let air_class2 = rd::<u32>(base + STATE_TABLE_STEAM + 2 * 0x40) & 3 == 2;
-    if air_class2 || class2(actor) != 0 || airborne(actor) != 0 || has_motion(actor, AIR_KNOCK_BACK[0]) == 0 {
-        return false;
+    if rd::<u32>(base + STATE_TABLE_STEAM + 2 * 0x40) & 3 == 2 {
+        return Err(NoLift::AirClass2);
+    }
+    if class2(actor) != 0 {
+        return Err(NoLift::Class2);
+    }
+    if airborne(actor) != 0 {
+        return Err(NoLift::Airborne);
+    }
+    if has_motion(actor, AIR_KNOCK_BACK[0]) == 0 {
+        return Err(NoLift::NoAirKnockBack);
     }
     let hop: unsafe extern "system" fn(usize, f32) -> f32 = std::mem::transmute(base + HOP_STEAM);
     hop(actor, KNOCK_BACK_HOP);
-    true
+    Ok(())
+}
+
+/// (t1048) The lift's refusal logged (Combat) once per enemy object (`probe::object_id`) and reason,
+/// with what KH1 has of this enemy: its state, its class-2 / in-the-air tests and which of KH1's
+/// knock-back and launch motions it has.
+unsafe fn note_no_lift(actor: usize, why: NoLift) {
+    static SEEN: std::sync::Mutex<Vec<(u32, NoLift)>> = std::sync::Mutex::new(Vec::new());
+    if !super::log_on(super::LogCat::Combat) {
+        return;
+    }
+    let obj = super::probe::object_id(actor);
+    {
+        let Ok(mut seen) = SEEN.lock() else { return };
+        if seen.contains(&(obj, why)) || seen.len() >= 200 {
+            return;
+        }
+        seen.push((obj, why));
+    }
+    let state = rd::<i32>(actor + 0x70);
+    let detail = if why != NoLift::Fns && knock_back_fns() {
+        let base = BASE.load(Ordering::Relaxed);
+        let class2: unsafe extern "system" fn(usize) -> i32 = std::mem::transmute(base + CLASS2_STEAM);
+        let airborne: unsafe extern "system" fn(usize) -> i32 = std::mem::transmute(base + AIRBORNE_STEAM);
+        let has_motion: unsafe extern "system" fn(usize, u32) -> i32 = std::mem::transmute(base + HAS_MOTION_STEAM);
+        let has = |m: u32| if has_motion(actor, m) != 0 { "yes" } else { "no" };
+        format!(
+            ", class 2 {}, in the air {}, since {}; motions 0x4C {} 0x50 {} 0x52 {} 0x5C {}",
+            class2(actor) != 0,
+            airborne(actor) != 0,
+            rd::<i32>(actor + 0x164) - rd::<u16>(actor + 0x3EA) as i32,
+            has(0x4C),
+            has(0x50),
+            has(0x52),
+            has(0x5C)
+        )
+    } else {
+        String::new()
+    };
+    log!(Combat, "KH2 blow: enemy object {obj} ({actor:#x}, state {state}{detail}) not lifted into KH1's airborne knock-back: {}", why.says());
 }
 
 /// KH1's knock-back (Steam): for a KH2 blow's record, a grounded enemy lifted first (`lift_for_blow`),
@@ -3415,7 +3905,26 @@ unsafe extern "system" fn knocked_back(actor: usize, rec: usize) {
     if actor > 0x10000 {
         super::magnet::knocked_back(actor);
     }
-    let lifted = has_blow(rec) && actor > 0x10000 && lift_for_blow(actor);
+    // (t1049) A KH2 blow `scale_record` sent as KH1's launch that reached the knock-back instead
+    // (the enemy went class 2 before KH1's hit pass, or KH1's launch had no motion for it): the
+    // t1048 blow path, as before.
+    if actor > 0x10000 && !has_blow(rec) && take_as_launch(rec) {
+        if let Some(l) = take_launch(rec) {
+            if let Ok(mut v) = BLOWS.lock() {
+                v.push((rec, l, takeover_ms()));
+            }
+            static R: AtomicU32 = AtomicU32::new(0);
+            if super::log_on(super::LogCat::Combat) && R.fetch_add(1, Ordering::Relaxed) < 20 {
+                log!(Combat, "KH2 blow as KH1's launch on object {} ({actor:#x}, state {}): KH1 sent it to its knock-back; the blow path there", super::probe::object_id(actor), rd::<i32>(actor + 0x70));
+            }
+        }
+    }
+    let lift = (has_blow(rec) && actor > 0x10000).then(|| lift_for_blow(actor));
+    let lifted = matches!(lift, Some(Ok(())));
+    // (t1048) Why not, logged.
+    if let Some(Err(why)) = lift {
+        note_no_lift(actor, why);
+    }
     f(actor, rec);
     let Some(l) = take_blow(rec) else { return };
     let state = rd::<i32>(actor + 0x70);
@@ -3430,12 +3939,29 @@ unsafe extern "system" fn knocked_back(actor: usize, rec: usize) {
             if log_on {
                 log!(Combat, "KH1's knock-back on {actor:#x} fell back to its launch (motion base {motion:#x}): KH2's numbers in it");
             }
+            watch_via(actor, "KH1's knock-back fell back to its launch");
             kh2_launch(actor, l, &[0x52, 0x5C], "KH1's knock-back");
+        } else if rd::<i32>(actor + 0x178) >= 1 && GROUND_KNOCK_BACK.contains(&(rd::<u32>(actor + 0x17C) & 0xFFFF)) {
+            // (t1054) KH1's ground knock-back (a finisher's last blow, since t1053 the only KH2 blow
+            // that comes here, class-2 enemies mid-reaction included): KH1's own distance, its
+            // reaction motion's root travel (about 390, Checked (log), `docs/research/reaction-root-
+            // travel.md`), is the whole of it, the owner's choice. t1048's extra KH2 push and hop on
+            // top (`ground_blow`) are gone.
+            watch_via(actor, "KH1's ground knock-back, KH1's own distance");
+            if log_on {
+                log!(Combat,
+                    "KH2 blow on {actor:#x} kept on the ground by KH1 (state {state}, motion {:#x}): KH1's own knock-back distance (its reaction's travel), no push of ours (KH2's start: up {:.0}, sideways {:.1} a frame)",
+                    rd::<u32>(actor + 0x17C) & 0xFFFF,
+                    l.up,
+                    l.speed
+                );
+            }
         } else if log_on {
             log!(Combat, "KH1's knock-back on {actor:#x} for a KH2 blow (up {:.0}, sideways {:.0}): KH1's own reaction, not its airborne one (state {state}, motion {:#x}{})", l.up, l.speed, rd::<u32>(actor + 0x17C) & 0xFFFF, if lifted { ", lifted" } else { "" });
         }
         return;
     }
+    watch_via(actor, "KH1's airborne knock-back");
     let Some(p) = pose::kh2().map(|k| k.character.reaction.clone()) else { return };
     let k = super::knockback::launch_factor(actor);
     let l = Launch { up: l.up * k, speed: l.speed * k };
@@ -3467,6 +3993,9 @@ pub unsafe fn install() {
     if super::addr::Build::current() == super::addr::Build::Steam {
         hook::install(base + SCRIPT_LAUNCH_STEAM, &SCRIPT_LAUNCH_PROLOGUE, script_launched as *const () as usize, &ORIG_SCRIPT_LAUNCH, "enemy scripted launch (KH2's blows)");
         hook::install(base + KNOCK_BACK_STEAM, &KNOCK_BACK_PROLOGUE, knocked_back as *const () as usize, &ORIG_KNOCK_BACK, "enemy knock-back (KH2's blows)");
+        // (t1051, log only) KH1's AI-script movement natives, for the KH2 blow watch.
+        hook::install(base + SCRIPT_MOVE4_STEAM, &SCRIPT_MOVE_PROLOGUE, script_move4 as *const () as usize, &ORIG_SCRIPT_MOVE4, "enemy script move, state 4 (KH2 blow log)");
+        hook::install(base + SCRIPT_MOVE7_STEAM, &SCRIPT_MOVE_PROLOGUE, script_move7 as *const () as usize, &ORIG_SCRIPT_MOVE7, "enemy script move, state 7 (KH2 blow log)");
     }
     if hook::install(base + EXEC_RVA, &EXEC_PROLOGUE, exec as *const () as usize, &ORIG_EXEC, "execute attack row").is_some() {
         EXEC_IN.store(true, Ordering::Release);

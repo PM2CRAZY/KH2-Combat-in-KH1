@@ -81,6 +81,19 @@
 //! as Guard Shape KH1's guard objects (`combat::Strikes::blade_guard`); KH1's guard request 0xD4
 //! is never started. Its arc KH2's: 162's reflect range 180 is every side by KH2's test
 //! (`character_core::reaction::clash_angle_ok`), KH1's data `+0x64` -1.
+//!
+//! (t1046) **Crits only on each blade's last blow, in a finisher** (the owner's answers 1 (b), 3 (b)
+//! and (c)). In a move playing on a finisher request (`kh1rows::finisher_request`), each blade's
+//! last blow window in the clip (`kh1rows::last_blow`: Final's 153 and 154 on both blades, 183's
+//! 1421 / 1420) takes KH1's finisher row's data; every other window, and every window of a swing,
+//! jump, item use, glide or cast (Final's 181, 1449 / 1450, 1286 / 1287, 1281 / 1282, 1429 / 1428),
+//! the swing row's (a blow keeping kind 5): those never roll. KH1's constructor sets the object's critical from its data once
+//! (`0x1402B2DC0`: `+0x94` = data `+0x18` × 0.05 × stats `+0xD8`, `+0x98` = data `+0x1C`; the row
+//! maker `0x1402B3270` then × row `+0x31` × 0.05 and + row `+0x32` on a blade, Checked (decomp)), so
+//! `step` puts each window's critical on the object with its data as those two would
+//! (`crit_fields`), beside its blade fields. A re-hit of a window on the same target rolls no more
+//! (`rehit::again`, `kh1rows::may_crit`). Before, the object kept its first window's: Final's 153
+//! left blade (1403 first, a blow) rolled on every hit, its right one (a row of ours) too.
 
 use super::addr::Rva;
 use super::bodyhits::{rd, wr};
@@ -168,6 +181,9 @@ struct LeftWin {
     start: u32,
     end: Option<u32>,
     data: usize,
+    /// (t1053) The blade's last blow in a finisher (`blade_data`'s `finisher`): a KH2 blow here
+    /// stays KH1's knock-back or launch; any other blow goes to KH1's flinch (`combat::scale_record`).
+    last: bool,
 }
 
 impl LeftWin {
@@ -210,6 +226,7 @@ pub unsafe fn new_play(actor: usize, m: u16, req: u32, air: bool, clip: &charact
             if still_ours(&l) {
                 let free: unsafe extern "system" fn(usize) = std::mem::transmute(super::bodyhits::base() + FREE_ATTACK_RVA);
                 free(l.obj);
+                super::rehit::forget(l.obj);
             }
         }
         OBJ[side].store(0, Ordering::Relaxed);
@@ -354,11 +371,14 @@ unsafe fn make_guard(side: usize, actor: usize, m: u16, req: u32, ch: u8, clip: 
 /// (t1037) One copy per (ATKP, KH1 group, ground or air), what its contents are made from (before:
 /// per motion and window), so the two Keyblades' windows in Final's slots don't fill
 /// `bodyhits`' page of copies: Final's glide 205 / 206 / 207 share one 1281.
-unsafe fn blade_data(attack: u16, air: bool, channel: u8, a: &kh2_formats::battle::Atkp) -> Option<usize> {
-    let key = (attack as u64) << 32 | (channel as u64) << 16 | (air as u64) << 8 | KEY_MARK;
+/// (t1046) `finisher`: the blade's last blow in the clip (`kh1rows::last_blow`), on KH1's finisher
+/// row's data (its critical); any other window on the swing row's, a blow keeping kind 5. (In the
+/// key, bit 9: one ATKP can be a last blow in one clip and not in another.)
+unsafe fn blade_data(attack: u16, air: bool, channel: u8, a: &kh2_formats::battle::Atkp, finisher: bool) -> Option<usize> {
+    let key = (attack as u64) << 32 | (channel as u64) << 16 | (finisher as u64) << 9 | (air as u64) << 8 | KEY_MARK;
     let d = super::bodyhits::data_copy(key)?;
     let throws = super::kh1rows::throws(a);
-    let (src, _) = super::kh1rows::kh1_row(super::bodyhits::template_row(air, throws))?;
+    let (src, _) = super::kh1rows::kh1_row(super::bodyhits::template_row(air, throws && finisher))?;
     std::ptr::copy_nonoverlapping(src as *const u8, d as *mut u8, DATA);
     let kind = if throws {
         5u32
@@ -412,6 +432,23 @@ unsafe fn blade_fields(obj: usize, data: usize, actor: usize, row: usize) {
     wr(obj + 0x68, priority.clamp(1, 99));
 }
 
+/// (t1046) The object's critical from `data`, as KH1's constructor and row maker give it
+/// (`0x1402B2DC0`: chance `+0x94` = data `+0x18` × 0.05 × the maker's stats `+0xD8`, bonus `+0x98`
+/// = data `+0x1C`; `0x1402B3270` on a blade: chance × row `+0x31` × 0.05, bonus + row `+0x32`;
+/// Checked (decomp)), for `step`'s window switch (KH1 sets them only at make).
+unsafe fn crit_fields(obj: usize, data: usize, actor: usize, row: usize) {
+    let stats = pose::ptr(rd::<u32>(actor + 0x6C));
+    let per = if stats > 0x10000 { rd::<f32>(stats + 0xD8) as f64 } else { 1.0 };
+    let mut chance = (rd::<i32>(data + 0x18) as f64 * 0.05 * per) as f32;
+    let mut bonus = rd::<i32>(data + 0x1C);
+    if row > 0x10000 {
+        chance *= rd::<u8>(row + 0x31) as f32 * 0.05;
+        bonus += rd::<i8>(row + 0x32) as i32;
+    }
+    wr(obj + 0x94, chance);
+    wr(obj + 0x98, bonus);
+}
+
 /// The left Keyblade's object for a new play of motion `m`: one KH1 attack object of Sora's,
 /// made with KH1's attack constructor (`0x1402B2DC0`) on our copy of his KH1 swing row's data,
 /// on the clip's left attack group (`kh2slots::left_channel`), with the left Keyblade's own
@@ -440,14 +477,19 @@ unsafe fn make(side: usize, actor: usize, m: u16, req: u32, air: bool, clip: &ch
     let kh2 = pose::kh2()?;
     let base = super::bodyhits::base();
     let mut windows = Vec::new();
+    // (t1046) This blade's last blow, in a finisher (`kh1rows::finisher_request`): the one window
+    // on the finisher's data.
+    let carrier = if side == LEFT { super::kh1rows::Carrier::Left } else { super::kh1rows::Carrier::Right };
+    let last = if super::kh1rows::finisher_request(req) { super::kh1rows::last_blow(clip, carrier) } else { None };
     for w in &clip.windows {
         let character_core::WindowKind::Hitbox { attack, group, weapon, .. } = w.kind else { continue };
         if !mine(weapon) {
             continue;
         }
         let Some(a) = kh2.battle.attack_for_level(attack, 0, 0).cloned() else { continue };
-        let Some(data) = blade_data(attack, air, ch, &a) else { continue };
-        windows.push(LeftWin { attack, group, start: w.start, end: w.end, data });
+        let finisher = super::kh1rows::throws(&a) && last == Some(w.start);
+        let Some(data) = blade_data(attack, air, ch, &a, finisher) else { continue };
+        windows.push(LeftWin { attack, group, start: w.start, end: w.end, data, last: finisher });
     }
     let first = windows.first().copied()?;
     let make: unsafe extern "system" fn(usize, u32, usize) -> usize = std::mem::transmute(base + MAKE_STEAM);
@@ -557,6 +599,7 @@ unsafe fn step_one(side: usize, actor: usize) {
     if switch {
         wr(obj + 0x5C, pose::handle(w.data));
         blade_fields(obj, w.data, l.actor, l.row);
+        crit_fields(obj, w.data, l.actor, l.row);
         l.data = w.data;
     }
     drop(g);
@@ -582,6 +625,39 @@ pub unsafe fn before_build(obj: usize) {
     }
 }
 
+/// (t1045) `bodyhits::reclaim`, before it reuses our data copies: the copies our live objects
+/// use (a hit object's every window's, which `step` puts on it later; a guard object's), into
+/// `out`. Ours KH1 freed are forgotten here, so none of them takes a reused copy on a reused pool
+/// object for its own (`still_ours` / `guard_ours` compare the object's data). A side whose lock
+/// is taken is being made now (`new_play` / `guards_new_play` took its last state first, Checked
+/// (code)): its new copies are this frame's, which `reclaim` keeps.
+pub(super) unsafe fn held(out: &mut Vec<usize>) {
+    for side in SIDES {
+        if let Ok(mut g) = STATE[side].try_lock() {
+            let live = g.as_ref().map(|l| still_ours(l));
+            match live {
+                Some(true) => out.extend(g.iter().flat_map(|l| l.windows.iter().map(|w| w.data))),
+                Some(false) => {
+                    *g = None;
+                    OBJ[side].store(0, Ordering::Relaxed);
+                }
+                None => {}
+            }
+        }
+        if let Ok(mut g) = GUARD[side].try_lock() {
+            let live = g.as_ref().map(|x| guard_ours(x));
+            match live {
+                Some(true) => out.extend(g.iter().map(|x| x.data)),
+                Some(false) => {
+                    *g = None;
+                    GUARD_OBJ[side].store(0, Ordering::Relaxed);
+                }
+                None => {}
+            }
+        }
+    }
+}
+
 /// Which of our objects `attack` is (`LEFT` / `RIGHT`).
 fn side_of(attack: usize) -> Option<usize> {
     if attack == 0 {
@@ -599,6 +675,16 @@ pub unsafe fn atkp(attack: usize) -> Option<kh2_formats::battle::Atkp> {
     let id = l.windows.get(l.cur.unwrap_or(0))?.attack;
     drop(g);
     pose::kh2()?.battle.attack_for_level(id, 0, 0).cloned()
+}
+
+/// (t1053) Whether the window open on our object (`atkp`'s) is its blade's last blow in a finisher
+/// (`kh1rows::last_blow` in a move on `kh1rows::finisher_request`, as t1046's critical); `None`
+/// when `attack` isn't one of ours.
+pub unsafe fn last_blow(attack: usize) -> Option<bool> {
+    let side = side_of(attack)?;
+    let g = STATE[side].try_lock().ok()?;
+    let l = g.as_ref().filter(|l| l.obj == attack && still_ours(l))?;
+    Some(l.windows.get(l.cur.unwrap_or(0))?.last)
 }
 
 /// `bodyhits::hit`: KH1's contact made a hit with our object (logged).

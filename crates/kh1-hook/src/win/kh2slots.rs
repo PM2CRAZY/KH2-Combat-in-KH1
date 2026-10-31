@@ -3388,6 +3388,8 @@ pub unsafe fn frame(actor: usize) {
     // ours (`bodyhits`), else KH2's own sweep (`kh2_hits`, which keeps the guards and the pull).
     super::bodyhits::frame(actor);
     super::takeover::kh2_hits(actor);
+    // (t1051, log only) Enemies that took a KH2 blow, watched (`combat::blow_watch`).
+    super::combat::blow_watch(actor);
 }
 
 /// KH1's motion flags (`+0x160`): bit 3 holds the motion at its end (else it loops), bit 6 a loop

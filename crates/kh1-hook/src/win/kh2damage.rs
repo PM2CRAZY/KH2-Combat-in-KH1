@@ -34,6 +34,18 @@
 //! member criticals") decides instead for attacks whose owner is on Sora's side and isn't Sora
 //! (Donald, Goofy, the guests; `party_member`).
 //!
+//! (t1047) KH2 Damage off, a KH2 multi-hit move with a blow (a hit of reaction group 4 somewhere in
+//! it; the owner: only those) shares one KH1 hit (the owner's answer 2 (b)):
+//! each hit's KH1 damage × its ATKP power / the move's whole KH2 power (`kh1rows::move_power`: each
+//! window at its most hits, length / re-hit interval), by the same curve copy for the call (each
+//! value × the share, rounded up as KH2 rounds); a Strength-based hit of a move with a blow has KH1's
+//! finisher row's power points for the call, so the hits total one KH1 finisher. Moves with no
+//! blow (plain two-blade swings, ...), single-hit moves and KH2 spells unchanged (`share_of`).
+//!
+//! (t1046) One critical roll per finisher (the owner's answer 1 (b)): for an attack of Sora's whose
+//! hit isn't its move's last blow, or is a re-hit of that window on the same target
+//! (`kh1rows::may_crit`), the attack's chance `+0x94` reads 0 for the call, as Criticals Off does.
+//!
 //! Cost: one hook, called once per hit record; a table of at most 256 u16 built per KH2 hit.
 
 use super::addr::Build;
@@ -245,7 +257,11 @@ unsafe extern "system" fn damage(attack: usize, target: usize, kind: usize) -> u
     // Criticals off: no chance for the call, whoever owns the attack (the tester, 2 (b): Sora
     // and enemies alike; his party by its own row; KH1 rolls for every attack here, Checked
     // (decomp)).
-    let crit = (attack > 0x10000 && !crits_for(owner, sora)).then(|| {
+    // (t1046) And no roll for a hit of Sora's that isn't its move's last blow or is a re-hit of
+    // it (`kh1rows::may_crit`; the owner's answer 1 (b): one roll per finisher, KH1's rule).
+    let rolls = crits_for(owner, sora);
+    let one_roll = attack > 0x10000 && mine && rolls && !super::kh1rows::may_crit(attack, target, sora);
+    let crit = (attack > 0x10000 && (!rolls || one_roll)).then(|| {
         let c = rd::<f32>(attack + ATTACK_CRIT_CHANCE);
         wr(attack + ATTACK_CRIT_CHANCE, 0.0f32);
         c
@@ -258,6 +274,8 @@ unsafe extern "system" fn damage(attack: usize, target: usize, kind: usize) -> u
         return d;
     }
     let kh2 = if active() { kh2_power(attack, sora) } else { None };
+    // (t1047) KH2 Damage off: a KH2 multi-hit move's share of one KH1 hit (`share_of`).
+    let shared = if kh2.is_none() && !kh2_damage() { share_of(attack, sora) } else { None };
     let base = BASE.load(Ordering::Relaxed);
     let at = base + CURVE_PTR_STEAM;
     let kh1_curve = rd::<usize>(at);
@@ -297,6 +315,12 @@ unsafe extern "system" fn damage(attack: usize, target: usize, kind: usize) -> u
             swapped = true;
         }
     }
+    if let Some(s) = shared.as_ref() {
+        if kh1_curve > 0x10000 {
+            wr(at, scaled_curve(kh1_curve, s.factor));
+            swapped = true;
+        }
+    }
     // KH1's finisher points off a KH2 hit (t918, the owner: "the bonus on top should not be in the
     // game but work through KH1's systems"): KH1's finisher rows add 4 or 6 power points to the
     // curve's index (data `+0x48`) and KH2's finisher power % then applied on top. For the call,
@@ -304,12 +328,19 @@ unsafe extern "system" fn damage(attack: usize, target: usize, kind: usize) -> u
     // own power % is the finisher's whole strength on KH1's curve; put back after. Not for KH1's
     // magic stat (Ripple Drive's on Magic-based hits, `kh1rows::kh1_magic`; KH1 spells' data) nor
     // the elements whose power is the effect itself (8 gravity %, 9 stop, 11 cure, 12 aero).
+    // (t1047) A shared hit (KH2 Damage off): the move's KH1 finisher's points when it has a blow,
+    // else its own data's (`Share::points`).
     let mut row_power = None;
     if swapped {
         let data = super::pose::ptr(rd::<u32>(attack + ATTACK_DATA));
         if data > 0x10000 && rd::<u32>(data + DATA_STAT) == 0 && !matches!(rd::<u32>(data + DATA_ELEMENT) & 0xF, 8 | 9 | 11 | 12) {
-            if let Some((plain, _)) = super::kh1rows::kh1_row(PLAIN_SWING_ROW) {
-                let (was, swing) = (rd::<i32>(data + DATA_POWER), rd::<i32>(plain + DATA_POWER));
+            let want = if kh2.is_some() {
+                super::kh1rows::kh1_row(PLAIN_SWING_ROW).map(|(plain, _)| rd::<i32>(plain + DATA_POWER))
+            } else {
+                shared.as_ref().and_then(|s| s.points)
+            };
+            if let Some(swing) = want {
+                let was = rd::<i32>(data + DATA_POWER);
                 if was != swing {
                     wr(data + DATA_POWER, swing);
                     row_power = Some((data, was, swing));
@@ -331,14 +362,89 @@ unsafe extern "system" fn damage(attack: usize, target: usize, kind: usize) -> u
         if LOGGED.fetch_add(1, Ordering::Relaxed) < 40 {
             let crit_hit = kind > 0x10000 && rd::<u32>(kind) & 0x20 != 0;
             log!(Combat,
-                "KH2 damage: {from} power {power}%{}{} on actor {target:#x}: {d}{}{}{}",
+                "KH2 damage: {from} power {power}%{}{} on actor {target:#x}: {d}{}{}{}{}",
                 if magic { " (Magic)" } else { "" },
                 spell.map_or(String::new(), |(l, cast)| format!(" (KH1 spell level {l}: of {cast}%)")),
                 row_power.map_or(String::new(), |(_, was, swing)| format!(" (KH1 row power {was} -> {swing})")),
                 if crit_hit { " (critical)" } else { "" },
+                if one_roll { " (no critical roll: not the move's last blow, or a re-hit)" } else { "" },
+                if swapped { "" } else { " (KH1's curve not found: KH1's damage)" }
+            );
+        }
+    }
+    if let Some(s) = shared {
+        if LOGGED.fetch_add(1, Ordering::Relaxed) < 40 {
+            log!(Combat,
+                "KH2 damage off: ATKP {} power {} of its move's {} over {} hits ({:.1}%) on actor {target:#x}: {d}{}{}",
+                s.atkp,
+                s.power,
+                s.total,
+                s.hits,
+                s.factor * 100.0,
+                row_power.map_or(String::new(), |(_, was, now)| format!(" (KH1 row power {was} -> {now})")),
                 if swapped { "" } else { " (KH1's curve not found: KH1's damage)" }
             );
         }
     }
     d
+}
+
+/// (t1047) A hit's share of its KH2 move with KH2 Damage off (the owner's answer 2 (b)).
+struct Share {
+    atkp: u16,
+    power: u32,
+    total: u32,
+    hits: u32,
+    /// Its ATKP power / the move's total (`kh1rows::move_power`).
+    factor: f64,
+    /// KH1's finisher row's power points (data `+0x48`, ground or air by his KH1 state): every
+    /// Strength-based hit of the move takes them for the call, so the hits total one KH1 finisher.
+    points: Option<i32>,
+}
+
+/// (t1047) The share of this hit of Sora's `attack` in its KH2 move (KH2 Damage off): its KH2 ATKP
+/// (`kh1rows::kh2_atkp`: a body, blade or row object of ours; a native swing's on KH1's own row,
+/// `kh1rows::native_atkp`), one of the hit windows of the clip playing (`kh2slots::playing_clip`),
+/// and a move of more than one hit with a blow in it (`kh1rows::move_power`). `None`: a move with no
+/// blow or a single hit, a KH2 spell object (its own rows by count, not a move's windows), or no clip.
+unsafe fn share_of(attack: usize, sora: usize) -> Option<Share> {
+    if attack < 0x10000 || sora < 0x10000 || super::bodyhits::spell_object(attack) {
+        return None;
+    }
+    let a = match super::kh1rows::kh2_atkp(attack) {
+        Some(a) => a,
+        None => {
+            let data = super::pose::ptr(rd::<u32>(attack + ATTACK_DATA));
+            if data < 0x10000 || rd::<u32>(data + DATA_BONE) != WEAPON_BONE {
+                return None;
+            }
+            super::kh1rows::native_atkp(sora)?
+        }
+    };
+    let (_, clip, _) = super::kh2slots::playing_clip(sora)?;
+    if !super::kh1rows::in_clip(clip, a.id) {
+        return None;
+    }
+    let (total, hits, blow) = super::kh1rows::move_power(clip)?;
+    // (Only a move with a blow: the owner's answer to t1047's question.)
+    if !blow || hits < 2 || total == 0 || a.power == 0 {
+        return None;
+    }
+    let air = matches!(rd::<i32>(sora + 0x70), 1 | 2);
+    let points = super::kh1rows::kh1_row(super::bodyhits::template_row(air, true)).map(|(d, _)| rd::<i32>(d + DATA_POWER));
+    Some(Share { atkp: a.id, power: a.power as u32, total, hits, factor: a.power as f64 / total as f64, points })
+}
+
+/// (t1047) KH1's damage curve (`kh1_curve`: a u16 count, then u16 values) copied into `CURVE` with
+/// each value × `factor`, rounded up (as KH2 rounds; a tiny margin so a whole factor keeps KH1's
+/// value); its address.
+unsafe fn scaled_curve(kh1_curve: usize, factor: f64) -> usize {
+    let n = (rd::<u16>(kh1_curve) as usize).min(CURVE_MAX);
+    let curve = std::ptr::addr_of_mut!(CURVE) as *mut u16;
+    *curve = n as u16;
+    for i in 0..n {
+        let v = rd::<u16>(kh1_curve + 2 + i * 2) as f64;
+        *curve.add(1 + i) = (v * factor - 1e-6).ceil().clamp(0.0, u16::MAX as f64) as u16;
+    }
+    curve as usize
 }

@@ -72,7 +72,45 @@
 //!
 //! Steam only (new addresses); elsewhere `kh2_hits` sweeps as before. Cost: one hook on the pass's
 //! per-attack builder (a lookup in a 64-entry table per live attack object); a few entries per live
-//! window; at most one data copy per (move, window, air) for the session.
+//! window; at most one data copy per (move, window, air) at a time.
+//!
+//! (t1046) **Crits only on a move's last blow** (the owner's answer 1 (b)). KH1 rolls its critical
+//! from the attack's chance, which its constructor takes from the data (`+0x94` = data `+0x18` ×
+//! 0.05 × stats `+0xD8`, `+0x98` = data `+0x1C`; `0x1402B2DC0`, the roll in `0x1402BFA80`, Checked
+//! (decomp)), and only its finisher data has a chance (Checked (files) `btltbl.bin`). Before, every
+//! KH2 blow window took the finisher row's data, so each hit of Explosion's 911 rolled. Now only the
+//! clip's last blow window on his body (`kh1rows::last_blow`: Explosion's 912, Magnet Burst's 1903,
+//! Final's 154's 1737), and only in a move playing on a finisher request (`kh1rows::finisher_request`,
+//! the owner's answer (c)), takes the finisher row's; every other blow window takes the swing row's data with
+//! the blow's kind 5 kept (`combat::scale_record` still gives KH2's arc; its spark and sound bytes
+//! the blow's, as before). A re-hit of the last window on the same target rolls no more
+//! (`rehit::again`). A KH2 spell's knocking hit on the finisher's data (no KH1 spell data of its own)
+//! has its chance and bonus cleared: KH1's spells never roll (all nine of KH1's spell entries have
+//! 0, Checked (files)) and which hit of a spell script is its last can't be told from one attack.
+//!
+//! (t1045) **Our data copies are reused** once nothing of KH1's uses them (`data_slot`, `reclaim`).
+//! One page holds them (`DATA_PAGE` / `DATA_SLOT`: 64), shared since t1037 with `lefthits`' blade
+//! and guard objects, so Final's ~40 attacks per blade filled it and later copies were refused
+//! ("no room for another attack data copy"): Explosion, Vicinity Break, Magnet Burst and new Final
+//! hits got no objects until a fresh start (the owner's report; fix "(a)"). Now, when a copy is
+//! needed for a key not on the page and the page is full, the copies nothing uses are freed (their
+//! keys dropped) and reused. In use, from KH1's own memory (Steam KH1, Checked (decomp)):
+//! - every object of KH1's attack pool (`0x142DB4710`, 64 of 0xC0) with its in-use bit `+0`
+//!   `0x800` (the constructor `0x1402B2DC0` takes the first without it; KH1's pool walks
+//!   `0x1402B34B0` / `0x1402B3380` test it), its data handle `+0x5C` (`0x1402B2DC0` writes it;
+//!   one KH1 marked dead, `0x200000`, keeps `0x800` until it is freed, so it counts);
+//! - every hit record (KH1's record maker `0x1402BF630`: 64 records of 0x40 at `0x142DE5E10`, 128
+//!   at `0x142DE6E10`, its spare one at `0x142DE5DD0`; in use `+0` bit 1, cleared for all by
+//!   `0x1402BF560`) by the attack's data handle it keeps (`+0x2C`, the object's `+0x5C`), so a hit
+//!   KH1 hasn't finished with keeps its data; the pool addresses checked in the exe once
+//!   (`0x1402BF560`'s two `lea`s, Checked (exe)), else nothing is reused (as before);
+//! - what `lefthits` holds for its live objects (every window's copy of a blade's play, which its
+//!   step puts on the object later; `lefthits::held`), and a copy handed out this game frame or the
+//!   last (one being made now: `lefthits::make` takes all its windows' copies before its object).
+//! Before reusing, entries of ours whose object KH1 freed are forgotten (here and in `lefthits`),
+//! so none takes a reused copy on a reused pool object for its own. **Assumption**: nothing else of
+//! KH1's keeps an attack's data past its object and its hit records. Nothing runs per frame: the
+//! scan (64 objects, 193 records) runs only when the page is full and a new key comes.
 
 use super::addr::{Build, Rva};
 use super::{log, pose};
@@ -109,6 +147,20 @@ const BLOCK_RVA: Rva = Rva(0x2D23740);
 const DATA: usize = 0x70;
 const DATA_SLOT: usize = 0x80;
 const DATA_PAGE: usize = 0x2000;
+/// (t1045) KH1's hit records (Steam, `0x1402BF630`, Checked (decomp)): 64 and 128 of 0x40 bytes,
+/// the spare one, in use `+0` bit 1, the attack's data handle `+0x2C`.
+const RECORDS_A_STEAM: usize = 0x2DE5E10;
+const RECORDS_B_STEAM: usize = 0x2DE6E10;
+const RECORD_SPARE_STEAM: usize = 0x2DE5DD0;
+const RECORDS_A_COUNT: usize = 64;
+const RECORDS_B_COUNT: usize = 128;
+const RECORD: usize = 0x40;
+/// KH1's record reset `0x1402BF560`'s two `lea rax, [records]; mov ecx, count` (Steam, Checked
+/// (exe)): at `+0xA` the first pool's (64), at `+0x2E` the second's (128).
+const RECORDS_LEA_A: (usize, [u8; 12]) = (0x2BF56A, [0x48, 0x8D, 0x05, 0x9F, 0x68, 0xB2, 0x02, 0xB9, 0x40, 0x00, 0x00, 0x00]);
+const RECORDS_LEA_B: (usize, [u8; 12]) = (0x2BF58E, [0x48, 0x8D, 0x05, 0x7B, 0x78, 0xB2, 0x02, 0xB9, 0x80, 0x00, 0x00, 0x00]);
+/// A freed copy's key (no key of ours has every bit).
+const FREE_KEY: u64 = u64::MAX;
 /// KH1's body centre point id (`0x14029EB20`'s 0x8003: the first body part's centre).
 const BODY_BONE: u32 = 0x8003;
 /// The most entries KH1's list takes before it writes over its last (`0x1402B3D50`).
@@ -128,6 +180,10 @@ static READY: AtomicBool = AtomicBool::new(false);
 static TEST_OK: AtomicBool = AtomicBool::new(false);
 static MAKE_OK: AtomicBool = AtomicBool::new(false);
 static LOGGED: AtomicU32 = AtomicU32::new(0);
+/// (t1045) KH1's hit record pools are where we read them (0 unknown, 1 yes, 2 no), and the
+/// reclaim / "no room" lines logged (their own count: they come late in a session).
+static RECORDS_OK: AtomicU32 = AtomicU32::new(0);
+static PAGE_LOGGED: AtomicU32 = AtomicU32::new(0);
 
 fn note(s: impl FnOnce() -> String) {
     if !super::log_on(super::LogCat::Combat) {
@@ -170,6 +226,10 @@ struct Live {
     magnet: Option<(i16, i16, i16)>,
     /// Last game frame's centre (KH1 world) and that frame's number.
     prev: Option<([f32; 3], u64)>,
+    /// (t1053) The clip's last blow on his body in a finisher (`data_for`'s `finisher`): a KH2 blow
+    /// from it stays KH1's knock-back or launch; any other blow goes to KH1's flinch
+    /// (`combat::scale_record`).
+    last: bool,
 }
 
 struct State {
@@ -184,12 +244,21 @@ struct State {
     results: Vec<(u64, u16, usize, Option<u32>)>,
     /// The row a spell hit is being made with now (`before_hit` → `atkp`): (attack, row).
     current: Option<(usize, kh2_formats::battle::Atkp)>,
-    /// Our data copies: their key (`body_key`, `spell_key`) → address. Never freed: KH1's hit
-    /// records keep an attack's data after the attack (`docs/kh1-attack-elements.md` §4).
-    data: Vec<(u64, usize)>,
+    /// Our data copies on the page: their key (`body_key`, `spell_key`, `lefthits`') → address.
+    /// (t1045) Freed (`FREE_KEY`) and reused only when no KH1 attack object, hit record (which
+    /// keeps an attack's data after the attack) or live object of `lefthits` uses them (`reclaim`).
+    data: Vec<DataCopy>,
     page: usize,
     /// The move playing: (motion, KH1 time, request).
     playing: Option<(u16, f32, u32)>,
+}
+
+/// (t1045) One of our data copies on the page: its key (`FREE_KEY`: free), its address, the game
+/// frame it was last handed out.
+struct DataCopy {
+    key: u64,
+    addr: usize,
+    used: u64,
 }
 
 /// Reflect's barriers as KH1 guard objects (`combat::Strikes::barrier_guard`, t796): each one's
@@ -542,6 +611,8 @@ struct SpellObj {
     by_calls: bool,
     /// It has hit something (`spell_hit`).
     hit: bool,
+    /// (t1056) Its KH2 blows stay blows (`combat::SpellAttack::send_off`, `last_blow`).
+    send_off: bool,
 }
 
 /// Frames a spell attack placed by its script's calls stays live without being moved (5 s at 60).
@@ -598,6 +669,8 @@ pub unsafe fn frame(actor: usize) {
     if !ON.load(Ordering::Relaxed) || actor < 0x10000 {
         return;
     }
+    // (t1050) Body windows KH1's pass stopped building: their log summed up.
+    window_flush_due();
     if !READY.load(Ordering::Relaxed) {
         if super::kh1rows::kh1_row(template_row(false, false)).is_none() {
             return;
@@ -640,6 +713,7 @@ pub unsafe fn frame(actor: usize) {
         if let Some(l) = e.take() {
             if still_ours(&l) {
                 free(l.obj);
+                super::rehit::forget(l.obj);
             }
         }
     }
@@ -662,6 +736,9 @@ pub unsafe fn frame(actor: usize) {
     let free_bit: unsafe extern "system" fn() -> u32 = std::mem::transmute(base + FREE_BIT_RVA);
     let info = pose::ptr(rd::<u32>(actor + 0x14C));
     let mut made = Vec::new();
+    // (t1046) The clip's last blow on his body, in a finisher (`kh1rows::finisher_request`): the
+    // one window on the finisher's data.
+    let last = if super::kh1rows::finisher_request(req) { super::kh1rows::last_blow(clip, super::kh1rows::Carrier::Body) } else { None };
     for w in &windows {
         let Some(a) = kh2.battle.attack_for_level(w.attack, 0, 0).cloned() else { continue };
         let shapes: Vec<&kh2_data::sora::BoneShape> = rig.body_shapes.iter().filter(|s| s.group == w.group && (s.kind == ATTACK_KIND || s.kind == GUARD_KIND)).collect();
@@ -683,7 +760,8 @@ pub unsafe fn frame(actor: usize) {
                 },
             };
             let shape = BodyShape { kh1_type, radius: s.radius, height: s.height, bone, offset: s.offset, lift: s.lift };
-            let Some(data) = data_for(&mut g, base, m, w.index, air, si, w.channel, &a, s.radius, BODY_BONE) else { continue };
+            let finisher = super::kh1rows::throws(&a) && last == Some(w.start);
+            let Some(data) = data_for(&mut g, base, m, w.index, air, si, w.channel, &a, finisher, s.radius, BODY_BONE) else { continue };
             let fx = template_fx(air, super::kh1rows::throws(&a));
             let bit = free_bit();
             if bit == 0 {
@@ -708,8 +786,19 @@ pub unsafe fn frame(actor: usize) {
             // late for a window from frame 0).
             wr(obj + 0x58, req);
             let magnet = (character_core::reaction::category(a.enemy_reaction) == 5).then_some((a.knockback_1, a.knockback_2, a.unknown_16));
-            g.live[i] = Some(Live { obj, data, motion: m, atkp: w.attack, shape, magnet, prev: None });
-            made.push(format!("ATKP {} group {} on KH1 group {} ({:?} r {} h {} lift {}, interval {})", w.attack, w.group, w.channel, bone, s.radius, s.height, s.lift, a.interval));
+            g.live[i] = Some(Live { obj, data, motion: m, atkp: w.attack, shape, magnet, prev: None, last: finisher });
+            made.push(format!(
+                "ATKP {} group {} on KH1 group {} ({:?} r {} h {} lift {}, interval {}{})",
+                w.attack,
+                w.group,
+                w.channel,
+                bone,
+                s.radius,
+                s.height,
+                s.lift,
+                a.interval,
+                if finisher { ", the last blow: KH1's finisher data" } else { "" }
+            ));
         }
     }
     if !made.is_empty() {
@@ -735,13 +824,15 @@ pub(super) unsafe fn template_fx(air: bool, throws: bool) -> Option<[u8; 3]> {
 }
 
 /// Our attack data for one body shape of a window (made the first time, refreshed each time: the
-/// Recoil row's clash rules can change).
+/// Recoil row's clash rules can change). (t1046) `finisher`: the clip's last blow on his body
+/// (`kh1rows::last_blow`), on KH1's finisher row's data (its critical chance and bonus); any other
+/// window on the swing row's, a blow keeping kind 5.
 #[allow(clippy::too_many_arguments)]
-unsafe fn data_for(g: &mut State, base: usize, motion: u16, window: usize, air: bool, shape: usize, channel: u8, a: &kh2_formats::battle::Atkp, radius: f32, bone: u32) -> Option<usize> {
+unsafe fn data_for(g: &mut State, base: usize, motion: u16, window: usize, air: bool, shape: usize, channel: u8, a: &kh2_formats::battle::Atkp, finisher: bool, radius: f32, bone: u32) -> Option<usize> {
     let key = (motion as u64) << 32 | (window as u64 & 0xFF) << 16 | (air as u64) << 8 | (shape as u64 & 0xFF);
     let d = data_slot(g, base, key)?;
     let throws = super::kh1rows::throws(a);
-    let (src, _) = super::kh1rows::kh1_row(template_row(air, throws))?;
+    let (src, _) = super::kh1rows::kh1_row(template_row(air, throws && finisher))?;
     std::ptr::copy_nonoverlapping(src as *const u8, d as *mut u8, DATA);
     // KH2's reaction on it, as our rows have (`kh1rows::make`).
     let kind = if throws {
@@ -787,22 +878,112 @@ pub(super) fn make_ok() -> bool {
     MAKE_OK.load(Ordering::Relaxed)
 }
 
-/// Our data copy for `key` (made the first time; its address).
+/// Our data copy for `key` (made the first time; its address). (t1045) A new key takes a freed
+/// copy, else a new one while the page has room, else the copies nothing uses are freed first
+/// (`reclaim`).
 unsafe fn data_slot(g: &mut State, base: usize, key: u64) -> Option<usize> {
-    if let Some(e) = g.data.iter().find(|e| e.0 == key) {
-        return Some(e.1);
+    let now = super::takeover::GAME_FRAME.load(Ordering::Relaxed);
+    if let Some(e) = g.data.iter_mut().find(|e| e.key == key) {
+        e.used = now;
+        return Some(e.addr);
     }
     if g.page == 0 {
         g.page = super::kh1rows::near(base + BLOCK_RVA, DATA_PAGE).unwrap_or(usize::MAX);
         note(|| format!("KH2 body / spell hits: attack data copies at {:#x}", g.page));
     }
-    if g.page == usize::MAX || (g.data.len() + 1) * DATA_SLOT > DATA_PAGE {
+    if g.page == usize::MAX {
         note(|| "KH2 body / spell hits: no room for another attack data copy".to_string());
         return None;
     }
-    let d = g.page + g.data.len() * DATA_SLOT;
-    g.data.push((key, d));
-    Some(d)
+    if let Some(d) = take_free(g, key, now) {
+        return Some(d);
+    }
+    if (g.data.len() + 1) * DATA_SLOT <= DATA_PAGE {
+        let d = g.page + g.data.len() * DATA_SLOT;
+        g.data.push(DataCopy { key, addr: d, used: now });
+        return Some(d);
+    }
+    if reclaim(g, base, now) > 0 {
+        if let Some(d) = take_free(g, key, now) {
+            return Some(d);
+        }
+    }
+    if super::log_on(super::LogCat::Combat) && PAGE_LOGGED.fetch_add(1, Ordering::Relaxed) < 40 {
+        log!(Combat, "KH2 body / spell hits: no room for another attack data copy (all {} in use by KH1's attack objects or hit records)", g.data.len());
+    }
+    None
+}
+
+/// (t1045) A freed copy for `key`, if there is one.
+fn take_free(g: &mut State, key: u64, now: u64) -> Option<usize> {
+    let e = g.data.iter_mut().find(|e| e.key == FREE_KEY)?;
+    e.key = key;
+    e.used = now;
+    Some(e.addr)
+}
+
+/// (t1045) KH1's hit record pools are the ones we read (`RECORDS_LEA_A` / `_B`, once).
+unsafe fn records_ok(base: usize) -> bool {
+    match RECORDS_OK.load(Ordering::Relaxed) {
+        1 => return true,
+        2 => return false,
+        _ => {}
+    }
+    let same = |(rva, bytes): (usize, [u8; 12])| (0..bytes.len()).all(|i| rd::<u8>(base + rva + i) == bytes[i]);
+    let ok = same(RECORDS_LEA_A) && same(RECORDS_LEA_B);
+    RECORDS_OK.store(if ok { 1 } else { 2 }, Ordering::Relaxed);
+    if !ok {
+        log!(Combat, "KH2 body / spell hits: KH1's hit records aren't where we read them: our attack data copies aren't reused");
+    }
+    ok
+}
+
+/// (t1045) The page is full and a new key came: every copy no KH1 attack object (in use, `+0`
+/// `0x800`: its data `+0x5C`), no KH1 hit record in use (`+0` bit 1: its data `+0x2C`, and the
+/// spare record's) and no live object of `lefthits` (`lefthits::held`) uses, and not handed out
+/// this game frame or the last, is freed (its key dropped). Ours KH1 freed are forgotten first (as
+/// `frame` does), so none of them takes a reused copy on a reused pool object for its own. How
+/// many were freed.
+unsafe fn reclaim(g: &mut State, base: usize, now: u64) -> usize {
+    if !records_ok(base) {
+        return 0;
+    }
+    for e in g.live.iter_mut() {
+        if e.is_some_and(|l| !still_ours(&l)) {
+            *e = None;
+        }
+    }
+    let live_now: Vec<bool> = g.live.iter().map(|e| e.is_some()).collect();
+    g.spells.retain(|(i, _)| live_now[*i]);
+    let mut held: Vec<usize> = Vec::with_capacity(POOL_COUNT + 16);
+    let pool = base + POOL_STEAM;
+    for i in 0..POOL_COUNT {
+        let o = pool + i * OBJ;
+        if rd::<u32>(o) & 0x800 != 0 {
+            held.push(pose::ptr(rd::<u32>(o + 0x5C)));
+        }
+    }
+    for (start, n) in [(RECORDS_A_STEAM, RECORDS_A_COUNT), (RECORDS_B_STEAM, RECORDS_B_COUNT)] {
+        for i in 0..n {
+            let r = base + start + i * RECORD;
+            if rd::<u32>(r) & 1 != 0 {
+                held.push(pose::ptr(rd::<u32>(r + 0x2C)));
+            }
+        }
+    }
+    held.push(pose::ptr(rd::<u32>(base + RECORD_SPARE_STEAM + 0x2C)));
+    super::lefthits::held(&mut held);
+    let mut n = 0;
+    for e in g.data.iter_mut() {
+        if e.key != FREE_KEY && e.used + 1 < now && !held.contains(&e.addr) {
+            e.key = FREE_KEY;
+            n += 1;
+        }
+    }
+    if super::log_on(super::LogCat::Combat) && PAGE_LOGGED.fetch_add(1, Ordering::Relaxed) < 40 {
+        log!(Combat, "KH2 body / spell hits: attack data page full ({} copies): {n} no KH1 attack object or hit record uses freed for reuse", g.data.len());
+    }
+    n
 }
 
 /// A KH2 spell's attacks (`formmagic`, `reflect`, in place of `combat::Strikes::spell_strike`):
@@ -839,6 +1020,12 @@ pub unsafe fn spell_place(sora: usize, attack: &super::combat::SpellAttack, row:
 }
 
 /// Whether the spell attack `key`'s object has hit something (KH2's `trap_attack_is_hit`, t819).
+/// (t1047) `attack` is one of our KH2 spell objects (`kh2damage::share_of` leaves them out).
+pub fn spell_object(attack: usize) -> bool {
+    let Some(i) = pool_index(attack) else { return false };
+    STATE.try_lock().is_ok_and(|g| g.spells.iter().any(|(k, _)| *k == i) && g.live[i].is_some_and(|l| l.obj == attack))
+}
+
 pub fn spell_hit(key: u64) -> bool {
     STATE.try_lock().is_ok_and(|g| g.spells.iter().any(|(_, sp)| sp.key == key && sp.hit))
 }
@@ -902,6 +1089,12 @@ unsafe fn place(sora: usize, attacks: &[super::combat::SpellAttack], row: &dyn F
         if a.kh1_data.is_none() && first.stat_source == 1 {
             super::kh1rows::kh1_magic_row(d);
         }
+        // (t1046) A knocking hit on the finisher's data: no critical chance or bonus (KH1's spells
+        // never roll; KH2 has no critical).
+        if a.kh1_data.is_none() && knock {
+            wr(d + 0x18, 0i32);
+            wr(d + 0x1C, 0i32);
+        }
         wr(d + 0x10, -1i32);
         let r0 = a.shapes.first().map_or(10.0, |s| s.radius);
         wr(d + 0x5C, r0.round() as i32);
@@ -933,8 +1126,8 @@ unsafe fn place(sora: usize, attacks: &[super::combat::SpellAttack], row: &dyn F
             wr(obj + 8, h);
         }
         let dummy = BodyShape { kh1_type: 1, radius: 0.0, height: 0.0, bone: None, offset: [0.0; 3], lift: 0.0 };
-        g.live[i] = Some(Live { obj, data: d, motion: 0, atkp: a.atk, shape: dummy, magnet: None, prev: None });
-        let mut sp = SpellObj { key: a.key, atk: a.atk, rows, group: a.group, shapes: [([0.0; 3], 1, 0.0, 0.0); SPELL_SHAPES], n: 0, seen: frame, kh1_spell: a.kh1_data.is_some(), by_calls, hit: false };
+        g.live[i] = Some(Live { obj, data: d, motion: 0, atkp: a.atk, shape: dummy, magnet: None, prev: None, last: false });
+        let mut sp = SpellObj { key: a.key, atk: a.atk, rows, group: a.group, shapes: [([0.0; 3], 1, 0.0, 0.0); SPELL_SHAPES], n: 0, seen: frame, kh1_spell: a.kh1_data.is_some(), by_calls, hit: false, send_off: a.send_off };
         for s in a.shapes.iter() {
             let t = match s.kind {
                 ShapeKind::Ellipsoid | ShapeKind::Sphere => 1u32,
@@ -960,6 +1153,7 @@ pub unsafe fn spell_forget(key: u64) {
         if still_ours(&l) {
             let free: unsafe extern "system" fn(usize) = std::mem::transmute(BASE.load(Ordering::Relaxed) + FREE_ATTACK_RVA);
             free(l.obj);
+            super::rehit::forget(l.obj);
         }
     }
 }
@@ -991,6 +1185,30 @@ pub unsafe fn atkp(attack: usize) -> Option<kh2_formats::battle::Atkp> {
     let id = l.atkp;
     drop(g);
     pose::kh2()?.battle.attack_for_level(id, 0, 0).cloned()
+}
+
+/// (t1053) For an attack object of ours (`atkp`'s): whether a KH2 blow from it stays KH1's
+/// knock-back or launch (`combat::scale_record`). A body window: the clip's last blow on his body in
+/// a finisher (`Live::last`, t1046's rule). A blade of `lefthits`: its window's (`lefthits::last_blow`).
+/// A KH2 spell: (t1056) by its cast (`SpellObj::send_off`): yes on the combo finisher's cast and on
+/// Thunder's every cast, else no (t1057: Fire no on every cast, its finisher too), so a plain cast's
+/// blows go to KH1's flinch (the owner's rule). Which
+/// hit of a script is its last still can't be told from one attack (t1046), so every blow of a
+/// finisher cast keeps its blow. `None` when `attack` isn't ours.
+pub unsafe fn last_blow(attack: usize) -> Option<bool> {
+    if !native() {
+        return None;
+    }
+    if let Some(last) = super::lefthits::last_blow(attack) {
+        return Some(last);
+    }
+    let i = pool_index(attack)?;
+    let g = STATE.try_lock().ok()?;
+    let l = g.live[i].filter(|l| l.obj == attack && still_ours(l))?;
+    if let Some((_, sp)) = g.spells.iter().find(|(k, _)| *k == i) {
+        return Some(sp.send_off);
+    }
+    Some(l.last)
 }
 
 /// `probe::hit`, before KH1's record builder runs for `attack` on `target`: for a spell object of
@@ -1057,6 +1275,10 @@ pub unsafe fn hit(attack: usize, target: usize, rec: usize) {
     };
     let motion = l.motion;
     drop(g);
+    // (t1050) The body window log: KH1 made contact in this window.
+    if spell.is_none() {
+        window_contact(attack, target);
+    }
     note(|| format!("KH2 {kind} hit: ATKP {atk} (motion {motion}) from KH1's pass on actor {target:#x}"));
     // KH2's Magnet catch, on every hit (`0x14040FBF0`): KH1's state of ours (`magnet`).
     if let Some((k1, k2, swirl)) = l.magnet {
@@ -1207,11 +1429,15 @@ unsafe extern "system" fn entries(obj: usize, list: usize, count: i32) -> i32 {
         l.prev = Some((c, frame));
     }
     let shape = l.shape;
+    let (motion, atkp) = (l.motion, l.atkp);
     drop(g);
     let mut count = count;
+    let start = count;
     for q in &centres[..n] {
         count = put_entry(obj, owner, bit, list, count, shape.kh1_type, shape.radius, shape.height, *q);
     }
+    // (t1050) The body window log (Combat logging only): each enemy near against these entries.
+    window_log(obj, owner, list + start.max(0) as usize * 0x40, (count - start).max(0) as usize, motion, atkp);
     count
 }
 
@@ -1235,5 +1461,425 @@ unsafe fn put_entry(obj: usize, owner: usize, bit: u32, list: usize, count: i32,
         count + 1
     } else {
         count
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// (t1050) The body window log (the owner's approval; log only, nothing of KH1's or ours changes).
+// While a body window of ours is open (KH1's pass builds its object: Explosion's 911 / 912,
+// Vicinity Break's, Magnet Burst's, Final's 154 body shapes), each enemy within `WLOG_REACH` of
+// Sora is logged (Combat) once on the window's first frame it is seen and once when the window
+// closes, with its frame of closest approach. What is read is what KH1's own pass reads for it
+// (Steam, Checked (decomp)):
+// - the actors: KH1's pool `0x142D372A0` (96 of 0x4B0), live with `+0x374` bit 1 set and bit 2
+//   clear (`0x140291B20`, the pass's iterator); an enemy is of another team (`+0x374 >> 5 & 3`,
+//   which KH1's entry test `0x1402B3BE0` compares with the attack entry's);
+// - hittable (`0x140292070`, which the pass `0x1402B4460` asks before it puts an actor's parts in):
+//   a part table (`[actor+0x134]`, count `+6` not 0), its byte `+6` not 2, its flags word
+//   `& 0x8048` == `0x8000` (`0x40`: KH1's untouchable flag, its dodge roll's, `reflect`), and one
+//   part not switched off by `+0x3A8`;
+// - its parts: `[[actor+0x134]+0x18]`, 0x14 bytes each (`+0` hit id, `+1` type, `+2` bone code,
+//   `+4` t, `+8` lift, `+0xC` radius, `+0x10` half height), part i switched off by `+0x3A8` bit i;
+//   each placed by KH1's own placement `0x1402B5E50 (actor, part, shape)` (as the pass places them;
+//   it only reads the actor and writes the shape we give it), first bytes checked;
+// - the test: KH1's own overlap `0x1402B5EF0 (attack shape, body shape)` (first bytes checked, as
+//   `unmet_types`) against every entry of ours this frame (this frame's shape and KH2's sweep), and
+//   our normalised squared gap of that same formula (`gap`: below 1 meets);
+// - why none met (`0x1402B3BE0`'s order): not hittable, the attack object refused for bodies (dead
+//   `0x200000`, `0x400`, result `+4 & 0x30`, clash types 1 / 2 / 4, the one-hit bit `0x80` with a
+//   result), the hit bit held (`actor+0x3E0 & object+0x54`), else the parts: a part switched off that
+//   would meet, or outside the shape.
+// Contact: our hit hook (`hit`, KH1's contact through `probe::hit`). Bounded: only while Combat
+// logging is on, only in an open window (inside KH1's pass, `entries`), enemies within 800, at most
+// `WLOG_ENEMIES` per window and `WLOG_PARTS` parts per line, `WLOG_LINES` lines a session. Nothing
+// runs outside open windows but one atomic load in `frame`.
+
+/// KH1's part placement `0x1402B5E50 (actor, part, shape)` (Steam; `mov [rsp+8], rbx; mov
+/// [rsp+0x10], rsi; push rdi; sub rsp, 0x20`, Checked (exe)).
+const PLACE_STEAM: usize = 0x2B5E50;
+const PLACE_BYTES: [u8; 15] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x74, 0x24, 0x10, 0x57, 0x48, 0x83, 0xEC, 0x20];
+/// KH1's actor pool (Steam, the pass's iterator `0x140291B20`): 96 of 0x4B0.
+const ACTORS_STEAM: usize = 0x2D372A0;
+const ACTOR_COUNT: usize = 96;
+const ACTOR_SIZE: usize = 0x4B0;
+const WLOG_REACH: f32 = 800.0;
+const WLOG_PARTS: usize = 12;
+const WLOG_ENEMIES: usize = 16;
+const WLOG_WINDOWS: usize = 8;
+const WLOG_LINES: u32 = 160;
+/// KH1's placement and overlap are the ones we know (0 unknown, 1 yes, 2 no).
+static PLACE_OK: AtomicU32 = AtomicU32::new(0);
+static WLOG_PENDING: AtomicBool = AtomicBool::new(false);
+static WLOG_LOGGED: AtomicU32 = AtomicU32::new(0);
+
+struct WinEnemy {
+    actor: usize,
+    id: u32,
+    /// The smallest gap of any of its parts this window, its frame and that frame's line.
+    best: f32,
+    best_frame: u64,
+    best_line: String,
+    best_why: &'static str,
+    contact: Option<u64>,
+}
+
+struct WinLog {
+    obj: usize,
+    motion: u16,
+    atkp: u16,
+    open: u64,
+    last: u64,
+    enemies: Vec<WinEnemy>,
+}
+
+static WLOG: Mutex<Vec<WinLog>> = Mutex::new(Vec::new());
+
+fn wlog_line(s: String) {
+    if WLOG_LOGGED.fetch_add(1, Ordering::Relaxed) < WLOG_LINES {
+        log!(Combat, "{}", s);
+    }
+}
+
+/// KH1's placement and overlap checked (once).
+unsafe fn place_ok(base: usize) -> bool {
+    match PLACE_OK.load(Ordering::Relaxed) {
+        1 => return true,
+        2 => return false,
+        _ => {}
+    }
+    let same = |at: usize, bytes: &[u8]| crash_ok(base + at, bytes.len()) && std::slice::from_raw_parts((base + at) as *const u8, bytes.len()) == bytes;
+    let ok = same(PLACE_STEAM, &PLACE_BYTES) && same(OVERLAP_STEAM, &OVERLAP_BYTES);
+    PLACE_OK.store(if ok { 1 } else { 2 }, Ordering::Relaxed);
+    if !ok {
+        log!(Combat, "KH2 body window log: KH1's part placement or overlap has unexpected bytes: no window log");
+    }
+    ok
+}
+
+/// `n` bytes at `p` readable (`crash::readable` on its first and last byte).
+unsafe fn crash_ok(p: usize, n: usize) -> bool {
+    p > 0x10000 && super::crash::readable(p) && super::crash::readable(p + n.max(1) - 1)
+}
+
+/// KH1's entry test's formula as a normalised squared gap (below 1 meets; `0x1402B5EF0`, Checked
+/// (decomp)): `a` / `b` (type, radius, half height, centre). Types 1 (ellipsoid) and 2 (column);
+/// `None` for another (a box: KH1's own answer only).
+fn gap(a: (u32, f32, f32, [f32; 3]), b: (u32, f32, f32, [f32; 3])) -> Option<f32> {
+    let (lo, hi) = if b.0 < a.0 { (b, a) } else { (a, b) };
+    let d = [hi.3[0] - lo.3[0], hi.3[1] - lo.3[1], hi.3[2] - lo.3[2]];
+    let horiz = d[0] * d[0] + d[2] * d[2];
+    let dy = d[1].abs();
+    let sq = |v: f32| v * v;
+    match (lo.0, hi.0) {
+        (1, 1) => {
+            let r = lo.1 + hi.1;
+            let h = lo.2 + hi.2;
+            (r > 0.0 && h > 0.0).then(|| horiz / sq(r) + sq(d[1] / h))
+        }
+        (1, 2) => {
+            let (he, hc) = (lo.2, hi.2);
+            if !(he > 0.0) {
+                return None;
+            }
+            if dy >= he + hc {
+                return Some(sq(dy / (he + hc)).max(1.0));
+            }
+            let re = if dy <= hc {
+                lo.1
+            } else {
+                let t = (dy - hc) / he;
+                (1.0 - t * t).abs().sqrt() * lo.1
+            };
+            let r = re + hi.1;
+            (r > 0.0).then(|| horiz / sq(r))
+        }
+        (2, 2) => {
+            let (r, h) = (lo.1 + hi.1, lo.2 + hi.2);
+            (r > 0.0 && h > 0.0).then(|| (horiz / sq(r)).max(sq(dy / h)))
+        }
+        _ => None,
+    }
+}
+
+/// The attack object's own refusal of bodies in KH1's entry test (`0x1402B3BE0`), if any.
+unsafe fn attack_refuses(obj: usize) -> Option<String> {
+    let flags = rd::<u32>(obj);
+    let result = rd::<u32>(obj + 4);
+    let t = (flags >> 17) & 7;
+    let type_ok = ((flags & 0xE_0000).wrapping_sub(0x2_0000) & 0xFFF9_FFFF) != 0 || flags & 0xE_0000 == 0x6_0000;
+    let why = if flags & 0x20_0000 != 0 {
+        "marked dead (0x200000)"
+    } else if flags & 0x400 != 0 {
+        "flag 0x400"
+    } else if result & 0x30 != 0 {
+        "its result word already clashed (0x30)"
+    } else if !type_ok {
+        "its clash type meets no body"
+    } else if flags & 0x80 != 0 && result != 0 {
+        "one-hit and already used"
+    } else {
+        return None;
+    };
+    Some(format!("attack object refused for bodies: {why} (flags {flags:#x}, result {result:#x}, clash type {t})"))
+}
+
+/// The shape KH1's placement writes (an entry's `+0x20`..: type, radius, half height, centre `+0x10`;
+/// 16-aligned as KH1's list entries are).
+#[repr(C, align(16))]
+struct PartShape([u8; 0x20]);
+
+/// One part of an enemy this frame, placed by KH1.
+#[derive(Clone, Copy)]
+struct PartNow {
+    hit_id: u8,
+    kind: u32,
+    bone: u16,
+    centre: [f32; 3],
+    radius: f32,
+    half: f32,
+    off: bool,
+    gap: Option<f32>,
+    meets: bool,
+}
+
+/// (t1050) `entries` built our body object `obj` this frame: its `n` entries at `first` in KH1's
+/// list. Each enemy within reach measured against them, as KH1's pass will test it.
+unsafe fn window_log(obj: usize, owner: usize, first: usize, n: usize, motion: u16, atkp: u16) {
+    if !super::log_on(super::LogCat::Combat) || n == 0 || WLOG_LOGGED.load(Ordering::Relaxed) >= WLOG_LINES {
+        return;
+    }
+    let base = BASE.load(Ordering::Relaxed);
+    if !place_ok(base) || !crash_ok(first, n * 0x40) || !crash_ok(owner, 0x400) || !crash_ok(base + ACTORS_STEAM, ACTOR_COUNT * ACTOR_SIZE) {
+        return;
+    }
+    let frame = super::takeover::GAME_FRAME.load(Ordering::Relaxed);
+    let Ok(mut logs) = WLOG.try_lock() else { return };
+    // (A play of this object that closed meanwhile, or the oldest when full: summed up now.)
+    let mut done: Vec<WinLog> = Vec::new();
+    let mut k = 0;
+    while k < logs.len() {
+        if logs[k].obj == obj && logs[k].last + 1 < frame {
+            done.push(logs.remove(k));
+        } else {
+            k += 1;
+        }
+    }
+    if !logs.iter().any(|w| w.obj == obj) {
+        if logs.len() >= WLOG_WINDOWS {
+            done.push(logs.remove(0));
+        }
+        logs.push(WinLog { obj, motion, atkp, open: frame, last: frame, enemies: Vec::new() });
+    }
+    WLOG_PENDING.store(true, Ordering::Relaxed);
+    let place: unsafe extern "system" fn(usize, usize, *mut PartShape) = std::mem::transmute(base + PLACE_STEAM);
+    let overlap: unsafe extern "system" fn(usize, usize) -> u8 = std::mem::transmute(base + OVERLAP_STEAM);
+    let feet = rd::<[f32; 3]>(owner + 0x10);
+    let ours: Vec<(u32, f32, f32, [f32; 3])> = (0..n)
+        .map(|i| {
+            let e = first + i * 0x40;
+            let c = rd::<[f32; 3]>(e + 0x30);
+            (rd::<u32>(e + 0x20), rd::<f32>(e + 0x24), rd::<f32>(e + 0x28), c)
+        })
+        .collect();
+    let above = |c: [f32; 3]| feet[1] - c[1];
+    let out = |c: [f32; 3]| ((c[0] - feet[0]).powi(2) + (c[2] - feet[2]).powi(2)).sqrt();
+    let w = logs.iter_mut().find(|w| w.obj == obj).unwrap();
+    w.last = frame;
+    if frame == w.open {
+        let s = ours[0];
+        let refused = attack_refuses(obj).map_or(String::new(), |r| format!("; {r}"));
+        wlog_line(format!(
+            "KH2 body window log: ATKP {atkp} (motion {motion}) object {obj:#x} opens: our shape type {} centre {:.0} above Sora's feet, {:.0} out, radius {:.0}, half height {:.0}, {n} entr{} (with KH2's sweep){refused}",
+            s.0,
+            above(s.3),
+            out(s.3),
+            s.1,
+            s.2,
+            if n == 1 { "y" } else { "ies" }
+        ));
+    }
+    let team = |a: usize| (rd::<u32>(a + 0x374) >> 5) & 3;
+    let our_team = (rd::<u32>(obj) >> 12) & 3;
+    let bit = rd::<u32>(obj + 0x54);
+    let refused = attack_refuses(obj).is_some();
+    for ai in 0..ACTOR_COUNT {
+        let a = base + ACTORS_STEAM + ai * ACTOR_SIZE;
+        if a == owner {
+            continue;
+        }
+        let live = rd::<u32>(a + 0x374);
+        if live & 1 == 0 || live & 2 != 0 || team(a) == our_team {
+            continue;
+        }
+        let p = rd::<[f32; 3]>(a + 0x10);
+        let dist = ((p[0] - feet[0]).powi(2) + (p[1] - feet[1]).powi(2) + (p[2] - feet[2]).powi(2)).sqrt();
+        if !(dist <= WLOG_REACH) {
+            continue;
+        }
+        // KH1's hittable (`0x140292070`) and its parts.
+        let table = pose::ptr(rd::<u32>(a + 0x134));
+        let flags = rd::<u32>(a);
+        let b6 = rd::<u8>(a + 6);
+        let mask = rd::<u32>(a + 0x3A8);
+        let count = if crash_ok(table, 0x1C) { rd::<u8>(table + 6) as usize } else { 0 };
+        let parts = if count > 0 { pose::ptr(rd::<u32>(table + 0x18)) } else { 0 };
+        let count = if crash_ok(parts, count * 0x14) { count } else { 0 };
+        let on = |i: usize| (mask >> (i & 31)) & 1 == 0;
+        let hittable = count > 0 && b6 != 2 && flags & 0x8048 == 0x8000 && (0..count).any(on);
+        let mut now: Vec<PartNow> = Vec::with_capacity(count.min(32));
+        for i in 0..count.min(32) {
+            let part = parts + i * 0x14;
+            let mut shape = PartShape([0u8; 0x20]);
+            place(a, part, &mut shape);
+            let sp = shape.0.as_ptr() as usize;
+            let kind = rd::<u32>(sp);
+            let (radius, half, centre) = (rd::<f32>(sp + 4), rd::<f32>(sp + 8), rd::<[f32; 3]>(sp + 0x10));
+            let mut g: Option<f32> = None;
+            let mut meets = false;
+            for (k, s) in ours.iter().enumerate() {
+                if let Some(v) = gap(*s, (kind, radius, half, centre)) {
+                    g = Some(g.map_or(v, |x: f32| x.min(v)));
+                }
+                if overlap(first + k * 0x40 + 0x20, sp) != 0 {
+                    meets = true;
+                }
+            }
+            now.push(PartNow { hit_id: rd::<u8>(part), kind, bone: rd::<u16>(part + 2), centre, radius, half, off: !on(i), gap: g, meets });
+        }
+        let held = rd::<u32>(a + 0x3E0) & bit != 0;
+        let why: &'static str = if !hittable {
+            "not hittable"
+        } else if refused {
+            "the attack object refused for bodies"
+        } else if held {
+            "hit bit already held"
+        } else if now.iter().any(|q| !q.off && q.meets) {
+            "would meet"
+        } else if now.iter().any(|q| q.off && q.meets) {
+            "part off"
+        } else {
+            "outside the shape"
+        };
+        // This frame's closest part (smallest gap; KH1's "meets" as 0 where we have no gap of ours).
+        let closest = now.iter().map(|q| q.gap.unwrap_or(if q.meets { 0.0 } else { f32::INFINITY })).fold(f32::INFINITY, f32::min);
+        let id = super::probe::object_id(a);
+        let state = rd::<i32>(a + 0x70);
+        let line = || {
+            let mut s = format!(
+                "enemy object {id} ({a:#x}, state {state}, {dist:.0} from Sora; hittable {hittable}: flags {flags:#x} (0x8000 {}, untouchable 0x40 {}, 0x8 {}), byte +6 {b6}, parts {count}, off mask {mask:#x}; hit bit {})",
+                flags & 0x8000 != 0,
+                flags & 0x40 != 0,
+                flags & 0x8 != 0,
+                if held { "held" } else { "free" }
+            );
+            for (i, q) in now.iter().enumerate().take(WLOG_PARTS) {
+                s.push_str(&format!(
+                    "; part {i} (id {}, type {}, bone {:#x}): centre {:.0} above Sora's feet, {:.0} out, radius {:.0}, half height {:.0}, {}, gap {}, KH1 meets {}",
+                    q.hit_id,
+                    q.kind,
+                    q.bone,
+                    above(q.centre),
+                    out(q.centre),
+                    q.radius,
+                    q.half,
+                    if q.off { "off" } else { "on" },
+                    q.gap.map_or("n/a".to_string(), |v| format!("{v:.2}")),
+                    if q.meets { "yes" } else { "no" }
+                ));
+            }
+            if now.len() > WLOG_PARTS {
+                s.push_str(&format!("; {} more parts", now.len() - WLOG_PARTS));
+            }
+            s
+        };
+        let pos = match w.enemies.iter().position(|e| e.actor == a) {
+            Some(i) => i,
+            None => {
+                if w.enemies.len() >= WLOG_ENEMIES {
+                    continue;
+                }
+                let l = line();
+                wlog_line(format!("KH2 body window log: ATKP {} (motion {}) first frame (+{}) of {l}; now: {why}", w.atkp, w.motion, frame - w.open));
+                w.enemies.push(WinEnemy { actor: a, id, best: f32::INFINITY, best_frame: frame, best_line: String::new(), best_why: why, contact: None });
+                w.enemies.len() - 1
+            }
+        };
+        let e = &mut w.enemies[pos];
+        if closest < e.best || e.best_line.is_empty() {
+            e.best = closest;
+            e.best_frame = frame;
+            e.best_line = line();
+            e.best_why = why;
+        }
+    }
+    drop(logs);
+    for w in done {
+        window_summary(w);
+    }
+}
+
+/// (t1050) KH1's pass made contact with our body object `attack` on `target` (`hit`).
+fn window_contact(attack: usize, target: usize) {
+    if !super::log_on(super::LogCat::Combat) {
+        return;
+    }
+    let frame = super::takeover::GAME_FRAME.load(Ordering::Relaxed);
+    let Ok(mut logs) = WLOG.try_lock() else { return };
+    let Some(w) = logs.iter_mut().find(|w| w.obj == attack) else { return };
+    if let Some(e) = w.enemies.iter_mut().find(|e| e.actor == target) {
+        if e.contact.is_none() {
+            e.contact = Some(frame);
+        }
+    }
+}
+
+/// (t1050) Each frame (`frame`): the windows KH1's pass didn't build last frame are closed and
+/// summed up. One atomic load while none is open.
+fn window_flush_due() {
+    if !WLOG_PENDING.load(Ordering::Relaxed) {
+        return;
+    }
+    let frame = super::takeover::GAME_FRAME.load(Ordering::Relaxed);
+    let done: Vec<WinLog> = {
+        let Ok(mut logs) = WLOG.try_lock() else { return };
+        let (gone, keep): (Vec<WinLog>, Vec<WinLog>) = std::mem::take(&mut *logs).into_iter().partition(|w| w.last + 1 < frame);
+        *logs = keep;
+        if logs.is_empty() {
+            WLOG_PENDING.store(false, Ordering::Relaxed);
+        }
+        gone
+    };
+    for w in done {
+        window_summary(w);
+    }
+}
+
+/// (t1050) One line per enemy of a closed window: contact, else why not, and its closest frame.
+fn window_summary(w: WinLog) {
+    if !super::log_on(super::LogCat::Combat) {
+        return;
+    }
+    let frames = w.last - w.open + 1;
+    for e in &w.enemies {
+        let result = match e.contact {
+            Some(f) => format!("KH1 made contact at +{}", f.saturating_sub(w.open)),
+            None => format!(
+                "no contact: {}",
+                match e.best_why {
+                    "would meet" => "KH1's test would meet at the closest frame but no contact came (cause not read)",
+                    other => other,
+                }
+            ),
+        };
+        let best = if e.best.is_finite() { format!("{:.2}", e.best) } else { "none".to_string() };
+        wlog_line(format!(
+            "KH2 body window log: ATKP {} (motion {}) object {:#x} closed after {frames} frame(s): enemy object {}: {result}; closest at +{} (gap {best}): {}",
+            w.atkp,
+            w.motion,
+            w.obj,
+            e.id,
+            e.best_frame.saturating_sub(w.open),
+            e.best_line
+        ));
     }
 }

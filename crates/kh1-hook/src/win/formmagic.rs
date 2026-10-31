@@ -1333,9 +1333,23 @@ pub(super) unsafe fn spell_attack(actor: usize, a: &kh2_magic::MagicAttack, batt
         return None;
     }
     let shapes = a.shapes();
-    let fire = package.get(&a.spell).and_then(|&p| package_spell(p)).is_some_and(|(spell, _)| spell == 0);
+    let spell = package.get(&a.spell).and_then(|&p| package_spell(p)).map(|(spell, _)| spell);
+    let fire = spell == Some(0);
     let shapes = if fire { super::reflect::kh1_sized_shapes(actor, shapes) } else { shapes };
-    (!shapes.is_empty()).then(|| combat::SpellAttack { kh1_data, package: Some(pkg), key: attack_key(a), group: if first.combo_group != 0 { first.combo_group as i64 } else { a.group }, atk: a.atk, sub: a.sub, shapes })
+    // (t1056, the owner: "fire should flinch until its finisher, thunder does an air launch,
+    // blizzard should flinch until finisher") A spell's blows stay blows on the combo finisher's
+    // cast (its sub odd: level × 2 − 2 + 1 + the form's even offset), and Thunder's on every cast
+    // (ATKP 250 / 251 are blows at every sub, Checked (files) `00battle.bin`); any other cast's
+    // blows go to KH1's flinch (`combat::scale_record`). Not a spell (Wisdom's shots): unchanged.
+    // (t1057, the owner's "(a)", Fire only) Fire's blows go to KH1's flinch on every cast, its
+    // finisher's too: KH2's Fire finisher sends off with its last hit, a flinch with a big push
+    // (reaction 6, 500 / 750, Checked (files) `00battle.bin`), not with a blow.
+    let send_off = match spell {
+        Some(2) | None => true,
+        Some(0) => false,
+        Some(_) => a.sub & 1 == 1,
+    };
+    (!shapes.is_empty()).then(|| combat::SpellAttack { kh1_data, package: Some(pkg), key: attack_key(a), group: if first.combo_group != 0 { first.combo_group as i64 } else { a.group }, atk: a.atk, sub: a.sub, shapes, send_off })
 }
 
 /// A spell attack's key for KH1's objects and our hit records.

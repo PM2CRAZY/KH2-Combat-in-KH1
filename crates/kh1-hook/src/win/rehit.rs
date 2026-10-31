@@ -54,6 +54,12 @@ struct Pending {
 }
 
 static PENDING: Mutex<Vec<Pending>> = Mutex::new(Vec::new());
+/// (t1046) Targets KH2's interval let in again (`tick`): (attack object, its hit bit then, target).
+/// KH1's critical roll runs only on a window's first hit on a target (`again`, `kh1rows::may_crit`;
+/// the owner's answer 1 (b): one roll per finisher). Dropped when the object is no longer in use or
+/// has another bit (`tick`), at a new KH2 attack on it (`new_attack`) and when ours free it
+/// (`forget`: a new object can take the same pool slot, bit and data the same frame).
+static AGAIN: Mutex<Vec<(usize, u32, usize)>> = Mutex::new(Vec::new());
 /// KH2 keeps four re-hit slots per target (`HitRecord`); kept loosely here, a bound for the list.
 const MOST: usize = 64;
 
@@ -94,20 +100,61 @@ pub unsafe fn on_hit(attack: usize, target: usize) {
 /// Each of Sora's frames (`takeover::physics`, before KH1's collision pass): a target whose re-hit
 /// interval has run loses the attack's bit (the attack still the one that hit: in use, same bit).
 pub unsafe fn tick() {
+    // (t1046) Re-hit marks of objects KH1 freed or re-bit: gone.
+    if let Ok(mut a) = AGAIN.lock() {
+        if !a.is_empty() {
+            a.retain(|e| rd::<u32>(e.0) & 0x800 != 0 && rd::<u32>(e.0 + 0x54) == e.1);
+        }
+    }
     let Ok(mut g) = PENDING.lock() else { return };
     if g.is_empty() {
         return;
     }
     let now = super::takeover::TICKS.load(Ordering::Relaxed);
+    let mut again = Vec::new();
     g.retain(|p| {
         if now.saturating_sub(p.at) < p.interval {
             return true;
         }
         if rd::<u32>(p.attack) & 0x800 != 0 && rd::<u32>(p.attack + 0x54) == p.bit {
             wr(p.target + 0x3E0, rd::<u32>(p.target + 0x3E0) & !p.bit);
+            again.push((p.attack, p.bit, p.target));
         }
         false
     });
+    drop(g);
+    if again.is_empty() {
+        return;
+    }
+    if let Ok(mut a) = AGAIN.lock() {
+        for e in again {
+            if !a.contains(&e) {
+                if a.len() >= MOST {
+                    a.remove(0);
+                }
+                a.push(e);
+            }
+        }
+    }
+}
+
+/// (t1046) `target` was let in again for `attack` by KH2's interval (`tick`): not the window's
+/// first hit on it, so KH1's critical roll doesn't run for it (`kh1rows::may_crit`).
+pub unsafe fn again(attack: usize, target: usize) -> bool {
+    let Ok(a) = AGAIN.lock() else { return false };
+    if a.is_empty() || attack < 0x10000 {
+        return false;
+    }
+    let bit = rd::<u32>(attack + 0x54);
+    a.iter().any(|e| e.0 == attack && e.1 == bit && e.2 == target)
+}
+
+/// (t1046) Ours freed `attack` (`bodyhits`, `lefthits`): its re-hit marks dropped, so an object
+/// made in its pool slot the same frame (often with the same hit bit) starts with none.
+pub fn forget(attack: usize) {
+    if let Ok(mut a) = AGAIN.lock() {
+        a.retain(|e| e.0 != attack);
+    }
 }
 
 /// KH1's re-arm of an attack (`0x1402B3380 (attack)`, Steam; Checked (decomp)): with its interval
@@ -127,6 +174,8 @@ pub unsafe fn new_attack(attack: usize) {
     if let Ok(mut g) = PENDING.lock() {
         g.retain(|p| p.attack != attack);
     }
+    // (t1046) A new KH2 attack: its first hit on each target may roll again.
+    forget(attack);
     let rearm: unsafe extern "system" fn(usize) = std::mem::transmute(super::takeover::game_base() + REARM_STEAM);
     let (interval, clock) = (rd::<f32>(attack + 0x50), rd::<f32>(attack + 0xA4));
     wr(attack + 0x50, f32::MIN_POSITIVE);
