@@ -87,6 +87,16 @@ const TRAIL_STEP_PROLOGUE: [u8; 6] = [0x40, 0x57, 0x48, 0x83, 0xEC, 0x20];
 const EFFECT_KILL_RVA: Rva = Rva(0x1DE890);
 /// Actor fields: its weapon object handle.
 const ACTOR_WEAPON: usize = 0x14C;
+/// (t1061) An actor's `+0` bit 0x4000: its weapon out. KH1 (Steam, Checked (decomp)) sets it with
+/// `0x1402A2E30` and clears it with `0x1402A3280`; its party draw (`0x1402A1630`) draws the weapon
+/// object only while it is set, and its trail step (`0x1402C1F20`) keeps a running trail only while
+/// `+0` has all of `0xC001`. Who puts Sora's Keyblade away: his motion start (`0x14029FC40`), from
+/// the weapon mode of the motion's row in his request table (`+0x1D8`, read by `0x1402A01E0`:
+/// bits 12..14 of the row, 0 = away, 1 = out; a raw-slot request skips the table and leaves the
+/// bit as it is), which is how the victory poses and other scripted motions put it away; the event
+/// script's weapon commands (`0x1401AA150` / `0x1401AA190` out, `0x1401AA210` / `0x1401AA230` away,
+/// for one actor or the whole party); and the carry command 0x1C of `0x1402C5D50` (the carried one's).
+const WEAPON_OUT_BIT: u32 = 0x4000;
 /// The weapon object's effect data (the `.wpn`'s second section).
 const OBJ_EFFECTS: usize = 0x18;
 /// A weapon object's size and fields (KH1's, Steam `0x140286D60`, Checked (decomp)): `+0x00` the
@@ -377,6 +387,22 @@ pub fn hide() {
     SHOWN.store(false, Ordering::Relaxed);
 }
 
+/// (t1061) The left Keyblade is put away for now, in every two-Keyblade form (Valor, Master,
+/// Final): (a) Sora's own Keyblade is put away (his actor's weapon-out bit `+0` 0x4000 clear,
+/// `WEAPON_OUT_BIT`: KH1's victory poses, talks and scripted motions), or (b) one of KH1's cutscenes
+/// runs (its scene flag `0x142382594` bit 0, `driveparty::scene`; Assumption: KH2 hides a form's
+/// second weapon in its events, the owner's account). Nothing of `SHOWN` / the loaded model changes:
+/// the holder stays made and posed (`holder::look` only clears its weapon-out bit, so KH1's own draw
+/// skips it and KH1's own trail step ends its trail), no trail is asked for it, its hits and guards
+/// are freed and not made (`lefthits`), its effects stop (`left_owner` none, `kh2dpx`); when both
+/// clear, the same Keyblade is drawn again at once. Two reads, made where the holder, the trail
+/// request and the left hits already run.
+pub fn put_away() -> bool {
+    let sora = super::takeover::sora_actor();
+    let away = readable(sora, 4) && unsafe { rd::<u32>(sora) } & WEAPON_OUT_BIT == 0;
+    away || super::driveparty::scene()
+}
+
 /// The left Keyblade's owner for KH1's own bindings (`kh2dpx`: KH2's second-weapon points 0x4004 /
 /// 0x4006 / 0x4008 on KH1's blade binding; `lefthits`): the holder actor (`holder`: KH1's own actor
 /// on Sora's left palm, posed by KH1 with the left Keyblade's bones, its weapon object the left
@@ -388,7 +414,8 @@ pub fn left_owner() -> Option<usize> {
     if !INSTALLED.load(Ordering::Relaxed) || !(super::form::two_blades() && SHOWN.load(Ordering::Relaxed) && MESH.load(Ordering::Relaxed) != 0) {
         return None;
     }
-    if !super::form::native_now() {
+    // (t1061: none while it is put away, `put_away`.)
+    if !super::form::native_now() || put_away() {
         return None;
     }
     let a = super::holder::actor()?;
@@ -788,7 +815,8 @@ unsafe extern "system" fn actor_draw(actor: usize, mask: u32, p3: u32, colour: u
 unsafe extern "system" fn trail_start(actor: usize, id: u32) {
     let f: unsafe extern "system" fn(usize, u32) = std::mem::transmute(ORIG_TRAIL_START.load(Ordering::Acquire));
     f(actor, id);
-    if actor != 0 && actor == super::takeover::sora_actor() && !IN_TRAIL.load(Ordering::Relaxed) && left_shown() {
+    // (t1061: not while the left Keyblade is put away, `put_away`.)
+    if actor != 0 && actor == super::takeover::sora_actor() && !IN_TRAIL.load(Ordering::Relaxed) && left_shown() && !put_away() {
         if let Some(holder) = trail_holder() {
             static N: AtomicU32 = AtomicU32::new(0);
             log_n(&N, 6, || format!("trail: KH1's request {id:#x} for Sora asked for the left Keyblade too"));

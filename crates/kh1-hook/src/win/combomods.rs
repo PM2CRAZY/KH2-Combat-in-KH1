@@ -1802,7 +1802,7 @@ const NORMAL_STEAM: usize = 0x1907F0;
 const NORMAL_BYTES: [u8; 11] = [0xF3, 0x0F, 0x10, 0x15, 0xC4, 0x27, 0x25, 0x00, 0x48, 0x63, 0xC1];
 
 /// The Config row Combat > Ledge Hop (the owner, t914: "make sora's drop ahead hop a toggle in
-/// the config menu under combat"): 0 not read yet, else 1 + on. On (the default): KH2's line ahead
+/// the config menu under combat"): 0 not read yet, else 1 + on. On (off by default since t1069): KH2's line ahead
 /// marks row 1 at a drop ahead (its hop off the ledge, 181). Off: base Sora's press never marks
 /// it; Drive Forms keep KH2's.
 static DROP_HOP: AtomicU8 = AtomicU8::new(0);

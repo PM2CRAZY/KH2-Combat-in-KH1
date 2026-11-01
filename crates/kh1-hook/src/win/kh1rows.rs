@@ -447,6 +447,21 @@ static ATKP_OF: [AtomicU32; OURS.len()] = [const { AtomicU32::new(u32::MAX) }; O
 /// row switches between them live).
 static CLASH_KH1: [AtomicU32; OURS.len()] = [const { AtomicU32::new(u32::MAX) }; OURS.len()];
 static CLASH_KH2: [AtomicU32; OURS.len()] = [const { AtomicU32::new(u32::MAX) }; OURS.len()];
+/// (t1064) Each row's template data's own wall-test bit (`+0x38` bit 16, `WALL_OFF`), put back
+/// out of a Drive Form (`rules`).
+static WALL_KH1: [AtomicU32; OURS.len()] = [const { AtomicU32::new(0) }; OURS.len()];
+/// (t1064) KH1's attack data `+0x38` bit 16: KH1's attack constructor `0x1402B2DC0` turns it into
+/// the object's "spent" bit 0x100000, and its shape pass `0x1402B3800` runs the wall contact
+/// `0x1402B3A00` (the wall bounce: a kind 6 record, his recoil 0x6E / 0x70) only while that bit
+/// is clear (Checked (decomp)). Set: the attack passes through walls.
+pub(super) const WALL_OFF: u32 = 0x1_0000;
+
+/// (t1064) KH2's wall rule for a hit's ATKP: KH2's attack step `0x1403D0BB0` runs the wall contact
+/// `0x1403D1960` (whose background hit is his recoil 41 / 43) only for an ATKP with flag bit 0x01
+/// (`+0x12`, OpenKH's "BG hit"; Checked (decomp)). True: the hit passes through walls in KH2.
+pub(super) fn kh2_no_wall(a: &kh2_formats::battle::Atkp) -> bool {
+    a.flags & 1 == 0
+}
 /// Which rules the data holds now: 0 none yet, 1 KH1's, 2 KH2's.
 static RULES: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
 /// KH1's clash type that meets no attack (no entry of KH1's pairing table `0x140528CB8` has its
@@ -797,6 +812,7 @@ unsafe fn make(base: usize, index: u16, kh1: usize) -> Option<Table> {
         let (t2, p2) = kh2_clash(a, t1, p1);
         CLASH_KH1[n].store(t1 << 16 | (p1 as u32 & 0xFFFF), Ordering::Relaxed);
         CLASH_KH2[n].store(t2 << 16 | (p2 as u32 & 0xFFFF), Ordering::Relaxed);
+        WALL_KH1[n].store(rd::<u32>(d + 0x38) & WALL_OFF, Ordering::Relaxed);
         if o.guard_break && t2 != PIERCE_TYPE {
             log!(Combat, "KH1's attack rows: Guard Break's ATKP {atkp:?} is no pierce armor: it keeps its template's clash type under KH2's rules");
         }
@@ -842,6 +858,9 @@ unsafe fn make(base: usize, index: u16, kh1: usize) -> Option<Table> {
 /// guards but is never stopped) gets KH1's priority past which it isn't stopped (`GUARD_THROUGH`,
 /// 0x62: KH1's clash half `0x1402B4BC0` stops only a side under it); the rest keep the template's.
 /// KH2's guard kinds (2, 3) are no attack rows. Returns (type, priority).
+///
+/// (t1060) Applied to Sora's attacks at Recoil KH2, and in a Drive Form on KH1's states whatever the
+/// Recoil row (`kh2_rules`; the owner's answer (a): every form by its own KH2 data).
 pub(super) fn kh2_clash(a: Option<&kh2_formats::battle::Atkp>, t: u32, p: i32) -> (u32, i32) {
     match a {
         Some(a) if a.kind == 1 => (PIERCE_TYPE, p),
@@ -850,32 +869,77 @@ pub(super) fn kh2_clash(a: Option<&kh2_formats::battle::Atkp>, t: u32, p: i32) -
     }
 }
 
+/// (t1060) Whether Sora's attacks take KH2's clash rules (`kh2_clash`): the Recoil row at KH2, or a
+/// Drive Form on KH1's own states at either setting (the owner: a form's refact-self-2 hit "shouldn't
+/// cause sora to recoil, it should let him parry a move though"; answer (a), every form by its own
+/// KH2 data). KH1's half `0x1402B4BC0` stops neither a side at 0x62 or more nor queues a recoil
+/// record on its owner, while the enemy's side under 0x62 is stopped and its owner recoils: the
+/// parry (`docs/kh1-kh2-recoil.md` §6.3, Checked (decomp)). Base Sora stays on the Recoil row.
+pub fn kh2_rules() -> bool {
+    super::recoil::kh2() || super::form::native_form().is_some()
+}
+
 /// Each frame base Sora is posed (`install`): our rows' data hold the Recoil row's rules (KH1's:
 /// the templates' clash type and priority, Guard Break's priority at least `GUARD_THROUGH`; KH2's: `kh2_clash`). KH1 reads them
 /// when it makes the row's attack object (`0x1402B2DC0`: data `+0x38` bits 0..2 → the object's
 /// flags bits 17..19, `+0x3C` → its priority `+0x68`, Checked (decomp)), so a switch takes the
 /// next swing.
+///
+/// (t1060) In a Drive Form on KH1's states, KH2's rules from the form's own data at either Recoil
+/// setting: our rows are shared by base Sora and every form (one row a KH2 motion id, the clip from
+/// the moveset playing, `pose::kh2_moves`), so the clash type and priority are worked out again from
+/// the form's clip's first hit window's ATKP (`window_atkp`, as `make` does for base Sora) when the
+/// form changes, and written to the shared data as the Recoil row's switch is. A row the form has no
+/// clip of keeps KH2's rules from base Sora's data. Only on a change (base Sora, KH1 or KH2, or a form).
 unsafe fn rules() {
-    let want = if super::recoil::kh2() { 2u8 } else { 1 };
+    let form = super::form::native_form();
+    let want = match form {
+        Some(k) => 3 + k as u8,
+        None if super::recoil::kh2() => 2u8,
+        None => 1,
+    };
     if RULES.load(Ordering::Relaxed) == want {
         return;
     }
+    let kh2 = pose::kh2();
     let mut said = Vec::new();
     for n in 0..OURS.len() {
         let d = DATA_AT[n].load(Ordering::Relaxed);
-        let v = if want == 2 { &CLASH_KH2[n] } else { &CLASH_KH1[n] }.load(Ordering::Relaxed);
+        let mut v = if want == 1 { &CLASH_KH1[n] } else { &CLASH_KH2[n] }.load(Ordering::Relaxed);
         if d == 0 || v == u32::MAX {
             continue;
         }
+        if form.is_some() {
+            let own = kh2.and_then(|k| window_atkp(OURS[n].motion, None).and_then(|id| k.battle.attack_for_level(id, 0, 0)));
+            let v1 = CLASH_KH1[n].load(Ordering::Relaxed);
+            if own.is_some() && v1 != u32::MAX {
+                let (t2, p2) = kh2_clash(own, v1 >> 16, (v1 & 0xFFFF) as u16 as i16 as i32);
+                v = t2 << 16 | (p2 as u32 & 0xFFFF);
+            }
+        }
         let (t, p) = (v >> 16, (v & 0xFFFF) as u16 as i16 as i32);
-        wr(d + 0x38, (rd::<u32>(d + 0x38) & !7) | t);
+        // (t1064) In a Drive Form, KH2's wall rule from the form's own clip's ATKP (`kh2_no_wall`:
+        // Final's hits have no "BG hit" flag, so they never bounce off a wall); otherwise, or with
+        // no clip of the form's, the template's own bit (KH1's wall bounce, base Sora as before).
+        let own_wall = if form.is_some() { kh2.and_then(|k| window_atkp(OURS[n].motion, None).and_then(|id| k.battle.attack_for_level(id, 0, 0))).map(kh2_no_wall) } else { None };
+        let wall = match own_wall {
+            Some(true) => WALL_OFF,
+            Some(false) => 0,
+            None => WALL_KH1[n].load(Ordering::Relaxed),
+        };
+        wr(d + 0x38, (rd::<u32>(d + 0x38) & !(7 | WALL_OFF)) | t | wall);
         wr(d + 0x3C, p);
         if OURS[n].attack {
-            said.push(format!("{} type {t} priority {p}", OURS[n].name));
+            said.push(format!("{} type {t} priority {p}{}", OURS[n].name, if wall != 0 { " through walls" } else { "" }));
         }
     }
     RULES.store(want, Ordering::Relaxed);
-    log!(Combat, "KH1's attack rows: {}'s clash rules: {}", if want == 2 { "KH2" } else { "KH1" }, said.join(", "));
+    let whose = match form {
+        Some(k) => format!("KH2 ({}'s own data)", k.name()),
+        None if want == 2 => "KH2".to_string(),
+        None => "KH1".to_string(),
+    };
+    log!(Combat, "KH1's attack rows: {whose}'s clash rules: {}", said.join(", "));
 }
 
 /// Sora's own KH1 row `row` (KH1's table, not ours): its attack data's address and its effect and
@@ -1057,14 +1121,20 @@ pub unsafe fn native_atkp(actor: usize) -> Option<kh2_formats::battle::Atkp> {
 /// any row not its own (the idle, request 0, `0x14029FA30 (actor, 0x40000000, 0)`) is KH1's fall
 /// instead (request 6), as its own air rows queue (rows 15..18). The queue (`0x14029F980`): its
 /// count at `+0x178`, entries of 0x10 from `+0x17C` (the request first).
+/// (t1066) Any queued idle up to the count, not only the second entry: the count holds only what
+/// is still to play (the motion step's apply `0x14029FC40` takes the head off and counts one down,
+/// t1002, Checked (decomp)), so once the move plays its idle is the first entry with a count of 1.
+/// Right after KH1's row runner (`combat::exec`) it is the second of 2, as before; from a ground
+/// move leaving the ground mid-move (`shared::physics::lift_off`, Valor's finisher 154 at frame
+/// 64) it is the first of 1, which the old test skipped: the idle played in the air (the owner's
+/// trace f23201: request 0 at 125 above the floor after 154).
 pub unsafe fn queue_fall(actor: usize) {
-    let count = rd::<u32>(actor + 0x178);
-    if count != 2 {
-        return;
-    }
-    let e = actor + 0x17C + 0x10;
-    if rd::<u32>(e) == 0x4000_0000 {
-        wr(e, 0x4000_0006u32);
+    let count = rd::<u32>(actor + 0x178).min(8);
+    for i in 0..count as usize {
+        let e = actor + 0x17C + i * 0x10;
+        if rd::<u32>(e) == 0x4000_0000 {
+            wr(e, 0x4000_0006u32);
+        }
     }
 }
 

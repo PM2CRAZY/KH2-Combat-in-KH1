@@ -216,7 +216,8 @@ static ORIG_TOUCH: AtomicUsize = AtomicUsize::new(0);
 /// KH2's box Open (03system `cmd` 0x20, the box's reaction shape's argument; Checked (files)) is usable only
 /// when (`0x1404088F0`, Checked (decomp)) Sora's facing · (box - Sora) >= its `+0x10` (-0.7071: the box at
 /// most 135 degrees off his facing) and (box - Sora) · (the box's facing turned by `+0x14` + pi) >= its
-/// `+0x18` (6.1e-17, i.e. 0: Sora on the box's front side); otherwise it is greyed.
+/// `+0x18` (6.1e-17, i.e. 0: Sora on the box's front side); otherwise it is greyed. (t1067: only the first
+/// rule is taken here, `chest_touch`.)
 /// KH1's command box: the command per slot (`0x140528914`, slot 3 the Triangle box), greyed and blocked bits
 /// (`0x140528904`, `0x140528908`); the chest's Open is command 0x37. Checked (exe).
 const MENU_SLOTS_STEAM: usize = 0x528914;
@@ -224,7 +225,6 @@ const GREYED_STEAM: usize = 0x528904;
 const BLOCKED_STEAM: usize = 0x528908;
 const OPEN_COMMAND: u8 = 0x37;
 const KH2_OPEN_FACING: f32 = -0.707_106_77;
-const KH2_OPEN_FRONT: f32 = 6.123_031_8e-17;
 const OPEN_REQUEST: u32 = 0x900A6;
 const ACTOR_REQUEST: usize = 0x17C;
 /// Sora's lock: actor `+0x444` bit 1 (the handler sets it; KH1's control step is skipped while it is).
@@ -926,9 +926,12 @@ unsafe extern "system" fn chest_first(actor: usize, b: u32) -> usize {
     f(actor, b)
 }
 
-/// The chest's touch callback (t780): on Quick / Skip, KH2's two facing rules for the box's Open before
-/// KH1's own offer (its state and height checks stay): the chest no more than 135 degrees off Sora's facing,
-/// and Sora on the chest's front side. Facings are the actors' direction vectors (`+0x30`, t782); Assumption:
+/// The chest's touch callback (t780): on Quick / Skip, KH2's facing rule for the box's Open before
+/// KH1's own offer (its state and height checks stay): the chest no more than 135 degrees off Sora's facing.
+/// (t1067, the owner's answer (a): KH2's second rule, Sora on the chest's front side, is dropped. KH1 has
+/// no front rule (its scan needs only Sora facing the chest, Checked (decomp)) and its rooms put chests
+/// where only a side is reachable (Traverse Town); KH2's rooms are built for the rule. The front value
+/// stays in the log line.) Facings are the actors' direction vectors (`+0x30`, t782); Assumption:
 /// a chest's front is that direction. Called by KH1 only when its scan asks this chest.
 unsafe extern "system" fn chest_touch(chest: usize, sora: usize, code: i32) -> u64 {
     let orig: unsafe extern "system" fn(usize, usize, i32) -> u64 = std::mem::transmute(ORIG_TOUCH.load(Ordering::Acquire));
@@ -956,7 +959,7 @@ unsafe extern "system" fn chest_touch(chest: usize, sora: usize, code: i32) -> u
     // during the evidence box's window, f3748..f3893, gave no lid, no item, and the chest was never offered
     // again). In KH1 the box holds Sora until its 512, so the two never met; the Open is greyed until then.
     let busy = box_running();
-    let grey = busy || len > 1.0 && (facing < KH2_OPEN_FACING || front < KH2_OPEN_FRONT);
+    let grey = busy || len > 1.0 && facing < KH2_OPEN_FACING;
     let r = orig(chest, sora, code);
     let offered = rd::<u8>(base + MENU_SLOTS_STEAM + 3) == OPEN_COMMAND;
     if grey && offered {
@@ -1484,8 +1487,62 @@ unsafe fn call(ctx: usize, which: usize) -> u64 {
     if which == 1 && MODE.load(Ordering::Relaxed) != MODE_PICKUP && ours_to_skip(ctx) {
         timed_text(base(), ctx);
     }
+    // (t1070, log only) The owner: the In-game Scene Skip's "Obtained" line for an ability shows the
+    // Keyblade icon (0x86); vanilla's ability icon is looked for in KH1's own texts as they are shown.
+    if matches!(which, 1 | 3) {
+        icon_search(ctx, which);
+    }
     let f: unsafe extern "system" fn(usize) -> u64 = std::mem::transmute(ORIG_FN[which].load(Ordering::Acquire));
     f(ctx)
+}
+
+/// (t1070, log only, Menus) Each text KH1 adds to a window (message function 1: window, text) or each
+/// item line (605: its two arguments) the first time it is seen: its arguments, every glyph after a
+/// `{0C 04}` in the text (where KH1's texts put their icons, `line_icon`) and its words, so the icon of
+/// a vanilla ability line (a scene that gives one, the skip off) can be read from the log. At most 200
+/// lines; nothing when the message functions aren't wrapped (Chest Opening and Item Pickup on Vanilla).
+unsafe fn icon_search(ctx: usize, which: usize) {
+    static SEEN: Mutex<Vec<(usize, i32, i32)>> = Mutex::new(Vec::new());
+    let sp = rd::<i32>(ctx + CTX_SP);
+    if !(1..64).contains(&sp) {
+        return;
+    }
+    let (a, b) = (rd::<i32>(ctx + 0x198 + (sp - 1) as usize * 4), rd::<i32>(ctx + 0x198 + sp as usize * 4));
+    let Ok(mut seen) = SEEN.lock() else { return };
+    if seen.len() >= 200 || seen.contains(&(which, a, b)) {
+        return;
+    }
+    seen.push((which, a, b));
+    let n = MESSAGE_FNS[which].0;
+    if which != 1 || !(0..0x400).contains(&b) {
+        log!(Menus, "Ability icon search (t1070): message function {n}: arguments {a}, {b}");
+        return;
+    }
+    let p = rd::<u64>(base() + TEXTS_STEAM + b as usize * 8) as usize;
+    if p < 0x10000 || !super::crash::readable(p) || !super::crash::readable(p + 0xFF) {
+        log!(Menus, "Ability icon search (t1070): message function {n}: window {a}, text {b}: not readable");
+        return;
+    }
+    let at = |i: usize| rd::<u8>(p + i);
+    let (mut icons, mut words, mut i) = (Vec::new(), String::new(), 0usize);
+    while i + 2 < 0x100 {
+        let c = at(i);
+        if c == 0x0C && at(i + 1) == 0x04 && at(i + 2) >= 0x20 {
+            icons.push(format!("{:#x}", at(i + 2)));
+            words.push_str(&format!("[icon {:#x}]", at(i + 2)));
+            i += 3;
+            continue;
+        }
+        match c {
+            0x2B..=0x44 => words.push((b'A' + c - 0x2B) as char),
+            0x45..=0x5E => words.push((b'a' + c - 0x45) as char),
+            0x01 => words.push(' '),
+            _ => {}
+        }
+        let Some(l) = code_len(c, || at(i + 1)) else { break };
+        i += l;
+    }
+    log!(Menus, "Ability icon search (t1070): message function {n}: window {a}, text {b}: icons [{}] \"{words}\"", icons.join(", "));
 }
 
 unsafe extern "system" fn msg0(ctx: usize) -> u64 {

@@ -309,6 +309,8 @@ unsafe extern "system" fn physics(actor: usize) {
         GAME_FRAME.fetch_add(1, Ordering::Relaxed);
         FRAME_KIND.store(if took { 1 } else if HANDOFF_FRAME.load(Ordering::Relaxed) { 2 } else { 0 }, Ordering::Relaxed);
         room_watch(actor, took);
+        // (t1059: a new room's arrival in a form: the partners taken even while a script has Sora.)
+        super::driveparty::arrival_frame();
     }
     if took {
         if sora {
@@ -1034,6 +1036,8 @@ unsafe fn room_watch(actor: usize, kh2: bool) {
     let Ok(mut seen) = ROOM.try_lock() else { return };
     let now = now_ms();
     if seen.as_ref().is_none_or(|s| s.world != world || s.room != room) {
+        // (t1059: the partners a form took, taken at once in the new room.)
+        super::driveparty::room_entered(world, room, seen.as_ref().map(|s| (s.world, s.room)));
         log!(Takeover,
             "room: world {world:#x} room {room:#x} entered; {} (KH1 state {}, flags {:08x}, script {})",
             if kh2 { "KH2 has Sora".to_string() } else { format!("KH1 has Sora ({})", LAST_WHY.try_lock().map(|w| w.clone()).unwrap_or_default()) },
@@ -1617,6 +1621,22 @@ pub fn kh1_scene() -> bool {
     let after_move = HANDOFF.load(Ordering::Relaxed) && !super::shared::active() || now_ms().saturating_sub(HANDOFF_SEEN_MS.load(Ordering::Relaxed)) < 1500;
     let held = FROZEN_FRAMES.load(Ordering::Relaxed) >= 2 && !battle && !after_move;
     event || own_mode || ((active() || super::shared::active()) && (SCRIPTED.load(Ordering::Relaxed) || held))
+}
+
+/// (t1065) `kh1_scene` without its "held still out of battle" part: an event (a talk, the
+/// Coliseum's win), one of KH1's own movement modes or an area script walking him. For a Drive
+/// Form's ground inertia (`shared::physics`): KH1 doesn't run its control step through his
+/// actions, so out of battle every attack of his read as "held" (Checked (trace): the owner's t1064
+/// trace f184..f248, Final's 152, no move at all), and t1063 dropped the form's move in them.
+pub fn kh1_scene_unheld() -> bool {
+    let base = BASE.load(Ordering::Relaxed);
+    if base == 0 {
+        return false;
+    }
+    let event = unsafe { rd::<u32>(base + EVENT_RVA) } != 0;
+    let sora = unsafe { rd::<u64>(base + PARTY_RVA) } as usize;
+    let own_mode = sora > 0x10000 && kh1_camera_mode(unsafe { rd::<i32>(sora + 0x70) });
+    event || own_mode || ((active() || super::shared::active()) && SCRIPTED.load(Ordering::Relaxed))
 }
 
 /// KH1 moves Sora itself in a scene: one of its own movement modes (the Jungle Slider) or an

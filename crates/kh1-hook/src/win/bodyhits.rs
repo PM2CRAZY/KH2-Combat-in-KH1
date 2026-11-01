@@ -855,7 +855,8 @@ unsafe fn data_for(g: &mut State, base: usize, motion: u16, window: usize, air: 
         super::kh1rows::kh1_magic_row(d);
     }
     let (t1, p1) = (rd::<u32>(d + 0x38) & 7, rd::<i32>(d + 0x3C));
-    let (t, p) = if super::recoil::kh2() { super::kh1rows::kh2_clash(Some(a), t1, p1) } else { (t1, p1) };
+    // (t1060: KH2's rules at Recoil KH2 or in a Drive Form, `kh1rows::kh2_rules`.)
+    let (t, p) = if super::kh1rows::kh2_rules() { super::kh1rows::kh2_clash(Some(a), t1, p1) } else { (t1, p1) };
     // (Bit 16: "spent", no wall test.)
     wr(d + 0x38, (rd::<u32>(d + 0x38) & !7) | t | 0x1_0000);
     wr(d + 0x3C, p);

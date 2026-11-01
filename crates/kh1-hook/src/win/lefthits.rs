@@ -230,7 +230,8 @@ pub unsafe fn new_play(actor: usize, m: u16, req: u32, air: bool, clip: &charact
             }
         }
         OBJ[side].store(0, Ordering::Relaxed);
-        let want = super::form::native_now() && if side == LEFT { super::form::two_blades() } else { super::kh2slots::rowless_now(actor) };
+        // (t1061: no left hits while the left Keyblade is put away, `leftblade::put_away`.)
+        let want = super::form::native_now() && if side == LEFT { super::form::two_blades() && !super::leftblade::put_away() } else { super::kh2slots::rowless_now(actor) };
         if want {
             *g = make(side, actor, m, req, air, clip);
             OBJ[side].store(g.as_ref().map_or(0, |l| l.obj), Ordering::Relaxed);
@@ -257,7 +258,8 @@ unsafe fn guards_new_play(actor: usize, m: u16, req: u32, clip: &character_core:
             }
         }
         GUARD_OBJ[side].store(0, Ordering::Relaxed);
-        if !on {
+        // (t1061: no left guard while the left Keyblade is put away, `leftblade::put_away`.)
+        if !on || (side == LEFT && super::leftblade::put_away()) {
             continue;
         }
         // (`guard_channels` is [right, left].)
@@ -401,9 +403,17 @@ unsafe fn blade_data(attack: u16, air: bool, channel: u8, a: &kh2_formats::battl
         super::kh1rows::kh1_magic_row(d);
     }
     let (t1, p1) = (rd::<u32>(d + 0x38) & 7, rd::<i32>(d + 0x3C));
-    let (t, p) = if super::recoil::kh2() { super::kh1rows::kh2_clash(Some(a), t1, p1) } else { (t1, p1) };
-    // (The data's own "spent" bit 16 kept: KH1's wall test as for the right Keyblade.)
-    wr(d + 0x38, (rd::<u32>(d + 0x38) & !7) | t);
+    // (t1060: KH2's rules at Recoil KH2 or in a Drive Form, `kh1rows::kh2_rules`.)
+    let (t, p) = if super::kh1rows::kh2_rules() { super::kh1rows::kh2_clash(Some(a), t1, p1) } else { (t1, p1) };
+    // (The data's own "spent" bit 16 kept: KH1's wall test as for the right Keyblade; t1064: in a
+    // Drive Form, KH2's wall rule from this ATKP, `kh1rows::kh2_no_wall`: no "BG hit" flag, through
+    // walls, as our rows' data in a form.)
+    let wall = if super::form::native_form().is_some() {
+        if super::kh1rows::kh2_no_wall(a) { super::kh1rows::WALL_OFF } else { 0 }
+    } else {
+        rd::<u32>(d + 0x38) & super::kh1rows::WALL_OFF
+    };
+    wr(d + 0x38, (rd::<u32>(d + 0x38) & !(7 | super::kh1rows::WALL_OFF)) | t | wall);
     wr(d + 0x3C, p);
     Some(d)
 }
@@ -563,10 +573,43 @@ pub unsafe fn step(actor: usize) {
     if !super::bodyhits::native() || actor < 0x10000 {
         return;
     }
+    // (t1061) The left Keyblade put away mid-play (Sora's own put away, or a KH1 cutscene,
+    // `leftblade::put_away`): its hit and guard objects freed with KH1's free, as a new play frees
+    // them; not made again until a new play with it out. A read only while one is live.
+    if (OBJ[LEFT].load(Ordering::Relaxed) != 0 || GUARD_OBJ[LEFT].load(Ordering::Relaxed) != 0) && super::leftblade::put_away() {
+        free_left();
+    }
     for side in SIDES {
         if OBJ[side].load(Ordering::Relaxed) != 0 {
             step_one(side, actor);
         }
+    }
+}
+
+/// (t1061) The left Keyblade's hit and guard objects freed (KH1's free, as `new_play` frees the last
+/// play's), if still ours.
+unsafe fn free_left() {
+    let free: unsafe extern "system" fn(usize) = std::mem::transmute(super::bodyhits::base() + FREE_ATTACK_RVA);
+    if let Ok(mut g) = STATE[LEFT].try_lock() {
+        if let Some(l) = g.take() {
+            if still_ours(&l) {
+                free(l.obj);
+                super::rehit::forget(l.obj);
+            }
+        }
+        OBJ[LEFT].store(0, Ordering::Relaxed);
+    }
+    if let Ok(mut g) = GUARD[LEFT].try_lock() {
+        if let Some(x) = g.take() {
+            if guard_ours(&x) {
+                free(x.obj);
+            }
+        }
+        GUARD_OBJ[LEFT].store(0, Ordering::Relaxed);
+    }
+    static N: AtomicU32 = AtomicU32::new(0);
+    if super::log_on(super::LogCat::Combat) && N.fetch_add(1, Ordering::Relaxed) < 10 {
+        log!(Combat, "left Keyblade hits: the left Keyblade is put away (Sora's own put away, or a cutscene): its hit and guard objects freed");
     }
 }
 

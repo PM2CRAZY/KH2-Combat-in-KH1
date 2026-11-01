@@ -47,3 +47,22 @@ flown). Flights the story starts itself (`0x14020EEB0`) stay as they are.
 
 Unverified in game: the landing list drawn without the flight's scene behind it; story worlds
 whose first arrival is tied to a flight.
+
+## The route's event scripts (t1068)
+
+The owner: with the skip on, the story step that follows a world's first arrival didn't happen (answer
+(b)); answer (a): do what a cleared flight does but the flight itself.
+
+- Steam KH1, Checked (decomp, exe): each route has a record at `0x14050AF00 + route * 0x58` (`route_tw_1`,
+  ...; the route start's first argument is its index). It names two event scripts in `worldmap/ev/`: a
+  departure one (`+0x34`, `wld_out_*`, event 0x40) run as the flight starts, and an arrival one (`+0x14`,
+  `wld_in_*`, event 0x41) run after the cleared flight's landing list, with flag word `0x142867364` bit 8
+  set just before. Routes 3..15 have both, 16..18 only the departure one, the rest none. The skip ran
+  neither.
+- Now the skip, after the landing list, loads both into the scene's script buffer (`0x14268C438`, its first
+  two 0x1000 slots) with KH1's loader `0x140214780`, sets bit 8, and runs them with KH1's runner
+  `0x140213150` in the flight's order, then lands (or goes back to the map) as before. The route's scores
+  are still not written (no flight flown).
+- Assumptions: the world map reloads its own two scripts in those slots when it next starts; the
+  departure script runs safely after the landing list instead of before it; the scripts don't need the
+  flight's actors. Not checked in game.

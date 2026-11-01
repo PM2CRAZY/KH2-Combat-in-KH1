@@ -686,6 +686,18 @@ unsafe fn orig_give(i: usize, ctx: usize) -> u64 {
 /// 583, a reward record: an item or an ability.
 unsafe extern "system" fn give_583(ctx: usize) -> u64 {
     if !noting() {
+        // (t1070, log only) A reward KH1 gives outside the skip (a scene played through): which,
+        // so the log's next "Ability icon search" lines can be matched to an ability's line.
+        let base = BASE.load(Ordering::Relaxed);
+        let id = arg(ctx, 0);
+        let table = rd::<u64>(base + REWARDS_PTR_STEAM) as usize;
+        if table >= 0x10000 && (0..0x10000).contains(&id) && super::crash::readable(table + id as usize * 2 + 1) {
+            let rec = rd::<u16>(table + id as usize * 2);
+            if rec & 0xF == 1 {
+                let ab = (rec >> 8) as u8;
+                log!(Menus, "Ability icon search (t1070): KH1 gives ability {ab:#x} ({}) outside the skip (reward {id})", super::menu::ability_name(base, ab).unwrap_or_default());
+            }
+        }
         return orig_give(0, ctx);
     }
     let base = BASE.load(Ordering::Relaxed);

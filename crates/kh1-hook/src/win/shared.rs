@@ -1455,6 +1455,24 @@ pub mod physics {
         if !kh2() {
             return false;
         }
+        // (t1063) While KH1's own scene has him (an event: a talk, the Coliseum's win; an area
+        // script walking him through a door or zone; KH1 holding him still out of battle,
+        // `takeover::kh1_scene`), KH1 moves him: his KH2 ground velocity is dropped, not carried
+        // on. The owner: in Wisdom / Final "it doesn't stop his momentum so he flies past the door
+        // during the door animation, this also happens when talking to an npc, coliseum win
+        // animation". Checked (code): KH1's scripts set his move through KH1's own step, which this
+        // inertia replaced with the old velocity. Assumption: KH2's events also stop the player's
+        // free-move velocity (an event leaves the free state, whose action change restarts the
+        // velocity step, `0x1403B89A0`, Checked (decomp); the event path itself not traced).
+        // (t1065) Not KH1's "held still" test (`kh1_scene_unheld`): it is on through every action of
+        // his out of battle, where it stopped his attacks dead; the Coliseum's win and other
+        // cutscenes by KH1's scene flag instead (`driveparty::scene`, as t1061 puts the Keyblades away).
+        if super::super::takeover::kh1_scene_unheld() || super::super::driveparty::scene() {
+            if let Ok(mut g) = GROUND_V.try_lock() {
+                *g = None;
+            }
+            return false;
+        }
         let dt = dt();
         let (a, b) = (n.acceleration, n.brake);
         let action = rd::<u32>(actor) & 4 != 0;

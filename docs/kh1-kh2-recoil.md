@@ -532,3 +532,61 @@ ini `clash_count = kh1 | kh2`, **KH2 by default**, as the other Tweaks rows defa
 - Cost: no new hook. The meeting hook (called only for overlapping attack pairs) does two
   directional tests when one side is Sora's. The hit pass does a few reads.
 
+### 6.11 Drive Forms take KH2's clash rules at either Recoil setting (t1060)
+
+- The owner (answer (a)): every Drive Form's hits follow KH2's clash rule from its own ATKP data,
+  whatever the Recoil row says; a refact-self-2 hit "shouldn't cause sora to recoil, it should let
+  him parry a move though". Base Sora stays on the Recoil row.
+- How refact self 2 maps onto KH1 (§6.3, **Checked (decomp)**): our side's priority at least 0x62.
+  KH1's half `0x1402B4BC0` never stops a side at 0x62 or more and queues no clash record on its
+  owner, so no KH1 recoil request (0x6E / 0x6F / 0x70) starts for Sora; the enemy's attack (under
+  0x62) is stopped and its owner gets KH1's clash record (kind 6, or 7 when the gap is over 40):
+  the parry, with KH1's spark. Pierce armor (kind 1) is KH1's type 6, which meets no attack: no
+  parry and no recoil, as KH2's table (kind 1 meets only special guards).
+- Built (`kh1rows::kh2_rules`: Recoil KH2 or `form::native_form()`): our KH1 rows (`kh1rows::rules`),
+  the body windows (`bodyhits`), both blades' objects (`lefthits`), KH2's shapes against guards
+  (`combat::Strikes::strike_as`) and the refact-2 guard immunity (`recoil::meet`).
+- Our rows are shared by base Sora and every form (one row per KH2 motion id; the clip comes from
+  the moveset playing, `pose::kh2_moves`). So `kh1rows::rules` works the row's type and priority
+  out again from the form's own clip (its first hit window's ATKP, as for base Sora) when the form
+  changes, and writes it into the shared data as the Recoil row's switch does; KH1 reads it when
+  it makes the row's attack object (next swing). A row the form has no clip of keeps KH2's rules
+  from base Sora's data. Nothing per frame but the existing change check.
+- Each form's hit ATKPs (**Checked (files)**: range 10 in the weapon and body motions, `00battle.bin`):
+  - Final (`W_EX010_ULTF_R` / `_L`, `P_EX100_ULTF`): every hit is refact self 2. Normal (parries):
+    1273..1287, 1281 / 1282, 1284 / 1285, 1386..1392, 1399..1402, 1405..1413, 1428 / 1429, 1449 /
+    1450, 1457 / 1458, 30 / 31, 1607 / 1608. Pierce armor (no parry, never stopped): 1393..1398 in
+    151, 1403 / 1404 and 1422..1427 in 153, 1414..1421 in 183, the body's 1455 / 1456 / 1737.
+  - Master (`W_EX010_TRIF_R` / `_L`, `P_EX100_TRIF`): refact self 2 but for the left blade's 1059
+    (181), 1061 / 1063 (182) and 1076 (185), refact self 0: those are stopped and recoil by KH1's
+    priority rule, per KH2's data. Body 1100 / 1101 (184) pierce armor.
+  - Limit (`W_EX010_KH1F`, `P_EX100_KH1F`): base Sora's plain swings 126, 127, 128, 131, 132, 147
+    and Slide Dash 968 / 975 are refact self 0 (they recoil); 890, 909, 1871 / 1872 refact 2; the
+    limits' 1857..1895 and the body's 1870 pierce armor.
+  - Wisdom (`P_EX100_MAGF`): no hit windows (its shots are not motion windows); guards only.
+  - Valor: its files (`P_EX100_BTLF`, `W_EX010_BTLF_*`) are not in the uploaded set: not checked.
+- One attack object a row: a row's rule is its clip's first hit window's (Final's 151 starts on
+  1390, normal; its later pierce windows ride on it; 153 and 183 start on pierce windows, so they
+  meet no enemy attack). Same limit as base Sora's (§6.3).
+- Not changed: a form's recoil itself when one happens (the refact-0 rows above) is KH1's request
+  as before (`recoil::after_pass` is base Sora's only).
+- **Walls (t1064).** The owner's trace and log after t1063: in Final, the air combo's first swing
+  (motion 182, priority 98) still bounced: KH1's air recoil 0x70 (slot 112) at the end of the
+  swing, with no enemy attack or guard met (no meeting line in the log; at priority 0x62 KH1's
+  clash half can't stop it). That leaves KH1's wall contact. **Checked (log, trace);** that it was
+  a wall and not something else is an inference from that.
+  - KH2 (**Checked (decomp)**): the attack step `0x1403D0BB0` runs the wall contact `0x1403D1960`
+    (its background hit is the recoil 41 / 43) only when the ATKP's flag byte `+0x12` has bit
+    0x01 (OpenKH's "BG hit").
+  - KH2's files (**Checked (files)**, `00battle.bin`): no Final hit ATKP has it (1273..1287,
+    1386..1429, 1449 / 1450, 1455..1458, 1737, 30 / 31, 1607 / 1608: flags 0x00 or 0x20). Master's
+    left 1059 / 1061 / 1063 / 1076, Limit's 127 / 132 / 147 / 968 / 975 don't either. Base Sora's
+    126 / 128 / 131 do.
+  - KH1 (**Checked (decomp)**): attack data `+0x38` bit 16 becomes the object's bit 0x100000 in
+    the constructor `0x1402B2DC0`, and the shape pass `0x1402B3800` runs the wall contact
+    `0x1402B3A00` only while it is clear (the body hits already set it, `bodyhits`).
+  - Built: in a Drive Form, our rows' data (`kh1rows::rules`, from the form's clip's first hit
+    window's ATKP) and both blades' data (`lefthits::blade_data`, per ATKP) take KH2's rule: no "BG
+    hit" flag, bit 16 set (through walls); with it, bit 16 clear. Out of a form, the template's own
+    bit, as before (base Sora keeps KH1's wall bounce at either Recoil setting). Nothing per frame
+    (written on the form change and when a blade's data is made).

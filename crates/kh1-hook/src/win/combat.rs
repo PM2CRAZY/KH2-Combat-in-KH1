@@ -1850,7 +1850,8 @@ impl Strikes {
             // with "refact self" 2 (Horizontal Slash, Retaliating Slash, Aerial Finish, ...) meets
             // them but is never stopped (KH2's `0x1403D2140`, Checked (decomp); KH2's table
             // `0x1405C5E98`, Checked (exe)). At KH1, KH1's rules by its row's clash type, as before.
-            let kh2_rules = super::recoil::kh2();
+            // (t1060: and in a Drive Form on KH1's states at either setting, `kh1rows::kh2_rules`.)
+            let kh2_rules = super::kh1rows::kh2_rules();
             let pierce = kh2_rules && first.kind == 1;
             let holds = kh2_rules && first.kind == 0 && first.refact_self == 2;
             let guards: Vec<&Guard> = self

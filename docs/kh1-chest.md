@@ -658,6 +658,16 @@ Checked (files): every `tz*.ard` (Deep Jungle) and `pc*.ard` (Hollow Bastion), e
   item's kind) has its icon after `{0C 04}`. t816 reads the icon from the line the part would have shown (message
   function 1 on window 7) and gives it to the box's line. Checked (files); not checked in game.
 
+### Round 24 (t1067): Open from any side
+
+- The owner: with Chest Opening on Skip, chests can't be opened from the side, so some in Traverse Town can't
+  be got. Cause (Checked (code)): on Quick / Skip `chest_touch` greyed Open unless Sora was on the chest's
+  front side (KH2's second rule, `0x1404088F0`, Checked (decomp)), with the front taken from the chest's
+  `+0x30` direction (Assumption). Round 15's throne room log showed the same rule greying two of three chests.
+- KH1 (Checked (decomp)): its offer needs only Sora facing the chest; KH1's rooms put chests where only a
+  side can be reached. The owner's answer (a): the front rule is dropped; KH2's other rule stays (the chest
+  at most 135 degrees off Sora's facing). The log line still prints the front value. Not checked in game.
+
 ## Not checked (Assumption)
 
 - (t724, now answered) KH2's own chest: see "KH2's own chest opening" above (checked in files and

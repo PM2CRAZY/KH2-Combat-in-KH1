@@ -625,12 +625,22 @@ unsafe fn look(a: usize) {
     }
     let obj = if super::model::left_is_ours() { None } else { super::leftblade::left_object_now() };
     wr::<u32>(a + A_WEAPON, obj.map_or(0, super::pose::handle));
+    // (t1061) Put away with Sora's own Keyblade, or in one of KH1's cutscenes
+    // (`leftblade::put_away`): the object stays on the holder (the same Keyblade back at once) but
+    // its weapon-out bit is clear, so KH1's own draw (`0x1402A1630`) skips it and KH1's own trail
+    // step (`0x1402C1F20`, `+0` short of `0xC001`) ends its trail; ended here too on the frame it
+    // goes, and Always's trail isn't asked for it. Checked (decomp).
+    let away = obj.is_some() && super::leftblade::put_away();
+    if away && rd::<u32>(a + A_FLAGS0) & WEAPON_OUT != 0 {
+        super::leftblade::end_left_trail();
+    }
+    let obj_out = obj.is_some() && !away;
     // (t842: no shadow. The holder is a copy of Sora's model with every mesh hidden, its body at
     // the bind, so KH1's shadow pass drew a T-posed Sora shadow off it; KH2's left weapon casts
     // none of its own, and Sora's own shadow is his actor's.)
     let f0 = rd::<u32>(a + A_FLAGS0) & !(DRAWN | WEAPON_OUT | SHADOW);
     let drawn = rd::<u32>(sora + A_FLAGS0) & DRAWN;
-    wr::<u32>(a + A_FLAGS0, f0 | drawn | if obj.is_some() { WEAPON_OUT } else { 0 });
+    wr::<u32>(a + A_FLAGS0, f0 | drawn | if obj_out { WEAPON_OUT } else { 0 });
     std::ptr::copy_nonoverlapping((sora + A_COLOUR_TO) as *const u8, (a + A_COLOUR_TO) as *mut u8, 0x10);
     std::ptr::copy_nonoverlapping((sora + A_COLOUR) as *const u8, (a + A_COLOUR) as *mut u8, 4);
     std::ptr::copy_nonoverlapping((sora + A_TINT) as *const u8, (a + A_TINT) as *mut u8, 0x10);
@@ -639,7 +649,7 @@ unsafe fn look(a: usize) {
     wr::<f32>(a + A_ALPHA_RATE, 0.0);
     wr::<u32>(a + A_FLAGS2, rd::<u32>(a + A_FLAGS2) | NO_CULL);
     // (Cosmetics > Keyblade Trail: Always, as `cosmetics` asks Sora's ahead of his trail step.)
-    if let (Some(obj), true) = (obj, super::cosmetics::always()) {
+    if let (Some(obj), true, true) = (obj, obj_out, super::cosmetics::always()) {
         wr::<u32>(a + A_TRAIL_FLAGS, rd::<u32>(a + A_TRAIL_FLAGS) | TRAIL_BIT);
         if let Some(id) = super::combat::swing_trail_id(sora) {
             super::cosmetics::request(obj, id);

@@ -37,9 +37,9 @@ kh2_volume = 1.0\r\n\
 ; damage_scale: times the damage of Sora's KH2 attacks (1.0 = KH1's hit x KH2's power)\r\n\
 damage_scale = 1.0\r\n\
 ; criticals: on = KH1's critical hits on every attack, enemies' too (Critical Plus); off = none,\r\n\
-;   as in KH2\r\n\
+;   as in KH2; on by default (the owner, t1069)\r\n\
 ;   (the Config menu's Combat list switches it)\r\n\
-criticals = off\r\n\
+criticals = on\r\n\
 ; party_criticals: the same for Donald's, Goofy's and the guests' attacks (the Combat list's\r\n\
 ;   Party Criticals row)\r\n\
 party_criticals = off\r\n\
@@ -52,8 +52,9 @@ kh1_ability_chance = off\r\n\
 glide_cast = on\r\n\
 ; drop_hop: on = an attack pressed on the ground with the floor giving out ahead hops base Sora\r\n\
 ;   off the ledge in an air swing, as KH2 (its row 1); off = no hop, the press takes the next\r\n\
-;   attack that fits; Drive Forms keep KH2's (the Config menu's Combat > Tweaks > Ledge Hop row)\r\n\
-drop_hop = on\r\n\
+;   attack that fits, the default (the owner, t1069); Drive Forms keep KH2's (the Config menu's\r\n\
+;   Combat > Tweaks > Ledge Hop row)\r\n\
+drop_hop = off\r\n\
 ; kh2_voice: on = Sora's KH2 battle voice on those moves instead of KH1's; off = KH1's voice\r\n\
 ; (battle_quotes, below, takes its place once set)\r\n\
 kh2_voice = off\r\n\
@@ -212,8 +213,8 @@ magic_air_physics = kh2\r\n\
 ;   (Gravity and Stop its finisher) and, on KH1's animation, let an Attack or a spell follow from\r\n\
 ;   KH2's Fire window (kh2), or play as KH1's; on KH2's animation Gravity and Stop are finishers\r\n\
 ;   either way\r\n\
-;   (kh1); the Config menu's Magic list switches it\r\n\
-magic_combo = kh1\r\n\
+;   (kh1); kh2 by default (the owner, t1069); the Config menu's Magic list switches it\r\n\
+magic_combo = kh2\r\n\
 ; hit_reactions: kh1 or kh2, KH1's or KH2's reaction animations when base Sora is hit (KH1\r\n\
 ;   still runs the reaction: its no-damage time, voices, HUD and MP); the Config menu's Combat\r\n\
 ;   list switches it\r\n\
@@ -471,8 +472,8 @@ pub struct Settings {
     pub damage_scale: f32,
     /// KH2's power inside KH1's damage function (`kh2_damage = on`, the default; `kh2damage`).
     pub kh2_damage: bool,
-    /// KH1's critical hits on every attack (`criticals = on`; off by default, as KH2;
-    /// `kh2damage::criticals`).
+    /// KH1's critical hits on every attack (`criticals = on`; on by default since t1069, the
+    /// owner; `kh2damage::criticals`).
     pub criticals: bool,
     /// KH1's critical hits on Sora's party members' attacks (`party_criticals = on`; off by
     /// default, as KH2; `kh2damage::party_criticals`).
@@ -491,7 +492,7 @@ pub struct Settings {
     /// the tester, what-is-still-missing m15 answer 1; `recoil::clash_count`).
     pub clash_count: bool,
     /// KH2's line ahead (its row 1, the hop off a ledge) for base Sora's ground press (`drop_hop =
-    /// on`, the default; the owner, t914; `combomods::drop_hop`).
+    /// on`; the owner, t914; off by default since t1069, the owner; `combomods::drop_hop`).
     pub drop_hop: bool,
     /// Glide on Square: always off (held off since t319; its ini line `glide` removed, t924). The
     /// Square glide code stays behind it for later.
@@ -780,13 +781,13 @@ fn load(first: bool) -> Option<Settings> {
         glide_on_square: false,
         // (t922: experimental, off unless `experimental = on`; off by default.)
         kh2_damage: experimental && on(&text, "kh2_damage", "on", false),
-        criticals: on(&text, "criticals", "on", false),
+        criticals: on(&text, "criticals", "on", true),
         party_criticals: on(&text, "party_criticals", "on", false),
         kh1_ability_chance: on(&text, "kh1_ability_chance", "on", false),
         enemy_weight: !experimental || on(&text, "enemy_weight", "on", true),
         glide_cast: on(&text, "glide_cast", "on", true),
         clash_count: !experimental || on(&text, "clash_count", "kh2", true),
-        drop_hop: on(&text, "drop_hop", "on", true),
+        drop_hop: on(&text, "drop_hop", "on", false),
         kh2_voice: on(&text, "kh2_voice", "on", false),
         auto_aim: on(&text, "auto_aim", "on", false),
         wall_clink: on(&text, "wall_clink", "on", true),
@@ -899,7 +900,7 @@ fn load(first: bool) -> Option<Settings> {
                 on(&text, "anim_aero", "kh2", magic && !kh1_cast[2]),
                 // (Air casts moved by the Physics row before: its value, KH2's without it.)
                 on(&text, "magic_air_physics", "kh2", crate::kh1phys::Rule::parse(setting(&text, "physics").as_deref()) == crate::kh1phys::Rule::Kh2),
-                on(&text, "magic_combo", "kh2", false),
+                on(&text, "magic_combo", "kh2", true),
                 on(&text, "guard_anim", "kh2", false),
                 experimental && on(&text, "guard_shape", "kh2", false),
             ]

@@ -889,3 +889,57 @@ Keyblade while KH1's actor pool has no place; KH1's own slots between Valor move
 
 
 **t852.** The left Keyblade's keychain kept the right one's shape: the holder motions start from the main bake's pose, whose chain bones are the right Keyblade's, and the left hold carried them along. In Valor's idle it pointed up, 126 degrees off KH2's left chain. Now the left chain is hung from KH2's left weapon motion the way the right one is from the right (`kh1_data::secondary`, chain only). Offline it's within 1 degree of KH2's in every motion checked. Checked (files, offline).
+
+## 13. Put away with Sora's own Keyblade, and in cutscenes (t1061)
+
+The owner's report: in the Olympus Coliseum's victory poses the second Keyblade stayed in Sora's hand. The owner's decision: both rules, in Valor, Master and Final.
+
+**How KH1 puts Sora's Keyblade away. Checked (decomp, Steam).** An actor's weapon shows while bit 0x4000 of its first flag word (`+0`) is set. KH1 sets it with `0x1402A2E30` and clears it with `0x1402A3280`. The party draw (`0x1402A1630`) draws the weapon object only while the bit is set. The trail step (`0x1402C1F20`) keeps a running trail only while `+0` has all of 0xC001, and ends it at once otherwise. Three things change the bit:
+- The motion start (`0x14029FC40`). A motion asked through the actor's request table (`+0x1D8`, read by `0x1402A01E0`) carries a weapon mode in bits 12..14 of its row: 0 puts the weapon away, 1 brings it out. The victory poses and other scripted motions put the Keyblade away this way. A raw-slot request (our KH2 slots) skips the table and leaves the bit alone.
+- The event script's weapon commands: `0x1401AA150` / `0x1401AA190` bring it out (for one actor / the whole party) and `0x1401AA210` / `0x1401AA230` put it away.
+- The carry command 0x1C of `0x1402C5D50` puts the carried actor's weapon away.
+
+**Cutscenes.** KH1's scene flag `0x142382594` bit 0, as `driveparty` reads it (`driveparty::scene`). Assumption: KH2 hides a form's second weapon in its events (the owner's account; not found in the KH2 decomp this round).
+
+**What t1061 does.** `leftblade::put_away` is true while Sora's `+0` bit 0x4000 is clear or the scene flag is on. While it holds:
+- The holder actor stays made and posed, its weapon object still on it, but its own weapon-out bit is cleared (`holder::look`). KH1's own draw then skips it, and KH1's own trail step ends its trail (ended by us too on the frame it goes).
+- No trail is asked for it: neither KH1's request copy (`leftblade::trail_start`) nor Keyblade Trail: Always.
+- `left_owner` is none, so KH2's second-weapon effects stop (`kh2dpx`).
+- The left hit and guard objects are freed (`lefthits::step`, KH1's free) and none is made (`new_play`, `guards_new_play`).
+
+When both clear, the next frame draws the same Keyblade again. Nothing is reloaded and `SHOWN` is untouched, so the arrival / revert flows and the 10-frame slot check (`leftblade::show`) don't interact with it. Cost: two reads (Sora's flag word, the scene flag), made where the holder, the trail request and the left hits already run.
+
+## 14. Out again on entering a new room in a Drive Form (t1062)
+
+The owner's report: in a Drive Form, Sora's Keyblades were gone after he entered a new room. His rule: the exit's walk-out puts them away as in vanilla. On entering the new room they are out again. Cutscenes (the Olympus Coliseum's victory poses among them) keep t1061's behaviour.
+
+**Why they stayed away. Checked (decomp, exe, log).**
+- **The walk-out puts it away.** KH1's event script has two weapon-away commands, op 142 (`0x1401AA210`, the script's own actor) and op 739 (`0x1401AA230`, the party), in the command table at `0x1404FA870` (dispatcher `0x1401B3530`). Both call `0x1402A3280`, which clears `+0` bit 0x4000. The owner's t1061 log (six room changes, none in a form) shows:
+  - Op 142 ran in the second of each of the three walk-out exits (rooms 1 to 0 at f237, 0 to 1 at f25485, 1 to 0 at f38985) and nowhere else.
+  - In each, Sora's bit went clear the frame before the walk motion was set.
+  - The arena exit at f36037 ran no op 142, and Sora kept his Keyblade.
+  - This part stays as in vanilla.
+- **The teardown carries it into the next room.** The room teardown (`0x14028AA30` → `0x1402921A0`) writes each party actor's bit into his member record (`0x142868BA0 + member * 0x74 + 0x3A`, bit 0). The actor creation (`0x140290D60`) makes the next room's actor with it. The log's new rooms had Sora come in with flags `01008043` (away) after the walk-outs and `0100c043` (out) after the arena exit.
+- **Base Sora gets it back from a motion.** His next motion whose request row has weapon mode 1 brings it out: the motion start `0x14029FC40` calls `0x1402A2E30 (actor, 1)`. A form's moves are raw-slot KH2 requests, which skip the row's weapon mode, so in a form nothing brought it back.
+
+**The weapon-out call. Checked (decomp, exe).** `0x1402A2E30 (actor, n)` sets the bit. Only if the bit was clear and the actor has a weapon object, it also sets the object's draw colour `+0x0C..+0x0F` to `ff ff ff` and `80` (n ≠ 0) or `ff` (n = 0). Its callers:
+- The motion start passes 1.
+- The script's out commands 141 / 738 pass the script's own value.
+- Three of KH1's handlers (`0x1401D8B70`, `0x1401D8CA0`, `0x1401D8DD0`; what they handle is not identified) pass 0.
+
+We bring the Keyblade out with `(sora, 1)`, as the motion start does, since that is the call that would bring it back for base Sora in the new room. This matches the `ff ff ff 80` §10.1 records for the right Keyblade.
+
+**Room change vs cutscene. Checked (decomp).** KH1's scene flag `0x142382594` bit 0 is set only through `0x1401A0E60`, by the cutscene-mode commands (27, 84, 85, 139, 140, 317, 476, 477, 489, 490, 623, 624). The room start (`0x1401A38A0`) clears it.
+
+**What t1062 does.**
+- When `driveparty::room_entered` runs in a form (t1059, once a room), it sets `KEYBLADE_DUE`.
+- On the first frame of the form's own step in the new room (`driveparty::frame`, from `form::native_frame`, which runs only while KH1's states have Sora, so after the room's entry script lets him go) with the scene flag off: if Sora's bit is clear, KH1's own `0x1402A2E30 (sora, 1)` is called (first bytes checked). This happens once.
+- While the scene flag is on (the arrival runs a cutscene), it waits, and the Keyblade comes out on the first such frame after the cutscene ends.
+- A cutscene later in the same room that puts it away is left as KH1 has it.
+- The form ending clears the pending flag.
+- The second Keyblade follows Sora's bit by t1061's rule: it vanishes with his during the walk-out and shows again with his. `leftblade::put_away` is unchanged.
+- Exits, KH1's motions and cutscenes are untouched.
+
+Cost: one load in the form's frame; the rest once a room.
+
+**Not checked.** No room change in a form is in the log. Assumption: vanilla brings the Keyblade back around when Sora becomes playable; ours comes back at that point. A room whose arrival scene keeps the scene flag on while Sora can move would hold it back until the flag clears.

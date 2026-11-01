@@ -10,7 +10,7 @@
 //! greys the form, is its KO test). Read when the Drive list is built (`drive::usable`), nothing per frame.
 
 use super::log;
-use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU8, Ordering};
 
 const SLOTS_OFF: usize = 0x48E;
 const MEMBER_SIZE: usize = 0x74;
@@ -79,6 +79,21 @@ pub unsafe fn ok(form: u8) -> bool {
 // at `0x142D37280` (Sora, then the two). A cutscene: KH1's scene flag `0x142382594` bit 0 (the scripts'
 // cutscene-mode opcodes, `cutscenelog`; Assumption: on for every scene that moves a partner). A new room's
 // actors come in whole and are taken again.
+//
+// t1059, a new room in a form (the owner's t1058 log, Checked (log): a room entered at f1166, the partners
+// taken again only at f1185; one at f1547 never). KH1 (Steam, Checked (decomp)): an actor's start
+// `0x140292660` (from its creation `0x140290D60` and the actor command 0x20 of `0x14028E6E0`) sets it acting
+// again and zeroes its flag stack's depth `+0x388`, so a new room can rebuild a partner at the same address
+// and our record of him still said "taken"; and `form::native_frame` runs only while KH1's states have Sora,
+// not while a room's entry script moves him (f1166..f1185). Now a record whose actor's stack is below the
+// depth our push left is his rebuild (dropped without a pop: the pushed flags went with the old actor) and
+// he is taken again at once; on each room change (`room_entered`, from `takeover`'s room watch, once a room)
+// the partners are taken at once (model to 0 over 0 frames, HUD slot hidden, flags pushed the same frame)
+// and for the arrival window (`ARRIVAL_FRAMES`, also stepped while a script has Sora, `arrival_frame`) KH1's
+// scene flag is ignored so no one pops in on arrival. KH1's room start `0x1401A38A0` clears the flag
+// (Checked (decomp)); the window ends early once the flag has been on and cleared (the arrival's scene
+// over), so a cutscene later in the room still brings them back. The Coliseum's rounds are event entries in
+// the same room (`ingameskip`, Checked (files) at t764), so a won round's scene is never inside a window.
 
 const PARTY_RVA: usize = 0x2D37280;
 const SCENE_RVA: usize = 0x2382594;
@@ -101,6 +116,9 @@ const ACTING: u32 = 0x8000;
 const DRAWN: u32 = 0x3;
 const UNTOUCHED: u32 = 0x240;
 const FADE_FRAMES: f32 = 15.0;
+/// After a room change in a form: KH1's scene flag ignored this long (60 Hz frames, 1 s; Assumption: an
+/// arrival's script scene sets it within this, the owner's log had KH1's script moving Sora for 19 frames).
+const ARRIVAL_FRAMES: u32 = 60;
 
 #[derive(Clone, Copy)]
 struct Away {
@@ -109,9 +127,18 @@ struct Away {
     /// Frames of the fade out left; 0 once the flags are pushed.
     fading: u32,
     pushed: bool,
+    /// KH1's flag stack depth right after our push (lower later: the actor was started again).
+    depth: i32,
+    /// "The stack is full" logged for this actor (once a room: a new room starts a new record).
+    refused: bool,
 }
 
 static AWAY: std::sync::Mutex<[Option<Away>; 2]> = std::sync::Mutex::new([None, None]);
+/// The form `frame` last ran for (KH2's id), 0 after a revert.
+static FORM_NOW: AtomicU8 = AtomicU8::new(0);
+/// 60 Hz frames left of a new room's arrival window; whether the scene flag was on in it.
+static ARRIVAL: AtomicU32 = AtomicU32::new(0);
+static ARRIVAL_SCENE: AtomicBool = AtomicBool::new(false);
 
 unsafe fn calls_ok(base: usize) -> bool {
     super::hook::prologue_is(base + PUSH_RVA, &PUSH_BYTES)
@@ -157,6 +184,9 @@ unsafe fn back(base: usize, a: Away, why: &str) {
 
 /// Every partner the form took back at once (the revert, however it comes).
 pub unsafe fn back_all(why: &str) {
+    FORM_NOW.store(0, Ordering::Relaxed);
+    ARRIVAL.store(0, Ordering::Relaxed);
+    KEYBLADE_DUE.store(false, Ordering::Relaxed);
     let base = super::takeover::game_base();
     let Ok(mut g) = AWAY.lock() else { return };
     for slot in g.iter_mut() {
@@ -172,16 +202,51 @@ pub unsafe fn back_all(why: &str) {
 /// Each frame of a form (`form::native_frame`): the partners KH2's form `form` takes go, and come back
 /// for a cutscene.
 pub unsafe fn frame(form: u8) {
+    FORM_NOW.store(form, Ordering::Relaxed);
     let base = super::takeover::game_base();
     if base == 0 || !calls_ok(base) {
         return;
     }
-    let scene = rd::<u32>(base + SCENE_RVA) & 1 != 0;
+    // (t1062: Sora's Keyblade back out in a new room.)
+    keyblade_due(base);
     let Ok(mut g) = AWAY.try_lock() else { return };
+    step(base, form, &mut g);
+}
+
+/// Our push of KH1's flags on a partner (without acting, model and shadow, with `0x240`), if KH1's
+/// stack has room; full: logged once for this record.
+unsafe fn try_push(base: usize, a: &mut Away) {
+    let depth = rd::<i32>(a.actor + STACK_DEPTH);
+    if depth < STACK_MAX {
+        let push: unsafe extern "system" fn(usize, u32) = std::mem::transmute(base + PUSH_RVA);
+        push(a.actor, (rd::<u32>(a.actor) & !(ACTING | DRAWN)) | UNTOUCHED);
+        a.pushed = true;
+        a.depth = depth.max(0) + 1;
+    } else if !a.refused {
+        a.refused = true;
+        log!(Forms, "Drive: partner {} (actor {:#x}) not taken yet: KH1's flag stack is full (depth {depth} of {STACK_MAX}, flags {:08x})", a.member, a.actor, rd::<u32>(a.actor));
+    }
+}
+
+/// The partner check (`frame`, and in a new room's arrival window `arrival_frame` / `room_entered`).
+unsafe fn step(base: usize, form: u8, g: &mut [Option<Away>; 2]) {
+    let mut scene = rd::<u32>(base + SCENE_RVA) & 1 != 0;
+    // (t1059: a new room's first moments: KH1's scene flag ignored until its arrival scene is over.)
+    if ARRIVAL.load(Ordering::Relaxed) > 0 {
+        if scene {
+            ARRIVAL_SCENE.store(true, Ordering::Relaxed);
+            scene = false;
+        } else if ARRIVAL_SCENE.load(Ordering::Relaxed) {
+            ARRIVAL.store(0, Ordering::Relaxed);
+        }
+    }
+    let arriving = ARRIVAL.load(Ordering::Relaxed) > 0;
     for i in 0..2 {
         let actor = rd::<u64>(base + PARTY_RVA + (1 + i) * 8) as usize;
-        // (A new room's actor, or none: ours on the old one is gone with it.)
-        if g[i].is_some_and(|a| a.actor != actor) {
+        // (A new room's actor, or none: ours on the old one is gone with it. t1059: the same actor
+        // started again by KH1, its flag stack below our push: our flags went with the old one.)
+        let rebuilt = g[i].is_some_and(|a| a.actor == actor && a.pushed && rd::<i32>(actor + STACK_DEPTH) < a.depth);
+        if rebuilt || g[i].is_some_and(|a| a.actor != actor) {
             g[i] = None;
         }
         let member = if actor >= 0x10000 { member_of(actor) } else { None };
@@ -189,10 +254,16 @@ pub unsafe fn frame(form: u8) {
         match (g[i], want) {
             (None, true) => {
                 let m = member.unwrap_or(0);
-                fade(base, actor, 0.0, FADE_FRAMES);
+                // (t1059: in a new room or after a rebuild at once, no fade: he must not be seen.)
+                let now = arriving || rebuilt;
+                fade(base, actor, 0.0, if now { 0.0 } else { FADE_FRAMES });
                 hud(base, m, 0);
-                g[i] = Some(Away { actor, member: m, fading: FADE_FRAMES as u32, pushed: false });
-                log!(Forms, "Drive: partner {m} leaves for the form");
+                let mut a = Away { actor, member: m, fading: if now { 0 } else { FADE_FRAMES as u32 }, pushed: false, depth: 0, refused: false };
+                log!(Forms, "Drive: partner {m} leaves for the form (actor {actor:#x}{})", if rebuilt { ", started again by KH1: at once" } else if now { ", a new room: at once" } else { "" });
+                if now {
+                    try_push(base, &mut a);
+                }
+                g[i] = Some(a);
             }
             (Some(a), false) => {
                 g[i] = None;
@@ -200,16 +271,59 @@ pub unsafe fn frame(form: u8) {
             }
             (Some(mut a), true) if !a.pushed => {
                 a.fading = a.fading.saturating_sub(1);
-                if a.fading == 0 && rd::<i32>(actor + STACK_DEPTH) < STACK_MAX {
-                    let push: unsafe extern "system" fn(usize, u32) = std::mem::transmute(base + PUSH_RVA);
-                    push(actor, (rd::<u32>(actor) & !(ACTING | DRAWN)) | UNTOUCHED);
-                    a.pushed = true;
+                if a.fading == 0 {
+                    try_push(base, &mut a);
                 }
                 g[i] = Some(a);
             }
             _ => {}
         }
     }
+}
+
+/// A room entered (`takeover`'s room watch, once a room; `was` the room before): in a form, the
+/// arrival window opens and the partners are taken at once (t1059). Not where the form ends on
+/// arrival anyway (the Coliseum's cup start, a world left with Gauge Refill KH2: `form::native_frame`).
+pub unsafe fn room_entered(world: u32, room: u32, was: Option<(u32, u32)>) {
+    let form = FORM_NOW.load(Ordering::Relaxed);
+    if form == 0 || !super::form::in_form() {
+        return;
+    }
+    if let Some((was_world, was_room)) = was {
+        let cup = world == COLISEUM && was_world == COLISEUM && was_room < FIRST_ARENA_ROOM && room >= FIRST_ARENA_ROOM;
+        if cup || (was_world != world && super::form::gauge_refill()) {
+            return;
+        }
+    }
+    let base = super::takeover::game_base();
+    if base == 0 || !calls_ok(base) {
+        return;
+    }
+    ARRIVAL_SCENE.store(false, Ordering::Relaxed);
+    ARRIVAL.store(ARRIVAL_FRAMES, Ordering::Relaxed);
+    // (t1062: his Keyblade out again once the form's own frame runs in this room, `keyblade_due`.)
+    KEYBLADE_DUE.store(true, Ordering::Relaxed);
+    log!(Forms, "Drive: world {world:#x} room {room:#x} entered in a form: the partners taken at once, KH1's scene flag ignored up to {ARRIVAL_FRAMES} frames");
+    let Ok(mut g) = AWAY.try_lock() else { return };
+    step(base, form, &mut g);
+}
+
+/// Each of Sora's frames (`takeover::physics`, whoever has him): nothing but in a new room's arrival
+/// window, where the partner check runs even while KH1's script moves Sora (t1059).
+pub unsafe fn arrival_frame() {
+    let left = ARRIVAL.load(Ordering::Relaxed);
+    if left == 0 {
+        return;
+    }
+    ARRIVAL.store(left.saturating_sub(super::takeover::steps().max(1)), Ordering::Relaxed);
+    let form = FORM_NOW.load(Ordering::Relaxed);
+    let base = super::takeover::game_base();
+    if form == 0 || !super::form::in_form() || base == 0 || !calls_ok(base) {
+        ARRIVAL.store(0, Ordering::Relaxed);
+        return;
+    }
+    let Ok(mut g) = AWAY.try_lock() else { return };
+    step(base, form, &mut g);
 }
 
 // ---------------------------------------------------------------- the Olympus Coliseum (t961)
@@ -255,4 +369,58 @@ pub fn forget_room() {
 pub fn scene() -> bool {
     let base = super::takeover::game_base();
     base != 0 && unsafe { rd::<u32>(base + SCENE_RVA) } & 1 != 0
+}
+
+// ---------------------------------------------------------------- Sora's Keyblade in a new room (t1062)
+//
+// The owner: in a Drive Form the Keyblades go away in the exit's walk-out as in vanilla, and are out
+// again when Sora enters the new room. KH1 (Steam, Checked (decomp, exe, log)): a walk-out exit's script
+// runs event op 142 (`0x1401AA210`, command table `0x1404FA870`), which clears Sora's `+0` bit 0x4000
+// (`0x1402A3280`); KH1's room teardown (`0x14028AA30` -> `0x1402921A0`) keeps each party actor's bit in
+// its member record (`0x142868BA0 + member * 0x74 + 0x3A` bit 0) and the next room makes the actor with
+// it (`0x140290D60`), so Sora comes in with it away (the owner's t1061 log: flags `01008043` after each
+// walk-out). Base Sora gets it back from his next motion whose request row's weapon mode is 1 (the motion
+// start `0x14029FC40` calls `0x1402A2E30 (actor, 1)`); a form's moves are raw-slot KH2 requests, which
+// skip that, so in a form it never came back. Now, after `room_entered` in a form, the first frame of the
+// form's own step in the new room (`frame`: it runs only while KH1's states have Sora, not while the
+// room's entry script moves him) with KH1's scene flag off brings it out with KH1's own `0x1402A2E30
+// (sora, 1)`, the arguments of KH1's motion start (its colour write `ff ff ff 80` happens only when the
+// bit was clear). While the flag is on (the arrival runs a cutscene) it waits and comes out on the first
+// such frame after the cutscene ends. Once a room: a cutscene later in the room that puts it away is
+// left as KH1 has it. The second Keyblade follows Sora's bit (`leftblade::put_away`, t1061).
+// Per frame: one load of `KEYBLADE_DUE` in the form's frame; the rest only once a room.
+
+const WEAPON_OUT_RVA: usize = 0x2A2E30;
+/// `mov [rsp+8], rbx; push rdi; sub rsp, 0x20; mov rbx, rcx; mov edi, edx` (Checked (exe)).
+const WEAPON_OUT_BYTES: [u8; 15] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x57, 0x48, 0x83, 0xEC, 0x20, 0x48, 0x8B, 0xD9, 0x8B, 0xFA];
+const WEAPON_OUT_BIT: u32 = 0x4000;
+/// A new room entered in a form: Sora's Keyblade is to come out (`keyblade_due`).
+static KEYBLADE_DUE: AtomicBool = AtomicBool::new(false);
+
+/// The form's frame (`frame`) after a room change: outside a cutscene, Sora's Keyblade out with
+/// KH1's own weapon out if it is away, once.
+unsafe fn keyblade_due(base: usize) {
+    if !KEYBLADE_DUE.load(Ordering::Relaxed) {
+        return;
+    }
+    if !super::form::native_now() {
+        KEYBLADE_DUE.store(false, Ordering::Relaxed);
+        return;
+    }
+    // (A cutscene on arrival: out when it is over.)
+    if rd::<u32>(base + SCENE_RVA) & 1 != 0 {
+        return;
+    }
+    KEYBLADE_DUE.store(false, Ordering::Relaxed);
+    let sora = super::takeover::sora_actor();
+    if sora < 0x10000 || !super::crash::readable(sora + 3) || rd::<u32>(sora) & WEAPON_OUT_BIT != 0 {
+        return;
+    }
+    if !super::hook::prologue_is(base + WEAPON_OUT_RVA, &WEAPON_OUT_BYTES) {
+        log!(Forms, "Drive: Sora's Keyblade not brought out in the new room (KH1's weapon out not where expected)");
+        return;
+    }
+    let out: unsafe extern "system" fn(usize, i32) = std::mem::transmute(base + WEAPON_OUT_RVA);
+    out(sora, 1);
+    log!(Forms, "Drive: a new room in a form: Sora's Keyblade out again (KH1's weapon out, as a motion of weapon mode 1)");
 }

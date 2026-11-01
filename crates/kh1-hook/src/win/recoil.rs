@@ -236,7 +236,8 @@ unsafe extern "system" fn meet(a: usize, b: usize) {
     }
     orig(a, b);
     let counts = clash_count();
-    let refact = kh2() && on();
+    // (t1060: a Drive Form on KH1's states takes KH2's clash rules at either setting, `kh1rows::kh2_rules`.)
+    let refact = (kh2() && on()) || super::form::native_form().is_some();
     if !counts && !refact {
         return;
     }
