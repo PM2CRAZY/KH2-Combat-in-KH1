@@ -1396,3 +1396,21 @@ Not checked: in game, and how often KH1's 64 records or 32 work slots fill in pl
   start of the game logs why. That happens when the interpreter hook or a first-byte check fails,
   or on a non-Steam build. Before, every script ran on our machine then. Our machine stays only for
   `kh2-magic`'s offline tests, which have no KH1.
+
+### 8d. A spell's first cast showed Wisdom's element 0 (t1074)
+
+- The owner: with any KH2 spell there's a chance the Aerial Recovery effect and sound play. Checked (log): at the first Fire, Blizzard and Thunder of the session (f984, f1049, f1115) the cast's first effect went to package 4 (`Spell(4) element 0`, Wisdom's archive `P_EX100_MAGF`), its later elements to the spell's own package (7, 10, 13).
+- Cause (Checked (code)): KH1's script machine steps the casts with the sink kept from the last `shots_step`, which holds a copy of the spell-to-package map. A spell file loaded for its first cast (`formmagic::spell_index`) was in the runtime's map but not in that copy until the next `shots_step`; the cast's first step on KH1's process came before it, so `reflect::Sink::effect_start` found no package and fell back to Wisdom's. Assumption: Wisdom's element 0 is what looked like Aerial Recovery's effect and sound.
+- Fix: `spell_index` also puts the new file's package in the kept sink's copy. Every later cast was already right. Not checked in game.
+- t1075: t1074 didn't reach it. Checked (the owner's t1074 log, f398 / f467 / f529, the first Fire, Blizzard and Thunder after booting): still package 4. Cause (Checked (code)): a spell's first cast is started inside `shots_step`, whose world (with its copy of the map, made at its start) is a local until the step ends, so t1074's update of the kept world found nothing to update, and KH1's first step of the cast ran on the step's stale copy. Now every file's package is also noted as it is added (`formmagic::note_package`) and read where a copy has no entry yet (`package_of`, in `reflect::Sink::effect_start` and `spell_attack`). Only a miss takes the lock. Not checked in game.
+
+### 8e. KH1's own Fire keeps KH1's timing at Magic Combo KH2 (t1076)
+
+The user's rule: on KH1's own Fire you can't act into an Attack at the start of the animation; only after the cast, where the game lets you input another Fire, can you attack again.
+
+- **What was wrong (Checked, trace `trace_1793515942_f1991`):** the first shot 0x36 started, KH1's combo window (bit 22) came on 21 frames in from our share of KH2 Fire's window, and an Attack cut 0x36 before the cast.
+- **What KH1 does (Checked, files `xa_ex_0010.mset`):** slot 54 (0x36, 28 frames) has no events. Slot 57 (0x3D, 60 frames) has one: "may be left" (type 0) from frame 46. Slot 55 (Blizzard 0x37, 86 frames) has it from 68. Slot 56 (Thunder 0x38 / Cure 0x39, 68 frames) has none.
+- **What KH1 does (Checked, decomp):** KH1's command menu takes a command when the action flag is clear (`0x140297870`) or the combo window is on (`0x1402A2EC0`). The "may be left" event clears that flag. A Fire taken while 0x3D plays is KH1's quick re-fire: 0x3D again (`0x1402A7510`).
+- **What KH1 does (Checked, trace):** the action flag clears on the frame bit 20 comes on in 0x3D.
+- **Now:** Fire's 0x36 and 0x3D get the window only where KH1's own "may be left" is on, read with KH1's own level reader on KH1's own motion (`kh2slots::kh1_own_level`). So there's none on 0x36, and on 0x3D it opens at frame 46, the same frame KH1 takes another Fire. A re-fire or Attack there counts on in the combo.
+- **Still on the share:** Blizzard, Thunder and Cure. Blizzard opens about 4 frames before KH1's own 68. Thunder and Cure open at 51 of 68, where KH1 itself takes nothing before the end.

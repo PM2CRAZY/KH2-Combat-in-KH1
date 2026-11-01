@@ -1494,6 +1494,20 @@ pub unsafe fn no_gravity(actor: usize) -> bool {
     t >= 0.0 && no_gravity_spans(clip).iter().any(|&(a, b)| a <= t && t < b)
 }
 
+/// (t1071) Our move playing on `actor` is still before its clip's first no-gravity range (KH1's time
+/// in it under that range's start), for `shared::physics`' Master Form bridge. `None`: no move of
+/// ours, or its clip has no such range after its start.
+pub unsafe fn before_first_hold(actor: usize) -> Option<bool> {
+    let m = current(actor)?;
+    let clip = clip_of(m)?;
+    let start = no_gravity_spans(clip).iter().map(|&(a, _)| a).fold(f32::INFINITY, f32::min);
+    if !(start.is_finite() && start > 0.0) {
+        return None;
+    }
+    let t: f32 = rd(actor + TIME_NOW);
+    Some(t.is_finite() && t < start)
+}
+
 /// KH2's no-gravity ranges of `clip` as our level event 8.1 takes them (frames, start..end): none
 /// for a clip that allows movement all through (`no_gravity`).
 fn no_gravity_spans(clip: &character_core::Clip) -> Vec<(f32, f32)> {
@@ -2339,6 +2353,16 @@ unsafe fn reader_key(actor: usize, kind: u16, id: u16, ours: impl Fn(usize) -> b
     let reader: unsafe extern "system" fn(usize, u32, f32) -> usize = std::mem::transmute(base + LEVEL_READER_STEAM);
     let key = reader(motion, (kind as u32) << 16 | id as u32, time);
     Some((key >= 0x10000).then_some(key))
+}
+
+/// (t1076) A level event of whatever motion KH1 plays on `actor` now, KH1's own slots too (not
+/// only ours, as `kh1_key`), read by KH1's own level reader at KH1's time in it: whether it is on
+/// (the key's `a`). `None` off Steam or with the reader not where expected.
+pub unsafe fn kh1_own_level(actor: usize, kind: u16, id: u16) -> Option<bool> {
+    if super::addr::Build::current() != super::addr::Build::Steam || actor < 0x10000 {
+        return None;
+    }
+    Some(reader_key(actor, kind, id, |_| true)?.is_some_and(|key| rd::<u8>(key + 4) != 0))
 }
 
 /// (t868) A level event of the motion KH1 plays on `actor` now, read by KH1's own level reader

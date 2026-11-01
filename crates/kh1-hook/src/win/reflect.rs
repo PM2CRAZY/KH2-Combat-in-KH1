@@ -999,7 +999,8 @@ impl Sink {
                 h
             }
             SinkKind::Form(package) => {
-                let package = package.get(&e.spell).copied().unwrap_or(super::kh2fx::WISDOM);
+                // (t1075: a file added since this world's copy was made: `formmagic::package_of`.)
+                let package = super::formmagic::package_of(package, e.spell).unwrap_or(super::kh2fx::WISDOM);
                 // (t1013 / t1016) An effect bound to the thrown Keyblade (Strike Raid's 32,
                 // `obj_effect_start_bind_other (Sora, 32, weapon)`): started unbound and placed on
                 // the blade's root each frame it flies (`limitform::blade_effect`), never on Sora.

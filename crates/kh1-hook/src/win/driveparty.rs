@@ -231,6 +231,16 @@ unsafe fn try_push(base: usize, a: &mut Away) {
 /// The partner check (`frame`, and in a new room's arrival window `arrival_frame` / `room_entered`).
 unsafe fn step(base: usize, form: u8, g: &mut [Option<Away>; 2]) {
     let mut scene = rd::<u32>(base + SCENE_RVA) & 1 != 0;
+    // (t1073) In the Olympus Coliseum, KH1's event holding Sora counts as a cutscene too: the
+    // owner's log (a cup with Donald and Goofy, Master Form): the win after a later round set no
+    // scene flag; KH1 started the partners again for its win scene (f19000 / f19002, "started again
+    // by KH1") and we took them again at once, so its waits on their motions (event function 103,
+    // f19046..) never ended: the soft lock. `takeover::event_has_sora`: an event runs and Sora
+    // can't act. (Only in the Coliseum: its matches run event scripts while he fights, with him
+    // able to act.)
+    if !scene && rd::<u32>(base + WORLD_RVA) == COLISEUM && super::takeover::event_has_sora() {
+        scene = true;
+    }
     // (t1059: a new room's first moments: KH1's scene flag ignored until its arrival scene is over.)
     if ARRIVAL.load(Ordering::Relaxed) > 0 {
         if scene {

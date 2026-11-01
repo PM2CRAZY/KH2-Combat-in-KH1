@@ -1639,6 +1639,22 @@ pub fn kh1_scene_unheld() -> bool {
     event || own_mode || ((active() || super::shared::active()) && SCRIPTED.load(Ordering::Relaxed))
 }
 
+/// (t1073) An event runs (`EVENT_RVA`) and KH1's "can act" test (`CAN_ACT_RVA`) says Sora can't
+/// act: KH1's event has him (a cutscene's moment, the Coliseum's win between rounds), for
+/// `driveparty`. False outside an event (KH1 holding him for a move of its own).
+pub fn event_has_sora() -> bool {
+    let base = BASE.load(Ordering::Relaxed);
+    if base == 0 || unsafe { rd::<u32>(base + EVENT_RVA) } == 0 {
+        return false;
+    }
+    let sora = unsafe { rd::<u64>(base + PARTY_RVA) } as usize;
+    if sora < 0x10000 {
+        return false;
+    }
+    let can: unsafe extern "system" fn(usize) -> i32 = unsafe { std::mem::transmute(base + CAN_ACT_RVA) };
+    unsafe { can(sora) == 0 }
+}
+
 /// KH1 moves Sora itself in a scene: one of its own movement modes (the Jungle Slider) or an
 /// area script walking him. KH1's camera stays through these even after a camera reset that
 /// KH2's camera takes (`camera.rs`).

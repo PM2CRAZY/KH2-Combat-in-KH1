@@ -1013,9 +1013,56 @@ pub mod physics {
     unsafe fn mark_hop(actor: usize) {
         let now = game_frame().max(1);
         HOP_FRAME.store(now, Ordering::Relaxed);
+        // (t1071) Master Form: a new move started while the move it cuts held him (its no-gravity
+        // range open at his last air step) keeps him held until its own range (`BRIDGE`).
+        // (t1072) Only set here, never cleared: a row's start marks the hop twice in one frame
+        // (`kh2_hop_as`, then `kh1_air_attack_started`), and the first call has already put
+        // `HELD_LAST` off, so t1071's second call wiped the bridge the first had set (the owner's
+        // t1071 trace f4456..f4472 and log f4559: no hold, the same fall). `bridge_holds` ends it.
+        let bridge = HELD_LAST.load(Ordering::Relaxed) && super::super::form::native_form() == Some(super::super::form::Kind::Master) && rd::<i32>(actor + 0x70) == 2;
+        if bridge {
+            if let Ok(mut b) = BRIDGE.lock() {
+                *b = super::super::kh2slots::playing_motion(actor).map(|m| (m, now));
+            }
+        }
         let cut = super::super::kh2slots::playing_motion(actor).zip(super::super::kh2slots::kh1_time_now(actor));
         if let Ok(mut g) = HOP_CUT.lock() {
             *g = cut.map(|(m, t)| (m, t, now));
+        }
+    }
+
+    /// (t1071) Master Form's air hold carried over a combo's next move (the owner: after a ground
+    /// attack puts him in the air, "sora just needs to maintain his air state like he does with air
+    /// attacks on master form"): set by `mark_hop` when the new row starts while the move it cuts
+    /// held him (`HELD_LAST`); the KH2 motion that was playing and the game frame.
+    static BRIDGE: Mutex<Option<(u16, u64)>> = Mutex::new(None);
+
+    /// (t1071) Whether the bridge holds him at this air step: while the cut move still plays (a few
+    /// frames), then while the new move is before its own first no-gravity range
+    /// (`kh2slots::before_first_hold`); over at the range, a move without one, the ground or another
+    /// form. Not KH2's own rule (KH2 rebuilds its no-gravity bits from the new motion every frame,
+    /// `0x1403C83B0`, so its next move falls until its own range, Checked (decomp)): the owner's.
+    unsafe fn bridge_holds(actor: usize) -> bool {
+        let Ok(mut g) = BRIDGE.try_lock() else { return false };
+        let Some((cut, at)) = *g else { return false };
+        if super::super::form::native_form() != Some(super::super::form::Kind::Master) || rd::<i32>(actor + 0x70) != 2 {
+            *g = None;
+            return false;
+        }
+        let playing = super::super::kh2slots::playing_motion(actor);
+        if playing == Some(cut) {
+            if game_frame().saturating_sub(at) <= HOP_CUT_FRAMES {
+                return true;
+            }
+            *g = None;
+            return false;
+        }
+        match super::super::kh2slots::before_first_hold(actor) {
+            Some(true) => true,
+            _ => {
+                *g = None;
+                false
+            }
         }
     }
 
@@ -1884,7 +1931,14 @@ pub mod physics {
         // holds nothing, `HOP_FRAME`, `HOP_CUT`.)
         let hop_now = sora && (HOP_FRAME.load(Ordering::Relaxed) == game_frame().max(1) || cut_still_playing(actor));
         let cut_hold = !hop_now && (kh1_hold || super::super::kh2slots::no_gravity(actor) && (!super::super::kh2slots::cast_playing(actor) || cast_kh2()));
-        let held = air_ok && (rise.is_some() || super::super::form::arrival_held(actor) || cut_hold);
+        let bridged = air_ok && bridge_holds(actor);
+        if bridged {
+            static NB: AtomicU32 = AtomicU32::new(0);
+            if super::super::log_on(super::super::LogCat::Takeover) && NB.fetch_add(1, Ordering::Relaxed) < 40 {
+                super::super::log!(Takeover, "Master Form: the air hold carried into KH2 motion {:?} (before its own no-gravity range, t1071)", super::super::kh2slots::playing_motion(actor));
+            }
+        }
+        let held = air_ok && (rise.is_some() || super::super::form::arrival_held(actor) || cut_hold || bridged);
         // (Whether the hold was on at his last air step: KH2's fall restart when it ends, below.)
         let was_held = sora && HELD_LAST.swap(held, Ordering::Relaxed);
         if held {

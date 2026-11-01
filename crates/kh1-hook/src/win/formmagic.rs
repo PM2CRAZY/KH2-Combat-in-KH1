@@ -321,6 +321,7 @@ fn runtime(g: &mut Option<Runtime>) -> &mut Runtime {
                 Ok(file) => {
                     let i = magic.add_spell(file);
                     package.insert(i, super::kh2fx::WISDOM);
+                    note_package(i, super::kh2fx::WISDOM);
                     log!(Magic, "Wisdom Form's script ready (its shots)");
                     Some(i)
                 }
@@ -344,6 +345,7 @@ fn runtime(g: &mut Option<Runtime>) -> &mut Runtime {
                 Ok(file) => {
                     let i = magic.add_spell(file);
                     package.insert(i, super::kh2fx::LIMIT);
+                    note_package(i, super::kh2fx::LIMIT);
                     log!(Magic, "Limit Form's script ready (its limits)");
                     Some(i)
                 }
@@ -357,6 +359,26 @@ fn runtime(g: &mut Option<Runtime>) -> &mut Runtime {
     })
 }
 
+/// (t1075) Every spell file's package as it is added (`note_package`), read where a world's copy
+/// of the map has no entry for it yet (`package_of`). t1074 brought the kept world's copy up to
+/// date, but the first cast of a spell is started inside `shots_step`, whose world (and its copy,
+/// made at its start) is a local until the step ends: the owner's t1074 log still shows the first
+/// Fire / Blizzard / Thunder of a boot on Wisdom's package 4 (f398, f467, f529).
+static PACKAGES: Mutex<Vec<(usize, u8)>> = Mutex::new(Vec::new());
+
+fn note_package(i: usize, p: u8) {
+    if let Ok(mut g) = PACKAGES.lock() {
+        g.retain(|e| e.0 != i);
+        g.push((i, p));
+    }
+}
+
+/// Spell file `i`'s effect package: the world's copy `package`, else the one noted when the file
+/// was added (`PACKAGES`).
+pub(super) fn package_of(package: &HashMap<usize, u8>, i: usize) -> Option<u8> {
+    package.get(&i).copied().or_else(|| PACKAGES.lock().ok()?.iter().find(|e| e.0 == i).map(|e| e.1))
+}
+
 /// A spell's script in the runtime (parsed on first use).
 fn spell_index(rt: &mut Runtime, spell: u8, level: u8) -> Option<usize> {
     if let Some(i) = rt.files.get(&(spell, level)) {
@@ -367,6 +389,18 @@ fn spell_index(rt: &mut Runtime, spell: u8, level: u8) -> Option<usize> {
         Ok(f) => {
             let i = rt.magic.add_spell(f);
             rt.package.insert(i, spell_package(spell, level));
+            note_package(i, spell_package(spell, level));
+            // (t1074) The sink KH1's script machine steps the casts with (`rt.world`, kept from the
+            // last `shots_step`) holds a copy of the packages: a spell's first cast in a session was
+            // first stepped on KH1's process before the next `shots_step` renewed it, so its first
+            // effect (element 0, at its cast's start) found no package and fell back to Wisdom's
+            // (`unwrap_or(WISDOM)`, `reflect::Sink::effect_start`): Wisdom's archive's element 0
+            // with its sound (the owner's log: "Spell(4) element 0" at f984 / f1049 / f1115, the
+            // first Fire, Blizzard and Thunder; their later elements on 7 / 10 / 13). The copy is
+            // brought up to date here too.
+            if let Some(super::reflect::Sink { kind: super::reflect::SinkKind::Form(p), .. }) = rt.world.as_mut().and_then(|w| w.sink.as_mut()) {
+                p.insert(i, spell_package(spell, level));
+            }
             Some(i)
         }
         Err(e) => {
@@ -1056,6 +1090,9 @@ pub unsafe fn finisher_spell_window(actor: usize) -> Option<bool> {
 /// 0x37, Thunder 0x38, Cure 0x39, Aero 0x3C (KH1's request table, `xa_ex_0010.mset`, Checked
 /// (files); Gravity 0x3A and Stop 0x3B are left out).
 const KH1_WINDOW_REQUESTS: [u32; 5] = [0x36, 0x3D, 0x37, 0x38, 0x39];
+/// KH1's own Fire, its first shot and repeated shot: the window at KH1's own "may be left" only
+/// (`kh1_cast_window`, t1076).
+const KH1_FIRE_REQUESTS: [u32; 2] = [0x36, 0x3D];
 
 /// The Magic Combo row at KH2 (`styles::Kind::MagicCombo`; the tester, combo row selection after
 /// m29: "make a config for magic that allows you to combo out of grounded magic like kh2"): a
@@ -1080,6 +1117,15 @@ pub unsafe fn kh1_cast_step(spell: i32) -> bool {
 /// the repeated shot animation"); placing it by share is an **Assumption** (KH1's casts have no
 /// window of their own), and so is that KH1's spell script, a task of its own, casts whatever
 /// motion follows.
+/// (t1076) KH1's own Fire (`KH1_FIRE_REQUESTS`) keeps KH1's own timing instead (the user: "you
+/// shouldn't be able to act into an attack at the start of fire animation its after its casted and
+/// the game lets you input another fire then you should be able to attack again"): the window only
+/// where KH1 itself takes the next command, its "may be left" (type 0.0, `+0x1CC` bit 20, which
+/// clears the action flag KH1's menu gate `0x140297870` tests, `0x1402A2EC0`; Checked (decomp)),
+/// read with KH1's own level reader on KH1's own motion (`kh2slots::kh1_own_level`). The first
+/// shot 0x36 (slot 54) has none, the repeated shot 0x3D (slot 57) has it from frame 46 of 60
+/// (`xa_ex_0010.mset`, Checked (files)), where KH1's quick re-fire (`0x1402A7510`, Fire while 0x3D
+/// plays) also comes in (Checked (trace): the action flag clears there).
 pub unsafe fn kh1_cast_window(actor: usize) {
     if actor < 0x10000 || actor != super::takeover::sora_actor() {
         return;
@@ -1123,7 +1169,10 @@ pub unsafe fn kh1_cast_window(actor: usize) {
     // (t882) The window from our copy of KH1's cast motion (our level event 8.10, placed there by
     // share at build, `kh2slots::kh1_copies`), read by KH1's own reader; by share here where no copy
     // of ours plays.
+    // (t1076) KH1's own Fire: at KH1's own "may be left" only, where KH1 takes another Fire.
+    let fire = KH1_FIRE_REQUESTS.contains(&request);
     let (open, from) = match super::kh2slots::kh1_copy_level(actor, kh1_data::slot::RANGE_KH1_CAST_COMBO) {
+        _ if fire => (super::kh2slots::kh1_own_level(actor, kh1_data::slot::CAN_LEAVE, 0) == Some(true), "KH1's own may-leave"),
         Some(on) => (on, "our copy's 8.10"),
         None => {
             let Some(share) = super::kh2slots::combo_share(56) else { return };
@@ -1326,14 +1375,14 @@ pub(super) unsafe fn spell_attack(actor: usize, a: &kh2_magic::MagicAttack, batt
     if a.freed || a.owner != SORA {
         return None;
     }
-    let pkg = package.get(&a.spell).copied().unwrap_or(super::kh2fx::WISDOM);
-    let kh1_data = package.get(&a.spell).and_then(|&p| package_spell(p)).filter(|(spell, _)| *spell <= 2).and_then(|(spell, level)| combat::kh1_spell_data(spell, level));
+    let pkg = package_of(package, a.spell).unwrap_or(super::kh2fx::WISDOM);
+    let kh1_data = package_of(package, a.spell).and_then(package_spell).filter(|(spell, _)| *spell <= 2).and_then(|(spell, level)| combat::kh1_spell_data(spell, level));
     let first = row(battle, a.atk, a.sub, 0)?;
     if !combat_core::AttackKind::from_id(first.kind).deals_damage() {
         return None;
     }
     let shapes = a.shapes();
-    let spell = package.get(&a.spell).and_then(|&p| package_spell(p)).map(|(spell, _)| spell);
+    let spell = package_of(package, a.spell).and_then(package_spell).map(|(spell, _)| spell);
     let fire = spell == Some(0);
     let shapes = if fire { super::reflect::kh1_sized_shapes(actor, shapes) } else { shapes };
     // (t1056, the owner: "fire should flinch until its finisher, thunder does an air launch,
