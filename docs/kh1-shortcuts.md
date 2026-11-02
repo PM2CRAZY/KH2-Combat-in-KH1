@@ -96,3 +96,23 @@ an uninitialised local, and build a stray command id. `+0x847` is not read or wr
   the menu text lookup). The four name calls answer 7 with Reflect's level name.
 - Not checked in the game: the 9-row list's look (only the rows are pitched; the window has no
   height of its own in its definition).
+
+## Limit Form's limits in the shortcuts (Ours, `drive::limit_shortcuts`, t1080)
+
+- KH2: in form 3 its shortcut fill puts entry k of a 4-entry table (`0x1405C9678`, Steam) in
+  shortcut slot k (Checked (decomp), `docs/kh1-forms-research-r12.md`). The table's values,
+  Sonic Rave, Last Arcanum, Strike Raid, Infinity (`cmd` 698, 701, 704, 683), are the main
+  branch's read of KH2 FM's exe (its `0x1405C97E8`), not read on testing: Assumption.
+- Here: after KH1's battle fill, in Limit Form, entries 0..3 of KH1's shortcut menu
+  (`0x140529718`) are `limitform::LIMITS`' command records in that order (L1 + Triangle, Square,
+  confirm, cancel; Infinity only with `shortcuts = 4`), greyed as the Limit list
+  (`limitform::greyed`), and KH1's L1 flag `0x142D5445C` set. KH1's own shortcut menu draws and
+  runs them; the run reaches `combat::command` → `limitform::chosen` as the Limit list's rows do.
+  `shortcuts::fill` leaves its fourth and Reflect entries alone then.
+- KH1's slot bytes in the save (`+0x844..+0x847`) are never written, so saving in the form saves
+  KH1's own shortcuts. KH1's fill rewrites its three every frame it fills; for frames it doesn't
+  (no spell learned, or the save's no-magic flags `+0x874 & 9`), a copy of KH1's own entries,
+  masks and L1 flag (kept from the frame before the form, updated whenever KH1 fills) is put back
+  on the first fill out of the form (revert, room change, death, title).
+- Assumption: KH1's fill sets the L1 flag only for a set shortcut and doesn't clear it otherwise;
+  on the way out the flag is the pre-form value, or set if one of KH1's three is set.

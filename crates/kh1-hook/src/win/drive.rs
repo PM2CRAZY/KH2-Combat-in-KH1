@@ -196,7 +196,11 @@ pub unsafe fn fill(actor: usize, _flags: usize) {
     // when Sora has no spell, so the list doesn't open; Drive's row 4 is drawn from the magic
     // list's own bit (`drive_row4`), page 2's from the forms (`cmdmenu`), so Revert stays usable.
     // (Limit Form, t976: its Limit list in Magic's place, `limit_list`.)
-    if super::form::in_limit() && ensure_limit_records(base) {
+    let limit = super::form::in_limit() && ensure_limit_records(base);
+    // (Limit Form's shortcuts, t1080: its limits in KH1's shortcut menu, `limit_shortcuts`; KH1's own
+    // back the first fill out of the form.)
+    limit_shortcuts(base, actor, limit);
+    if limit {
         limit_list(base, actor);
     } else if super::form::in_valor() || super::form::in_limit() {
         let top = base + MENU_RVA;
@@ -268,6 +272,99 @@ unsafe fn limit_list(base: usize, actor: usize) {
     for off in [4usize, 8] {
         wr(top + off, rd::<u32>(top + off) & !2);
     }
+}
+
+/// KH1's battle shortcut menu (`0x140529718`, a command list of type 5: `+4` / `+8` disabled bits,
+/// `+0x10` count, `+0x14` command ids; `docs/kh1-shortcuts.md`) and the flag KH1's command step
+/// opens it on with L1 (set by KH1's fill when a shortcut is set).
+const SHORTCUT_MENU_RVA: Rva = Rva(0x529718);
+const HAS_SHORTCUTS_RVA: Rva = Rva(0x2D5445C);
+/// KH1's own shortcut menu while Limit Form's limits are in it (`None` out of the form): its
+/// entries and two disabled masks as KH1's fill last left them (the fourth entry and its bit as
+/// they were before the form: KH1 never writes them, `shortcuts::fill` does), and KH1's L1 flag as
+/// it was before the form.
+#[derive(Clone, Copy)]
+struct Kh1Shortcuts {
+    ids: [u8; 4],
+    off: [u32; 2],
+    has: u32,
+}
+static KH1_SHORTCUTS: std::sync::Mutex<Option<Kh1Shortcuts>> = std::sync::Mutex::new(None);
+/// An empty shortcut (KH1's "no command").
+const NO_COMMAND: u8 = 0x42;
+
+/// Limit Form's limits are in KH1's shortcut menu (`shortcuts::fill` then leaves its fourth and
+/// Reflect's entries alone).
+pub fn limit_shortcuts_on() -> bool {
+    KH1_SHORTCUTS.try_lock().is_ok_and(|k| k.is_some())
+}
+
+/// Limit Form's shortcuts (t1080, the owner: "limit form shortcuts dont change to show the
+/// limits"). KH2's shortcut fill in form 3 puts entry k of a 4-entry table in shortcut slot k
+/// (`0x1405C9678`, Checked (decomp), `docs/kh1-forms-research-r12.md`); the table's values (Sonic
+/// Rave, Last Arcanum, Strike Raid, Infinity) are the main branch's read of KH2 FM's exe, not read
+/// here (Assumption). That is `limitform::LIMITS`' order: L1 + Triangle, Square, confirm, and cancel
+/// (the fourth, `shortcuts = 4`). After KH1's fill each entry of KH1's shortcut menu is the limit's
+/// command record (the Limit list's), greyed as the list, and KH1's L1 flag is set: KH1's own
+/// shortcut menu draws them (named by the word lookup, `word`) and runs them (KH1's run
+/// `0x1402912F0` → `combat::command` → `limitform::chosen`), as from the Limit list. KH1's slot
+/// bytes in the save (`+0x844..`) are never touched, so a save in the form keeps KH1's shortcuts.
+/// KH1 rebuilds the menu each fill; when its fill didn't (no spell learned, or KH1's no-magic
+/// flags), the copy of KH1's own kept here is put back the first fill out of the form.
+unsafe fn limit_shortcuts(base: usize, actor: usize, on: bool) {
+    let Ok(mut kept) = KH1_SHORTCUTS.lock() else { return };
+    let menu = base + SHORTCUT_MENU_RVA;
+    let ids = rd::<[u8; 4]>(menu + 0x14);
+    let off = [rd::<u32>(menu + 4), rd::<u32>(menu + 8)];
+    let ours = |id: u8| super::limitform::LIMITS.iter().any(|l| l.0 == id);
+    // KH1's fill wrote its three this frame (none of KH1's commands is one of our limit records).
+    let kh1_filled = !ids[..3].iter().any(|&id| ours(id));
+    if !on {
+        let Some(k) = kept.take() else { return };
+        let mut now = Kh1Shortcuts { ids, off, has: k.has };
+        if !kh1_filled {
+            now.ids[..3].copy_from_slice(&k.ids[..3]);
+            now.off = k.off;
+        }
+        now.ids[3] = k.ids[3];
+        for (o, was) in now.off.iter_mut().zip(k.off) {
+            *o = *o & !8 | was & 8;
+        }
+        wr(menu + 0x14, now.ids);
+        wr(menu + 4, now.off[0]);
+        wr(menu + 8, now.off[1]);
+        // KH1's L1 flag: as before the form, or set by a shortcut of KH1's three (Assumption: KH1's
+        // fill sets it only for a set shortcut, `docs/kh1-shortcuts.md`; `shortcuts::fill` sets it
+        // for the fourth and Reflect after this).
+        let any = now.ids[..3].iter().any(|&id| id != NO_COMMAND);
+        wr(base + HAS_SHORTCUTS_RVA, if any { 1 } else { k.has });
+        log!(Forms, "Limit Form's shortcuts: KH1's back {:02x?} ({})", now.ids, if kh1_filled { "KH1's fill" } else { "kept copy" });
+        return;
+    }
+    match kept.as_mut() {
+        None => {
+            let fourth = if ours(ids[3]) { NO_COMMAND } else { ids[3] };
+            log!(Forms, "Limit Form's shortcuts: the limits in KH1's shortcut menu (KH1's were {ids:02x?})");
+            *kept = Some(Kh1Shortcuts { ids: [ids[0], ids[1], ids[2], fourth], off, has: rd::<u32>(base + HAS_SHORTCUTS_RVA) });
+        }
+        Some(k) if kh1_filled => {
+            k.ids[..3].copy_from_slice(&ids[..3]);
+            for (o, now) in k.off.iter_mut().zip(off) {
+                *o = now & !8 | *o & 8;
+            }
+        }
+        Some(_) => {}
+    }
+    let n = (rd::<i32>(menu + 0x10).clamp(0, 4) as usize).min(super::limitform::LIMITS.len());
+    for (k, l) in super::limitform::LIMITS.iter().take(n).enumerate() {
+        wr(menu + 0x14 + k, l.0);
+    }
+    let mask = (1u32 << n) - 1;
+    let grey = if super::limitform::greyed(base, actor) { mask } else { 0 };
+    for o in [4usize, 8] {
+        wr(menu + o, rd::<u32>(menu + o) & !mask | grey);
+    }
+    wr(base + HAS_SHORTCUTS_RVA, 1u32);
 }
 
 /// Drive as KH1's row 4: the magic list's hidden last entry (Summon's command, named "Drive").

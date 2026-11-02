@@ -513,6 +513,11 @@ unsafe extern "system" fn fill(a: usize, b: usize) {
     // second page's Drive row (`drive`).
     super::reflect::magic_menu(a, b);
     super::drive::fill(a, b);
+    // In Limit Form the shortcuts are its limits (`drive::limit_shortcuts`, t1080): Sora's own
+    // (Reflect's, the fourth) are KH1's fill's again out of the form.
+    if super::drive::limit_shortcuts_on() {
+        return;
+    }
     let base = base();
     let s = save();
     // (KH1 fills its shortcuts only with magic on here and a spell learned.)
