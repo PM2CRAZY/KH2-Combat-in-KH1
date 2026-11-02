@@ -590,3 +590,17 @@ ini `clash_count = kh1 | kh2`, **KH2 by default**, as the other Tweaks rows defa
     hit" flag, bit 16 set (through walls); with it, bit 16 clear. Out of a form, the template's own
     bit, as before (base Sora keeps KH1's wall bounce at either Recoil setting). Nothing per frame
     (written on the form change and when a blade's data is made).
+
+- **The owner, after t1076: "final form shouldn't be clinking with anything". Not built (asked).**
+  - KH2 (**Checked (decomp)**, §1.2 / §1.3): Final's hits are all refact self 2. A kind-0 Final hit meeting an enemy
+    attack goes on; the enemy's attack is stopped and the enemy is made immune to that swing (`0x1403D2140`); the
+    enemy's own reaction plays its reflected motion if its ATKP has one (§1.5); Sora's clash reaction `0x1403D61D0`
+    plays system spark 0xD and nothing else. Against a guard: the guard's owner is made immune, the same spark. Final's
+    pierce hits (1393..1398, 1403 / 1404, 1414..1427, 1455 / 1456, 1737) meet only special guards. So KH2's Final does
+    meet things and spark; it never recoils. What spark 0xD looks like, and whether it has a sound, is **not checked**
+    (no KH2 exe or `00effect.bar` in that session).
+  - Ours: KH1's clang (`combat::clang`, `0x1402AC4C0`: KH1's spark and clash sound) in place of spark 0xD on a guard
+    (`recoil::meet`), KH1's own clash spark on an attack, and the enemy's KH1 big recoil (kind 7, §5 answer 3 (a)).
+    Not KH2: the enemy isn't made immune to the swing that parried it (KH1's half doesn't mark it).
+  - Options put to the owner: (a) keep KH2's meeting but drop KH1's clash sound and use a quieter / KH2 spark;
+    (b) Final's hits meet nothing (no parry, no immunity, no spark), which is not KH2's rule; (c) leave it as KH2's.
