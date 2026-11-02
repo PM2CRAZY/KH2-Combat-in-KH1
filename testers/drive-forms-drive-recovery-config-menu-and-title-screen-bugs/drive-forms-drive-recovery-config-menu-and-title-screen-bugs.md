@@ -9,6 +9,8 @@
 - [3. Assistant: Eight versions, t1077 to t1084: one per system. None of them](#^m3)
 - [4. PM2CRAZY (owner, chat 2026-11-02, copied word for word): 1. Have the parry effects, but let the attack play out.](#^m4)
 - [5. Assistant: Thanks. No version this round: two of these need one more th](#^m5)
+- [6. PM2CRAZY (owner, chat 2026-11-02, copied word for word): 1. a](#^m6)
+- [7. Assistant: t1085, growth abilities. Quick Run, Aerial Dodge and Dodge R](#^m7)
 
 ---
 
@@ -112,4 +114,31 @@
 > **3. Drive Recovery on Sora straight away.** Noted. Removing the party list means KH1's battle item use has to run with no target picked, and KH1 has no item of its own that does that. I need to read in the KH1 decomp how its battle item use takes the target, so I don't hand it an empty one (that could crash). I didn't have the decomp in this session; I'll build it as soon as I can read it.
 
 ^m5
+
+
+> [!note] Tester PM2CRAZY (owner, chat 2026-11-02, copied word for word)
+> 1. a
+> 2. High Jump, and glide/superglide should only be given out where you get them in KH1. Once sora gets them, he can level them up. dodge roll and the other growth abilities can function how they do in KH2.
+>
+> 3. when selecting the item, just have soras name appear
+
+^m6
+
+
+> [!tip] Assistant
+> **t1085, growth abilities.** Quick Run, Aerial Dodge and Dodge Roll now come the KH2 way. Each one is added, with a "New Ability" box, once its form (Wisdom, Master or Limit) is high enough that base Sora's level for it reaches LV1. Sora stays one level under the form, as in KH2. High Jump, Glide and Superglide still come only where KH1 gives them; after that, form levels raise them. KH1 still gives its own Dodge Roll at its level-up as well. A save that already had Quick Run or Aerial Dodge without the form level loses them until the form gets there. A new ability goes in equipped if Sora has the AP for it, otherwise off. Checked against KH2's rule from an earlier decomp round (`0x1403E8380`); not seen in game.
+>
+> **1. Final, (a).** By the code, Sora's Final swing already keeps going through a parry: only the enemy's attack is stopped. So I haven't changed anything. If you still see Final's swing stop or "clink" in game, please send a log with Combat on and say where it happened; then something else is stopping it, and the log will show what.
+>
+> **3. Only Sora's name in the target list.** I understand. KH1 refills that party list every frame, after the point where the mod can step in today. To show only Sora, I need to know either which name KH1's one-entry target list (command 0x4C in `btltbl.bin`) shows, or the first bytes of KH1's next fill step (`0x140292760`), so I can hook it safely. Both are in your extracted files and the decomp, which I didn't have here. I'll build it once I can read them.
+>
+> **Please test (t1085):**
+> 1. On an early save, Quick Run and Aerial Dodge aren't in the KH2 list.
+> 2. Raise Wisdom to Lv3: Quick Run LV1 appears with its box. Master gives Aerial Dodge the same way, and Limit gives Dodge Roll.
+> 3. Load a save whose Wisdom is already Lv3 or higher: Quick Run is there right after loading.
+> 4. Tell me if KH1's own level-up gives a second Dodge Roll after Limit already gave you one.
+>
+> **Question:** should a new growth ability always go in equipped, even when Sora doesn't have the AP (so it always works, as KH2's do), or stay as now, off when the AP doesn't fit?
+
+^m7
 
