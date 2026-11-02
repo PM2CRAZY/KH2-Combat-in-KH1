@@ -2900,6 +2900,16 @@ Paused here to move on to the next form; t1013..t1019 are untested in game. Open
 - t1031: Item use in Master (answer 8): Master has motion 9 in its field slot only (`A110`, as Wisdom's and Limit's, Checked (files)); KH2's lookup `0x1403C7C50` tries the id's four slots by the table at `0x1405C5D38` and nothing else (Checked (decomp) / (exe)), so Master plays its own. `MASTER_SPECS` gets the item specs (0x3E / 0x3F).
 - t1032: Limit's and Master's KH2 swing sounds play whatever `kh2_sounds` lists, as Valor's / Final's (the owner's answer
   2 (a)); Master's finishers keep KH1's row line at Battle Quotes KH1 (answer 1 (a), no change).
+- t1081: no guard or roll in Master at either Dodge Roll style. The owner: "you can guard in final form and master
+  form and it looks crazy". KH2's Master has no guard (PTYA set 4 has no row 11, its 42 is the repel clip D350 with no
+  guard window, no 173 / 209 in `P_EX100_TRIF.mset`, Checked (files), §24.1). On KH1's states Master took base Sora's
+  Square path, which takes KH1's Square action bit (`0x100000`) only at Dodge Roll KH2; at KH1, KH1's own Square handler
+  (`0x1402A7B30`, Checked (decomp), `docs/kh1-roll-guard-native.md` §3.1) started KH1's guard row 0x3D (request 0xD4, whose
+  slot is base Sora's KH2 guard 173: the base model's guard on Master) or KH1's roll. Now `shared::control` takes KH1's
+  Square bit in Master always, as Valor, Wisdom and Final already do; its jump in the air is still its Aerial Dodge.
+  Final already hid Square (t1033), so the Final guard the owner saw has another start: not found by reading the code.
+  **Not checked in game.** `combomods::kh1_guard_frame` (already reads `+0x164` each frame) logs once a play when KH1's
+  guard request 0xD4 plays in Master or Final (KH1 state, Square on the pad), to find it.
 
 ## 25. Final Form on KH1's states (the owner, after t1032: "start final", 2026-10-30)
 

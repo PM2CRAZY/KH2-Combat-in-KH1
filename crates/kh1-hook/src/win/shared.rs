@@ -189,7 +189,25 @@ pub fn mark_air_dodged() {
 
 /// One control step of KH1's with base Sora in its states: the borrow it starts (kept for the
 /// physics step), and KH1's bits it doesn't get this step.
+///
+/// (The owner, after t1076: "you can guard in final form and master form and it looks crazy".)
+/// KH2's Master has no guard, dodge roll, Quick Run or glide (PTYA set 4 has no row 11, its 42 is
+/// the repel clip D350 with no guard window, no 173 / 209 in `P_EX100_TRIF.mset`, its growth is
+/// Aerial Dodge; Checked (files), `docs/kh1-drive-forms-native.md` §24.1), so in Master KH1 never
+/// sees Square (its action bit), as in Valor, Wisdom and Final: KH1's own Square handler
+/// (`0x1402A7B30`, Checked (decomp)) started KH1's guard row 0x3D (request 0xD4, no slot of
+/// Master's: another model's guard on the form) and KH1's roll whenever the Dodge Roll style was
+/// KH1 (KH1's action bit was only taken at KH2). Master's jump in the air is still its Aerial
+/// Dodge (base Sora's path, `base_control`).
 pub fn control(s: &Seen) -> u32 {
+    let hide = base_control(s);
+    match super::form::native_form() {
+        Some(super::form::Kind::Master) => hide | KH1_ACTION_BIT,
+        _ => hide,
+    }
+}
+
+fn base_control(s: &Seen) -> u32 {
     let was = LAST.swap((s.jump as u32) | (s.square as u32) << 1, Ordering::Relaxed);
     let jump_fresh = s.jump && was & 1 == 0;
     let square_fresh = s.square && was & 2 == 0;
@@ -223,7 +241,7 @@ pub fn control(s: &Seen) -> u32 {
         Some(super::form::Kind::Limit) => {}
         // (Master Form, t1021: KH2's action button finds no guard (none in its 42 or PTYA set 4) and
         // no roll; its jump in the air is its Aerial Dodge (its growth ability), base Sora's native
-        // path below with its own clip and levels.)
+        // path below with its own clip and levels. KH1's Square is taken in `control`.)
         Some(super::form::Kind::Master) => {}
         // (Final Form, t1033: KH2's action button finds no guard (no 42 / 173 in `P_EX100_ULTF.mset`,
         // no guard row in PTYA set 5, Checked (files)), no roll and no Quick Run (its growth is

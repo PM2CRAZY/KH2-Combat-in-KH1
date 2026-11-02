@@ -2640,7 +2640,16 @@ static KH1_GUARD_OBJ: std::sync::atomic::AtomicUsize = std::sync::atomic::Atomic
 /// at KH1, KH1's own block stands as it is (nothing of ours). From `kh2slots`' frame.
 pub unsafe fn kh1_guard_frame(actor: usize) {
     let had = KH1_GUARD_OBJ.load(Ordering::Relaxed);
-    let guarding = actor >= 0x10000 && rd::<u32>(actor + 0x164) & 0xFFFF == 0xD4 && !super::form::in_form() && super::styles::kh1_now(super::styles::Kind::GuardAnim);
+    let guard_request = actor >= 0x10000 && rd::<u32>(actor + 0x164) & 0xFFFF == 0xD4;
+    // (The owner, after t1076: a guard in Master and Final. Neither form has one in KH2 (no row 11,
+    // no 173; Checked (files)), and KH1 sees no Square in either now (`shared::control`); KH1's
+    // guard request still playing in one of them is logged once a play, to find what started it.)
+    static FORM_GUARD: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    let form_guard = guard_request && matches!(super::form::native_form(), Some(super::form::Kind::Master | super::form::Kind::Final));
+    if FORM_GUARD.swap(form_guard, Ordering::Relaxed) != form_guard && form_guard {
+        log!(Combat, "KH1's guard request 0xD4 is playing in {} Form, which has no guard in KH2 (KH1 state {}, Square on the pad {})", super::form::native_form().map_or("?", |k| k.name()), rd::<i32>(actor + 0x70), takeover::pad_square());
+    }
+    let guarding = guard_request && !super::form::in_form() && super::styles::kh1_now(super::styles::Kind::GuardAnim);
     let now = if guarding && Build::current() == Build::Steam { super::combat::kh1_guard_object(actor) } else { None };
     if had != 0 && now != Some(had) {
         super::combat::kh1_guard_forget(had);
