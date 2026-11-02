@@ -570,3 +570,12 @@ option for limits", and "in most menus, the text at the bottom extends past the 
   KH1 | KH2, the row's value the opposite of `limitform::three_bars` / `ledges_kh1`. The ini keys
   (`limit_cost`, `limit_ledges`) and their meanings are unchanged, so a saved setting stays as it was.
   Checked (code): the only rows with KH2 on the left were these two.
+- **t1078, help lines fit the screen.** KH1's help update draws at x `0xAE` (174) of the 512 x 384 menu
+  space (§2.4, Checked (decomp)). The owner's 1280 x 720 screenshot puts that space at 1.875 px a unit,
+  centred (unit 0 at 160 px), so a help line has about 423 units before the screen's right edge
+  (Checked (screenshot): his Limits in Forms line is cut after "in a Dr"). `config::fit_help`: a help
+  text of ours whose widest line (KH1's width function `0x1402D0E10`, which takes the size) is wider
+  than 408 units is drawn from a copy with KH1's size code `0C s` at its start and after each line
+  break, `s` the largest size that fits; worked out once per text. KH1's own help texts are left alone.
+  **Assumption:** a line break doesn't reset the size code (put after each break anyway); the lines keep
+  KH1's spacing; a 16:9 screen (wider screens have more room).

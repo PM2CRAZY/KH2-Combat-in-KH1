@@ -140,6 +140,16 @@ const LABEL_ROOM: i32 = 0x0B + 0x8E - 0x1B - 8;
 const VALUE_PAD: i32 = 16;
 /// Text ids of ours drawn smaller (`fit`): `FIT_BASE + index into FIT`.
 const FIT_BASE: u32 = 0x7F40_0000;
+/// The room a help line of ours has (the owner, the bug-list thread: "in most menus, the text at the
+/// bottom extends past the screen"). KH1's help update draws the text at x `0xAE` (174) of the
+/// 512 x 384 menu space (`0x1402F7D60` -> `0x1402EAEA0(win, 0, 0xAE, y, id, h, colour)`, Checked
+/// (decomp), `docs/kh1-config-menu.md` §2.4). The owner's 1280 x 720 screenshot has that space at
+/// 1.875 px a unit, centred (its x 0 at 160 px; the help text starts at about 482 px = unit 172), so
+/// the screen's right edge is unit (1280 - 160) / 1.875 = 597 and a line has 423 units before it
+/// (Checked (screenshot)). 15 kept clear. **Assumption:** 16:9; a wider screen only has more room.
+const HELP_ROOM: i32 = 597 - 0xAE - 15;
+/// `fit`'s key for a help line (a room no panel has).
+const HELP_KEY: i32 = -1;
 
 /// Window fields (Checked (decomp)).
 const WIN_PARENT: usize = 0x18;
@@ -1099,6 +1109,72 @@ unsafe fn fit(id: u32, room: i32) -> u32 {
     }
 }
 
+/// The id the help line draws our help text `id` with: `id` itself while every line of it fits
+/// `HELP_ROOM` at KH1's text size, else a copy with KH1's size code `0C s` at its start and after each
+/// line break (`02`), `s` the largest size at which KH1's own width function (`MEASURE_STEAM`, which
+/// takes the size) has its widest line fit. Worked out once per text (`FIT`, key `HELP_KEY`); only
+/// our ids. The size code after each break is there in case a break resets it (**Assumption**: not
+/// seen in the decomp either way); the lines keep KH1's spacing, so the box holds as many lines.
+unsafe fn fit_help(id: u32) -> u32 {
+    if id >> 16 != 0x7F00 || Build::current() != Build::Steam || !TEXT_HOOKED.load(Ordering::Relaxed) {
+        return id;
+    }
+    let mut fits = FIT.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(i) = fits.iter().position(|f| f.0 == id && f.1 == HELP_KEY) {
+        return if fits[i].2 == 0 { id } else { FIT_BASE + i as u32 };
+    }
+    if fits.len() >= 0x1000 {
+        return id;
+    }
+    let base = BASE.load(Ordering::Relaxed);
+    let size = rd::<i32>(base + TEXT_SIZE_STEAM);
+    let p = text(id);
+    let mut out = 0usize;
+    if (9..=64).contains(&size) && super::crash::readable(p) {
+        let measure: unsafe extern "system" fn(usize, u32) -> i32 = std::mem::transmute(base + MEASURE_STEAM);
+        let mut own = Vec::new();
+        for i in 0..1024 {
+            let b = rd::<u8>(p + i);
+            if b == 0 {
+                break;
+            }
+            own.push(b);
+        }
+        let lines: Vec<Vec<u8>> = own
+            .split(|b| *b == 0x02)
+            .map(|l| {
+                let mut v = l.to_vec();
+                v.push(0);
+                v
+            })
+            .collect();
+        let widest = |s: i32| lines.iter().map(|l| measure(l.as_ptr() as usize, s as u32)).max().unwrap_or(0);
+        let w = widest(size);
+        if w > HELP_ROOM {
+            let mut s = (size * HELP_ROOM / w).clamp(8, size - 1);
+            while s > 8 && widest(s) > HELP_ROOM {
+                s -= 1;
+            }
+            let mut v = vec![0x0C, s as u8];
+            for b in &own {
+                v.push(*b);
+                if *b == 0x02 {
+                    v.extend_from_slice(&[0x0C, s as u8]);
+                }
+            }
+            v.push(0);
+            out = Box::leak(v.into_boxed_slice()).as_ptr() as usize;
+            log!(Menus, "Config menu: help {id:#x} is {w} wide for {HELP_ROOM}: drawn at size {s} of {size}");
+        }
+    }
+    fits.push((id, HELP_KEY, out));
+    if out == 0 {
+        id
+    } else {
+        FIT_BASE + (fits.len() - 1) as u32
+    }
+}
+
 /// The help line (KH1's, one per list): it reads its id from the Config table by the Config row;
 /// under one of our lists the id of that list's row, on page 1 our button's or (row 8) KH1's
 /// Default's. The slot holds it only for the call.
@@ -1124,6 +1200,8 @@ unsafe extern "system" fn help(win: usize) {
     if !(0..PAGE_ROWS as i32).contains(&row) {
         return f(win);
     }
+    // (Too wide for the screen: drawn smaller.)
+    let id = fit_help(id);
     let at = base + HELP_IDS_RVA + row as usize * 4;
     let keep = rd::<u32>(at);
     wr(at, id);
