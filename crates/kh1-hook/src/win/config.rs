@@ -479,10 +479,12 @@ const DRIVE: [Item; 6] = [
 // (Cost: round 12 answer 2 (c), KH2's 4 bars by default, the owner's 3 behind this row.)
 // (Trinity Limit: round 12 answer 1, "make a toggle for limit to be able to used the 5th kh1 trinity"; off by default; t977.)
 // (Ledges: the owner, t1001 round, question 4: "Config toggle, KH2 default"; t1011.)
+// (Cost and Ledges: KH2 on the right as on every other row, the owner, the bug-list thread: "KH2 is the first
+// option for cost and ledges, but the second option for limits".)
 const LIMIT: [Item; 4] = [
-    Item::Set([0x7F00_0258, 0x7F00_0003, 0x7F00_0259, 0x7F00_025A], Row::LimitCost),
+    Item::Set([0x7F00_0258, 0x7F00_0259, 0x7F00_0003, 0x7F00_025A], Row::LimitCost),
     Item::Set([0x7F00_025B, 0x7F00_011D, 0x7F00_011E, 0x7F00_025C], Row::LimitTrinity),
-    Item::Set([0x7F00_025D, 0x7F00_0003, 0x7F00_0002, 0x7F00_025E], Row::LimitLedges),
+    Item::Set([0x7F00_025D, 0x7F00_0002, 0x7F00_0003, 0x7F00_025E], Row::LimitLedges),
     Item::Set([0x7F00_0254, 0x7F00_0002, 0x7F00_0003, 0x7F00_0255], Row::FormLimits),
 ];
 // (QoL: the user, t704: "make a qol (Quality of life) section in the config menu, put gummi skip in
@@ -820,9 +822,10 @@ fn value(what: Row) -> bool {
         Row::RecoverySources => super::driveitems::sources(),
         Row::PartyRequired => super::driveparty::required(),
         Row::FormLimits => super::formlimits::kh2(),
-        Row::LimitCost => super::limitform::three_bars(),
+        // (KH2 on the right: right is KH2's 4 bars / KH2's ledges.)
+        Row::LimitCost => !super::limitform::three_bars(),
         Row::LimitTrinity => super::limitform::trinity(),
-        Row::LimitLedges => super::limitform::ledges_kh1(),
+        Row::LimitLedges => !super::limitform::ledges_kh1(),
     }
 }
 
@@ -874,9 +877,9 @@ fn set(what: Row, v: bool) {
         Row::RecoverySources => super::driveitems::set_sources(v),
         Row::PartyRequired => super::driveparty::set_required(v),
         Row::FormLimits => super::formlimits::set_kh2(v),
-        Row::LimitCost => super::limitform::set_three_bars(v),
+        Row::LimitCost => super::limitform::set_three_bars(!v),
         Row::LimitTrinity => super::limitform::set_trinity(v),
-        Row::LimitLedges => super::limitform::set_ledges_kh1(v),
+        Row::LimitLedges => super::limitform::set_ledges_kh1(!v),
     }
 }
 

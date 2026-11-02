@@ -557,3 +557,16 @@ Progression, QoL, Cosmetics, Misc (`List::Drive`, `List::Progression`, parent th
   balance rule ported (the owner's answer (a)).
 
 Not checked in game.
+
+## The bug-list thread (t1077, t1078)
+
+The owner (thread `drive-forms-drive-recovery-config-menu-and-title-screen-bugs`): "some minor
+inconsistencies with where "KH2" is ... KH2 is the first option for cost and ledges, but the second
+option for limits", and "in most menus, the text at the bottom extends past the screen".
+
+- **t1077, KH2 on the right on every row.** Every row of ours keeps KH1 (or Off) on the left and KH2
+  (or On) on the right, the value `true` = right (`config::value`). Drive > Limit's Cost (KH2 | 3 Bars)
+  and Ledges (KH2 | KH1) were the two rows the other way round; they are now 3 Bars | KH2 and
+  KH1 | KH2, the row's value the opposite of `limitform::three_bars` / `ledges_kh1`. The ini keys
+  (`limit_cost`, `limit_ledges`) and their meanings are unchanged, so a saved setting stays as it was.
+  Checked (code): the only rows with KH2 on the left were these two.
