@@ -27,7 +27,8 @@
 //!   KH2's value × 100 points to the gauge (`drivegauge::add`, KH2's `0x1403C0AD0`), returning bit 0
 //!   (KH1 then takes one from the inventory or the slot, plays its use sound 0xE and shows message
 //!   0x99 + 0, `0x14030F160`). Assumption: Sora's battle actor id is `0x10000 | 0` as the menu's
-//!   target is (`0x1402CD5E0` takes that form for a party member).
+//!   target is (`0x1402CD5E0` takes that form for a party member); since t1083 his actor as a handle
+//!   or its pointer is taken too (`is_sora`).
 //! - **The shops** (t950, round 5 answer 1 (a), main's design): KH1's shop open `0x1403010A0 (mode,
 //!   list, ..)` (mode 0 the item shops, 2 the other lists; the list a count and item ids from KH1's
 //!   table at `0x1404FEE00`, picked by the shop's event, `0x1401CA610`) is hooked: with Progression >
@@ -320,6 +321,22 @@ unsafe fn gauge_usable() -> bool {
     super::form::gauge_cost() && super::drivegauge::get().is_some_and(|g| items::usable(g.bars, g.max))
 }
 
+/// Sora's actor (KH1's first party slot, Steam `0x142D37280`, as `cmdmenu` / `chest` read it).
+const SORA_RVA: usize = 0x2D37280;
+
+/// Whether a target of KH1's item use (or of its use test) is Sora (t1083): `0x10000 | 0` (Checked (decomp), `0x1402CD590`), or in battle his actor as a handle (KH1's
+/// `0x14038AD90` form, `pose::ptr`) or its pointer's low half. Assumption: the battle use's "target
+/// actor's id" (`0x1402CD580`) is one of these; before, only `0x10000 | 0` was taken, so a battle
+/// use on Sora could be refused.
+unsafe fn is_sora(t: u32) -> bool {
+    if t == 0x1_0000 {
+        return true;
+    }
+    let base = super::sys::GetModuleHandleA(std::ptr::null()) as usize;
+    let sora = rd::<u64>(base + SORA_RVA) as usize;
+    sora > 0x10000 && (t as usize == sora & 0xFFFF_FFFF || (t & 0x8000_0000 != 0 && super::pose::ptr(t) == sora))
+}
+
 /// KH1's use test, ours for Drive Recovery.
 unsafe extern "system" fn can_use(item: u32, member: i32) -> u8 {
     if items::which(item).is_some() && TAKEN.load(Ordering::Relaxed) {
@@ -327,7 +344,7 @@ unsafe extern "system" fn can_use(item: u32, member: i32) -> u8 {
         if KIND_SET.load(Ordering::Relaxed) != 1 + battle() as u8 {
             records(base);
         }
-        return (member == 0 && gauge_usable()) as u8;
+        return ((member == 0 || is_sora(member as u32)) && gauge_usable()) as u8;
     }
     let f: unsafe extern "system" fn(u32, i32) -> u8 = std::mem::transmute(ORIG_CAN_USE.load(Ordering::Relaxed));
     f(item, member)
@@ -337,9 +354,9 @@ unsafe extern "system" fn can_use(item: u32, member: i32) -> u8 {
 unsafe extern "system" fn apply(item: u32, target: u64) -> u64 {
     if let Some(k) = items::which(item).filter(|_| TAKEN.load(Ordering::Relaxed)) {
         let t = target as u32;
-        let sora = t & 0xFF_0000 == 0x1_0000 && t & 0xFFFF == 0;
-        if sora && gauge_usable() {
+        if is_sora(t) && gauge_usable() {
             super::drivegauge::add(items::points(k), items::NAMES[k]);
+            log!(Forms, "Drive Recovery: {} used (target {t:#x})", items::NAMES[k]);
             return 1;
         }
         log!(Forms, "Drive Recovery: {} not used (target {t:#x}, the gauge full or not the form cost)", items::NAMES[k]);

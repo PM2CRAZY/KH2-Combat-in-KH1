@@ -2369,6 +2369,14 @@ the task with its own quad buffer `0x142866960` (→ inside slot 0's draw with K
 - Assumption: an argument of `0x91` / `0x92` (above 0x7F) reaches the item use whole: KH1 sign-extends it into the
   command (`(char)arg << 8`, masked `0xFFFF00`); a reader of the low byte gets ours, a reader of 16 bits wouldn't.
 
+### 16.9 Sora as the battle use's target (t1083)
+- t949 took only `0x10000 | 0` as Sora in the effect `0x1402CD780 (item, target)` (the Items page's form,
+  `0x1402CD590`, Checked (decomp)). The battle use passes "the target actor's id" (`0x1402C2B50` → `0x1402CD580`),
+  whose form wasn't read (Assumption in t949). Now Sora is also taken as his actor (`*0x142D37280`) in KH1's handle
+  form (`0x80000000 | segment << 25 | offset`, `0x14038AD90`) or as the pointer's low half; the use test takes member
+  0 or the same forms. Every use and every refusal logs the target, so the owner's log shows the form if this still
+  refuses. Assumption: one of these is the battle form.
+
 ## 17. KH2's Drive support abilities (main-port round 6, row 5, 2026-10-30: research)
 
 ### 17.1 KH2 (Steam KH2)
