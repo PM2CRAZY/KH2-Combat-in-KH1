@@ -498,3 +498,26 @@ are never cut.
   (before KH1's step frees it) counts as playing for the rule: a lower line asked in exactly that
   frame is dropped, where KH2 would have taken it.
 
+
+## Ours held out on the way back to the title (t1079)
+
+- The owner: going to the title screen from a save point's save menu, the loading screen never
+  ends. No log yet.
+- What ours did there (Checked (code)): `kh1bank::frame_end` put our one-sound banks back into
+  KH1's bank list `0x1404D65D8` whenever it had shrunk and then stood still 30 frames, and our
+  voice bank back into KH1's voice list `0x1404D65B8` at once whenever its count changed, in any
+  game mode, the title's included.
+- Suspect (Assumption: no decomp or log of KH1's way back to the title in that session): that way
+  releases KH1's banks (`0x1400D2C70`) and waits for its lists to be empty or idle; ours, put back
+  each time, kept them from ever emptying. Not seen in a room or world change, which load the next
+  world's banks without waiting for empty lists (testers' logs).
+- Now: ours go back into either list only while KH1's game mode (`0x14233FBC0`) is a game (4..0x12,
+  but not 0xD..0x10, the title's movies and the ways back to it); out of a game they stay out, and
+  once a game runs again the list must stand still 30 frames first. KH2's sounds aren't needed on
+  the title. Stopping our queued sounds (`tend`) runs in every mode as before. Which modes the
+  save menu's return passes through: Assumption (0x10 then 2, from the mode machine's notes in
+  `docs/kh1-asset-cache.md` §2.1).
+- The log (Loading & Cache): "KH1 game mode a -> b" on each change, and "KH1 game mode b for N s"
+  every 5 s while it isn't a game, with both lists' counts, how many of ours are in, and the bank
+  slots. If those 5 s lines stop while the screen is stuck, KH1's frame itself has stopped (a wait
+  inside one call), not a mode waiting.

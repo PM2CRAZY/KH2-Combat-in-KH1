@@ -27,7 +27,9 @@
 //!
 //! The engine has a fixed number of bank slots (`0x14004F570`: remaining, `0x14004F5F0`: in
 //! use, Checked (decomp)); its size isn't known here, so ours are registered only while more than
-//! `KEEP_FREE` stay free for KH1's own (logged, both counts). Steam build only (the addresses are
+//! `KEEP_FREE` stay free for KH1's own (logged, both counts). Ours (both lists) are put back only
+//! while KH1's game mode is a game (t1079, `game_running`): never on the way back to the title or
+//! on it. Steam build only (the addresses are
 //! the Steam exe's); elsewhere nothing is registered and KH2's sounds aren't heard (the mod has no
 //! player of its own: `kh2sound`).
 
@@ -109,6 +111,64 @@ static STILL: AtomicU32 = AtomicU32::new(0);
 static LOGS: AtomicU32 = AtomicU32::new(0);
 /// Ours have been put in once (a later shortfall is KH1's reset).
 static SEEN: AtomicBool = AtomicBool::new(false);
+
+/// KH1's game mode (Steam `0x14233FBC0`, the mode machine `0x140170870`'s state; the same address
+/// `loadscreen` and `softreset` use, Checked (exe) there): 0 / 1 start-up and KH1's reset, 2 / 3
+/// the title, from 4 a game; 0xD..0xF the title's movies, 0xF and 0x10 go back to 2 (the title
+/// again) (`docs/kh1-asset-cache.md` §2.1, Checked (decomp)).
+const MODE_STEAM: usize = 0x233FBC0;
+
+/// t1079: ours are put back into KH1's lists only while a game runs, never while KH1 is going back
+/// to its title or is on it (the owner: from the save menu's return to the title, the loading
+/// screen never ends). Assumption (no decomp in that session): KH1's way back to the title
+/// releases its banks and waits for its lists to empty, and ours, put back each time the list
+/// changed, kept them from ever emptying. Nothing of KH2's plays outside a game.
+fn game_running(mode: i32) -> bool {
+    (4..=0x12).contains(&mode) && !(0xD..=0x10).contains(&mode)
+}
+
+/// t1079, the log (Loading & Cache): KH1's game mode changes, and every 5 s while it isn't a game,
+/// with both of KH1's bank lists, so a stuck way back to the title shows where it stands.
+unsafe fn watch_mode(base: usize, mode: i32) {
+    static LAST: AtomicI32 = AtomicI32::new(-1);
+    static SINCE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    static SAID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    static LINES: AtomicU32 = AtomicU32::new(0);
+    if !super::log_on(super::LogCat::Loading) {
+        LAST.store(mode, Ordering::Relaxed);
+        return;
+    }
+    let now = super::frameadv::clock_ms();
+    let was = LAST.swap(mode, Ordering::Relaxed);
+    let changed = was != mode;
+    if changed {
+        SINCE.store(now, Ordering::Relaxed);
+        SAID.store(now, Ordering::Relaxed);
+    } else if game_running(mode) || now.saturating_sub(SAID.load(Ordering::Relaxed)) < 5000 {
+        return;
+    } else {
+        SAID.store(now, Ordering::Relaxed);
+    }
+    if LINES.fetch_add(1, Ordering::Relaxed) >= 400 {
+        return;
+    }
+    let up = rd::<usize>(base + SOUND_UP_STEAM) != 0 && ready(base);
+    let slots = if up { format!("{} bank slots left, {} in use", banks_left(base), banks_used(base)) } else { "KH1's sound system not up".to_string() };
+    let ours = BANKS.try_lock().map(|b| format!("{} of our {} marked in", b.iter().filter(|x| x.present).count(), b.len())).unwrap_or_else(|_| "ours busy".into());
+    let lists = format!(
+        "bank list {} ({ours}; {} of ours in it now, put back {}), voice list {} (ours {}), {slots}",
+        rd::<i32>(base + BANK_COUNT_STEAM),
+        ours_in_list(base).len(),
+        if DIRTY.load(Ordering::Relaxed) { "waiting" } else { "not needed" },
+        rd::<i32>(base + VOICE_COUNT_STEAM),
+        if VOICE_DATA.load(Ordering::Relaxed) != 0 { "in" } else { "out" },
+    );
+    if changed {
+        log!(Loading, "KH1 game mode {was} -> {mode} ({}): {lists}", if game_running(mode) { "a game: ours may go back in" } else { "not a game: ours held out" });
+    } else {
+        log!(Loading, "KH1 game mode {mode} for {:.0} s: {lists}", now.saturating_sub(SINCE.load(Ordering::Relaxed)) as f32 / 1000.0);
+    }
+}
 
 fn note(line: impl FnOnce() -> String) {
     if !super::log_on(super::LogCat::Sound) {
@@ -264,9 +324,17 @@ pub unsafe fn frame_end(base: usize) {
     if Build::current() != Build::Steam || base == 0 {
         return;
     }
+    let mode: i32 = rd(base + MODE_STEAM);
+    watch_mode(base, mode);
+    let game = game_running(mode);
     if rd::<usize>(base + SOUND_UP_STEAM) != 0 && ready(base) {
         tend(base);
-        tend_voice(base);
+        if game {
+            tend_voice(base);
+        } else {
+            // (Looked at again once a game runs.)
+            VOICE_COUNT.store(-1, Ordering::Relaxed);
+        }
     }
     let count: i32 = rd(base + BANK_COUNT_STEAM);
     let head: usize = rd(base + BANK_LIST_STEAM);
@@ -280,6 +348,11 @@ pub unsafe fn frame_end(base: usize) {
         }
         STILL.store(0, Ordering::Relaxed);
         DIRTY.store(true, Ordering::Relaxed);
+        return;
+    }
+    if !game {
+        // (Not a game: ours stay out, and a game's list must stand still from its own start.)
+        STILL.store(0, Ordering::Relaxed);
         return;
     }
     let still = STILL.fetch_add(1, Ordering::Relaxed) + 1;
