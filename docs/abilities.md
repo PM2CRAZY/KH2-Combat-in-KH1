@@ -296,3 +296,19 @@ file is no longer written to: nothing is taken out any more.
   `Abilities`.
 - The `Kh1Own` rows on KH2's side are not checked one by one in the game.
 - Nothing here has been tried in the game.
+
+## Growth levels after a save loads (t1084, the bug-list thread)
+
+The owner: "loading into a save should give you the appropriate level of all growth abilities".
+- **Checked (code)**: base Sora's growth levels are worked out from the save's form records each time they're used
+  (`formexp::base_growth`, the form records at `+0x882` / `+0x884` / `+0x886` (Valor, Wisdom, Final), `+0x890`
+  (Limit), `+0x892` (Master); `menu::Growth::kh1` on every read; `combomods::abilities_now` caches one frame). A load
+  restores the whole save block (`docs/kh1-softreset.md`, Checked (decomp)), so nothing is lost or held from before.
+- What does decide whether one counts: the ability must be in his lists and equipped. High Jump, Glide and Dodge Roll
+  are KH1's own and only come from KH1 (the "vanilla" decision); Quick Run and Aerial Dodge are given off; base
+  Sora is one level under the form (KH2's rule, t703). KH2 itself puts the growth ability in Sora's list when the
+  form level first gives LV1 (`0x1403E8380`, Checked (decomp) in an earlier round). Asked in the thread.
+- t1084: the levels and menu names last seen by the ability menu (`menu::Growth`) were one copy for the whole session,
+  so a second save loaded in one session showed an "Ability Up" box for levels it already had. They are forgotten
+  whenever KH1 is on its title (mode 2 / 3 at `0x14233FBC0`, read at the frame's end, `menu::frame_end`). Not seen in
+  game.

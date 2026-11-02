@@ -574,6 +574,8 @@ unsafe extern "system" fn frame_end(renderer: usize) {
         }
         // KH2's sound banks into KH1's bank list, again after KH1 resets it (`kh1bank`).
         super::kh1bank::frame_end(base);
+        // KH1's title seen, for the ability menu's growth levels (`menu`).
+        super::menu::frame_end(base);
     }
     let f: unsafe extern "system" fn(usize) = std::mem::transmute(ORIG_FRAME_END.load(Ordering::Acquire));
     f(renderer);

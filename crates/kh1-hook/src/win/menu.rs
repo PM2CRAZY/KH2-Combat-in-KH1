@@ -501,13 +501,41 @@ static GROWTH: std::sync::Mutex<Option<Growth>> = std::sync::Mutex::new(None);
 /// One frame of the ability menu's own work (`Growth::update`).
 pub unsafe fn growth_frame(base: usize) {
     if let Ok(mut g) = GROWTH.try_lock() {
-        g.get_or_insert_with(Growth::new).update(base);
+        let g = g.get_or_insert_with(Growth::new);
+        // (A save loaded since the last frame: the growth levels last seen were the other save's.)
+        if TITLE_SEEN.swap(false, std::sync::atomic::Ordering::Relaxed) {
+            g.forget_levels();
+        }
+        g.update(base);
+    }
+}
+
+/// KH1's game mode (Steam `0x14233FBC0`, the mode machine's state: 2 / 3 the title; the address
+/// `loadscreen`, `softreset` and `kh1bank` use, Checked (exe) there; the modes Checked (decomp),
+/// `docs/kh1-asset-cache.md` §2.1).
+const MODE_STEAM: usize = 0x233FBC0;
+/// KH1 has been on its title since the ability menu's last frame (`frame_end`).
+static TITLE_SEEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Each frame (the frame-end hook, `debugmenu::frame_end`): notes KH1's title, so the next save's
+/// growth levels aren't compared with the last one's (the owner, the bug-list thread: a second
+/// save loaded in one session showed an "Ability Up" box for levels it already had). One read.
+pub unsafe fn frame_end(base: usize) {
+    if super::addr::Build::current() == super::addr::Build::Steam && matches!(rd::<i32>(base + MODE_STEAM), 2 | 3) {
+        TITLE_SEEN.store(true, std::sync::atomic::Ordering::Relaxed);
     }
 }
 
 impl Growth {
     pub fn new() -> Growth {
         Growth { mode: super::settings::get().abilities, frames: 0, seen: None, applied: false, no_room: Vec::new(), yielded: Vec::new(), prompts: Default::default(), idle: 0, qr_level: None, hj_level: None, gl_level: None, ad_level: None, given: None, ov_gen: 0, names: [None; 3] }
+    }
+
+    /// The growth levels and menu names last seen forgotten (a new save: its own are taken as they
+    /// are, with no "Ability Up" box, and the names written again).
+    fn forget_levels(&mut self) {
+        (self.qr_level, self.hj_level, self.gl_level, self.ad_level) = (None, None, None, None);
+        self.names = [None; 3];
     }
 
     /// Quick Run's (0), Glide's (1) or Aerial Dodge's (2) menu name at level `l` (his own), or at
