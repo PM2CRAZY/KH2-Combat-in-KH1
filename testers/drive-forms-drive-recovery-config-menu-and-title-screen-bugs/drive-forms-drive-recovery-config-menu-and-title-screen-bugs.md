@@ -7,6 +7,8 @@
 - [1. PM2CRAZY (owner, chat 2026-10-31, copied word for word): 1. you can guard in final form and master form and it looks ](#^m1)
 - [2. PM2CRAZY (owner, chat 2026-11-02, copied word for word): Make an exception. Do everything I asked, and also, when goi](#^m2)
 - [3. Assistant: Eight versions, t1077 to t1084: one per system. None of them](#^m3)
+- [4. PM2CRAZY (owner, chat 2026-11-02, copied word for word): 1. Have the parry effects, but let the attack play out.](#^m4)
+- [5. Assistant: Thanks. No version this round: two of these need one more th](#^m5)
 
 ---
 
@@ -87,4 +89,27 @@
 > 5. Your point 2 came through empty. Did you mean to write something there?
 
 ^m3
+
+
+> [!note] Tester PM2CRAZY (owner, chat 2026-11-02, copied word for word)
+> 1. Have the parry effects, but let the attack play out.
+> 2. im not quite sure what this question is asking, could you rephrase? also, sora should be 1 level the respective form just like KH2.
+> 3. Just have it be used on sora straight away
+
+^m4
+
+
+> [!tip] Assistant
+> Thanks. No version this round: two of these need one more thing before I can build them safely.
+>
+> **1. Final.** Which attack should play out?
+> - (a) Sora's Final swing. By the code it already keeps going through a parry: only the enemy's attack is stopped, and the enemy recoils. If you see Final's swing stop in game, tell me where (or send a log with Combat on), because then something else is stopping it.
+> - (b) The enemy's attack. It isn't cancelled and the enemy doesn't recoil, so it can still hit Sora. Only the spark and sound show.
+> - (c) Both.
+>
+> **2. Growth abilities, put more simply.** In KH2, when a form levels up, the growth ability is added to Sora's abilities by itself. For example, Valor reaching Lv2 adds High Jump to his list. Here, a form's level only raises an ability's level if Sora already has that ability: High Jump, Glide and Dodge Roll only come when KH1 gives them, and Quick Run and Aerial Dodge are given switched off. So the question is: should form levels add the growth abilities to Sora's list as KH2 does? (a) Yes, and switched on; (b) yes, but switched off; (c) no, keep it as now. And noted: base Sora one level under each form, as in KH2. That's the rule already, so nothing changes there.
+>
+> **3. Drive Recovery on Sora straight away.** Noted. Removing the party list means KH1's battle item use has to run with no target picked, and KH1 has no item of its own that does that. I need to read in the KH1 decomp how its battle item use takes the target, so I don't hand it an empty one (that could crash). I didn't have the decomp in this session; I'll build it as soon as I can read it.
+
+^m5
 

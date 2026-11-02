@@ -100,6 +100,8 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [1. PM2CRAZY (owner, chat 2026-10-31, copied word for word): 1. you can guard in final form and master form and it looks ](../testers/drive-forms-drive-recovery-config-menu-and-title-screen-bugs/drive-forms-drive-recovery-config-menu-and-title-screen-bugs.md#^m1)
   - [2. PM2CRAZY (owner, chat 2026-11-02, copied word for word): Make an exception. Do everything I asked, and also, when goi](../testers/drive-forms-drive-recovery-config-menu-and-title-screen-bugs/drive-forms-drive-recovery-config-menu-and-title-screen-bugs.md#^m2)
   - [3. Assistant: Eight versions, t1077 to t1084: one per system. None of them](../testers/drive-forms-drive-recovery-config-menu-and-title-screen-bugs/drive-forms-drive-recovery-config-menu-and-title-screen-bugs.md#^m3)
+  - [4. PM2CRAZY (owner, chat 2026-11-02, copied word for word): 1. Have the parry effects, but let the attack play out.](../testers/drive-forms-drive-recovery-config-menu-and-title-screen-bugs/drive-forms-drive-recovery-config-menu-and-title-screen-bugs.md#^m4)
+  - [5. Assistant: Thanks. No version this round: two of these need one more th](../testers/drive-forms-drive-recovery-config-menu-and-title-screen-bugs/drive-forms-drive-recovery-config-menu-and-title-screen-bugs.md#^m5)
 - [Drive Forms native](../testers/drive-forms-native/drive-forms-native.md)
   - [1. Assistant: I started this thread from What is still missing(../what-is-](../testers/drive-forms-native/drive-forms-native.md#^m1)
 - [Drive Forms](../testers/drive-forms/drive-forms.md)
