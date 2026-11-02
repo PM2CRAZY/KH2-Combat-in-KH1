@@ -25,7 +25,8 @@
 //! Progression is KH1's vanilla one (the tester, what-is-still-missing after m17: "make it all
 //! vanilla, just give the player all the custom abilities we added, existing saves get updated,
 //! remove extra ap for now"): KH1 gives its own abilities on its own schedule and the mod never
-//! takes one out; every KH2 ability of ours is Sora's from the start (`Kh1Sora::grants`); KH2's
+//! takes one out; every KH2 ability of ours is Sora's from the start (`Kh1Sora::grants`) but the
+//! growth ones, which come as KH2's do, from the Drive Forms' levels (`FORM_GIVEN`); KH2's
 //! growth levels come only from the Drive Forms' levels (`FormGrowth`); saves the older builds
 //! changed get KH1's abilities back once (`restore_vanilla`).
 
@@ -586,6 +587,16 @@ pub fn ours_byte(b: u8) -> bool {
     b != 0 && MENU.iter().any(|a| a.id == b & 0x7F)
 }
 
+/// The growth abilities the mod gives by the Drive Forms' levels, KH2's rule (the owner, the
+/// bug-list thread: "High Jump, and glide/superglide should only be given out where you get them
+/// in KH1 ... dodge roll and the other growth abilities can function how they do in KH2"): when
+/// base Sora's level for one first reaches LV1 (one under the form's, `formlevel::sora_growth`)
+/// it goes into his list if he doesn't have it; before that he doesn't have it. Quick Run
+/// (Wisdom), Aerial Dodge (Master), and KH1's own Dodge Roll (Limit; KH1 still gives it at its own
+/// level-up, the form level only adds it when he hasn't got it yet). High Jump and Glide aren't
+/// here: only KH1 gives them, and the forms' levels raise them once he has them.
+pub const FORM_GIVEN: [u8; 3] = [ours::QUICK_RUN, ours::AERIAL_DODGE, kh1::DODGE_ROLL];
+
 /// Base Sora's growth levels from the Drive Forms' levels (KH2's form level-up, Steam KH2
 /// `0x1403E8380`, `formlevel::sora_growth`, Checked (decomp)): Valor's High Jump, Wisdom's Quick
 /// Run, Limit's Dodge Roll (t975), Master's Aerial Dodge (t1026), Final's Glide (0: none). KH2 has no other source of them, and neither has the mod now:
@@ -843,8 +854,44 @@ impl Kh1Sora {
     /// Our KH2 abilities his lists don't hold yet (the tester, after m17: "just give the player
     /// all the custom abilities we added"): every one of `MENU` in the KH2 list. KH2's own Glide
     /// (shared) only comes with the Glide style (`glide_swap`).
+    /// Quick Run and Aerial Dodge aren't among them: they come from the Drive Forms' levels
+    /// (`growth_due`, the owner's decision in the bug-list thread).
     pub fn grants(&self) -> Vec<MenuAbility> {
-        MENU.iter().filter(|ab| ab.list == List::Kh2 && !self.has_ours(ab.id)).copied().collect()
+        MENU.iter().filter(|ab| ab.list == List::Kh2 && !FORM_GIVEN.contains(&ab.id) && !self.has_ours(ab.id)).copied().collect()
+    }
+
+    /// Base Sora's growth level for one of `FORM_GIVEN` from the Drive Forms' levels (0: none yet).
+    pub fn form_level(&self, id: u8) -> u8 {
+        match id {
+            ours::QUICK_RUN => self.form_growth.quick_run,
+            ours::AERIAL_DODGE => self.form_growth.aerial_dodge,
+            kh1::DODGE_ROLL => self.form_growth.dodge_roll,
+            _ => 0,
+        }
+    }
+
+    /// Whether he has one of `FORM_GIVEN` (on or off): KH1's Dodge Roll in his own list, ours in
+    /// theirs.
+    pub fn has_form_given(&self, id: u8) -> bool {
+        if id == kh1::DODGE_ROLL {
+            has(&self.abilities, id)
+        } else {
+            self.has_ours(id)
+        }
+    }
+
+    /// The growth abilities a form's level has given LV1 of that he doesn't have yet (KH2's
+    /// `0x1403E8380`: Sora's entry goes from an empty slot to LV1, Checked (decomp), formlevel.rs),
+    /// in `FORM_GIVEN`'s order.
+    pub fn growth_due(&self) -> Vec<u8> {
+        FORM_GIVEN.iter().copied().filter(|&id| self.form_level(id) >= 1 && !self.has_form_given(id)).collect()
+    }
+
+    /// Ours of `FORM_GIVEN` he has with no form level for them yet (older builds gave Quick Run
+    /// and Aerial Dodge from the start; KH2 has none before the form's level gives LV1). KH1's
+    /// Dodge Roll is never here: KH1 gives it on its own.
+    pub fn growth_early(&self) -> Vec<u8> {
+        [ours::QUICK_RUN, ours::AERIAL_DODGE].into_iter().filter(|&id| self.form_level(id) == 0 && self.has_ours(id)).collect()
     }
 }
 
@@ -1280,16 +1327,43 @@ mod tests {
         assert_eq!((high_jump_name(3), aerial_dodge_name(4)), ("High Jump LV3".to_string(), "Aerial Dodge MAX".to_string()));
     }
 
-    /// Every KH2 ability of Sora's own list is his at once, whatever his level or story.
+    /// The growth abilities (KH2's rule, the owner's decision in the bug-list thread): none before
+    /// the form's level gives LV1; at LV1 the ones he lacks are due; KH1's Dodge Roll counts in
+    /// his own list; Quick Run and Aerial Dodge given early by an older build are early.
+    #[test]
+    fn growth_abilities_come_from_form_levels() {
+        let mut s = sora(1, &[], &[]);
+        assert!(s.growth_due().is_empty() && s.growth_early().is_empty());
+        s.form_growth = FormGrowth { quick_run: 1, aerial_dodge: 2, dodge_roll: 1, ..FormGrowth::default() };
+        assert_eq!(s.growth_due(), vec![ours::QUICK_RUN, ours::AERIAL_DODGE, kh1::DODGE_ROLL]);
+        // KH1's own Dodge Roll (given by KH1's level-up, even off) and ours already there: none.
+        s.abilities[0] = kh1::DODGE_ROLL | 0x80;
+        s.kh2[0] = ours::QUICK_RUN;
+        assert_eq!(s.growth_due(), vec![ours::AERIAL_DODGE]);
+        // High Jump and Glide are never given by a form.
+        s.form_growth.high_jump = 3;
+        s.form_growth.glide = 3;
+        assert!(!s.growth_due().contains(&kh1::HIGH_JUMP) && !s.growth_due().contains(&kh1::GLIDE));
+        // An older build's Quick Run / Aerial Dodge with no form level yet; never KH1's Dodge Roll.
+        let mut old = sora(1, &[kh1::DODGE_ROLL], &[]);
+        old.kh2[..2].copy_from_slice(&[ours::QUICK_RUN | 0x80, ours::AERIAL_DODGE | 0x80]);
+        assert_eq!(old.growth_early(), vec![ours::QUICK_RUN, ours::AERIAL_DODGE]);
+        old.form_growth.quick_run = 1;
+        assert_eq!(old.growth_early(), vec![ours::AERIAL_DODGE]);
+    }
+
+    /// Every KH2 ability of Sora's own list but the growth ones is his at once, whatever his
+    /// level or story.
     #[test]
     fn grants_are_every_kh2_ability() {
         let all: Vec<u8> = MENU.iter().filter(|a| a.list == List::Kh2).map(|a| a.id).collect();
         assert_eq!(all.len(), 26);
-        assert_eq!(sora(1, &[], &[]).grants().iter().map(|a| a.id).collect::<Vec<_>>(), all);
+        let not_growth: Vec<u8> = all.iter().copied().filter(|id| !FORM_GIVEN.contains(id)).collect();
+        assert_eq!(sora(1, &[], &[]).grants().iter().map(|a| a.id).collect::<Vec<_>>(), not_growth);
         // Already there (even unequipped): not again.
         let g = sora(1, &[66 | 0x80, 68], &[]).grants();
         assert!(!g.iter().any(|a| a.id == 66 || a.id == 68));
-        assert_eq!(g.len(), 24);
+        assert_eq!(g.len(), 23);
     }
 
     /// KH2's Drive support abilities (t953): one number in `equipped` a copy, none when off.
@@ -1319,7 +1393,7 @@ mod tests {
         assert!(after.kh2().equipped.contains(&kh2::AERIAL_FINISH) && after.kh2().equipped.contains(&kh2::HORIZONTAL_SLASH));
         assert!(after.has_ours(66) && !has(&after.abilities, 66));
         assert!(!after.grants().iter().any(|a| [66, 70, 87].contains(&a.id)));
-        assert_eq!(after.grants().len(), 23);
+        assert_eq!(after.grants().len(), 22);
         // Nothing more to move.
         let again = move_to_kh2_list(&after);
         assert!(again.lines.is_empty() && again.abilities == after.abilities && again.kh2 == after.kh2);

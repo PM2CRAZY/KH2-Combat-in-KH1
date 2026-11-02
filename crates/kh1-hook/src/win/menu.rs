@@ -608,6 +608,37 @@ impl Growth {
         }
     }
 
+    /// Takes every copy of one of ours out of the KH2 list (and Sora's own), gaps closed; true if
+    /// any was there.
+    unsafe fn take_ours(&mut self, base: usize, save: usize, id: u8, on_list: bool) -> bool {
+        let without = |l: &[u8]| -> (Vec<u8>, bool) {
+            let end = l.iter().position(|b| *b == 0).unwrap_or(l.len());
+            let mut kept: Vec<u8> = l[..end].iter().copied().filter(|b| b & 0x7F != id).collect();
+            let took = kept.len() < end;
+            kept.resize(l.len(), 0);
+            (kept, took)
+        };
+        let mut any = false;
+        if on_list {
+            if let Some(l) = super::kh2list::read(base) {
+                let (k, took) = without(&l);
+                if took {
+                    super::kh2list::write(base, &k);
+                    any = true;
+                }
+            }
+        }
+        let own: Vec<u8> = (0..48).map(|i| rd::<u8>(save + 0x44 + i)).collect();
+        let (k, took) = without(&own);
+        if took {
+            for (i, b) in k.iter().enumerate() {
+                std::ptr::write((save + 0x44 + i) as *mut u8, *b);
+            }
+            any = true;
+        }
+        any
+    }
+
     /// Sora's side of KH1's save block, if it is there.
     unsafe fn kh1(base: usize) -> Option<Kh1Sora> {
         let save = save_block(base)?;
@@ -788,6 +819,41 @@ impl Growth {
                         } else {
                             log!(Menus, "no room for {} in Sora's list beside KH1's own (48, {FALLBACK_RESERVE} kept free for KH1; the KH2 list isn't in on this build)", ab.name);
                         }
+                    }
+                }
+                // The growth abilities (the owner, the bug-list thread: "dodge roll and the other
+                // growth abilities can function how they do in KH2"; `growth::FORM_GIVEN`): KH2's
+                // level-up puts one in Sora's list when his level for it first reaches LV1 (an
+                // empty slot to LV1, `0x1403E8380`, Checked (decomp)); before that he hasn't got
+                // it. On every read, so a loaded save gets what its forms' levels give.
+                for id in now.growth_early() {
+                    // (Not one the debug menu gave this session.)
+                    if super::debugmenu::ability_forced(id) == Some(true) {
+                        continue;
+                    }
+                    if self.take_ours(base, save, id, on_list) {
+                        log!(Menus, "{}: no form level gives it yet (KH2's rule), taken out of {}", growth::name(id), if on_list { "the KH2 list" } else { "Sora's list" });
+                    }
+                }
+                for id in now.growth_due() {
+                    if super::debugmenu::ability_forced(id) == Some(false) {
+                        continue;
+                    }
+                    // Equipped (Assumption: KH2's growth abilities work at once; not confirmed in
+                    // the repo's KH2 data) while Sora's AP allows it, else off, so KH1's AP rule
+                    // holds.
+                    let ap = super::kh2list::ap_of(base, id);
+                    let on = super::kh2list::ap_left_now(base).zip(ap).is_some_and(|(left, ap)| left >= ap as i32);
+                    let byte = if on { id } else { id | 0x80 };
+                    // (KH1's Dodge Roll in his own 48 as KH1 keeps it; ours in the KH2 list.)
+                    let given = if id == growth::kh1::DODGE_ROLL { add(save + 0x44, 48, byte) } else { self.give_ours(base, save, byte, on_list) };
+                    let what = growth::level_name(&growth::name(id), now.form_level(id));
+                    if given {
+                        log!(Menus, "Sora is given {what} (id {id}, KH2's growth rule, {}, {})", if on { "on" } else { "off" }, if id == growth::kh1::DODGE_ROLL || !on_list { "his own list" } else { "KH2 list" });
+                        self.prompts.push_back(("New Ability".to_string(), what, String::new()));
+                    } else if !self.no_room.contains(&id) {
+                        self.no_room.push(id);
+                        log!(Menus, "no room for {what} in {} (48)", if id == growth::kh1::DODGE_ROLL || !on_list { "Sora's list" } else { "the KH2 list" });
                     }
                 }
                 match learned.len() {

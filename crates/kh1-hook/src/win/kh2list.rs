@@ -187,6 +187,23 @@ unsafe fn ap_on(base: usize) -> i32 {
     ap
 }
 
+/// An ability's AP by KH1's ability table (`+0`; our entries hold KH2's AP), if it is there.
+pub unsafe fn ap_of(base: usize, id: u8) -> Option<u8> {
+    let table = rd::<u64>(base + TABLE_PTR_RVA) as usize;
+    let id = id & 0x7F;
+    if table < 0x10000 || id == 0 {
+        return None;
+    }
+    let e = table + (id as usize - 1) * 12;
+    super::crash::readable(e).then(|| rd::<u8>(e))
+}
+
+/// Sora's AP left now, both lists counted (as KH1's AP left with our hook, `ap_left`), while the
+/// KH2 list is in use; `None` otherwise.
+pub unsafe fn ap_left_now(base: usize) -> Option<i32> {
+    active(base).then(|| ap_left(0))
+}
+
 // ---- the page's view ----
 
 /// What a page call changed, to put back after it.

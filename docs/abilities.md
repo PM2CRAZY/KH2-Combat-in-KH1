@@ -164,9 +164,9 @@ starts with "KH2's" so that they can be told apart in the menu.
   list stays vanilla). KH1's Superglide is KH2's Glide LV1 too, and KH2's own Glide (88) is LV1
   past Chernabog as before it: only Final's level raises Glide (the tester, what-is-still-missing
   after m18, answer 3 (b): "treat it as LV1 so only Final raises Glide"; until t721 both were
-  MAX). Dodge Roll and Aerial Dodge stay LV1: in KH2 they grow
-  with Limit and Master, which aren't on KH1's states here. The debug menu's growth rows still
-  override all of this.
+  MAX). Dodge Roll grows with Limit's level (t975), Aerial Dodge with Master's (t1026). Quick Run,
+  Aerial Dodge and Dodge Roll are given by the forms' levels as KH2 does (below, "Growth abilities
+  given by form levels"). The debug menu's growth rows still override all of this.
 - **The fmlv rows' abilities** (KH2's own form level-up rule, not the mod's progression; kept):
   Combo Plus, Air Combo Plus, MP Rage, MP Haste (Wisdom LV6, KH1's own MP Haste, t714; it becomes
   MP Charge's MP Haste once a KH2 MP system is a Config setting), as KH1's own, off, with a box.
@@ -305,10 +305,39 @@ The owner: "loading into a save should give you the appropriate level of all gro
   (Limit), `+0x892` (Master); `menu::Growth::kh1` on every read; `combomods::abilities_now` caches one frame). A load
   restores the whole save block (`docs/kh1-softreset.md`, Checked (decomp)), so nothing is lost or held from before.
 - What does decide whether one counts: the ability must be in his lists and equipped. High Jump, Glide and Dodge Roll
-  are KH1's own and only come from KH1 (the "vanilla" decision); Quick Run and Aerial Dodge are given off; base
+  are KH1's own and only come from KH1 (the "vanilla" decision; Dodge Roll since the section below also from Limit's level); base
   Sora is one level under the form (KH2's rule, t703). KH2 itself puts the growth ability in Sora's list when the
   form level first gives LV1 (`0x1403E8380`, Checked (decomp) in an earlier round). Asked in the thread.
 - t1084: the levels and menu names last seen by the ability menu (`menu::Growth`) were one copy for the whole session,
   so a second save loaded in one session showed an "Ability Up" box for levels it already had. They are forgotten
   whenever KH1 is on its title (mode 2 / 3 at `0x14233FBC0`, read at the frame's end, `menu::frame_end`). Not seen in
   game.
+
+## Growth abilities given by form levels (the bug-list thread, the owner's decision)
+
+The owner: "High Jump, and glide/superglide should only be given out where you get them in KH1. Once sora gets them,
+he can level them up. dodge roll and the other growth abilities can function how they do in KH2."
+- **KH2's rule** (`0x1403E8380`, Checked (decomp) in an earlier round, `formlevel.rs`): when a form's growth level
+  rises, Sora's own entry goes from the level two under to one under; from an empty slot it becomes LV1. So base
+  Sora gets the ability when his level for it (one under the form's, `formlevel::sora_growth`) first reaches LV1:
+  form LV3 with the user's fmlv (Checked (files) earlier).
+- **Which** (`growth::FORM_GIVEN`): Quick Run (66, Wisdom), Aerial Dodge (67, Master), and KH1's own Dodge Roll (22,
+  Limit). High Jump, Glide and Superglide are not: only KH1 gives them, and the forms' levels raise them once he has
+  them (unchanged).
+- **How** (`menu::Growth::update`, once a second, `abilities = kh1` only; `Kh1Sora::growth_due`): one he hasn't got
+  is put in his list, Quick Run and Aerial Dodge in the KH2 list (Sora's own on a build without it), KH1's Dodge
+  Roll in Sora's own 48 (where KH1 keeps it and its roll reads it). Each comes with a "New Ability" box ("Quick Run
+  LV1"); later levels keep the "Ability Up" box. Log: "Sora is given ... (KH2's growth rule, on/off, ...)". The
+  levels come from the save's form records on every read, so a loaded save gets what its forms give.
+- **Before LV1 he hasn't got them**: Quick Run and Aerial Dodge are no longer given from the start (`grants` leaves
+  `FORM_GIVEN` out). A save from an older build that has them with no form level for them has them taken out
+  (`Kh1Sora::growth_early`, `Growth::take_ours`; log "... no form level gives it yet (KH2's rule), taken out"), unless
+  the debug menu gave it this session. KH1's Dodge Roll is never taken out.
+- **Equipped or not**: equipped while Sora's AP left (both lists, `kh2list::ap_left_now`) covers its AP
+  (`kh2list::ap_of`, KH1's ability table), else off, so KH1's AP rule holds. Assumption: KH2 gives a growth ability
+  working at once; the repo's KH2 docs and data don't say whether KH2's list entry is put in equipped. Not checked in
+  KH2's decomp (not in this session).
+- **Dodge Roll**: KH1 still gives its own at its level-up. If a form gave it first, Assumption: KH1's level-up adds
+  its copy anyway (a second Dodge Roll; it doesn't stack, and costs AP only if equipped). Not checked in KH1's decomp
+  (not in this session).
+- Not seen in game.
