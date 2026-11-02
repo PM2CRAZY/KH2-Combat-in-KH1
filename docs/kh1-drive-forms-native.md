@@ -2350,6 +2350,25 @@ the task with its own quad buffer `0x142866960` (→ inside slot 0's draw with K
   load of KH1's item table), KH1's again when it is off. Not gated on a form being open (a chest's contents
   shouldn't change with progress). Main's design, not KH2's.
 
+### 16.8 The battle Items list (t1082)
+- The owner: both items read "e" in the battle Items submenu and can't be used in battle.
+- KH1 (Checked (exe), `docs/kh1-reflect-spell.md`, `docs/kh1-drive.md`): every battle list row is a command id;
+  its name is the command record's word (`0x1402787B0`, the call at `0x1402787FB`), and choosing it writes the
+  record's type and argument into the command (`0x1402912F0`). The item record's name word is not read there.
+  Records `0x7E..0xFF` are empty in the player's `btltbl.bin` (Checked (files)).
+- So ours had rows (kind 0 puts them in the slots) but no command: an empty record's name ("e" is whatever word 0
+  draws, Assumption) and type 0, which runs nothing. That is also why they couldn't be used.
+- Assumption (KH1's Items fill not read; no exe in that session): an item's command is `item + 0x1E`, the number of its
+  name's word (KH1's item words are `id + 30`, `driveitems` test data and main's notes; Magic and Summon are named by
+  words 2 and 6). Ours would be commands `0xAF` / `0xB0`.
+- t1082: after each table load, KH1's own kind-0 items 1..0x10 are checked against the rule (their command type 3,
+  named by their item's word, one argument offset from the id); if it holds, commands `0xAF` / `0xB0` (only if empty or
+  ours) get KH1's first item command's record (its flags, target list and ranges) with our word and argument. If it
+  doesn't hold, nothing is written and the log says what KH1 has ("don't follow item + 0x1e"): then KH1's Items fill
+  (the item part of the top-level fill, Steam `0x140294220`) has to be read in the exe.
+- Assumption: an argument of `0x91` / `0x92` (above 0x7F) reaches the item use whole: KH1 sign-extends it into the
+  command (`(char)arg << 8`, masked `0xFFFF00`); a reader of the low byte gets ours, a reader of 16 bits wouldn't.
+
 ## 17. KH2's Drive support abilities (main-port round 6, row 5, 2026-10-30: research)
 
 ### 17.1 KH2 (Steam KH2)

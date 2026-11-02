@@ -71,6 +71,56 @@ pub fn help(k: usize, battle: bool) -> String {
     }
 }
 
+/// KH1's battle Items list (t1082): its rows are KH1 command ids, named and run from the command's
+/// record (`btltbl.bin`'s command records, 16 bytes: `+4` the name's word, `+6` the type, 3 an
+/// item, `+7` the argument, `+8` the submenu; `docs/kh1-reflect-spell.md`, Checked (exe) there).
+/// Assumption (not read in KH1's fill): an item's command is `item + 0x1E`, the same number as its
+/// name's word (KH1's item words are `id + 30`, Checked (files); Magic's and Summon's commands
+/// have their own ids as words, Checked (files)), so `0x91` / `0x92` are listed as commands
+/// `0xAF` / `0xB0`, empty records in KH1 (`0x7E..0xFF` all zero, Checked (files)): no name, no type.
+/// Checked at run time on KH1's own items before ours are written (`item_command_arg`).
+pub const COMMAND_OF_ITEM: u32 = 0x1E;
+/// KH1's battle items looked at for the rule: ids 1..=0x10 (Potion .. the last consumable before
+/// the summon commands `0x2F..`).
+pub const KH1_ITEMS: std::ops::RangeInclusive<u8> = 1..=0x10;
+pub const COMMAND_TYPE_ITEM: u8 = 3;
+pub const COMMAND: usize = 0x10;
+
+/// The command `item`'s battle row runs (`COMMAND_OF_ITEM`).
+pub fn command_of(item: u8) -> u32 {
+    item as u32 + COMMAND_OF_ITEM
+}
+
+/// From KH1's own item commands (`(item id, its item record's name word, its command record)` for
+/// each kind-0 item of `KH1_ITEMS` with a record): the offset of the argument from the item id, if
+/// every one is an item command (type 3) named by its item's word with the same offset, and there
+/// are at least two. `None`: KH1 doesn't follow the rule, nothing of ours is written.
+pub fn item_command_arg(kh1: &[(u8, u16, [u8; COMMAND])]) -> Option<i32> {
+    if kh1.len() < 2 {
+        return None;
+    }
+    let mut offset = None;
+    for &(id, word, rec) in kh1 {
+        if rec[6] != COMMAND_TYPE_ITEM || u16::from_le_bytes([rec[4], rec[5]]) != word || command_of(id) != word as u32 {
+            return None;
+        }
+        let d = rec[7] as i32 - id as i32;
+        if *offset.get_or_insert(d) != d {
+            return None;
+        }
+    }
+    offset
+}
+
+/// Our item `k`'s command record: KH1's Potion's (`template`) with our word and argument.
+pub fn command_record(template: &[u8; COMMAND], word: u16, arg: u8) -> [u8; COMMAND] {
+    let mut r = *template;
+    r[4..6].copy_from_slice(&word.to_le_bytes());
+    r[6] = COMMAND_TYPE_ITEM;
+    r[7] = arg;
+    r
+}
+
 /// KH1's item shops' lists (Steam `0x1404FEE00`, 0xD4 bytes each: a count, then up to 52 item ids;
 /// opened by `0x1403010A0`, Checked (decomp) and (exe)): the ones selling a Potion and a Tent (lists
 /// 0..3 and 7; KH1's other shop lists, weapons and accessories, don't) also sell ours (main's design,
@@ -202,6 +252,29 @@ mod tests {
             assert!(k < 2);
         }
         assert_eq!(CHESTS.iter().filter(|c| c.2 == 0).count(), 12);
+    }
+
+    #[test]
+    fn battle_commands() {
+        assert_eq!((command_of(0x91), command_of(0x92), command_of(1)), (0xAF, 0xB0, 0x1F));
+        let cmd = |word: u16, kind: u8, arg: u8| {
+            let mut r = [0u8; COMMAND];
+            r[4..6].copy_from_slice(&word.to_le_bytes());
+            r[6] = kind;
+            r[7] = arg;
+            r[8] = 4;
+            r
+        };
+        let kh1 = [(1, 0x1F, cmd(0x1F, 3, 1)), (2, 0x20, cmd(0x20, 3, 2)), (3, 0x21, cmd(0x21, 3, 3))];
+        assert_eq!(item_command_arg(&kh1), Some(0));
+        assert_eq!(item_command_arg(&kh1[..1]), None);
+        let off = [(1, 0x1F, cmd(0x1F, 3, 8)), (2, 0x20, cmd(0x20, 3, 9))];
+        assert_eq!(item_command_arg(&off), Some(7));
+        assert_eq!(item_command_arg(&[(1, 0x1F, cmd(0x1F, 3, 1)), (2, 0x20, cmd(0x20, 3, 5))]), None);
+        assert_eq!(item_command_arg(&[(1, 0x1F, cmd(0x1F, 2, 1)), (2, 0x20, cmd(0x20, 3, 2))]), None);
+        assert_eq!(item_command_arg(&[(1, 0x1F, cmd(0x40, 3, 1)), (2, 0x20, cmd(0x20, 3, 2))]), None);
+        let ours = command_record(&kh1[0].2, 0xAF, 0x91);
+        assert_eq!((u16::from_le_bytes([ours[4], ours[5]]), ours[6], ours[7], ours[8]), (0xAF, 3, 0x91, 4));
     }
 
     #[test]

@@ -10,6 +10,13 @@
 //!   values, their words our names and their help our text (handles made by KH1's `0x14038AD90`).
 //!   The kind is 0 (the battle item slots take it) with Drive > Recovery in Battle on, else 12
 //!   (menu only, KH2's rule).
+//! - **The battle Items list** (t1082): KH1's battle lists hold command ids and name and run a row
+//!   from its command record (`0x1402787B0` → the record's word; `0x1402912F0` → its type and
+//!   argument; `docs/kh1-reflect-spell.md`, Checked (exe) there), not from the item record. Ours had
+//!   none: the rows showed an empty record's name ("e") and ran nothing. Assumption (KH1's fill not
+//!   read): an item's command is `item + 0x1E`, the number of its name's word; checked at run time
+//!   on KH1's own items (type 3, their item's word, one argument offset) before records `0xAF` /
+//!   `0xB0` (empty in KH1) get KH1's first item command's record with our word and argument.
 //! - **Can it be used** `0x1402CD3A0 (item, member) -> bits`: KH1's per-item test (Potion: HP below
 //!   the maximum, ...), which the Items page asks for each member to enable the item and pick its
 //!   target (`0x1402E8B20`, `0x1402E8B90`). Ours: Sora (member 0) with the Drive gauge below its
@@ -66,6 +73,9 @@ const COUNT_FACTOR_RVA: usize = 0x2D60FA4;
 const PRIZES_OFF_RVA: usize = 0x2D60FAC;
 
 const CHEST_TABLE_RVA: usize = 0x528D60;
+/// KH1's command record `(id) -> table + id × 16` (Steam `0x14028F960`, Epic `0x14028D7D0`,
+/// `steam_map.in`; what `drive` / `reflect` write their records through).
+const COMMAND_RECORD_RVA: usize = 0x28F960;
 
 static ORIG_SHOP: AtomicUsize = AtomicUsize::new(0);
 /// The list handed to KH1's shop (a count, then the ids), kept while it is open.
@@ -250,11 +260,58 @@ pub unsafe fn records(base: usize) {
             wr(base + WORDS_RVA + word * 4, texts[k]);
         }
     }
+    commands(base, table);
     if !TAKEN.swap(true, Ordering::Relaxed) {
         chests(base, sources());
     }
     if KIND_SET.swap(1 + battle as u8, Ordering::Relaxed) != 1 + battle as u8 {
         log!(Forms, "Drive Recovery: KH1's items {:#x} / {:#x} are KH2's Drive Recovery / High Drive Recovery (+3 / +9 bars, {})", IDS[0], IDS[1], if battle { "menu and battle" } else { "menu only" });
+    }
+}
+
+/// KH1's battle Items list names and runs a row from its command record (t1082): the commands of
+/// ours (`items::command_of`, empty in KH1) get KH1's Potion's command with our word and argument,
+/// when KH1's own item commands follow the rule (`items::item_command_arg`); else none, logged.
+unsafe fn commands(base: usize, table: usize) {
+    static LOGGED: AtomicU8 = AtomicU8::new(0);
+    let record: unsafe extern "system" fn(u32) -> usize = std::mem::transmute(base + COMMAND_RECORD_RVA);
+    let mut kh1 = Vec::new();
+    for id in items::KH1_ITEMS {
+        let item = table + (id as usize - 1) * RECORD;
+        let r = record(items::command_of(id));
+        if r < 0x10000 || rd::<u8>(item + 2) != items::KIND_ITEM || rd::<[u8; items::COMMAND]>(r) == [0; items::COMMAND] {
+            continue;
+        }
+        kh1.push((id, rd::<u16>(item), rd::<[u8; items::COMMAND]>(r)));
+    }
+    let Some(offset) = items::item_command_arg(&kh1) else {
+        if LOGGED.swap(1, Ordering::Relaxed) != 1 {
+            log!(Forms, "Drive Recovery: KH1's item commands don't follow item + {:#x} (seen {:02x?}): no battle commands for ours", items::COMMAND_OF_ITEM, kh1);
+        }
+        return;
+    };
+    let template = kh1[0].2;
+    for (k, &id) in IDS.iter().enumerate() {
+        let (cmd, word) = (items::command_of(id), rd::<u16>(table + (id as usize - 1) * RECORD));
+        let Ok(arg) = u8::try_from(id as i32 + offset) else { return };
+        let r = record(cmd);
+        if r < 0x10000 {
+            return;
+        }
+        let want = items::command_record(&template, word, arg);
+        let have = rd::<[u8; items::COMMAND]>(r);
+        if have != want {
+            if have != [0; items::COMMAND] && have[4..8] != want[4..8] {
+                if LOGGED.swap(2, Ordering::Relaxed) != 2 {
+                    log!(Forms, "Drive Recovery: command record {cmd:#x} is in use ({have:02x?}): {} has no battle command", items::NAMES[k]);
+                }
+                return;
+            }
+            wr(r, want);
+        }
+    }
+    if LOGGED.swap(3, Ordering::Relaxed) != 3 {
+        log!(Forms, "Drive Recovery: battle commands {:#x} / {:#x} (from KH1's item {:#x}'s command {:02x?}, argument item {offset:+})", items::command_of(IDS[0]), items::command_of(IDS[1]), kh1[0].0, template);
     }
 }
 
