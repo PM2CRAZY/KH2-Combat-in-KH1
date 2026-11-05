@@ -11,7 +11,7 @@ Logs worth turning on: General, Menus, Combat, Forms, Magic, Sound, Effects, Ani
 - [ ] A clean install from `mod.yml` + `kh1-kh2.dll` starts; the Config button's help shows the branch's version (`tm...`). (README)
 - [ ] First start builds the caches (effects, sounds, motion slots, Anti's textures) and the second start loads them quickly. (tm4, tm20, tm22, tm23, tm27)
 - [ ] An old save from testing and one from main both load; abilities, Drive levels and Keyblades look right. (tm7, tm8)
-- [ ] Save menu > return to title, Continue: no stuck loading screen; also soft reset and game over to the title. (t1079 didn't fix it; this round)
+- [ ] Save menu > return to title: **still hangs (known)**. With `debug_menu = on` and Loading & Cache logging, do it, wait 20 s on the stuck screen and send `kh1-kh2.log` ("title watch" lines). Soft Reset and game over don't take this path; check they still work. (tm32)
 - [ ] Load one save, go to title, load another: no false "Ability Up" box. (t1084)
 
 ## 1. Config menu
@@ -23,7 +23,7 @@ Logs worth turning on: General, Menus, Combat, Forms, Magic, Sound, Effects, Ani
 - [ ] Tweaks > Walls: KH1 / Clink / Pass; untouched, it follows Recoil (Clink with Recoil KH2). (tm9, tm13)
 - [ ] Progression > Reflect by Story: on by default on a new ini. (tm6, tm15)
 - [ ] Drive > Anti > Rules: KH2 / Balance. (tm10)
-- [ ] The Drive list's "DRIVES" title sits centred in its tab, white. (main s304, this round)
+- [ ] The Drive list's "DRIVES" title sits centred in its tab, white. (tm28)
 
 ## 2. Abilities, AP and growth
 
@@ -35,7 +35,7 @@ Logs worth turning on: General, Menus, Combat, Forms, Magic, Sound, Effects, Ani
 ## 3. Drive Forms (all)
 
 - [ ] Each form: enter, fight, revert; a room change in a form (effects come back? see the open question on t-branch formfx); death in a form.
-- [ ] No guard and no dodge roll in Master and Final, at both Dodge Roll styles, keyboard and pad. (this round)
+- [ ] No guard and no dodge roll in Master and Final, at both Dodge Roll styles, keyboard and pad, with Guard and Dodge Roll equipped; base Sora still guards and rolls; Valor, Wisdom, Limit unchanged. (tm29)
 - [ ] Wisdom and Final: no footsteps on the ground; the other forms and base Sora still have theirs. (t1088)
 - [ ] Final's Blizzard finisher casts its full set; its ground and air finishers show their effects. (t1093, t1094)
 - [ ] Limit Form: L1 shows its limits; your shortcuts come back after the form, a save in the form keeps your own. (t1080)
@@ -65,7 +65,7 @@ Logs worth turning on: General, Menus, Combat, Forms, Magic, Sound, Effects, Ani
 
 ## 6. Items and Reflect
 
-- [ ] Drive Recovery / High Drive Recovery in battle (Recovery in Battle on): named right, the target list, adds +3 / +9 bars, used once. (t1082, t1083, this round)
+- [ ] Drive Recovery / High Drive Recovery in battle (Recovery in Battle on): named right; the target list shows only Sora; adds +3 / +9 bars; the count drops by one; getting hit mid-use gives it back. (t1082, tm30, tm31)
 - [ ] Reflect by Story: Reflect after the first of Pot Centipede / Hercules Cup / Ice Titan, Reflera, Reflega, each with its box. (tm6)
 
 ## 7. Camera and QoL
@@ -76,6 +76,10 @@ Logs worth turning on: General, Menus, Combat, Forms, Magic, Sound, Effects, Ani
 
 ## Known not built
 
+- Return to title from the save menu hangs (tm32 logs it; the fix likely needs two KH1 functions' first bytes from the exe).
+
 - Epic Games Store support; the Page Down HUD (the owner's choice).
 - The second Keyblade's shadow (needs the exe's bytes).
 - Form effects after a room change on testing's question (arrival pose or not).
+
+_Last updated: tm32._
