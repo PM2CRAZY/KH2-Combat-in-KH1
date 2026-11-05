@@ -1639,12 +1639,13 @@ pub fn kh1_scene_unheld() -> bool {
     event || own_mode || ((active() || super::shared::active()) && SCRIPTED.load(Ordering::Relaxed))
 }
 
-/// (t1073) An event runs (`EVENT_RVA`) and KH1's "can act" test (`CAN_ACT_RVA`) says Sora can't
-/// act: KH1's event has him (a cutscene's moment, the Coliseum's win between rounds), for
-/// `driveparty`. False outside an event (KH1 holding him for a move of its own).
-pub fn event_has_sora() -> bool {
+/// KH1's "can act" test (`CAN_ACT_RVA`) on Sora now, for `driveparty` (the Coliseum win's soft lock: a script's
+/// wait on a partner the form took keeps him back until Sora can act again). False with no Sora.
+/// (t1073's `event_has_sora` is gone: it needed the event word set, and `takeover` never runs the
+/// form's frame, where the partner check is, while that word is set: it could never be true there.)
+pub fn sora_can_act() -> bool {
     let base = BASE.load(Ordering::Relaxed);
-    if base == 0 || unsafe { rd::<u32>(base + EVENT_RVA) } == 0 {
+    if base == 0 {
         return false;
     }
     let sora = unsafe { rd::<u64>(base + PARTY_RVA) } as usize;
@@ -1652,7 +1653,7 @@ pub fn event_has_sora() -> bool {
         return false;
     }
     let can: unsafe extern "system" fn(usize) -> i32 = unsafe { std::mem::transmute(base + CAN_ACT_RVA) };
-    unsafe { can(sora) == 0 }
+    unsafe { can(sora) != 0 }
 }
 
 /// KH1 moves Sora itself in a scene: one of its own movement modes (the Jungle Slider) or an

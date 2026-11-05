@@ -187,6 +187,9 @@ pub unsafe fn back_all(why: &str) {
     FORM_NOW.store(0, Ordering::Relaxed);
     ARRIVAL.store(0, Ordering::Relaxed);
     KEYBLADE_DUE.store(false, Ordering::Relaxed);
+    WAITED_AT.store(0, Ordering::Relaxed);
+    SORA_WAITS.store(0, Ordering::Relaxed);
+    SORA_WAIT_LOGGED.store(false, Ordering::Relaxed);
     let base = super::takeover::game_base();
     let Ok(mut g) = AWAY.lock() else { return };
     for slot in g.iter_mut() {
@@ -231,14 +234,14 @@ unsafe fn try_push(base: usize, a: &mut Away) {
 /// The partner check (`frame`, and in a new room's arrival window `arrival_frame` / `room_entered`).
 unsafe fn step(base: usize, form: u8, g: &mut [Option<Away>; 2]) {
     let mut scene = rd::<u32>(base + SCENE_RVA) & 1 != 0;
-    // (t1073) In the Olympus Coliseum, KH1's event holding Sora counts as a cutscene too: the
-    // owner's log (a cup with Donald and Goofy, Master Form): the win after a later round set no
-    // scene flag; KH1 started the partners again for its win scene (f19000 / f19002, "started again
-    // by KH1") and we took them again at once, so its waits on their motions (event function 103,
-    // f19046..) never ended: the soft lock. `takeover::event_has_sora`: an event runs and Sora
-    // can't act. (Only in the Coliseum: its matches run event scripts while he fights, with him
-    // able to act.)
-    if !scene && rd::<u32>(base + WORLD_RVA) == COLISEUM && super::takeover::event_has_sora() {
+    // (The Coliseum's win: t1073's log, a cup with Donald and Goofy in Master Form: the win after a
+    // later round set no scene flag; KH1 started the partners again for its win scene (f19000 /
+    // f19002) and we took them again at once, so its waits on their motions (event function 103,
+    // f19046..) never ended. t1073's test (an event word set) can't be seen here: `takeover` doesn't
+    // run the form's frame while that word is set. Now KH1's own wait on a taken partner's motion
+    // brings him back (`wait_motion_fn`), and he stays back while that wait still runs or Sora can't
+    // act: the scene's hold.)
+    if !scene && script_waits() {
         scene = true;
     }
     // (t1059: a new room's first moments: KH1's scene flag ignored until its arrival scene is over.)
@@ -334,6 +337,112 @@ pub unsafe fn arrival_frame() {
     }
     let Ok(mut g) = AWAY.try_lock() else { return };
     step(base, form, &mut g);
+}
+
+// ---------------------------------------------------------------- KH1's scripts waiting on a partner
+//
+// The owner: "in Olympus coliseum during the win animation if your in a drive form then the game soft
+// locks". KH1 (Steam, Checked (decomp + exe), `docs/kh1-chest.md`): event function 103 (`0x1401A96F0`,
+// entry 103 of the event function table `0x1404FA870`) waits (returns 4, run again next frame) until the
+// motion of the context's actor (`ctx + 8`) is over, then goes on (2). The Coliseum's win scene waits so
+// on each member's pose (Checked (log): t1073's, event function 103 from f19046 on with both partners
+// taken). A partner we took has his flags pushed without "acting" (`0x8000`), so his motion never steps
+// and never ends. t1073 counted "an event runs and Sora can't act" as a cutscene for the partner check,
+// but the check runs in the form's frame, which `takeover` skips while KH1's event word is set
+// (`takeover::takeover`, "an event runs"), so it could never be true there (Checked (code)).
+// Now entry 103 of KH1's table points at ours (one data word; KH1's function still does the wait): a
+// wait on a partner the form took brings him back there and then (`back`, KH1's pop, fade in and HUD
+// fade), and the partner check counts it as a cutscene while such a wait ran in the last `WAIT_GRACE`
+// frames or Sora can't act (KH1's can-act test, the scene's hold); then the form takes them again with
+// KH2's 15-frame fade (`step`). Anywhere, not only in the Coliseum: a script that waits on a partner's
+// motion would hang the same way. A wait on Sora himself in a form that is still waiting after
+// `SORA_WAIT_LOG` calls is logged once with his motion (Forms), in case the form's own motion is what
+// doesn't end in a scene. Per frame: nothing outside KH1's motion waits; in one, a word read and a
+// compare with the two partner actors.
+
+const EVENT_TABLE_STEAM: usize = 0x4FA870;
+const FN_WAIT_MOTION: usize = 103;
+const WAIT_MOTION_STEAM: usize = 0x1A96F0;
+/// A script context's actor (`ctx + 8`, what event function 103 tests; Checked (decomp), `chest.rs`).
+const CTX_ACTOR: usize = 8;
+/// After the last wait on a partner, 60 Hz frames before the form may take them again (with Sora
+/// able to act). Assumption: KH1's waits on a pose come back every frame while they wait, so a scene
+/// still waiting is never more than a frame or two apart.
+const WAIT_GRACE: u64 = 30;
+/// Calls of event function 103 on Sora in a form still waiting before the diagnostic line.
+const SORA_WAIT_LOG: u32 = 600;
+static ORIG_WAIT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+/// `takeover::TICKS` + 1 of the last wait on a partner while a form ran; 0 none.
+static WAITED_AT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+static SORA_WAITS: AtomicU32 = AtomicU32::new(0);
+static SORA_WAIT_LOGGED: AtomicBool = AtomicBool::new(false);
+
+/// Steam only: entry 103 of KH1's event function table pointed at `wait_motion_fn`, if it holds KH1's
+/// function 103 where this exe has it.
+pub unsafe fn install(base: usize) {
+    if super::addr::Build::current() != super::addr::Build::Steam {
+        return;
+    }
+    let at = base + EVENT_TABLE_STEAM + FN_WAIT_MOTION * 8;
+    let kh1 = (base + WAIT_MOTION_STEAM) as u64;
+    ORIG_WAIT.store(kh1 as usize, Ordering::Release);
+    if !super::hook::patch(at, &kh1.to_le_bytes(), &(wait_motion_fn as *const () as u64).to_le_bytes(), "event function 103 (Drive partners)") {
+        log!(Forms, "Drive: KH1's event function 103 isn't where expected: a scene's wait on a partner the form took isn't seen");
+    }
+}
+
+/// Event function 103 through the table: a wait on a partner the form took brings him back first; then
+/// KH1's own wait.
+unsafe extern "system" fn wait_motion_fn(ctx: usize) -> u64 {
+    let f: unsafe extern "system" fn(usize) -> u64 = std::mem::transmute(ORIG_WAIT.load(Ordering::Acquire));
+    let form = FORM_NOW.load(Ordering::Relaxed);
+    let base = super::takeover::game_base();
+    let actor = if form != 0 && base != 0 && super::crash::readable(ctx + CTX_ACTOR + 7) { rd::<u64>(ctx + CTX_ACTOR) as usize } else { 0 };
+    if actor < 0x10000 {
+        return f(ctx);
+    }
+    if (1..3).any(|i| rd::<u64>(base + PARTY_RVA + i * 8) as usize == actor) {
+        let first = WAITED_AT.swap(super::takeover::TICKS.load(Ordering::Relaxed) + 1, Ordering::Relaxed) == 0;
+        if let Ok(mut g) = AWAY.try_lock() {
+            if let Some(slot) = g.iter_mut().find(|s| s.is_some_and(|a| a.actor == actor)) {
+                let a = slot.take().unwrap();
+                if calls_ok(base) {
+                    back(base, a, "a KH1 script waits on his motion, event function 103");
+                }
+            } else if first {
+                log!(Forms, "Drive: a KH1 script waits on partner actor {actor:#x}'s motion: the form doesn't take him while it does");
+            }
+        }
+        return f(ctx);
+    }
+    let r = f(ctx);
+    if actor == rd::<u64>(base + PARTY_RVA) as usize {
+        if r == 4 {
+            let n = SORA_WAITS.fetch_add(1, Ordering::Relaxed) + 1;
+            if n >= SORA_WAIT_LOG && !SORA_WAIT_LOGGED.swap(true, Ordering::Relaxed) {
+                log!(Forms, "Drive: a KH1 script has waited {n} calls on Sora's motion in a form (form {form}, state {}, request {:#x}, slot {:#x}, KH2 motion {:?}, flags {:08x})",
+                    rd::<i32>(actor + 0x70), rd::<u32>(actor + 0x164), rd::<u32>(actor + 0x168), super::kh2slots::playing_motion(actor), rd::<u32>(actor));
+            }
+        } else {
+            SORA_WAITS.store(0, Ordering::Relaxed);
+        }
+    }
+    r
+}
+
+/// The partner check (`step`): a KH1 script waited on a partner lately, or did and still holds Sora.
+fn script_waits() -> bool {
+    let at = WAITED_AT.load(Ordering::Relaxed);
+    if at == 0 {
+        return false;
+    }
+    let now = super::takeover::TICKS.load(Ordering::Relaxed);
+    if now.saturating_sub(at - 1) < WAIT_GRACE || !super::takeover::sora_can_act() {
+        return true;
+    }
+    WAITED_AT.store(0, Ordering::Relaxed);
+    log!(Forms, "Drive: KH1's scripts no longer wait on the partners and Sora can act: the form takes them again");
+    false
 }
 
 // ---------------------------------------------------------------- the Olympus Coliseum (t961)

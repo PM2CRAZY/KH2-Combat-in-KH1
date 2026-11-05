@@ -475,6 +475,8 @@ pub unsafe extern "system" fn DllMain(_inst: *mut c_void, reason: u32, _reserved
         volmute::install();
         cutsceneskip::install();
         ingameskip::install();
+        // (A scene's wait on a partner a Drive Form took brings him back: event function 103.)
+        driveparty::install(base);
         chest::install();
         model::install();
         gates::install();
