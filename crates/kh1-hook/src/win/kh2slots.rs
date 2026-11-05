@@ -758,6 +758,9 @@ pub struct Move {
     pub holder: bool,
     /// That holder motion's block until `place` copies it into KH1's memory.
     holder_block: Mutex<Option<crate::slotcache::Block>>,
+    /// The KH2 clip's frame KH1's time 0 stands for (60 Hz frames; `pose::Place::from`: Anti Form's
+    /// hang loop, `ANTI_LEDGE`), else 0.
+    from: u32,
 }
 
 struct Built {
@@ -958,14 +961,43 @@ pub fn prepare(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, mut cac
         // form-only rows on our own requests), slots of their own after base Sora's.
         for (f, v) in forms.iter() {
             let before = moves.len();
-            // (Anti's ledge hang, not built yet: what a spec would need, logged once a build.)
-            if f.kind == super::form::Kind::Anti {
-                anti_ledge_log(v, &requests, &form_has);
-            }
             for s in f.specs.iter().filter(|s| wanted(s.motion) && form_has(v, s.motion)) {
                 if let Some((m, block)) = make(mset, v, bake, cache.as_deref_mut(), &requests, (s.motion, s.stands_for, s.request, s.kind), true, (false, 0), KH1_SLOTS + moves.len(), false)? {
                     moves.push(m);
                     blocks.push(block);
+                }
+            }
+            // (Anti's ledge grab, hang and climb on KH1's own ledge requests, `ANTI_LEDGE`, placed on
+            // KH1's ledge as KH2 places Anti on its own, `anti_ledge_place`.)
+            if f.kind == super::form::Kind::Anti {
+                match anti_ledge_place(mset, v, bake) {
+                    Err(why) => log!(Animation, "KH2 slots: Anti Form's ledge hang left out ({why}); KH1's own ledge motions play there"),
+                    Ok(offset) => {
+                        for &(motion, stands_for, request, part) in ANTI_LEDGE.iter() {
+                            if !wanted(motion) || !form_has(v, motion) {
+                                log!(Animation, "KH2 slots: Anti Form has no motion {motion}; KH1's own on its request {request:#x}");
+                                continue;
+                            }
+                            let from = if part == Ledge::Loop { loop_point(v, motion) } else { Some(0) };
+                            let Some(from) = from else {
+                                log!(Animation, "KH2 slots: Anti Form's motion {motion} has no loop of its own; left off KH1's hang loop {request:#x}");
+                                continue;
+                            };
+                            let trimmed = (from > 0).then(|| {
+                                let mut c = v.character.clone();
+                                if let Some(clip) = c.moveset.clips.get_mut(&motion) {
+                                    *clip = clip_from(clip, from);
+                                }
+                                c
+                            });
+                            let src = pose::Src { rig: v.rig, character: trimmed.as_ref().unwrap_or(v.character), roots: v.roots, form: v.form, place: Some(pose::Place { offset, from, rise: part == Ledge::Climb }) };
+                            if let Some((m, block)) = make(mset, &src, bake, cache.as_deref_mut(), &requests, (motion, stands_for, request, Kind::MiscAnims), true, (false, 0), KH1_SLOTS + moves.len(), false)? {
+                                log!(Animation, "KH2 slots: Anti Form's ledge: motion {motion} from its frame {from} on KH1's request {request:#x} (slot {stands_for}), {} frames{}", m.frames, if m.travel { ", KH2's climb on KH1's travel" } else { "" });
+                                moves.push(m);
+                                blocks.push(block);
+                            }
+                        }
+                    }
                 }
             }
             // (Its finisher casts on its cast requests, as base Sora's below, where it built the
@@ -1175,12 +1207,15 @@ fn make(mset: &[u8], src: &pose::Src, bake: Option<&pose::Baker>, cache: Option<
     // forward, its finisher cast 57 836 (Checked (files) `P_EX100_MAGF.mset`; base Sora's casts have
     // none). The tester (drive-forms): "fires physics are missing".)
     let form_cast_travel = kind == Kind::Magic && src.form.is_some() && clip.root.iter().any(|r| r[0].hypot(r[2]) > 1.0);
-    let travel = (matches!(kind, Kind::GroundCombo | Kind::DodgeRoll) && travels(requests[request])) || form_cast_travel;
+    // (Anti Form's ledge climb, `ANTI_LEDGE`: KH1's climb requests travel, and KH2's climb rises by
+    // its root, `pose::Place::rise`.)
+    let climb = src.place.is_some_and(|p| p.rise) && travels(requests[request]);
+    let travel = (matches!(kind, Kind::GroundCombo | Kind::DodgeRoll) && travels(requests[request])) || form_cast_travel || climb;
     // (From the motion slot cache when it has this exact bake, `slot_key`; baked and kept there
     // otherwise.)
     let mut cache = cache;
     let baking = bake.map(|b| match cache.as_deref_mut() {
-        Some(c) => c.get_or_bake(slot_key(&template, (motion, field), frames, &tracks, travel, src.form), || {
+        Some(c) => c.get_or_bake(slot_key(&template, (motion, field), frames, &tracks, travel, src.form, src.place), || {
             super::loadscreen::baking();
             bake_one(b, src, &template, (motion, field), frames, &tracks, travel)
         }),
@@ -1235,7 +1270,7 @@ fn make(mset: &[u8], src: &pose::Src, bake: Option<&pose::Baker>, cache: Option<
         _ => None,
     };
     let holder = holder_block.is_some();
-    Ok(Some((Move { motion, stands_for, request, kind, slot, frames, baked, travel: travel && baked, default, field, variant, own: None, events, loop_from, form: src.form, holder, holder_block: Mutex::new(holder_block) }, block)))
+    Ok(Some((Move { motion, stands_for, request, kind, slot, frames, baked, travel: travel && baked, default, field, variant, own: None, events, loop_from, form: src.form, holder, holder_block: Mutex::new(holder_block), from: src.place.map_or(0, |p| p.from) }, block)))
 }
 
 /// One holder motion's key in the motion slot cache: the main bake's inputs it reads (the template,
@@ -1399,7 +1434,7 @@ fn body_strike(clip: &character_core::Clip, battle: &kh2_formats::battle::Battle
 pub unsafe fn now_playing(actor: usize) -> Option<(u16, f32)> {
     let m = current(actor)?;
     let t: f32 = rd(actor + TIME_NOW);
-    (t.is_finite() && t >= 0.0).then_some((m.motion, t))
+    (t.is_finite() && t >= 0.0).then_some((m.motion, t + m.from as f32))
 }
 
 /// (t1037) Our slot playing on `actor` now runs no KH1 attack row, so nothing of KH1's makes its
@@ -1970,9 +2005,13 @@ pub fn has_any(motion: u16) -> bool {
 /// manifest's files and settings (the KH1 template motion's bytes, the KH2 motion, its variant,
 /// length, KH1 events and travel). A Drive Form's motion (`form`: Valor's, the same motion ids as
 /// Sora's, other animations) has the moveset in its key too; base Sora's keys are as before.
-fn slot_key(template: &[u8], (motion, field): (u16, bool), frames: u32, tracks: &[EventTrack], travel: bool, form: Option<super::form::Kind>) -> u128 {
+fn slot_key(template: &[u8], (motion, field): (u16, bool), frames: u32, tracks: &[EventTrack], travel: bool, form: Option<super::form::Kind>, place: Option<pose::Place>) -> u128 {
     let mut h = crate::slotcache::Hasher::default();
     h.bytes(template).u32(motion as u32).u32(field as u32).u32(frames).u32(travel as u32).str(&format!("{tracks:?}"));
+    // (Anti Form's ledge hang, `ANTI_LEDGE`: its own placement.)
+    if let Some(p) = place {
+        h.str("ledge place").str(&format!("{p:?}"));
+    }
     // (Valor's keys as before: its model's name, "P_EX100_BTLF".)
     if let Some(k) = form {
         h.str(k.model());
@@ -3148,9 +3187,10 @@ pub unsafe fn kh1_time_now(actor: usize) -> Option<f32> {
     Some(rd::<f32>(actor + TIME_NOW)).filter(|t| t.is_finite() && *t >= 0.0)
 }
 
-/// KH1's time in our slot playing on `actor` (frames), if it is `slot` (our move's id).
+/// KH1's time in our slot playing on `actor` (frames), if it is `slot` (our move's id), as the KH2
+/// clip's frame (`Move::from` added: Anti Form's hang loop).
 pub unsafe fn kh1_time(actor: usize, slot: usize) -> Option<f32> {
-    current(actor).filter(|m| m.slot == slot).map(|_| rd::<f32>(actor + TIME_NOW)).filter(|t| t.is_finite() && *t >= 0.0)
+    current(actor).filter(|m| m.slot == slot).map(|m| rd::<f32>(actor + TIME_NOW) + m.from as f32).filter(|t| t.is_finite() && *t >= 0.0)
 }
 
 unsafe fn rd<T: Copy>(p: usize) -> T {
@@ -3861,37 +3901,97 @@ unsafe fn redirect(p: &mut Placed) {
     }
 }
 
-/// KH1's ledge hang and climb requests (Steam, Checked (decomp)): the grab `0x1402C9FB0` sets state 15
-/// and asks 0xE, then 0xD queued (the hang); state 15's step `0x1402CA640` climbs through `0x1402CABA0`
-/// (state 19, 0x10, then 0x32 queued) or plays 0xF (state 16, then a fall: Assumption, the let-go);
-/// state 19's step `0x1402CAC60` goes to state 18 (`0x1402CB0B0`) with 0x32.
-const LEDGE_REQUESTS: [(usize, &str); 5] = [(0xE, "grab"), (0xD, "hang"), (0xF, "drop"), (0x10, "climb"), (0x32, "climb's end")];
-/// Anti Form's own hang and climb (main s273: "antiform has it's own unique ledge grab animation":
-/// its motions 7, looping, and 8). **Assumption**: `P_EX100_HTLF.mset` holds them (not staged).
-const ANTI_LEDGE_MOTIONS: [u16; 2] = [7, 8];
+/// Anti Form's ledge grab, hang and climb on KH1's own ledge requests (main s273: "antiform has it's
+/// own unique ledge grab animation"; s277..s280: "sora should be hanging from his foot", "his foot
+/// should be hooked on the edge of the roof").
+///
+/// KH1 (Steam, Checked (decomp)): the grab `0x1402C9FB0` sets state 15 and asks 0xE, then 0xD
+/// queued (the hang); state 15's step `0x1402CA640` climbs through `0x1402CABA0` (state 19, 0x10,
+/// then 0x32 queued) or, with the top not one to stand on or someone on it, asks 0xF (state 16, the
+/// fall queued). KH1's motion step plays a queued request at the motion's end before it would loop
+/// (`0x14029F0A0`: the queue count `+0x178` first, else back to the loop start), Checked (decomp).
+/// Sora's request table (`xa_ex_0010.mset`, Checked (files)): 0xE slot 15 (68 frames), 0xD slot 14
+/// (120), 0xF slot 16 (28, travels), 0x10 slot 17 (40, travels); 0x32 is slot 50 (330 frames, an
+/// idle-like motion KH1 plays on what it climbed onto, state 18 `0x1402CB0B0`), left KH1's.
+///
+/// KH2 (Checked (files) `P_EX100_HTLF.mset`; motions 7 hang / 8 climb as the controller's,
+/// `character_core::motion::HANG` / `CLIMB`): 7 is 190 frames looping back to 110 (its own
+/// `frame_return` 55 at 30 fps), 8 is 16 frames, its root lifting 190 by frame 10 and 200 by 16,
+/// carrying him 110 forward. KH2 grabs with 7 from its start and loops it (the OG rewrite's `try_hang`; exe per
+/// `docs/movement-model.md`). So: 7 whole on the grab 0xE (KH1 then plays 0xD), 7's loop alone
+/// (110..190) on the hang 0xD, which KH1 loops whole, and 8 on both climbs, rising by KH2's root.
+const ANTI_LEDGE: [(u16, usize, usize, Ledge); 4] = [
+    (character_core::motion::HANG, 15, 0xE, Ledge::Whole),
+    (character_core::motion::HANG, 14, 0xD, Ledge::Loop),
+    (character_core::motion::CLIMB, 17, 0x10, Ledge::Climb),
+    (character_core::motion::CLIMB, 16, 0xF, Ledge::Climb),
+];
 
-/// Anti's ledge hang isn't a spec yet: a spec needs each request's KH1 slot (its `stands_for`, from
-/// Sora's request table, `xa_ex_0010.mset`), which isn't in the repo, and Anti's clips. This logs
-/// both (log only), so a spec can be written from the tester's log.
-fn anti_ledge_log(v: &pose::Src, requests: &[u32], has: &dyn Fn(&pose::Src, u16) -> bool) {
-    let reqs: Vec<String> = LEDGE_REQUESTS
-        .iter()
-        .map(|&(r, what)| match requests.get(r) {
-            Some(&e) if e & 0xFFF != 0xFFF => format!("{r:#x} {what}: slot {}, kind {}", e & 0xFFF, (e >> 12) & 7),
-            _ => format!("{r:#x} {what}: none"),
-        })
-        .collect();
-    let clips: Vec<String> = ANTI_LEDGE_MOTIONS
-        .iter()
-        .map(|&m| match v.character.moveset.clips.get(&m).filter(|_| has(v, m)) {
-            Some(c) => {
-                let (lo, hi) = c.root.iter().fold((f32::MAX, f32::MIN), |(lo, hi), r| (lo.min(r[1]), hi.max(r[1])));
-                format!("{m}: {} frames, root y {lo:.1}..{hi:.1}", c.length)
-            }
-            None => format!("{m}: none"),
-        })
-        .collect();
-    log!(Animation, "KH2 slots: Anti Form's ledge hang not built (needs its KH1 slots): KH1's requests {}; Anti's clips {}", reqs.join(", "), clips.join(", "));
+#[derive(Clone, Copy, PartialEq)]
+enum Ledge {
+    /// The clip from its start.
+    Whole,
+    /// The clip from its own loop point on (`loop_point`).
+    Loop,
+    /// The clip, KH1 moving him by its root's travel, height too (`pose::Place::rise`).
+    Climb,
+}
+
+/// KH1's hang (slot 14, the 0xD template): its helper 10, a child of the motion's root, holds still
+/// at the ledge's edge, 121.3 up and 55.3 forward of the model (Checked (files): only the hang's two
+/// motions, 14 and 15, have 13 helpers and it, its child 11 the grip 10.5 under it, where a hand's
+/// target helper 7 sits). **Assumption**: it is the edge KH1 hangs him from (KH1's place for the
+/// hang, `0x1402CA9A0`, is the edge's point out by his radius `+0x2C0` and down by a height from
+/// the table at `0x14052A1F0`, which the exe would confirm).
+const HANG_SLOT: usize = 14;
+const EDGE_HELPER: usize = 10;
+
+/// Where Anti's baked hang and climb sit in KH1's model: KH2 hangs him `hang_height` under the
+/// edge and his body radius out from the wall (`character_core` `try_hang`; Steam KH2, exe, per
+/// `docs/movement-model.md`; Anti's own `prty` and type-4 shape, read with the form), so the edge
+/// is at (0, hang_height, radius) of his KH2 pose, KH1-sized by the retarget's hip ratio; moved
+/// onto KH1's edge (`EDGE_HELPER`). His foot then hooks over the edge as in KH2 (the retargeted
+/// loop, Checked (files): the foot 13 over the edge, the ankle 4 under it, with base Sora's 150 /
+/// 90). Data only: nothing per frame.
+fn anti_ledge_place(mset: &[u8], v: &pose::Src, bake: Option<&pose::Baker>) -> Result<glam::Vec3, String> {
+    let b = bake.ok_or("it needs the bake, kh1_bake")?;
+    let h = ks::helpers(&ks::motion_bytes(mset, HANG_SLOT).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
+    let (parent, edge) = match h.get(EDGE_HELPER) {
+        Some(&e) if h.len() == 13 => e,
+        _ => return Err(format!("KH1's hang has {} helpers, not 13", h.len())),
+    };
+    if parent != 0 {
+        return Err(format!("KH1's hang's edge helper hangs from helper {parent}"));
+    }
+    let hang = &v.character.params.hang;
+    if !(hang.height > 0.0 && hang.body_radius > 0.0) {
+        return Err(format!("Anti's hang height {} / body radius {}", hang.height, hang.body_radius));
+    }
+    let r = b.hip_ratio();
+    let offset = glam::Vec3::from(edge) - glam::Vec3::new(0.0, hang.height, hang.body_radius) * r;
+    log!(Animation, "KH2 slots: Anti Form's ledge: KH1's edge {edge:.1?}, Anti's hang height {} and body radius {} (x {r:.3}): his pose moved {offset:.1?}", hang.height, hang.body_radius);
+    Ok(offset)
+}
+
+/// KH2's own loop point of `motion` (60 Hz frames from its start: `frame_return`), when it loops
+/// back to a later frame than its first.
+fn loop_point(v: &pose::Src, motion: u16) -> Option<u32> {
+    let m = v.rig.motions.get(&motion)?;
+    let from = ((m.frame_return - m.frame_start) * 60.0 / m.fps.max(1e-3)).round();
+    let len = v.character.moveset.clips.get(&motion)?.length;
+    (from >= 1.0 && (from as u32) < len).then_some(from as u32)
+}
+
+/// `c` from its frame `from` on: its length, root travel (from there), windows and frame triggers.
+fn clip_from(c: &character_core::Clip, from: u32) -> character_core::Clip {
+    let base = c.root.get(from as usize).copied().unwrap_or([0.0; 3]);
+    character_core::Clip {
+        motion: c.motion,
+        length: c.length - from,
+        root: c.root.iter().skip(from as usize).map(|r| [r[0] - base[0], r[1] - base[1], r[2] - base[2]]).collect(),
+        windows: c.windows.iter().filter(|w| w.end.map_or(true, |e| e > from)).map(|w| character_core::Window { start: w.start.saturating_sub(from), end: w.end.map(|e| e - from), ..w.clone() }).collect(),
+        events: c.events.iter().filter(|e| e.frame >= from).map(|e| character_core::Event { frame: e.frame - from, ..e.clone() }).collect(),
+    }
 }
 
 /// KH2's row selection on KH1's own ground or air swing (`combomods::attack`, Base / Aerial

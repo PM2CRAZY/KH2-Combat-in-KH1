@@ -203,17 +203,32 @@ pub struct Src<'a> {
     pub roots: &'a HashMap<u16, Vec<[f32; 3]>>,
     /// The Drive Form whose moveset it is (else base Sora's).
     pub form: Option<super::form::Kind>,
+    /// A placement of its baked poses of its own (`Place`: Anti Form's ledge hang, `kh2slots`);
+    /// `None` for every other move.
+    pub place: Option<Place>,
+}
+
+/// How `Baker::poses_of` places one motion's poses in KH1's model (Anti Form's ledge hang and climb
+/// on KH1's own ledge requests, `kh2slots::ANTI_LEDGE`): every bone moved by `offset` (model units,
+/// +y up, +z forward), the clip played from its frame `from` (60 Hz frames: the hang's loop), and with
+/// `rise` the root travel's height kept in KH1's travel helper too (the climb), not only along the
+/// ground.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Place {
+    pub offset: Vec3,
+    pub from: u32,
+    pub rise: bool,
 }
 
 impl Kh2 {
     /// Base Sora's moveset.
     pub fn src(&self) -> Src<'_> {
-        Src { rig: &self.rig, character: &self.character, roots: &self.roots, form: None }
+        Src { rig: &self.rig, character: &self.character, roots: &self.roots, form: None, place: None }
     }
 
     /// Drive Form `kind`'s, if it loaded.
     pub fn form_src(&self, kind: super::form::Kind) -> Option<Src<'_>> {
-        kind.data(self).map(|f| Src { rig: &f.rig, character: &f.character, roots: &f.roots, form: Some(kind) })
+        kind.data(self).map(|f| Src { rig: &f.rig, character: &f.character, roots: &f.roots, form: Some(kind), place: None })
     }
 }
 
@@ -1522,7 +1537,10 @@ impl Baker {
         let parents: Vec<i16> = self.skeleton.iter().map(|b| b.parent).collect();
         let mut out = Vec::with_capacity(frames as usize + 1);
         let mut moved = Vec::new();
-        let root_at = |f: u32| roots.and_then(|r| r.get((f as usize).min(r.len().saturating_sub(1)))).map(|p| Vec3::from(*p));
+        // (A placement of its own, `Place`: from a later frame of the clip, moved, rising.)
+        let place = src.place;
+        let from = place.map_or(0, |p| p.from);
+        let root_at = |f: u32| roots.and_then(|r| r.get(((f + from) as usize).min(r.len().saturating_sub(1)))).map(|p| Vec3::from(*p));
         let start = root_at(0).unwrap_or(Vec3::ZERO);
         // (A slot longer than the clip, `kh1rows::Ours::frames`: the clip loops over it from its
         // own loop point, as KH2 plays it; the Aerial Dodge's 202.)
@@ -1539,10 +1557,10 @@ impl Baker {
         let binds = kh2_held.then(|| (kh2_anim::Pose::bind(&self.skeleton).bones, kh2_anim::Pose::bind(&rig.skeleton).bones));
         let right_palm = rig.weapons.first().and_then(|w| w.bone);
         for f in 0..=frames {
-            let at = f as f32;
+            let at = (f + from) as f32;
             let mut body = kh2_anim::evaluate(&rig.skeleton, clip, kh2_anim::key_time(clip, at, looping), kh2_anim::Options::default()).bones;
             let mut weapon = kh2_weapon(rig, motion, at, looping, &body);
-            if let Some(root) = roots.and_then(|r| r.get((f as usize).min(r.len().saturating_sub(1)))) {
+            if let Some(root) = roots.and_then(|r| r.get(((f + from) as usize).min(r.len().saturating_sub(1)))) {
                 let un = Mat4::from_translation(-Vec3::from(*root));
                 for m in body.iter_mut().chain(weapon.iter_mut()) {
                     *m = un * *m;
@@ -1569,13 +1587,19 @@ impl Baker {
             {
                 self.secondary.apply(&mut kh1, &body, (!weapon.is_empty()).then_some(weapon.as_slice()), kh1_data::secondary::Parts::ALL);
             }
+            if let Some(p) = place {
+                for m in kh1.iter_mut() {
+                    m.w_axis += p.offset.extend(0.0);
+                }
+            }
             if travel {
-                // (Along the ground only: the root's height stays out, as before.)
+                // (Along the ground only: the root's height stays out, as before; with `Place::rise`,
+                // the ledge climb's, its height too.)
                 let d = root_at(f).map_or(Vec3::ZERO, |p| p - start);
                 // (KH2's units as they are: H10 moves him 1:1 in the world, Sora's placement
                 // having scale 1 (t364's KH1 trace: swing 98's H10 1.3 and 6.32 a frame, moved
                 // 1.30 and 6.32).)
-                let t = Vec3::new(d.x, 0.0, d.z);
+                let t = if place.is_some_and(|p| p.rise) { d } else { Vec3::new(d.x, 0.0, d.z) };
                 for m in kh1.iter_mut() {
                     m.w_axis += t.extend(0.0);
                 }
@@ -1588,6 +1612,11 @@ impl Baker {
 }
 
 impl Baker {
+    /// KH1 Sora's hip height over KH2's (`Retarget::hip_ratio`): KH2 distances on the pose to KH1's.
+    pub fn hip_ratio(&self) -> f32 {
+        self.retarget.hip_ratio()
+    }
+
     /// The holder motion's pose at each frame `0..=frames` of a two-Keyblade form's `motion`
     /// (Valor's; `kh2slots`, plan step 4 of `docs/kh1-weapon-second.md` §7.3): KH1 Sora's bind for
     /// every body bone, and the left hand's 13 weapon bones (`leftblade::left_bones`, from KH2's

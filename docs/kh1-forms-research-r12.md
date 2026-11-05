@@ -383,7 +383,7 @@ Tags: Checked (decomp) = Steam KH2 kh2.c / KH1 kh1.c; (files) = 00battle.bin / 0
 ## 3. KH1 host
 
 - **States:** as Valor and Wisdom: a `FORM_SLOTS` entry (ANTI_SPECS: motions 151–155, 161, 173, 181–184, cycles, reactions, jump/fall/land on KH1's requests, like WISDOM_SPECS, `kh2slots.rs:390-420`), `native_capable`, and Square through `combomods::valor_square`'s exe path (rows 11/12, ability 0).
-- **Ledge:** KH1's ledge and bar states 13 and 15 (`combat.rs:299`). Anti's motions 7/8 go onto KH1's hang and climb requests as a form spec. The "by the foot" height is baked as a root offset (data), not main's per-frame shift. Assumption: motion 7's own root already hangs low. Check P_EX100_HTLF when staged.
+- **Ledge:** KH1's ledge state 15 (and its climbs 19 / 16). Anti's motions 7/8 go onto KH1's hang and climb requests (built: section 7 of the main-port notes below, `kh2slots::ANTI_LEDGE`). The "by the foot" height is baked as an offset (data), not main's per-frame shift.
 - **Look:** KH1's own Anti-Sora (`xa_pp_3020.mdls` in `kh1_fifth`, main; not staged, Assumption). Its colours go onto Sora's HD textures through `tint`'s slot swap (`+0x70`), built **once** into `kh1-kh2-cache`. The owner's "every start" conflicts with the build-once rule.
   - With `player_model = kh2`: KH2's HTLF mdlx.
 - **Keyblade:** hiding KH1's Keyblade and trail needs a KH1 decomp check of the weapon-draw and trail flags (not located).
@@ -512,19 +512,37 @@ the file isn't staged); the build logs if not. Not changed: Anti's motion sounds
 only for the moves `kh2_sounds` lists (`kh2sound::event`'s form rule names Valor / Final / Limit /
 Master only) — a separate question.
 
-**7. Anti's ledge hang (not built; a log for it)** (main s273 "antiform has it's own unique ledge grab
-animation", s277 / s279 / s280 "hanging from his foot"):
+**7. Anti's ledge hang (built: KH1's own ledge requests play Anti's clips)** (main s273 "antiform has
+it's own unique ledge grab animation", s277 / s279 / s280 "hanging from his foot", "his foot should be
+hooked on the edge of the roof"):
 - KH1 (Steam, Checked (decomp)): the ledge grab `0x1402C9FB0` sets state 15 and asks request 0xE, with
   0xD queued (the hang); state 15's step `0x1402CA640` climbs through `0x1402CABA0` (state 19, request
-  0x10, then 0x32 queued) or plays 0xF (state 16, then a fall; Assumption: the let-go); state 19's step
-  `0x1402CAC60` goes to state 18 (`0x1402CB0B0`) with 0x32. Main's log matched: "state 15 hanging, then
-  19 and 18 pulling up".
-- Native plan: Anti's 7 (looping hang) on 0xE / 0xD and 8 (climb) on 0x10 (and 0x32) as `ANTI_SPECS`
-  entries, as every form's slots. What's missing: each request's KH1 slot (`Spec::stands_for`, from Sora's
-  request table in `xa_ex_0010.mset`, not in the repo, and never guessed: `make` leaves a wrong one out),
-  and whether `P_EX100_HTLF.mset` holds 7 / 8 and how low its root hangs (main's "by the foot" was a per-
-  frame shift of 6 under the edge; natively it would be the clip's own root, or a root offset baked into
-  the slot).
-- Added (log only, `kh2slots::anti_ledge_log`, once a slot build): the five requests' slots and kinds
-  and Anti's 7 / 8 (frames, root height range). The tester's next `kh1-kh2.log` ("Anti Form's ledge hang
-  not built") gives what the specs need.
+  0x10, then 0x32 queued) or, when the top isn't one to stand on or another actor is there, asks 0xF
+  (state 16, the fall 6 queued). So 0xF isn't the let-go (tm21's Assumption was wrong): it is a second
+  climb. The end of 0x10 (`0x1402CAD20`) goes to state 18 (`0x1402CB0B0`, standing on the object
+  climbed onto) or into the fall. KH1's motion step `0x14029F0A0` plays a queued request at the
+  motion's end before it would loop (queue count `+0x178` first). Main's log matched: "state 15 hanging,
+  then 19 and 18 pulling up". (Base KH1's state 13 is another thing: `0x1402C8910` / `0x1402C8A50` ask
+  0x1B..0x26, not a ledge.)
+- KH1's slots (Checked (files) `xa_ex_0010.mset`, test `ledge_requests_and_edge`): 0xE slot 15 (68 frames),
+  0xD slot 14 (120), 0xF slot 16 (28, travels: up 170, forward 80), 0x10 slot 17 (40, travels: up 140,
+  forward 95, ending at 110 up). 0x32 is slot 50 (330 frames, idle-like), left KH1's.
+- KH1's hang template (slot 14) has 13 helpers (only 14 and 15 do): helper 10, a child of the root, holds
+  still at (0, 121.3, 55.3), its child 11 a grip 10.5 under it where the hand target 7 sits (Checked
+  (files)). **Assumption**: helper 10 is the edge KH1 hangs him from. KH1 places him (`0x1402CA9A0`)
+  at the edge out by his radius `+0x2C0` and down by `DAT_14052A1F0[character]`, a value only the exe has.
+- Anti (Checked (files) `P_EX100_HTLF.mset`): 7 (F100) is 190 frames (95 at 30 fps), looping back to 110
+  (`frame_return` 55), a sound (8: 0 / 308) at frame 4; 8 (F101) is 16 frames, its root up 40 a frame
+  pair to 160 by frame 8, then 190 / 44 forward at 10, 200 / 110 at 16. KH2 (the OG rewrite's
+  `try_hang`, exe per `docs/movement-model.md`): the hang is at `hang_height` under the edge and the body
+  radius out, motion 7 from its start, looping; the climb is 8 by its root.
+- Built (`kh2slots::ANTI_LEDGE`, data only): 7 whole on 0xE (KH1 then plays 0xD), 7's loop alone (from
+  frame 110, `pose::Place::from`) on 0xD, which KH1 loops whole, and 8 on both climbs 0x10 and 0xF,
+  KH1 moving him by KH2's root in the slot's H10, its height too (`Place::rise`). The pose is moved
+  (`Place::offset`) so KH2's edge point, (0, hang_height, body radius) of Anti's pose sized by the
+  retarget's hip ratio (0.903), lands on KH1's edge helper: with base Sora's 150 / 90 that is (0, -14,
+  -26), the loop's foot 13 over the edge and its ankle 4 under it (main s280 had the ankle 6 under).
+  Anti's own `prty` height and type-4 radius are read with the form and logged. tm21's log is gone.
+- Not checked: in game (the tester's screenshot); whether KH1's mover keeps a climb's rise when the
+  rise is 200 (KH1's own is 140 and 170); the exe value `DAT_14052A1F0[Sora]`. The KH2-model draw
+  (`pose::follow_baked`, when Look is KH2's) doesn't take the offset (Anti's look isn't built).

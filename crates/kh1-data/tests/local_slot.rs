@@ -50,3 +50,22 @@ fn retimed_second_swing() {
     assert!(old_last <= 48 * 256 && old_last > 40 * 256, "template's last key {old_last}");
     assert!(last <= 56 * 256 && last > 47 * 256, "last key {last}");
 }
+
+/// KH1's ledge requests (the grab `0x1402C9FB0` asks 0xE, then 0xD; the climb `0x1402CABA0` 0x10;
+/// the blocked climb `0x1402CA640` 0xF) and their slots, and the hang's ledge helper (slot 14's
+/// helper 10, a child of the motion's root: the edge, 121.3 up and 55.3 forward) that
+/// `kh2slots::ANTI_LEDGE` places Anti Form's hang by.
+#[test]
+fn ledge_requests_and_edge() {
+    let Some(b) = mset() else { return };
+    let t = kh1_data::slot::request_table(&b).unwrap();
+    let slot = |r: usize| t[r] & 0xFFF;
+    assert_eq!([slot(0xE), slot(0xD), slot(0xF), slot(0x10)], [15, 14, 16, 17]);
+    // (Bit 15, KH1's travel flag: the climbs move him by their H10, the hang doesn't.)
+    assert_eq!([t[0xE] & 0x8000, t[0xD] & 0x8000, t[0xF] & 0x8000, t[0x10] & 0x8000], [0, 0, 0x8000, 0x8000]);
+    let h = kh1_data::slot::helpers(&kh1_data::slot::motion_bytes(&b, 14).unwrap()).unwrap();
+    assert_eq!(h.len(), 13);
+    let (parent, at) = h[10];
+    assert_eq!(parent, 0);
+    assert!((at[1] - 121.3).abs() < 0.1 && (at[2] - 55.3).abs() < 0.1, "{at:?}");
+}

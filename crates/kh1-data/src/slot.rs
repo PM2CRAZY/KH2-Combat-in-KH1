@@ -151,6 +151,22 @@ pub fn motion_bytes(mset: &[u8], slot: usize) -> Result<Vec<u8>> {
     mset.get(start..end).map(|b| b.to_vec()).ok_or_else(|| Error::Format("mset: motion past the end".into()))
 }
 
+/// A motion block's helpers (`+0x2C` count, `+0x30` the table, 40 bytes each): each helper's parent
+/// (`+0x0C`, -1 none) and its record's translation (`+0x1C..+0x28`, model units), as KH1's own
+/// matrix build reads the record (scale, parent, Euler rotation, translation; `kh1_data::bake`).
+/// The keyed values (the helper channels) aren't applied: the record's own.
+pub fn helpers(block: &[u8]) -> Result<Vec<(i32, [f32; 3])>> {
+    let (count, at) = (u32_at(block, 0x2C)? as usize, u32_at(block, 0x30)? as usize);
+    if count > 64 {
+        return Err(Error::Format(format!("motion: {count} helpers")));
+    }
+    let f = |p: usize| u32_at(block, p).map(f32::from_bits);
+    (0..count).map(|k| {
+        let e = at + k * 40;
+        Ok((u32_at(block, e + 0xC)? as i32, [f(e + 0x1C)?, f(e + 0x20)?, f(e + 0x24)?]))
+    }).collect()
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct EventKey {
     pub time: f32,

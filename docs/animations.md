@@ -290,7 +290,7 @@ drawn (their slots have no `play_for` entry). KH2's controller has no ledges in 
 
 | Move | Owner | At KH1 | At KH2 | Animation ID(s) | Setting | Notes |
 |---|---|---|---|---|---|---|
-| Ledge grab and hang | KH1 only (state 13) | KH1's | KH1's | KH1 slots **unconfirmed** | `grabs` | Tried from KH2's falls too: KH2's Air / Jump / Aerial Dodge / Glide states, after a 20-frame wait off something (`NO_GRAB`). **Camera:** KH1's ledge camera is KH2's follow camera (`camera_calls = kh2`). |
+| Ledge grab and hang | KH1 only (state 15; climbs 19 / 16) | KH1's | KH1's | KH1 requests 0xE (slot 15) then 0xD (14), climbs 0x10 (17) / 0xF (16), Checked (files, decomp). Anti Form: its 7 / 8 on them (`kh2slots::ANTI_LEDGE`) | `grabs` | Tried from KH2's falls too: KH2's Air / Jump / Aerial Dodge / Glide states, after a 20-frame wait off something (`NO_GRAB`). **Camera:** KH1's ledge camera is KH2's follow camera (`camera_calls = kh2`). |
 | Vines, climbable walls | KH1 only (state 10) | KH1's | KH1's | **unconfirmed** | `grabs` | As ledges. |
 | Ladders, poles; leaping off | KH1 only (states 15, 16) | KH1's | KH1's | **unconfirmed** | `grabs` | Leaping off: KH2's fall once he drops, or KH1's fall state under shared states. Camera as ledges. |
 | Bars, objects to hang from | KH1 only | KH1's | KH1's | **unconfirmed** | `grabs` | Bars are skipped where KH1 turns them off (`0x298D3A8`). |
