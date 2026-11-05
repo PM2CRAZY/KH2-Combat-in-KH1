@@ -1,3 +1,6 @@
+### 2026-11-05: Stage tm25 (testing-merge branch: kh1-data: KH1's PS2 meshes and textures in a .mdls, and the remastered mesh)
+- Readers for Anti Form's look: `kh1-data` `mdls.rs` gains `parse_faces` / `parse_textures` (KH1's PS2 meshes: DMA packets of triangle strips, chunk `+0xC` the strip's starting winding, found from the files; PS2 textures: 8-bit with CSM1-ordered colour tables), new `mesh.rs` (the remastered mesh `-c0.cvbl`) and `image.rs`. Checked (files): Sora's `xa_ex_0010.mdls` gives 2828 triangles, as his `-c0.cvbl`; his texture 0 matches his HD `-100` within 1.1 / 255. Test `tests/local_mesh.rs` (with `KH1_RE_DIR` / `KH1_HDTEX_DIR`; a `png` dev-dependency). Pure Rust, the player's own files at run time. Per frame: nothing.
+
 ### 2026-11-05: Stage tm24 (testing-merge branch: KH1's packages: a junk index entry is left out, not the whole package refused)
 - Toward Anti Form's look (main s290: "copying the exact textures of KH1 anti-sora"): KH1 Anti-Sora's model `xa_pp_3020.mdls` is in the `kh1_fifth` package, whose index has an entry with length 0xFDFDFDFD (Checked (main's docs)); testing's `Archive::open` refused the whole package for it. Such a junk entry is now left out, the rest of the package opened. Unit-tested. `kh2-formats/src/egs.rs`. Per frame: nothing.
 

@@ -229,3 +229,31 @@ Sleeves are light and grey, so they are coloured ("colourize": hue and saturatio
 brightness × 0.85 kept) only where texels are light and unsaturated (the black trim and the
 zipper rail stay); the belt and lining are blue, hue-shifted within their regions; the shoes'
 yellow (hue 48° ± 26°) only where bright (≥ 0.42), so the dark brown beside them stays.
+
+## Anti Form's look: the readers (testing-merge)
+
+For Anti Form's look (main's s290: "copying the exact textures of KH1 anti-sora onto sora's anti
+form model"), the mod reads three things from the player's own files (`kh1_data`):
+
+- **The PS2 meshes in a `.mdls`** (`mdls::parse_faces`). The model header's mesh entries (16
+  bytes: second-pass flag, texture index twice, offset of the first packet) lead to a run of PS2
+  DMA packets (quadword count in the tag's low 16 bits, id 7 ends the mesh). In each packet: tag 0
+  chunks (0x80 bytes) put bone `+4` in matrix slot `+8`; tag 1 chunks hold one triangle strip
+  (`count` at `+8`, the strip's starting winding at `+0xC`, a GIF tag, then 48-byte vertices:
+  normal and matrix slot, position in the bone's space, UV); tag 0x8000 ends the packet.
+  Checked (files): Sora's `xa_ex_0010.mdls` gives 2828 triangles on 9 meshes (textures 0, 1, 2,
+  3, 3, 4, 5, 5, 6), as many as his remastered mesh; posed in the bind pose they lie on it (mean
+  gap 0.0003, at most 0.08, Sora about 152 tall), and with `+0xC` taken as the start's winding
+  2384 of the 2457 triangles with a twin there face as it does (73 the other way, a strip split
+  differently; without it 733 did).
+- **The PS2 textures in a `.mdls`** (`mdls::parse_textures`): the MOBJ's words 2..7 are the
+  texture table (16-byte entries, `w u16, h u16` at `+4`), the pixels (8-bit indices) and the
+  256-colour tables (R, G, B, A with A 0..0x80, in the PS2's CSM1 order). Checked (files): Sora's
+  seven 128² textures fill words 5 and 7 exactly, and his texture 0 decoded so matches his HD
+  `-100` (512², the same texture drawn larger) within 1.1 of 255. Assumption: every character
+  model's textures are 8-bit like these (anything else is refused, and logged).
+- **The remastered mesh `-c0.cvbl`** (`mesh::cvbl_faces`; the layout above). Checked (files):
+  Sora's gives 2828 triangles on 9 meshes (slots 0, 1, 2, 3, then 1 five times).
+
+`crates/kh1-data/tests/local_mesh.rs` checks all of this on the owner's files (skipped without
+them: `KH1_RE_DIR`, `KH1_HDTEX_DIR`).

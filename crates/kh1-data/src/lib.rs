@@ -10,10 +10,12 @@
 //! [`Source::Original`] reads those first, so a randomizer's edits don't leak into our tables.
 
 pub mod bake;
+pub mod image;
 pub mod inverse;
 pub mod jiggle;
 pub mod legs;
 pub mod mdls;
+pub mod mesh;
 pub mod mset;
 pub mod retarget;
 pub mod secondary;

@@ -2365,6 +2365,7 @@ dependencies = [
  "kh2-anim",
  "kh2-data",
  "kh2-formats",
+ "png",
 ]
 
 [[package]]
