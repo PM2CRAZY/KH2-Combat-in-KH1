@@ -4032,8 +4032,39 @@ unsafe extern "system" fn run_entry(menu: usize, entry: i32) -> u64 {
     let r = f(menu, entry);
     if r != 0 {
         super::cmdmenu::command_taken(&open);
+    } else if super::log_on(super::LogCat::Menus) && !super::cmdmenu::lock_kh2() {
+        // (Log only, Command Lock KH1: KH1's own run refused the press, for the owner's "command
+        // lock doesn't turn it back to vanilla" (`cmdmenu::kh1_refused`).)
+        if let Some((kind, arg, sub, disabled)) = entry_command(menu, entry) {
+            if !disabled && kind != 1 && !(rd::<u32>(menu) != 4 && sub > 0) {
+                let sora = rd::<u64>(BASE.load(Ordering::Relaxed) + PARTY_RVA) as usize;
+                super::cmdmenu::kh1_refused(sora, kind, arg);
+            }
+        }
     }
     r
+}
+
+/// The command an entry runs (a party target list's: its parent's cursor entry): its record's
+/// type, argument and sub-list (`+8`), and the entry's blocked bit. `None`: no record.
+unsafe fn entry_command(menu: usize, entry: i32) -> Option<(u8, u8, i8, bool)> {
+    if menu < 0x10000 || !(0..16).contains(&entry) {
+        return None;
+    }
+    let disabled = rd::<u32>(menu + 8) >> entry & 1 != 0;
+    let base = BASE.load(Ordering::Relaxed);
+    let record_of: unsafe extern "system" fn(u32) -> usize = std::mem::transmute(base + RECORD_RVA);
+    let id = if rd::<u32>(menu) == 4 {
+        let parent = entry_parent(base)?;
+        rd::<u8>(parent + 0x14 + (rd::<i32>(parent + 0x34) & 0xF) as usize)
+    } else {
+        rd::<u8>(menu + 0x14 + entry as usize)
+    };
+    let record = record_of(id as u32);
+    if record < 0x10000 {
+        return None;
+    }
+    Some((rd::<u8>(record + 6), rd::<u8>(record + 7), rd::<i8>(record + 8), disabled))
 }
 
 /// The list under the menu chain's top (a party target list's parent).
@@ -4057,20 +4088,8 @@ unsafe fn spell_not_yet(menu: usize, entry: i32) -> bool {
             return true;
         }
     }
-    let disabled = rd::<u32>(menu + 8) >> entry & 1 != 0;
     let base = BASE.load(Ordering::Relaxed);
-    let record_of: unsafe extern "system" fn(u32) -> usize = std::mem::transmute(base + RECORD_RVA);
-    let id = if rd::<u32>(menu) == 4 {
-        let Some(parent) = entry_parent(base) else { return false };
-        rd::<u8>(parent + 0x14 + (rd::<i32>(parent + 0x34) & 0xF) as usize)
-    } else {
-        rd::<u8>(menu + 0x14 + entry as usize)
-    };
-    let record = record_of(id as u32);
-    if record < 0x10000 {
-        return false;
-    }
-    let (kind, arg, sub) = (rd::<u8>(record + 6), rd::<u8>(record + 7), rd::<i8>(record + 8));
+    let Some((kind, arg, sub, disabled)) = entry_command(menu, entry) else { return false };
     // Disabled entries: KH1's own "can't".
     if disabled {
         return false;

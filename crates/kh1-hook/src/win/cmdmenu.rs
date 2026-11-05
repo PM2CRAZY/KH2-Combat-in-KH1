@@ -22,7 +22,10 @@
 //!   it (`0x1403B6950` / `0x1403BA070`); before that the press does nothing and the list stays open.
 //!   Its rows grey only for availability (MP, items, form), never for what Sora is doing (Checked
 //!   (decomp)). KH1 greys and blocks spells and items by Sora's movement state (`0x140294220` /
-//!   `0x1402944C0`, the state table's bits 0x20 / 0x40) and takes any unblocked command.
+//!   `0x1402944C0`, the state table's bits 0x20 / 0x40), and its run (`0x140293480`) takes an
+//!   unblocked command only when its may-act test passes (`0x1402A2EC0`: can-act or the combo
+//!   window; Fire's re-fire and kind 99 past it), else nothing, the list open (Checked (decomp),
+//!   `docs/kh1-magic-native.md` §4p). So at KH1 the press while busy is refused by KH1 itself.
 //!
 //! Page 2's Party and Limit rows are KH1's empty command (0x42) for now, as KH2 shows them while
 //! they're not available (the user: "(a) we'll add them later").
@@ -407,6 +410,38 @@ pub unsafe fn locked(actor: usize) -> bool {
     }
     let can: unsafe extern "system" fn(usize) -> i32 = std::mem::transmute(base() + CAN_ACT_STEAM);
     can(actor) == 0 && rd::<u32>(actor + 0x1CC) & super::combomods::KH1_COMBO_WINDOW == 0
+}
+
+/// Log only (Menus), Command Lock KH1: KH1's own run (`0x140293480`) took no command for a press on
+/// a command entry (not blocked, not a list opening). KH1's run refuses, with no sound and the list
+/// left open, while its may-act test `0x1402A2EC0` fails (KH1's can-act `0x140297870`, or the
+/// combo window `+0x1CC` bit 22), in the jump take-off (state 1) or in deep water; past may-act
+/// only Fire's re-fire (requests 0x3D / 0x8A) and kind 99 go on (Checked (decomp),
+/// `docs/kh1-magic-native.md` §4p). The line says which held, and whether one of our KH2 motions
+/// plays (its windows are what KH1's test reads then), for the owner's "command lock currently
+/// doesn't turn it back to vanilla when set to kh1".
+pub unsafe fn kh1_refused(sora: usize, kind: u8, arg: u8) {
+    if !on() || sora < 0x10000 {
+        return;
+    }
+    static N: AtomicU32 = AtomicU32::new(0);
+    if N.fetch_add(1, Ordering::Relaxed) >= 40 {
+        return;
+    }
+    let can: unsafe extern "system" fn(usize) -> i32 = std::mem::transmute(base() + CAN_ACT_STEAM);
+    let free = can(sora) != 0;
+    let window = rd::<u32>(sora + 0x1CC) & super::combomods::KH1_COMBO_WINDOW != 0;
+    let kh2 = super::kh2slots::playing_motion(sora);
+    log!(
+        Menus,
+        "command menu: KH1's run took no command {kind:#x} (arg {arg}) (Command Lock KH1, KH1's own rule): state {}, can act {free}, combo window {window}, request {:#x}, {}",
+        rd::<i32>(sora + 0x70),
+        rd::<u32>(sora + 0x164),
+        match kh2 {
+            Some(m) => format!("our slot of KH2 motion {m} playing (its windows are KH1's test's)"),
+            None => "a KH1 motion".to_string(),
+        }
+    );
 }
 
 pub unsafe fn install() {

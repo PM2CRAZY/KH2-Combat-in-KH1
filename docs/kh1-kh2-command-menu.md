@@ -108,7 +108,7 @@ pointer `0x142D53A50`, navigation `0x1402931B0`, confirm `0x140293410`, run `0x1
 | Cancel back to the top | parent cursor to row 0 (any level) | top cursor to Attack (only when it lands on the top) |
 | After a command | top to Attack, submenus keep their cursor | everything to row 0 |
 | List changes | cursor by row (clamped) | cursor follows the command |
-| Busy Sora | spells and items grey and are blocked ("can't" sound); an unblocked command is taken and run or dropped | rows stay lit, the list stays, confirm does nothing until he can act |
+| Busy Sora | spells and items grey and are blocked by the movement state ("can't" sound); an unblocked command is refused by the run while KH1's may-act test fails (no sound, the list stays; Fire's re-fire and kind 99 excepted) | rows stay lit, the list stays, confirm does nothing until he can act |
 | Empty submenu | (closes when the parent row blocks) | closes to the top, sound 4 |
 | L2 + right stick | (our L2 Stick Menu) | always on; L2 + R3 confirms |
 | Sounds | 1 move, 6 open, 3 back, 4 can't | 1 move, 3 open, 4 back, 5 error, 0x14 page flip (KH2's own bank) |
@@ -151,7 +151,7 @@ pointer `0x142D53A50`, navigation `0x1402931B0`, confirm `0x140293410`, run `0x1
 | Drive Page | Page 2: Summon in row 4, Drive on page 2 | Page 1: Drive in row 4, Summon on page 2 |
 | D-Pad Left | cursor to Attack, no page 2 | flips page 1 / 2, cursor keeps its row |
 | Cursor Memory | KH1's (submenus keep their cursor) | KH2's (all to row 0 after a command, cursor follows the command) |
-| Command Lock | KH1's (rows grey and submenus close while busy) | KH2's (rows stay lit, confirm does nothing until Sora can act) |
+| Command Lock | KH1's (rows grey by the movement state; KH1's run refuses while its may-act test fails) | KH2's (rows stay lit, confirm does nothing until Sora can act) |
 | L2 Stick Menu | (existing row) | plus L2 + R3 confirms |
 
 ## What was built (t751..t756)
@@ -192,3 +192,27 @@ Still open (no answer needed):
   for now, since lifting it would let KH1's attack step start from states it doesn't expect.
 - The takeover pad masks for an open list (`takeover`, `probe`) are left: they only act while KH2's
   controller has Sora (the fallback).
+
+## Command Lock at KH1, re-read (the owner: "command lock currently doesn't turn it back to vanilla when set to kh1")
+
+- With the row at KH1 none of the row's KH2 parts runs (Checked (code)): the state lift around
+  KH1's top fill (`cmdmenu::top_fill`) and the refusal in KH1's run (`cmdmenu::locked`, from
+  `combat::spell_not_yet`) both test `lock_kh2` first; the ini (`command_lock = kh1`) and the
+  Config row read it the right way round; Cursor Memory's resets follow their own row. The other
+  refusals in `spell_not_yet` are the Drive's own (a form only on a frame Sora can change, Revert,
+  no magic in Valor), which don't follow this row.
+- KH1's own run (`0x140293480`) already refuses a command while its may-act test (`0x1402A2EC0`:
+  KH1's can-act `0x140297870`, or the combo window `+0x1CC` bit 22) fails: no record, no sound,
+  the list stays (Checked (decomp), `docs/kh1-magic-native.md` §4p, `docs/kh1-drive-forms-native.md`
+  t1001). `cmdmenu::locked` is that same test, so at Sora's battle states the KH2 setting differs
+  from KH1's only by (a) KH1's state greying lifted (items in the air, mostly) and (b) KH1's own
+  exceptions (Fire's re-fire during 0x3D / 0x8A, kind 99) refused. The t755 note that KH1 "takes
+  any unblocked command, which then runs or is dropped" was wrong; this table is corrected.
+- So what decides when a press is taken at KH1 is KH1's may-act test reading the playing motion's
+  windows. On our slots of KH2's motions (Attack / Combo / Magic rows at KH2) those are KH2's
+  windows (`kh2slots`, `combomods`), so the press is taken where KH2 takes it, at either Command
+  Lock setting. Assumption: that is what reads as "not vanilla"; not checked in game.
+- Diagnostic (t-next, log only, Menus): with the row at KH1, a press KH1's run refuses on a
+  command entry logs "KH1's run took no command" with Sora's state, can-act, the combo window, the
+  request and whether one of our KH2 motions plays (`cmdmenu::kh1_refused`, at most 40 lines).
+
