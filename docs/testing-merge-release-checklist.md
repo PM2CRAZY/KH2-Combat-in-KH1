@@ -44,7 +44,7 @@ Logs worth turning on: General, Menus, Combat, Forms, Magic, Sound, Effects, Ani
 
 ## 4. Anti Form
 
-- [ ] The secret code in battle with 3+ bars (and Donald and Goofy with Party Required on) starts Anti. (tm11)
+- [ ] The secret code (Up Up Down Down Left Right Left Right, then B and A on Xbox / Circle and Cross on PS; pad and keyboard; with a slip in the middle) with 3+ bars (and Donald and Goofy with Party Required on) starts Anti; if not, the Forms log says why. (tm11, tm33)
 - [ ] Rules KH2: needs 3 bars, takes 9, Revert greyed in battle; Balance: free, no Revert. (tm10)
 - [ ] ×1.5 damage taken; no magic, items or summons (greyed); no talk / examine / open. (tm10, tm14, tm17)
 - [ ] Square: Anti Glide on the ground, Side Spin mid-combo. (tm10)
@@ -65,6 +65,8 @@ Logs worth turning on: General, Menus, Combat, Forms, Magic, Sound, Effects, Ani
 
 ## 6. Items and Reflect
 
+- [ ] With Battle Quotes KH2, Sora says KH2's item line once on every item use (Items list and shortcuts, Misc Animations KH1 and KH2, on himself and on a partner), nothing when refused; Battle Quotes KH1 sounds as before. (tm34)
+
 - [ ] Drive Recovery / High Drive Recovery in battle (Recovery in Battle on): named right; the target list shows only Sora; adds +3 / +9 bars; the count drops by one; getting hit mid-use gives it back. (t1082, tm30, tm31)
 - [ ] Reflect by Story: Reflect after the first of Pot Centipede / Hercules Cup / Ice Titan, Reflera, Reflega, each with its box. (tm6)
 
@@ -82,4 +84,4 @@ Logs worth turning on: General, Menus, Combat, Forms, Magic, Sound, Effects, Ani
 - The second Keyblade's shadow (needs the exe's bytes).
 - Form effects after a room change on testing's question (arrival pose or not).
 
-_Last updated: tm32._
+_Last updated: tm34._
