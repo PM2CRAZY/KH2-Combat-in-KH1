@@ -11,6 +11,7 @@
 - [5. Assistant: Thanks. No version this round: two of these need one more th](#^m5)
 - [6. PM2CRAZY (owner, chat 2026-11-02, copied word for word): 1. a](#^m6)
 - [7. Assistant: t1085, growth abilities. Quick Run, Aerial Dodge and Dodge R](#^m7)
+- [8. PM2CRAZY (owner, chat 2026-11-05, copied word for word): 1. some kh2 moves like magnet burst don't cut out its audio ](#^m8)
 
 ---
 
@@ -141,4 +142,27 @@
 > **Question:** should a new growth ability always go in equipped, even when Sora doesn't have the AP (so it always works, as KH2's do), or stay as now, off when the AP doesn't fit?
 
 ^m7
+
+
+> [!note] Tester PM2CRAZY (owner, chat 2026-11-05, copied word for word)
+> 1. some kh2 moves like magnet burst don't cut out its audio after the move ends
+>
+> drive forms when entering a new area don't play its affects
+>
+> the second keyblade on a drive form doesn't have a shadow
+>
+> final form blizzard finisher is missing the rest of its casting (only casts one blizzard)
+>
+> final form finisher is missing its affects
+>
+> in Olympus coliseum during the win animation if your in a drive form then the game soft locks
+> 2. gummi skip completely breaks story flags
+> 3. wisdom form and final form play footsteps sfx's on the ground when they shouldn't
+>
+>
+> 1. n game scene skip should be moved to experimental along with gummi skip both being turned off as the default for now
+> 2. command lock currently doesn't turn it back to vanilla when set to kh1
+> 3. d pad left in the command menu config should be renamed to "2nd Page" with the setting being off (kh1) or on (kh2)
+
+^m8
 
