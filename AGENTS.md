@@ -1,3 +1,6 @@
+### 2026-11-05: Stage tm16 (testing-merge branch: the Page Down HUD research log taken out)
+- The owner (chat 2026-11-05): "dont implement the page down hud". tm2's one-time log of KH1's draw bytes (`win/mod.rs` `hud_draw_bytes`) taken out; `docs/kh1-hud-hide.md` kept as notes, marked not being built. Per frame: nothing.
+
 ### 2026-11-05: Stage tm15 (testing-merge branch: Reflect by Story on by default)
 - The owner (chat 2026-11-05), answer 4: Reflect by Story "on" by default. `reflect_story` defaults on (the ini's default line and a missing line); an ini that already has `reflect_story = off` (written since tm6) keeps it until the row is switched. Checked (code). `win/settings.rs`, `win/reflect.rs`. Per frame: nothing.
 

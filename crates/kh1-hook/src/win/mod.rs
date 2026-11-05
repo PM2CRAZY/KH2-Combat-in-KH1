@@ -382,28 +382,10 @@ unsafe extern "system" fn monitor(_: *mut c_void) -> u32 {
         }
         was = down;
         probe::tick(n as f32 / 20.0);
-        if n == 100 && addr::Build::current() == addr::Build::Steam {
-            hud_draw_bytes(base);
-        }
         if n == 100 || n % 2400 == 0 {
             let others: Vec<&str> = ["DBGHELP.dll", "LuaBackend.dll"].into_iter().filter(|m| !GetModuleHandleA(format!("{m}\0").as_ptr()).is_null()).collect();
             log!(General, "alive {}s; KH1 at {base:#x}; other mods loaded: {others:?}", n / 20);
         }
-    }
-}
-
-/// Research for the HUD hide key (main s312, `docs/kh1-hud-hide.md` on testing-merge): the first
-/// bytes of KH1's immediate draw on Steam (`0x1400FBB60 (count)` and the body it calls,
-/// `0x1400FBBA0`, `docs/kh1-render.md`), which the repo doesn't hold yet and a hook on it must
-/// check. Once, five seconds in, only with the General log on.
-unsafe fn hud_draw_bytes(base: usize) {
-    if !log_on(LogCat::General) || base == 0 {
-        return;
-    }
-    for rva in [0xFBB60usize, 0xFBBA0] {
-        let b = std::slice::from_raw_parts((base + rva) as *const u8, 16);
-        let hex: Vec<String> = b.iter().map(|x| format!("{x:02X}")).collect();
-        log!(General, "HUD hide research: first bytes of {:#x}: {}", 0x1_4000_0000usize + rva, hex.join(" "));
     }
 }
 

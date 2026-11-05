@@ -1,3 +1,5 @@
+> **Not being built** (the owner, testing-merge, 2026-11-05: "dont implement the page down hud"). tm16 took tm2's research log out. Kept as notes only.
+
 # Hiding KH1's field HUD with a key (inventory row 26, main s312)
 
 The owner on main: "can you also make it so that pg dn hides the hud?" (Page Down, configurable in the
