@@ -232,7 +232,10 @@ fn base_control(s: &Seen) -> u32 {
     // or not. No guard, no Aerial Dodge, no glide: KH1 sees no Square, and no jump in the air past
     // the rise (KH1's own glide), as in Valor.
     match super::form::native_form() {
-        Some(super::form::Kind::Valor) => {
+        // (Anti Form, the main-branch port's row 14: KH2's action-button handler finds no glide, roll
+        // or Quick Run (no growth ability) and no guard (none in its PTYA), so Square is its Square
+        // rows as Valor's: row 12 Side Spin in a combo, row 11 Anti Glide free on the ground.)
+        Some(super::form::Kind::Valor | super::form::Kind::Anti) => {
             let _ = super::combomods::valor_square(s, square_fresh);
             return KH1_ACTION_BIT | if air && !s.rising { KH1_JUMP_BITS } else { 0 };
         }

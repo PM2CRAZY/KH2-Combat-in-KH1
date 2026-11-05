@@ -47,6 +47,17 @@ pub fn drive_converter(count: i32, copies: u8) -> (i32, i32) {
 /// smallest a small one (KH2's `0x1405C7978` by size).
 pub const MUNNY_TYPES: [(usize, bool); 3] = [(0, false), (1, true), (2, true)];
 
+/// Anti Form's damage taken: × sstm `+0x94` (1.5), truncated (KH2 `0x1403C12F0`, a player target in
+/// form 6, before the resist and Damage Control; Checked (decomp + files)).
+pub const ANTI_DAMAGE: f32 = 1.5;
+
+pub fn anti_damage(damage: i32) -> i32 {
+    if damage <= 0 {
+        return damage;
+    }
+    (damage as f32 * ANTI_DAMAGE) as i32
+}
+
 /// Damage Control on a hit of `damage` to a target at `hp` of `max`.
 pub fn damage_control(damage: i32, hp: i32, max: i32, copies: u8) -> i32 {
     if damage <= 0 || copies == 0 || hp as f32 > max as f32 * DAMAGE_CONTROL_HP * copies as f32 {
@@ -69,6 +80,9 @@ mod tests {
         assert_eq!(drive_converter(5, 2), (1, 4));
         assert_eq!(drive_converter(5, 0), (5, 0));
         // At 30 of 120 HP (25 %): one copy halves (rounded up), above it doesn't; two copies reach 50 %.
+        assert_eq!(anti_damage(9), 13);
+        assert_eq!(anti_damage(10), 15);
+        assert_eq!(anti_damage(0), 0);
         assert_eq!(damage_control(9, 30, 120, 1), 5);
         assert_eq!(damage_control(9, 31, 120, 1), 9);
         assert_eq!(damage_control(9, 60, 120, 2), 5);

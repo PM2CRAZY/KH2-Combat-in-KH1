@@ -110,6 +110,21 @@ pub unsafe fn pay(cost: u8) -> bool {
     true
 }
 
+/// KH2's pay of `cost` bars with fewer allowed (`0x1403C2780`: the bars go to 0 when short, as
+/// Anti's 9 empties any gauge, the Drive command having greyed by the form asked for, Checked
+/// (decomp)), once the gauge holds `needs`. False below `needs`.
+pub unsafe fn pay_all(cost: u8, needs: u8) -> bool {
+    let Some(mut g) = get() else { return false };
+    if g.bars < needs {
+        return false;
+    }
+    let before = g;
+    g.pay(cost);
+    put(&g);
+    log!(Forms, "Drive gauge: {cost} bars paid ({} -> {} of {})", before.bars, g.bars, g.max);
+    true
+}
+
 /// Every bar full (KH2's refill `0x1403C2020`).
 pub unsafe fn refill(why: &str) {
     let Some(g) = get() else { return };

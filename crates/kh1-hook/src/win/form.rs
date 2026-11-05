@@ -98,6 +98,10 @@ pub enum Kind {
     /// (t1021: KH2's Master Form, form 4, `P_EX100_TRIF` moveset 4, on KH1's own states.)
     Master,
     Final,
+    /// (KH2's Anti Form, form 6, `P_EX100_HTLF` moveset 6, on KH1's own states; the main-branch
+    /// port's row 14. Not in the Drive list: KH2 lists it only with its item owned, `0x1403F3110`,
+    /// Checked (decomp); here the secret code asks for it. Its rules: `antiform`.)
+    Anti,
 }
 
 impl Kind {
@@ -105,7 +109,7 @@ impl Kind {
     /// (KH2's order, `0x1403F3110`: Valor, Wisdom, Limit, Master, then Final.)
     /// (t1033: Final in it, on KH1's own states, `drive::FORMS`' fifth.)
     pub const ALL: [Kind; 5] = [Kind::Valor, Kind::Wisdom, Kind::Limit, Kind::Master, Kind::Final];
-    const EVERY: [Kind; 5] = [Kind::Valor, Kind::Wisdom, Kind::Limit, Kind::Master, Kind::Final];
+    const EVERY: [Kind; 6] = [Kind::Valor, Kind::Wisdom, Kind::Limit, Kind::Master, Kind::Final, Kind::Anti];
     pub fn name(self) -> &'static str {
         match self {
             Kind::Valor => "Valor Form",
@@ -113,6 +117,7 @@ impl Kind {
             Kind::Limit => "Limit Form",
             Kind::Master => "Master Form",
             Kind::Final => "Final Form",
+            Kind::Anti => "Anti Form",
         }
     }
     fn code(self) -> u8 {
@@ -129,6 +134,7 @@ impl Kind {
             Kind::Limit => kh2.limit_form.as_ref(),
             Kind::Master => kh2.master.as_ref(),
             Kind::Final => kh2.final_form.as_ref(),
+            Kind::Anti => kh2.anti.as_ref(),
         }
     }
     /// With a second Keyblade (Valor's slot's; Master's floating one, t1024: `W_EX010_TRIF_L`,
@@ -145,13 +151,15 @@ impl Kind {
             Kind::Limit => "P_EX100_KH1F",
             Kind::Master => "P_EX100_TRIF",
             Kind::Final => "P_EX100_ULTF",
+            // (KH2's moveset 6, `kh2_data::sora::FORMS[5]`.)
+            Kind::Anti => "P_EX100_HTLF",
         }
     }
     /// Runs on KH1's own states where it can (`native_ok`): its moves baked into KH1 slots
     /// (`kh2slots::FORM_SLOTS`), its numbers on KH1's states. The others can't be entered (t873: refused, no KH2 controller).
     /// (t1033: Final too, `kh2slots::FINAL_SPECS`.)
     pub fn native_capable(self) -> bool {
-        matches!(self, Kind::Valor | Kind::Wisdom | Kind::Limit | Kind::Master | Kind::Final)
+        matches!(self, Kind::Valor | Kind::Wisdom | Kind::Limit | Kind::Master | Kind::Final | Kind::Anti)
     }
     /// Its growth ability (KH2's form growth: Valor High Jump, Wisdom Quick Run, Limit Dodge Roll
     /// (fmlv form 3, Checked (files)), Master Aerial Dodge (fmlv form 4, Checked (files)), Final
@@ -163,6 +171,8 @@ impl Kind {
             Kind::Limit => "Dodge Roll",
             Kind::Master => "Aerial Dodge",
             Kind::Final => "Glide",
+            // (Anti: none, no fmlv levels of its own, `antiform`.)
+            Kind::Anti => "no growth ability",
         }
     }
     /// (t1027) Casts KH2's Fire, Blizzard, Thunder, Cure (and Reflect) on KH1's cast state with its
@@ -241,6 +251,11 @@ pub fn in_valor() -> bool {
 /// In Final Form.
 pub fn in_final() -> bool {
     current() == Some(Kind::Final)
+}
+
+/// In Anti Form.
+pub fn in_anti() -> bool {
+    current() == Some(Kind::Anti)
 }
 
 /// In a form with a second Keyblade (Valor, Master, Final).
@@ -357,7 +372,8 @@ pub fn set_gauge_cost(on: bool) {
 /// testing's MP (more than 3).
 unsafe fn can_pay(sora: usize, kind: Kind) -> Result<(), String> {
     if gauge_cost() {
-        let cost = super::limitform::cost(super::formown::form_id(kind));
+        // (Anti: `antiform::needs`, KH2's greying by the form asked for, or nothing on Balance.)
+        let cost = if kind == Kind::Anti { super::antiform::needs() } else { super::limitform::cost(super::formown::form_id(kind)) };
         let have = super::drivegauge::bars();
         if have < cost {
             return Err(format!("Drive gauge {have} of {cost} bars"));
@@ -365,6 +381,9 @@ unsafe fn can_pay(sora: usize, kind: Kind) -> Result<(), String> {
         return Ok(());
     }
     let have = mp(sora);
+    if kind == Kind::Anti && super::antiform::balance() {
+        return Ok(());
+    }
     if have <= COST_MP {
         return Err(format!("MP {have}: it costs {COST_MP} and needs some left to run on"));
     }
@@ -383,6 +402,11 @@ static ORB_GAIN: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::ne
 pub fn orb(value: u8) -> bool {
     if !in_form() || form_gauge().is_none() {
         return false;
+    }
+    // (Anti Form: KH2's add turns a gain into a loss in form 6, `0x1403C0B50`, Checked (decomp).)
+    if in_anti() {
+        HIT_LOSS.fetch_add((value as f32 * crate::drivegauge::ORB_TICKS * 100.0) as u32, Ordering::Relaxed);
+        return true;
     }
     ORB_GAIN.fetch_add((value as f32 * crate::drivegauge::ORB_TICKS * 100.0) as u32, Ordering::Relaxed);
     true
@@ -519,7 +543,8 @@ pub unsafe fn usable(sora: usize, kind: Kind) -> bool {
         return false;
     }
     if in_form() {
-        return true;
+        // (Anti Form's Revert: `antiform::revert_allowed`, KH2's greyed in battle, Balance never.)
+        return !in_anti() || super::antiform::revert_allowed();
     }
     pose::kh2().is_some_and(|k| kind.data(k).is_some()) && super::shared::active() && sora > 0x10000 && can_pay(sora, kind).is_ok() && own_needs(kind).is_ok()
 }
@@ -544,7 +569,7 @@ unsafe fn own_needs(kind: Kind) -> Result<(), String> {
         Kind::Valor => super::valor::keyblade().map(|_| ()).ok_or_else(|| "no Keyblade for the second hand (one Sora owns that isn't equipped)".into()),
         // (Master, t1024: its second Keyblade is Sora's own until its M: slot, the owner's empty-slot
         // rule, round 11 answer 1 (a), so it needs nothing; t1025: an empty M: slot is the same.)
-        Kind::Wisdom | Kind::Limit | Kind::Master | Kind::Final => Ok(()),
+        Kind::Wisdom | Kind::Limit | Kind::Master | Kind::Final | Kind::Anti => Ok(()),
     }
 }
 
@@ -554,6 +579,9 @@ pub unsafe fn choose(sora: usize, kind: Kind) -> Result<&'static str, String> {
         return Err("a change is under way".into());
     }
     if in_form() {
+        if in_anti() && !super::antiform::revert_allowed() {
+            return Err(format!("no Revert from Anti Form {}", if super::antiform::balance() { "(Balance rules)" } else { "in battle (KH2)" }));
+        }
         REQUEST.store(2, Ordering::Relaxed);
         return Ok("Revert");
     }
@@ -630,7 +658,8 @@ pub fn form_abilities(sora: &Abilities, form: &Character, kind: Kind) -> Abiliti
         // its repel clip D350 with none (ranges 3 / 14 and a trail only, Checked (files)
         // `P_EX100_TRIF.mset`), and KH2's Master has no guard row (PTYA set 4, Checked (files)). The
         // clip's presence alone gave every form a guard.
-        guard: form.moveset.clips.get(&character_core::motion::GUARD).is_some_and(|c| c.windows.iter().any(|w| matches!(w.kind, character_core::WindowKind::Guard { .. }))),
+        // (Anti: none, its PTYA has no guard row, Checked (files); main's s283.)
+        guard: kind != Kind::Anti && form.moveset.clips.get(&character_core::motion::GUARD).is_some_and(|c| c.windows.iter().any(|w| matches!(w.kind, character_core::WindowKind::Guard { .. }))),
         // (Sora's Aerial Recovery in the form, with its own recovery motion: the user, Wisdom and
         // Valor were "missing aerial recovery".)
         aerial_recovery: sora.aerial_recovery && form.moveset.clips.contains_key(&character_core::motion::AIR_RECOVERY),
@@ -675,6 +704,8 @@ fn form_growth(a: &mut Abilities, sora: &Abilities, kind: Kind) {
                 Kind::Limit => sora.dodge_roll.max(learned.dodge_roll),
                 Kind::Master => sora.aerial_dodge.max(learned.aerial_dodge),
                 Kind::Final => sora.glide.max(learned.glide),
+                // (Anti: no growth ability, `antiform`.)
+                Kind::Anti => return,
             };
             crate::growth::one_above(base)
         }
@@ -688,6 +719,8 @@ fn form_growth(a: &mut Abilities, sora: &Abilities, kind: Kind) {
         // level, Checked (files); its record `formexp::MASTER_LEVEL_OFF`.)
         Kind::Master => a.aerial_dodge = g,
         Kind::Final => a.glide = g,
+        // (Anti: no growth ability, `antiform`.)
+        Kind::Anti => {}
     }
 }
 
@@ -704,6 +737,8 @@ unsafe fn drain_step(d: &mut Drive, actor: usize, battle: bool) {
             Kind::Master => Some(super::tint::Look::Master),
             // (Final's look, the owner's carried answer, main's white spec, t1041.)
             Kind::Final => Some(super::tint::Look::Final),
+            // (Anti's look, KH1 Anti-Sora's textures, isn't built: KH1 Sora's own for now.)
+            Kind::Anti => None,
         }),
     );
     // Valor's second Keyblade's Strength and MP (and back to Sora's own after).
@@ -949,6 +984,7 @@ pub unsafe fn native_frame(kh2: &pose::Kh2, actor: usize, battle: bool, steps: u
     if !NATIVE.load(Ordering::Relaxed) {
         return;
     }
+    super::antiform::note_battle(battle);
     // (Row 21, t965: KH2's blur waits 30 frames into the change and fades over 20 after it.)
     super::drivedim::frame(steps);
     // (Limit Form's Trinity Limit row, t977: KH1's offer kept to Trinity.)
@@ -1054,14 +1090,18 @@ unsafe fn native_start(d: &mut Drive, actor: usize) {
     let before = mp(actor);
     // (Form Cost, t933: the Drive gauge's bars, KH2's pay `0x1403C2780`, no MP; or testing's MP.)
     if gauge_cost() {
-        if !super::drivegauge::pay(super::limitform::cost(super::formown::form_id(kind))) {
+        // (Anti: `antiform::pay_gauge`, KH2's 9 with fewer allowed, or free on Balance.)
+        let paid = if kind == Kind::Anti { super::antiform::pay_gauge() } else { super::drivegauge::pay(super::limitform::cost(super::formown::form_id(kind))) };
+        if !paid {
             log!(Forms, "Drive ({}): the Drive gauge is short", kind.name());
             return;
         }
         PAID_GAUGE.store(true, Ordering::Relaxed);
     } else {
         PAID_GAUGE.store(false, Ordering::Relaxed);
-        super::reflect::pay_mp(actor, COST);
+        if !(kind == Kind::Anti && super::antiform::balance()) {
+            super::reflect::pay_mp(actor, COST);
+        }
     }
     heal_full(actor);
     if mp_refill() {
@@ -1094,7 +1134,8 @@ unsafe fn native_arrive(d: &mut Drive, kh2: &pose::Kh2, actor: usize) {
     // (Form Cost on the Drive gauge, t933: KH2's form gauge, (form level + 3) bars of 600 ticks,
     // `0x1403C17C0`; the level after `formexp::entered` below, so Lv1 the first time.)
     let gauge = PAID_GAUGE.swap(false, Ordering::Relaxed).then(|| {
-        let level = super::formexp::record(kind).level.max(1);
+        // (Anti: its own level 3, `antiform::LEVEL`, no form record.)
+        let level = if kind == Kind::Anti { super::antiform::LEVEL } else { super::formexp::record(kind).level.max(1) };
         let full = crate::drivegauge::form_ticks(level);
         (full, full)
     });
@@ -1112,7 +1153,10 @@ unsafe fn native_arrive(d: &mut Drive, kh2: &pose::Kh2, actor: usize) {
     if kind.two_blades() {
         super::valor::started();
     }
-    super::formexp::entered(kind);
+    // (Anti has no record, no EXP and isn't an owned form: KH2 has no form-EXP adder for form 6.)
+    if kind != Kind::Anti {
+        super::formexp::entered(kind);
+    }
     let rec = super::formexp::record(kind);
     // (Valor's slots on his requests from now: before its arrival is asked.)
     super::kh2slots::refresh();
@@ -1138,6 +1182,7 @@ fn growth_name(a: &Abilities, kind: Kind) -> &'static str {
         Kind::Limit => a.dodge_roll,
         Kind::Master => a.aerial_dodge,
         Kind::Final => a.glide,
+        Kind::Anti => 0,
     };
     ["none", "LV1", "LV2", "LV3", "MAX"][(level as usize).min(4)]
 }

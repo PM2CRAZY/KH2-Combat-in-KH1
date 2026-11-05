@@ -215,7 +215,7 @@ pub const NO_ROW: u8 = u8::MAX;
 /// his body, `P_EX100.mset`, Checked (files)) and Valor's arrival 53 (6 frames, guard and
 /// invulnerable all through, `P_EX100_BTLF.mset`, Checked (files)), their requests only, on KH1's
 /// ground swing as template (its sounds left out: KH2's own play, `kh2slots::tick`).
-pub const OURS: [Ours; 66] = [
+pub const OURS: [Ours; 67] = [
     Ours { name: "Upper Slash", kh2_row: 12, motion: 161, kind: Kind::Swing, rises: false, guard_break: false, attack: true, next_finisher: false, frames: None, own_sounds: false, combo: false, template: None, valor: false },
     Ours { name: "Finishing Leap", kh2_row: 37, motion: 167, kind: Kind::AirFinisher, rises: true, guard_break: false, attack: true, next_finisher: false, frames: None, own_sounds: false, combo: false, template: None, valor: false },
     Ours { name: "Horizontal Slash", kh2_row: 38, motion: 193, kind: Kind::AirSwing, rises: false, guard_break: false, attack: true, next_finisher: false, frames: None, own_sounds: false, combo: false, template: None, valor: false },
@@ -326,7 +326,22 @@ pub const OURS: [Ours; 66] = [
     // Checked (files)). Appended, so no other row's request moves.
     combo("154 (air finisher)", 154, Kind::AirFinisher),
     combo("153 (finisher)", 153, Kind::Finisher),
+    // (Anti Form's Anti Glide: its PTYA row 11 is motion 173 (where Sora's guard is), Square from a
+    // free state on the ground through KH2's action-button handler `0x1403A81F0` (Checked (decomp)),
+    // `combomods::valor_square`'s row 11; research round 12, Anti's PTYA, Checked (files). Sora's
+    // own guard 173 keeps its row "Guard" (not an attack, its request only). Built only from Anti's
+    // moveset (`only_for`), so no other form's or Sora's 173 lands on it. Appended, so no other
+    // row's request moves.)
+    combo(ANTI_GLIDE, 173, Kind::Swing),
 ];
+
+/// Anti Form's Anti Glide row of ours (`OURS`).
+pub const ANTI_GLIDE: &str = "Anti Glide";
+
+/// A row of ours built from one Drive Form's moveset only (`kh2slots::prepare`): Anti's Anti Glide.
+pub fn only_for(o: &Ours) -> Option<super::form::Kind> {
+    (o.name == ANTI_GLIDE).then_some(super::form::Kind::Anti)
+}
 
 /// Master Form's own air swing (`OURS` "185", t1022).
 pub const MASTER_SWING_MOTION: u16 = 185;

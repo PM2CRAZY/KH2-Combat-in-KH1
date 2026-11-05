@@ -111,15 +111,22 @@ unsafe extern "system" fn hit_hp(target: usize, record: usize) -> u32 {
     let Some((_, before, max)) = hp(target) else { return f(target, record) };
     let c = copies();
     // Damage Control (t957): the record's damage halved for KH1's call, then KH1's back.
+    // (Anti Form: × 1.5 first, KH2's order in `0x1403C12F0`, `rules::anti_damage`.)
     let damage = rd::<i32>(record + RECORD_DAMAGE);
-    let lowered = rules::damage_control(damage, before, max, c[2]);
+    let anti = super::form::in_anti();
+    let taken = if anti { rules::anti_damage(damage) } else { damage };
+    let lowered = rules::damage_control(taken, before, max, c[2]);
     if lowered != damage {
         wr(record + RECORD_DAMAGE, lowered);
     }
     let r = f(target, record);
     if lowered != damage {
         wr(record + RECORD_DAMAGE, damage);
-        note(|| format!("Damage Control: {damage} -> {lowered} at {before} of {max} HP ({} copies)", c[2]));
+        if anti {
+            note(|| format!("Anti Form: damage {damage} -> {taken} (x1.5){}", if lowered != taken { format!(", Damage Control -> {lowered}") } else { String::new() }));
+        } else {
+            note(|| format!("Damage Control: {damage} -> {lowered} at {before} of {max} HP ({} copies)", c[2]));
+        }
     }
     // Damage Drive (t954): the HP lost, out of a form, on the gauge that pays for the forms.
     if c[0] > 0 && !super::form::in_form() && super::form::gauge_cost() {

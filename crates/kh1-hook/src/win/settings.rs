@@ -608,6 +608,10 @@ pub struct Settings {
     /// A limit's move off a ledge KH1's way (`limit_ledges = kh1`: he falls and the limit ends; `kh2`,
     /// KH2's edge stop, by default); Config: Drive > Limit > Ledges, t1011; `limitform::ledges_kh1`.
     pub limit_ledges_kh1: bool,
+    /// Anti Form's rules are the owner's from the main branch (`anti_rules = balance`: free, no
+    /// Revert; `kh2`, KH2's cost and Revert, by default); Config: Drive > Anti > Rules;
+    /// `antiform::balance`.
+    pub anti_balance: bool,
     /// Where Drive Recovery items come from (`drive_recovery_sources = on`, the default; main's design);
     /// Config: Progression > Drive Recovery, t950; `driveitems::sources`.
     pub drive_recovery_sources: bool,
@@ -900,6 +904,7 @@ fn load(first: bool) -> Option<Settings> {
         limit_cost_three: on(&text, "limit_cost", "3", false),
         limit_trinity: on(&text, "limit_trinity", "on", false),
         limit_ledges_kh1: setting(&text, "limit_ledges").is_some_and(|v| v == "kh1"),
+        anti_balance: setting(&text, "anti_rules").is_some_and(|v| v == "balance"),
         drive_recovery_sources: on(&text, "drive_recovery_sources", "on", true),
         valor_left_blade: on(&text, "valor_left_blade", "on", true),
         styles: {

@@ -28,6 +28,10 @@ pub mod form {
     pub const LIMIT: u8 = 3;
     pub const MASTER: u8 = 4;
     pub const FINAL: u8 = 5;
+    /// Anti Form (KH2's form 6, `+0xDE0 == 6`: `docs/kh1-forms-research-r12.md`, Anti Form). No
+    /// fmlv levels of its own (its fmlv rows are the Anti chance table) and not counted for the
+    /// level cap (`0x1403E88B0`, Checked (decomp)).
+    pub const ANTI: u8 = 6;
 }
 
 /// The highest form level (KH2: 2 + 5 forms owned).

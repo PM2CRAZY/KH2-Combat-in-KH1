@@ -387,7 +387,7 @@ pub struct FormSlots {
     ours: &'static [u16],
 }
 
-pub const FORM_SLOTS: [FormSlots; 5] = [
+pub const FORM_SLOTS: [FormSlots; 6] = [
     FormSlots { kind: super::form::Kind::Valor, specs: &VALOR_SPECS, ours: &[] },
     // (Wisdom's Quick Run, its growth ability: its own 203 and its stop 204 on our Quick Run rows,
     // `quickrun`; its own Reflect 71 / 72 / 73 on our Reflect rows, `reflect::native_path`.)
@@ -420,6 +420,44 @@ pub const FORM_SLOTS: [FormSlots; 5] = [
         specs: &FINAL_SPECS,
         ours: &[character_core::motion::AIR_RECOVERY, character_core::motion::GLIDE_HOVER, super::reflect::GROUND_MOTION, super::reflect::FINISHER_MOTION, super::reflect::AIR_MOTION],
     },
+    // (Anti, the main-branch port's row 14: its Square moves on rows of ours, `combomods::valor_square`
+    // as Valor's: Side Spin 161, its PTYA row 12, on Upper Slash's row (Sora's row 12, motion 161,
+    // `kh1rows` "Upper Slash"); Anti Glide 173, its row 11, on our row "Anti Glide" (a combo row of
+    // ours, `form_combo`, only Anti's, `kh1rows::only_for`).)
+    FormSlots { kind: super::form::Kind::Anti, specs: &ANTI_SPECS, ours: &[161] },
+];
+
+/// Anti Form's motions on KH1's own requests (the main-branch port's row 14), each the same KH1
+/// request and template as base Sora's move of that kind, from `P_EX100_HTLF.mset` (moveset 6). Its
+/// PTYA (research round 12, Checked (files) `00battle.bin`): 13 rows, ground 154 / 155 and 153 /
+/// 152 / 151, air 182 / 181, finishers 184 / 183 (flag 5), row 11 173 (Anti Glide), row 12 161 (Side
+/// Spin), no guard row. As Valor's and Limit's: 152 on 0xC9, 151 on 0xC8 / 0xCA, 154 on 0xCB,
+/// 181..183 on 0xCC..0xCE (its other picks on our combo rows). Its jump is 3 on both takeoffs (no
+/// growth ability, so KH2's jump start plays no 201, `0x140422630`, Checked (decomp)). No item use
+/// (KH2's Items are off in Anti, the cmd form mask, Checked (files)), no roll, no glide, no casts.
+/// **Assumption**: `P_EX100_HTLF.mset` holds these motions (the file wasn't staged for the research);
+/// a spec whose clip isn't in it isn't built (`form_has`), and the load logs what it found.
+const ANTI_SPECS: [Spec; 20] = [
+    Spec { motion: 152, stands_for: 99, request: 0xC9, kind: Kind::GroundCombo },
+    Spec { motion: 151, stands_for: 98, request: 0xC8, kind: Kind::GroundCombo },
+    Spec { motion: 151, stands_for: 100, request: 0xCA, kind: Kind::GroundCombo },
+    Spec { motion: 154, stands_for: 101, request: 0xCB, kind: Kind::GroundCombo },
+    Spec { motion: 181, stands_for: 102, request: 0xCC, kind: Kind::AirCombo },
+    Spec { motion: 182, stands_for: 103, request: 0xCD, kind: Kind::AirCombo },
+    Spec { motion: 183, stands_for: 104, request: 0xCE, kind: Kind::AirCombo },
+    reaction_spec(0),
+    reaction_spec(1),
+    reaction_spec(2),
+    reaction_spec(3),
+    reaction_spec(4),
+    reaction_spec(5),
+    recoil_spec(0),
+    recoil_spec(1),
+    FALL,
+    jump_spec(0),
+    Spec { motion: character_core::motion::JUMP, stands_for: 12, request: 0x9, kind: Kind::Jump },
+    LAND,
+    CHEST,
 ];
 
 /// Final Form's motions on KH1's own requests (t1033, plan row t1033 of Final's research round 2,
@@ -784,7 +822,8 @@ pub fn prepare(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, mut cac
         let base_rows = &kh2.character.moveset.combo_rows;
         let ours_motions = |o: &super::kh1rows::Ours| -> Vec<u16> {
             // (A Valor-only move, its arrival: built from Valor's moveset only, below.)
-            if o.valor || !wanted(o.motion) || (o.combo && (!combo_ok.contains(&o.motion) || !super::kh1rows::combo_in(o, base_rows))) {
+            // (A row of one form's own, `kh1rows::only_for`: never base Sora's.)
+            if o.valor || super::kh1rows::only_for(o).is_some() || !wanted(o.motion) || (o.combo && (!combo_ok.contains(&o.motion) || !super::kh1rows::combo_in(o, base_rows))) {
                 return Vec::new();
             }
             let mut motions = vec![o.motion];
@@ -817,7 +856,7 @@ pub fn prepare(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, mut cac
         // build as by their motions before).)
         let form_combo = |v: &pose::Src, o: &super::kh1rows::Ours| -> bool { super::kh1rows::combo_in(o, v.character.moveset.combo_rows.iter().filter(|r| r.ability == 0)) };
         let form_ours = |f: &FormSlots, v: &pose::Src, o: &super::kh1rows::Ours| -> Vec<u16> {
-            if !wanted(o.motion) {
+            if !wanted(o.motion) || super::kh1rows::only_for(o).is_some_and(|k| k != f.kind) {
                 return Vec::new();
             }
             if o.valor || f.ours.contains(&o.motion) {

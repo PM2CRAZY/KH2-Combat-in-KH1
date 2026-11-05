@@ -295,6 +295,8 @@ enum Row {
     LimitTrinity,
     /// Drive > Limit > Ledges (KH2 | KH1, `limitform::ledges_kh1`, t1011).
     LimitLedges,
+    /// Drive > Anti > Rules (Balance | KH2, `antiform::balance`; the main-branch port's row 14).
+    AntiRules,
 }
 
 /// A row of one of our lists: a setting (label, left value, right value, help, what it switches),
@@ -369,8 +371,10 @@ enum List {
     /// Drive > Limit: Limit Form's settings (the owner, the main-branch port's round 12: "all of
     /// limits settings will be under a sub menu called limit in the drive submenu"; t972).
     Limit,
+    /// Drive > Anti: Anti Form's settings (as Limit's, the main-branch port's row 14).
+    Anti,
 }
-const LISTS: [List; 14] = [List::Top, List::Camera, List::Combat, List::Magic, List::Movement, List::Misc, List::MagicAnim, List::Tweaks, List::QoL, List::Cosmetics, List::CommandMenu, List::Progression, List::Drive, List::Limit];
+const LISTS: [List; 15] = [List::Top, List::Camera, List::Combat, List::Magic, List::Movement, List::Misc, List::MagicAnim, List::Tweaks, List::QoL, List::Cosmetics, List::CommandMenu, List::Progression, List::Drive, List::Limit, List::Anti];
 
 impl List {
     fn index(self) -> usize {
@@ -383,7 +387,7 @@ impl List {
             List::Magic => Some(List::Combat),
             List::MagicAnim => Some(List::Magic),
             List::Tweaks => Some(List::Combat),
-            List::Limit => Some(List::Drive),
+            List::Limit | List::Anti => Some(List::Drive),
             _ => Some(List::Top),
         }
     }
@@ -435,6 +439,7 @@ impl List {
             List::Progression => &PROGRESSION,
             List::Drive => &DRIVE,
             List::Limit => &LIMIT,
+            List::Anti => &ANTI,
         }
     }
 }
@@ -492,14 +497,19 @@ const PROGRESSION: [Item; 4] = [
 // forms"; KH2 by default; t958.)
 // (Limits in Forms: round 9 answer 2 (b), KH1's limits in forms as a toggle; KH2 by default; t963.)
 // (Limit: the owner's sub menu for Limit Form's settings, t972; Limits in Forms moved into it.)
-const DRIVE: [Item; 6] = [
+// (Anti: the owner's rule, `docs/main-port-inventory.md`: "Anti free / no revert goes behind the
+// balance toggle"; a sub menu of its own as Limit's.)
+const DRIVE: [Item; 7] = [
     Item::Set([0x7F00_0246, 0x7F00_0247, 0x7F00_0248, 0x7F00_0249], Row::FormCost),
     Item::Set([0x7F00_024A, 0x7F00_011D, 0x7F00_0003, 0x7F00_024B], Row::GaugeRefill),
     Item::Set([0x7F00_0244, 0x7F00_011D, 0x7F00_011E, 0x7F00_0245], Row::DriveMpRefill),
     Item::Set([0x7F00_024E, 0x7F00_011D, 0x7F00_011E, 0x7F00_024F], Row::RecoveryBattle),
     Item::Set([0x7F00_0252, 0x7F00_011D, 0x7F00_0003, 0x7F00_0253], Row::PartyRequired),
     Item::Open(0x7F00_0256, 0x7F00_0257, List::Limit),
+    Item::Open(0x7F00_0267, 0x7F00_0268, List::Anti),
 ];
+// (Rules: KH2 by default, on the right as on every other row; Balance the owner's main-branch rule.)
+const ANTI: [Item; 1] = [Item::Set([0x7F00_0269, 0x7F00_026A, 0x7F00_0003, 0x7F00_026B], Row::AntiRules)];
 // (Cost: round 12 answer 2 (c), KH2's 4 bars by default, the owner's 3 behind this row.)
 // (Trinity Limit: round 12 answer 1, "make a toggle for limit to be able to used the 5th kh1 trinity"; off by default; t977.)
 // (Ledges: the owner, t1001 round, question 4: "Config toggle, KH2 default"; t1011.)
@@ -639,7 +649,7 @@ const BUTTON_HELP: u32 = 0x7F00_0202;
 /// Misc's help, and the same without the debug menu (its row isn't there without the debug tools).
 const MISC_HELP: u32 = 0x7F00_020C;
 const MISC_HELP_NO_DEBUG: &str = "Battle quotes.";
-const STRINGS: [(u32, &str); 178] = [
+const STRINGS: [(u32, &str); 183] = [
     (0x7F00_0201, "KH1 in KH2"),
     (0x7F00_0202, "Choose KH1's or KH2's camera, combat, movement and more."),
     (0x7F00_0203, "Camera"),
@@ -729,6 +739,11 @@ const STRINGS: [(u32, &str); 178] = [
     (0x7F00_0256, "Limit"),
     (0x7F00_0257, "Limit Form's settings: its cost, and KH1's limits in a form."),
     (0x7F00_0258, "Cost"),
+    (0x7F00_0267, "Anti"),
+    (0x7F00_0268, "Anti Form's settings: its rules."),
+    (0x7F00_0269, "Rules"),
+    (0x7F00_026A, "Balance"),
+    (0x7F00_026B, "KH2: Anti Form needs 3 Drive bars and takes 9 (all it has), and Revert\nis greyed in battle, as in KH2. Balance: free, and no Revert (main branch)."),
     (0x7F00_025D, "Ledges"),
     (0x7F00_025E, "KH2: a limit's move keeps Sora on a ledge while KH2's edge stop holds him, and\nthe limit goes on. KH1: off a ledge he falls and the limit ends, as KH1's limits."),
     (0x7F00_025B, "Trinity Limit"),
@@ -863,6 +878,7 @@ fn value(what: Row) -> bool {
         Row::LimitCost => !super::limitform::three_bars(),
         Row::LimitTrinity => super::limitform::trinity(),
         Row::LimitLedges => !super::limitform::ledges_kh1(),
+        Row::AntiRules => !super::antiform::balance(),
     }
 }
 
@@ -918,6 +934,7 @@ fn set(what: Row, v: bool) {
         Row::LimitCost => super::limitform::set_three_bars(!v),
         Row::LimitTrinity => super::limitform::set_trinity(v),
         Row::LimitLedges => super::limitform::set_ledges_kh1(!v),
+        Row::AntiRules => super::antiform::set_balance(!v),
     }
 }
 

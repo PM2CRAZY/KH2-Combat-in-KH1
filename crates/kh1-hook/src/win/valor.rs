@@ -127,7 +127,7 @@ pub unsafe fn second_keyblade(base: usize) -> Option<u8> {
         super::form::Kind::Final => super::equip::final_keyblade(base),
         super::form::Kind::Valor => super::equip::valor_keyblade(base),
         super::form::Kind::Master => master_keyblade(),
-        super::form::Kind::Wisdom | super::form::Kind::Limit => None,
+        super::form::Kind::Wisdom | super::form::Kind::Limit | super::form::Kind::Anti => None,
     }
 }
 

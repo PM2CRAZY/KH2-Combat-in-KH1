@@ -422,3 +422,30 @@ Tags: Checked (decomp) = Steam KH2 kh2.c / KH1 kh1.c; (files) = 00battle.bin / 0
 - The code gives Final today in its text only. Final then needs the Drive list once owned.
 - "Every start" texmap against the build-once rule.
 - The Anti chance needs both partners (`0x140400740(6)`). With Party Required Off it's undecided whether the roll still needs them.
+
+## Anti Form on testing-merge: what is built (main-port row 14)
+
+**1. The form and its rules** (`win/form.rs` `Kind::Anti`, `win/antiform.rs`, `kh2slots::ANTI_SPECS`):
+- Form 6 on the shared framework: `P_EX100_HTLF` (kh2-data `FORMS[5]`, moveset 6) loaded from the
+  player's KH2 files and baked onto KH1's requests like the other forms (`ANTI_SPECS`: 151 / 152 / 154
+  ground, 181..183 air, reactions, recoils, fall / jump 3 / landing, chest). Its load logs its motions
+  and PTYA rows (`KH2 Anti Form loaded: ...`). Not in the Drive list (KH2 lists it only with its item,
+  `0x1403F3110`, Checked (decomp)). Assumption: HTLF has the clips; a spec without a clip isn't built.
+- Square, as Valor's path (`combomods::valor_square`): row 12 Side Spin 161 on Upper Slash's row of
+  ours; row 11 Anti Glide 173 on a new row of ours "Anti Glide" (appended, built from Anti's moveset
+  only: `kh1rows::only_for`; Sora's guard 173 keeps its own row). Checked (files, research) for the rows.
+- Rules (Config > Drive > Anti > Rules, KH2 by default; Balance = main's s272):
+  - KH2: on the Drive gauge needs 3 bars and pays 9 (`drivegauge::pay_all`, the gauge to 0 when short,
+    `0x1403C2780`); on MP, testing's 3 MP. Revert greyed in battle only (`0x1403F29E0`). Balance: free,
+    no Revert (the gauge running out or a knock-out still revert).
+  - Form gauge level 3 (sstm `+0x8C` − 2): 3600 ticks. Orbs drain it (`0x1403C0B50`).
+  - Damage taken × 1.5, truncated, before Damage Control (`drivesupport::anti_damage`, KH1's hit HP
+    hook `0x1402BEEE0`, `0x1403C12F0`).
+  - No guard, no growth, no form record / EXP (and not given as an owned form).
+  - Magic and Items greyed and blocked in the top menu; spells refused as in Valor.
+- Not built (needs): the Anti counter and roll (free save bytes: an exe search, `+0x881..+0x887` and
+  `+0x890..+0x893` are taken); HP orbs not picked up in Anti (a KH1 prize-pickup hook point, not
+  located); KH1's Summon refused (KH2's mask bit is an Assumption); its effect package
+  (`P_EX100_HTLF.a.us` as a `kh2dpx::Pkg`); the KH2 player model's body (`model.rs`); the ledge hang
+  (KH1's hang / climb request ids for a form spec, not in the repo); no Keyblade or trail (KH1's weapon
+  draw and trail flags, not located).

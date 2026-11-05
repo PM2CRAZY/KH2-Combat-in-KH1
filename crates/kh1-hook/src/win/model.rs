@@ -331,7 +331,8 @@ fn body(lib: &Library) -> Option<Arc<Loaded>> {
         Some(Kind::Limit) => 4,
         // (t1029: Master's own KH2 model, as Valor's / Limit's are theirs.)
         Some(Kind::Master) => 5,
-        None => 0,
+        // (Anti Form: its KH2 model `P_EX100_HTLF` isn't loaded here: base Sora's.)
+        Some(Kind::Anti) | None => 0,
     };
     lib.bodies[i].clone().or_else(|| lib.bodies[0].clone())
 }

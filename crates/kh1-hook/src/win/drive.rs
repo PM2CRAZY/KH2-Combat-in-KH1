@@ -202,12 +202,21 @@ pub unsafe fn fill(actor: usize, _flags: usize) {
     limit_shortcuts(base, actor, limit);
     if limit {
         limit_list(base, actor);
-    } else if super::form::in_valor() || super::form::in_limit() {
+    } else if super::form::in_valor() || super::form::in_limit() || super::form::in_anti() {
         let top = base + MENU_RVA;
         if rd::<u8>(top + 0x14 + 1) == 2 {
             for off in [4usize, 8] {
                 wr(top + off, rd::<u32>(top + off) | 2);
             }
+        }
+    }
+    // (Anti Form: no Items either, KH2's cmd form mask (Items off in Anti only, Checked (files)):
+    // the top's third row, Items, greyed and blocked as Magic is. **Assumption**: KH1's blocked bit
+    // keeps the Items list from opening as it does the magic list's.)
+    if super::form::in_anti() {
+        let top = base + MENU_RVA;
+        for off in [4usize, 8] {
+            wr(top + off, rd::<u32>(top + off) | 4);
         }
     }
     if !super::cmdmenu::drive_shown() || !ensure_records(base) {

@@ -85,6 +85,7 @@ fn kh2_form(kind: Kind) -> u8 {
         Kind::Limit => formlevel::form::LIMIT,
         Kind::Master => formlevel::form::MASTER,
         Kind::Final => formlevel::form::FINAL,
+        Kind::Anti => formlevel::form::ANTI,
     }
 }
 
@@ -98,6 +99,9 @@ fn slot(kind: Kind) -> Option<usize> {
         // (Master, t1026: its own record; before it, LV1 by `Record::default`.)
         Kind::Master => Some(MASTER_LEVEL_OFF),
         Kind::Final => Some(FORM_LEVELS_OFF + 4),
+        // (Anti: no form level or EXP, KH2 has no adder for form 6; its Anti counter (KH2's record 6
+        // `+4`) waits for free save bytes, `docs/kh1-forms-research-r12.md`.)
+        Kind::Anti => None,
     }
 }
 

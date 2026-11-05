@@ -777,6 +777,8 @@ fn desired() -> Vec<(Pkg, String)> {
             super::form::Kind::Limit => Pkg::Limit,
             // (t1028: Master's archive, as Limit's.)
             super::form::Kind::Master => Pkg::Master,
+            // (Anti Form: no package of its own built yet, `P_EX100_HTLF.a.us`.)
+            super::form::Kind::Anti => continue,
         };
         v.push((pkg, String::new()));
     }

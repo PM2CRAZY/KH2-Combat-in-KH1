@@ -71,6 +71,7 @@ pub fn form_id(kind: Kind) -> u8 {
         Kind::Limit => formlevel::form::LIMIT,
         Kind::Master => formlevel::form::MASTER,
         Kind::Final => formlevel::form::FINAL,
+        Kind::Anti => formlevel::form::ANTI,
     }
 }
 
