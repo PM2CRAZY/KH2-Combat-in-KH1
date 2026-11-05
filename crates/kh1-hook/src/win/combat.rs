@@ -587,12 +587,12 @@ unsafe fn command_step(actor: usize, dir: usize) {
         cmd_log(|| format!("command {kind:#x} ({full:08x}) refused: KH1's limits aren't used in a Drive Form (Limits in Forms KH2)"));
         return;
     }
-    // Anti Form: no Talk, Examine or Open (testing-merge, the owner: "yes", off as KH2), refused as
-    // KH1 refuses an unusable command.
+    // Anti Form: no Talk, Examine or Open (testing-merge, the owner: "yes", off as KH2), and no
+    // summons (main s272), refused as KH1 refuses an unusable command.
     if actor == sora && super::form::current() == Some(super::form::Kind::Anti) && crate::formcmds::anti_refuses(kind as u8) {
         let sound: unsafe extern "system" fn(i32) = std::mem::transmute(base + SOUND_RVA);
         sound(4);
-        cmd_log(|| format!("command {kind:#x} ({full:08x}) refused: Anti Form doesn't talk, examine or open"));
+        cmd_log(|| format!("command {kind:#x} ({full:08x}) refused: Anti Form doesn't talk, examine, open or summon"));
         return;
     }
     // (t1023: Valor's two-Keyblade refusal of KH1's commands, t962's `formcmds::valor_allows`, is
@@ -4170,6 +4170,13 @@ unsafe fn spell_not_yet(menu: usize, entry: i32) -> bool {
         let sound: unsafe extern "system" fn(i32) = std::mem::transmute(base + SOUND_RVA);
         sound(4);
         cmd_log(|| format!("spell {arg} refused: no magic in {}", if super::form::in_anti() { "Anti Form" } else { "Valor Form" }));
+        return true;
+    }
+    // No summons in Anti Form (the owner's port spec, main s272): the "can't" sound, the list stays.
+    if kind == crate::formcmds::SUMMON && super::form::in_anti() {
+        let sound: unsafe extern "system" fn(i32) = std::mem::transmute(base + SOUND_RVA);
+        sound(4);
+        cmd_log(|| format!("summon {arg} refused: no summons in Anti Form"));
         return true;
     }
     // A form from the Drive list: only on a frame Sora can change (`form::accept_now`: KH2's,

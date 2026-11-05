@@ -218,6 +218,31 @@ pub unsafe fn fill(actor: usize, _flags: usize) {
         for off in [4usize, 8] {
             wr(top + off, rd::<u32>(top + off) | 4);
         }
+        // (No summons either (the owner's port spec, main s272: "Magic, Reflect, items, summons
+        // ... are all refused, with "can't", and greyed"). On the page that shows KH1's Summon
+        // (Drive not shown here), KH1's Summon row is the magic list's last entry (command 6, row 4
+        // on page 1, or page 2's second row, which `cmdmenu::page2_rows` copies after this fill):
+        // its bit greyed and blocked, as KH1 does when every summon is unusable; and the summon
+        // list's entries too. The command itself is refused at the run and the command step
+        // (`combat::spell_not_yet`, `formcmds::anti_refuses`).)
+        if !super::cmdmenu::drive_shown() {
+            let magic = base + MAGIC_MENU_RVA;
+            let n = rd::<i32>(magic + 0x10);
+            if (1..=16).contains(&n) && rd::<u8>(magic + 0x14 + n as usize - 1) == SUMMON {
+                let bit = 1u32 << (n - 1);
+                for off in [4usize, 8] {
+                    wr(magic + off, rd::<u32>(magic + off) | bit);
+                }
+            }
+            let list = base + SUMMON_MENU_RVA;
+            let n = rd::<i32>(list + 0x10);
+            if (1..=16).contains(&n) {
+                let all = (1u32 << n) - 1;
+                for off in [4usize, 8] {
+                    wr(list + off, rd::<u32>(list + off) | all);
+                }
+            }
+        }
     }
     if !super::cmdmenu::drive_shown() || !ensure_records(base) {
         return;

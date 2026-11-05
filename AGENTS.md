@@ -1,3 +1,6 @@
+### 2026-11-05: Stage tm17 (testing-merge branch: Anti Form: no summons)
+- Main s272 / inventory row 14 (the owner's port spec): in Anti, "Magic, Reflect, items, summons ... are all refused, with "can't", and greyed". KH1's Summon row is the magic list's last entry (command 6) on page 1's row 4 or page 2's second row; in Anti `drive::fill` greys and blocks it and the whole summon list on the page that shows it, and type 6 is refused with KH1's "can't" when chosen and at the command step (`formcmds::ANTI_REFUSES` + 6, test extended). Assumption: KH2 refuses summons in Anti (its mask for Summon row 0x48 isn't in the notes; the research's "0x49 = Summon" is Party). Not checked in game. `win/drive.rs`, `formcmds.rs`, `win/combat.rs`, `docs/kh1-forms-research-r12.md`. Per frame: nothing new.
+
 ### 2026-11-05: Stage tm16 (testing-merge branch: the Page Down HUD research log taken out)
 - The owner (chat 2026-11-05): "dont implement the page down hud". tm2's one-time log of KH1's draw bytes (`win/mod.rs` `hud_draw_bytes`) taken out; `docs/kh1-hud-hide.md` kept as notes, marked not being built. Per frame: nothing.
 

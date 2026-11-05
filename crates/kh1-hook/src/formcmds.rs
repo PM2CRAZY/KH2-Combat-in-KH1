@@ -30,7 +30,11 @@
 /// and examining off in Anti, as KH2"): Talk 4, Examine 5 (Assumption, above), the chest's 0x1C /
 /// 0x1D / 0x1E and Open 0x37. Ids an object's own handler runs (save points, Assumption) aren't
 /// known by number and stay.
-pub const ANTI_REFUSES: [u8; 6] = [4, 5, 0x1C, 0x1D, 0x1E, 0x37];
+/// (Then KH1's summons, command type 6 (the summon records 0x2F.., `btltbl.bin`, `docs/kh1-drive.md`,
+/// Checked (files)): the owner's port spec, main s272, "summons ... are all refused, with "can't"";
+/// their rows are greyed in `drive::fill`.)
+pub const SUMMON: u8 = 6;
+pub const ANTI_REFUSES: [u8; 7] = [4, 5, 0x1C, 0x1D, 0x1E, 0x37, SUMMON];
 
 /// Whether Anti Form refuses KH1's command `id`.
 pub fn anti_refuses(id: u8) -> bool {
@@ -61,7 +65,7 @@ mod tests {
 
     #[test]
     fn anti_refuses_the_field_commands() {
-        for id in [4, 5, 0x1C, 0x37] {
+        for id in [4, 5, 0x1C, 0x37, SUMMON] {
             assert!(anti_refuses(id));
         }
         for id in [0, 1, 2, 0x47, 0x7D] {

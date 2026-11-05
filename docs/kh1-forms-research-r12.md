@@ -456,3 +456,18 @@ on the game thread takes it (`form::code_anti`) and asks for Anti as the Drive l
 (`form::choose`: KH1's can-change test on that frame, no queue; cost by `antiform`'s rules), with
 Anti's partners as KH2's `0x140400740(6)` wants them (Drive > Party Required). In a form, in a change,
 or with Anti's slots not built, it is refused and logged. The code itself is unchanged (still secret).
+
+**3. No summons in Anti** (the owner's port spec, inventory row 14 / main s272: "Magic, Reflect, items,
+summons ... are all refused, with "can't", and greyed"):
+- KH1's Summon row is not a top-level entry: it is the magic list's last entry, command 6 (record 6
+  opens menu 3, the summon list), drawn as row 4 on page 1, or copied to page 2's second row by
+  `cmdmenu::page2_rows` after the battle-menu fill (`docs/kh1-drive.md`, Checked (code / docs)). In
+  Anti, on the page that shows KH1's Summon (`!cmdmenu::drive_shown()`), `drive::fill` sets that entry's
+  greyed and blocked bits (`+4` / `+8`) and every entry's bits in the summon list: KH1 itself refuses
+  the row with its "can't".
+- The summons are command type 6 (records 0x2F.., `btltbl.bin`, Checked (files) per `docs/kh1-drive.md`):
+  refused in Anti at the run (`combat::spell_not_yet`, the list stays open) and at the command step
+  (`formcmds::ANTI_REFUSES`, for a shortcut).
+- KH2: page 2's Summon row is `0x48` (`0x1403F3860`, Checked (decomp)); its DisableForm byte in
+  `03system.bin` isn't in our notes (the row `0x49`'s mask 0b1110000 is Party's, not Summon's:
+  `docs/kh1-kh2-command-menu.md`). That KH2 greys summons in Anti: Assumption (Anti takes both partners).
