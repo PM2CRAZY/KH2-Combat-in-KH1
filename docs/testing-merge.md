@@ -26,19 +26,19 @@ Made 2026-11-05 from `testing` at t1094 (`bb3b65d`), at the owner's request (cha
 ## What main has that testing doesn't (the work list)
 
 From `docs/main-port-inventory.md` (main s339 against testing t948), its rows checked again against t1094.
-Status as of tm11 (2026-11-05). Nothing is checked in game yet.
+Status as of tm16 (2026-11-05). Nothing is checked in game yet.
 
 | # | Feature (main) | Inventory row | State |
 |---|---|---|---|
-| 1 | Bonus AP | 32 | tm7 |
+| 1 | Bonus AP | 32 | tm7; tm12: by main's learn levels, no cap (the owner) |
 | 2 | Growth abilities as main's (by Sora's level, forms one above) | 16 | tm8 (testing's rule kept behind `growth::GROWTH_RULE`) |
-| 3 | Anti Form | 14 | tm10 (form, moves, rules), tm11 (secret code). Not built: its look (model / texture readers), counter / roll save bytes, HP orbs, summon bit, its effects, ledge hang, no Keyblade / trails |
-| 4 | Reflect levels by the story, "New Magic: Reflect" box | 9 | tm6 (Progression > Reflect by Story, off by default) |
-| 5 | Page Down hides the HUD | 26 | tm2: research and a log of the Steam draw bytes; needs the KH1 decomp |
-| 6 | Swings meet walls as KH1's | 33 | tm9 (Tweaks > Walls: KH1 / Clink / Pass) |
+| 3 | Anti Form | 14 | tm10 (form, moves, rules), tm11 (secret code), tm14 (no talk / examine / open, the owner). Not built: its look (model / texture readers), counter / roll save bytes, HP orbs, summon bit, its effects, ledge hang, no Keyblade / trails |
+| 4 | Reflect levels by the story, "New Magic: Reflect" box | 9 | tm6 (Progression > Reflect by Story); tm15: on by default (the owner) |
+| 5 | Page Down hides the HUD | 26 | not being built (the owner: "dont implement the page down hud"); tm16 took tm2's research log out |
+| 6 | Swings meet walls as KH1's | 33 | tm9 (Tweaks > Walls: KH1 / Clink / Pass); tm13: Clink by default with Recoil KH2 (the owner) |
 | 7 | KH2 camera follows KH1's up / down invert | 34 | tm1 |
 | 8 | Combo lunges don't carry Sora through room exits / into crates | 35 | tm3 (exits); crates were already refused by KH1 |
 | 9 | KH2 effects on Counterguard, Flash Step, Retaliating Slash | 36 | tm4 |
 | 10 | Dream Shield stretching | 49 | tm5 (drawn routes fixed; a log for the baked moves) |
-| 11 | Epic Games Store support | 61 | not started: needs the Epic exe and decomp |
-| 12 | README, install notes, `mod.yml` for players | 62 | not started |
+| 11 | Epic Games Store support | 61 | not being built (the owner: "dont worry about epic support") |
+| 12 | README, install notes, `mod.yml` for players | 62 | `README.md` and `mod.yml`'s text rewritten for this branch (docs). `crates/kh1-hook/openkh/` copies are stale, untouched |
