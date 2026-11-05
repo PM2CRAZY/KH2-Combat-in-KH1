@@ -415,28 +415,56 @@ pub fn support_copies(a: &Abilities, n: u16) -> u8 {
 /// to turn it off again (testing's t718 rule: "remove extra ap for now").
 pub const BONUS_AP: bool = true;
 
-/// KH1's own top for a member's max AP, which main kept the bonus under (main stage 43: max AP
-/// "at most 100"; Assumption: read on main's build, not checked in the Steam decomp here).
-pub const MAX_AP_TOP: i32 = 100;
-
-/// The AP Sora gets on top of KH1's own (main's `bonus_ap`): each KH2 ability of ours he has
-/// learned brings its own AP, so taking the KH2 abilities costs none of KH1's. "Learned" on this
-/// branch is "in his lists" (the KH2 list, or Sora's own for a save not moved over to it), on or
-/// off, as main counted a learned ability whether or not it was equipped. Each ability counts once
-/// (main counted each of its `MENU` rows once), however many copies he holds (Form Boost's fmlv
-/// copies, t1039). KH2's own Glide (shared) has no AP.
-pub fn bonus_ap(abilities: &[u8], kh2: &[u8]) -> u8 {
-    MENU.iter().filter(|ab| ab.ap > 0 && (has(kh2, ab.id) || has(abilities, ab.id))).map(|ab| ab.ap as u32).sum::<u32>().min(255) as u8
+/// When main's player learned each KH2 ability its bonus AP counts for (main's `MENU` levels and
+/// `BOSS_GIFTS`, main stages 43 / 63 / 124 / 270 / 335 / 337; the owner, chat 2026-11-05: "follow
+/// main's learn levels, dont have a cap on AP"): by Sora's level, or once a boss is beaten (a
+/// world's progress byte, as `BossGift`). Main's 16 abilities only: KH1's own abilities that main
+/// showed by KH2 names (Flash Step, Aerial Sweep, Counterguard, ...) were KH1's and brought none.
+pub enum Learned {
+    Level(u8),
+    Boss(BossGift),
 }
 
-/// Sora's max AP with the bonus: KH1's own (`kh1`) plus `bonus`, under KH1's top (but never below
-/// KH1's own).
-pub fn max_ap_with_bonus(kh1: i32, bonus: u8) -> i32 {
-    if kh1 >= MAX_AP_TOP {
-        kh1
-    } else {
-        (kh1 + bonus as i32).min(MAX_AP_TOP)
-    }
+/// Main's schedule, by our ids (`ours`). The bosses' worlds and progress values are main's
+/// (Assumption: main's story bytes, the same `+0x1504` list testing reads).
+pub const BONUS_SCHEDULE: [(u8, Learned); 16] = [
+    (ours::QUICK_RUN, Learned::Level(12)),
+    (ours::AERIAL_DODGE, Learned::Boss(GENIE_JAFAR)),
+    (ours::AERIAL_RECOVERY, Learned::Level(4)),
+    (ours::DODGE_SLASH, Learned::Level(10)),
+    (ours::HORIZONTAL_SLASH, Learned::Level(16)),
+    (ours::NEGATIVE_COMBO, Learned::Level(20)),
+    (ours::AERIAL_SPIRAL, Learned::Level(25)),
+    (ours::UPPER_SLASH, Learned::Boss(BossGift { boss: "Sabor", world: 1, progress: 0x42, ability: ours::UPPER_SLASH })),
+    (ours::FINISHING_PLUS, Learned::Level(34)),
+    (ours::RETALIATING_SLASH, Learned::Level(43)),
+    (ours::AERIAL_DIVE, Learned::Boss(BossGift { boss: "Cerberus", world: 2, progress: 0x25, ability: ours::AERIAL_DIVE })),
+    (ours::MAGNET_BURST, Learned::Boss(BossGift { boss: "Captain Hook", world: 9, progress: 0x56, ability: ours::MAGNET_BURST })),
+    (ours::DAMAGE_DRIVE, Learned::Level(14)),
+    (ours::FORM_BOOST, Learned::Level(24)),
+    (ours::DAMAGE_CONTROL, Learned::Level(38)),
+    (ours::DRIVE_CONVERTER, Learned::Level(35)),
+];
+
+/// The AP Sora gets on top of KH1's own (main's `bonus_ap`): each of main's KH2 abilities brings
+/// its own AP once main's player would have learned it (`BONUS_SCHEDULE`: his `level`, or its boss
+/// beaten by the story `progress`), so taking the KH2 abilities costs none of KH1's. No top (the
+/// owner: "dont have a cap on AP").
+pub fn bonus_ap(level: u8, progress: &[u8]) -> u32 {
+    BONUS_SCHEDULE
+        .iter()
+        .filter(|(_, l)| match l {
+            Learned::Level(at) => level >= *at,
+            Learned::Boss(g) => beaten(progress, g),
+        })
+        .filter_map(|(id, _)| MENU.iter().find(|ab| ab.id == *id))
+        .map(|ab| ab.ap as u32)
+        .sum()
+}
+
+/// Sora's max AP with the bonus: KH1's own (`kh1`) plus `bonus`, no top.
+pub fn max_ap_with_bonus(kh1: i32, bonus: u32) -> i32 {
+    kh1.saturating_add(bonus.min(i32::MAX as u32) as i32)
 }
 
 /// Our Quick Run's ability id (`MENU`).
@@ -1559,25 +1587,27 @@ mod tests {
     /// Bonus AP (main's rule): each of ours he holds, on or off, once, in either list; KH1's own
     /// abilities bring none; under KH1's top.
     #[test]
-    fn bonus_ap_is_the_held_abilities_ap() {
-        let none = [0u8; 48];
-        assert_eq!(bonus_ap(&none, &none), 0);
-        // Quick Run (2) on, Upper Slash (4) off, KH1's Dodge Roll: 6.
-        let mut kh2 = [0u8; 48];
-        kh2[..2].copy_from_slice(&[ours::QUICK_RUN, ours::UPPER_SLASH | 0x80]);
-        let mut own = [0u8; 48];
-        own[0] = kh1::DODGE_ROLL;
-        assert_eq!(bonus_ap(&own, &kh2), 6);
-        // A copy in Sora's own list (a save not moved over) counts; a second copy doesn't.
-        own[1] = ours::FINISHING_PLUS | 0x80;
-        kh2[2] = ours::QUICK_RUN | 0x80;
-        assert_eq!(bonus_ap(&own, &kh2), 11);
-        // Everything of ours: the sum of their AP.
-        let all: Vec<u8> = MENU.iter().filter(|a| a.list == List::Kh2).map(|a| a.id | 0x80).collect();
-        assert_eq!(bonus_ap(&none, &all), MENU.iter().map(|a| a.ap).sum::<u8>());
-        assert_eq!(max_ap_with_bonus(10, 30), 40);
-        assert_eq!(max_ap_with_bonus(90, 30), MAX_AP_TOP);
-        assert_eq!(max_ap_with_bonus(100, 30), 100);
+    fn bonus_ap_follows_mains_learn_levels() {
+        let none = [0u8; 12];
+        assert_eq!(bonus_ap(1, &none), 0);
+        // Level 4: Aerial Recovery (2).
+        assert_eq!(bonus_ap(4, &none), 2);
+        // Level 12: Aerial Recovery 2, Dodge Slash 2, Quick Run 2.
+        assert_eq!(bonus_ap(12, &none), 6);
+        // Every level and every boss: the sum of the 16 abilities' AP.
+        let mut all = [0u8; 12];
+        all[1] = 0x42;
+        all[2] = 0x25;
+        all[4] = 0x53;
+        all[9] = 0x56;
+        let sum: u32 = BONUS_SCHEDULE.iter().map(|(id, _)| MENU.iter().find(|a| a.id == *id).unwrap().ap as u32).sum();
+        assert_eq!(bonus_ap(100, &all), sum);
+        // A boss counts only once beaten (Sabor: Upper Slash, 4).
+        let mut sabor = [0u8; 12];
+        sabor[1] = 0x42;
+        assert_eq!(bonus_ap(1, &sabor), 4);
+        // No top.
+        assert_eq!(max_ap_with_bonus(90, 30), 120);
     }
 
     /// Every KH2 ability of Sora's own list but the growth ones is his at once, whatever his

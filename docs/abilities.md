@@ -393,3 +393,15 @@ he can level them up. dodge roll and the other growth abilities can function how
   its copy anyway (a second Dodge Roll; it doesn't stack, and costs AP only if equipped). Not checked in KH1's decomp
   (not in this session).
 - Not seen in game.
+
+## Bonus AP by main's learn levels (testing-merge, tm12)
+
+The owner (chat 2026-11-05): "follow main's learn levels, dont have a cap on AP". `growth::bonus_ap(level, progress)`:
+each of main's 16 KH2 abilities (`growth::BONUS_SCHEDULE`) adds its AP once main's player would have learned it: Aerial
+Recovery 4, Dodge Slash 10, Quick Run 12, Damage Drive 14, Horizontal Slash 16, Negative Combo 20, Form Boost 24,
+Aerial Spiral 25, Finishing Plus 34, Drive Converter 35, Damage Control 38, Retaliating Slash 43 (Sora's level);
+Upper Slash at Sabor (Deep Jungle 0x42), Aerial Dive at Cerberus (Olympus 0x25), Magnet Burst at Captain Hook
+(Neverland 0x56), Aerial Dodge at Genie Jafar (Agrabah 0x53). The bosses' progress values are main's (Assumption).
+KH1's own abilities shown by KH2 names bring none, as on main. No top: KH1's stats fill `0x1402A5130` writes max AP
+`+0xE4` as a u32 from the save's byte and `0x1402E8560` reads it back unclamped (Checked (decomp)), so the bonus
+is added as is. Applied in the party-stats fill, Sora only, `abilities = kh1`.

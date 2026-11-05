@@ -315,17 +315,17 @@ unsafe fn bonus_ap(member: i32, out: usize) {
     }
     let base = super::sys::GetModuleHandleA(std::ptr::null()) as usize;
     let Some(save) = save_block(base) else { return };
-    let abilities = std::slice::from_raw_parts((save + 0x44) as *const u8, 48);
-    // (The KH2 list once the save is on it; before, its bytes are nobody's.)
-    let on_list = rd::<u16>(save + growth::LAYOUT_OFF) == growth::LAYOUT_KH2_LIST;
-    let kh2 = if on_list { super::kh2list::read(base) } else { None }.unwrap_or_default();
-    let bonus = growth::bonus_ap(abilities, &kh2);
+    // (Main's learn levels and bosses, no top: the owner, "follow main's learn levels, dont have a
+    // cap on AP".)
+    let level = rd::<u8>(save + 4);
+    let progress = std::slice::from_raw_parts((save + PROGRESS_OFF) as *const u8, 12);
+    let bonus = growth::bonus_ap(level, progress);
     let ap = rd::<i32>(out + 0xE4);
     let now = growth::max_ap_with_bonus(ap, bonus);
     std::ptr::write_unaligned((out + 0xE4) as *mut i32, now);
     static LAST: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(-1);
     if LAST.swap(now, std::sync::atomic::Ordering::Relaxed) != now {
-        log!(Menus, "Sora's max AP: {ap} (KH1's) + {bonus} (bonus AP: the KH2 abilities he holds) = {now}");
+        log!(Menus, "Sora's max AP: {ap} (KH1's) + {bonus} (bonus AP: main's KH2 abilities learned by level {level}) = {now}");
     }
 }
 
