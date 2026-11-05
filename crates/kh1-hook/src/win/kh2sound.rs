@@ -190,7 +190,8 @@ pub fn start() {
         // (And Final Form's.)
         // (And Master Form's, t1028: its swings, frame trigger 8 bank 500 ids 40..55 on both
         // weapons, and its voices, trigger 14, Checked (files).)
-        for v in [kh2.valor.as_ref(), kh2.final_form.as_ref(), kh2.limit_form.as_ref(), kh2.master.as_ref()].into_iter().flatten() {
+        // (And Anti Form's, testing-merge tm22: the owner, "yes", always, as the other forms'.)
+        for v in [kh2.valor.as_ref(), kh2.final_form.as_ref(), kh2.limit_form.as_ref(), kh2.master.as_ref(), kh2.anti.as_ref()].into_iter().flatten() {
             events.extend(v.character.moveset.clips.values().flat_map(|c| c.events.iter().map(|e| e.kind)).filter(|k| matches!(k, character_core::EventKind::Sound(_) | character_core::EventKind::Voice(_))));
         }
         // Reflect (the user: its sounds): its cast voices (MAGC, played by KH2's cast code, not a
@@ -684,7 +685,9 @@ pub unsafe fn event(motion: u16, kind: character_core::EventKind) {
     // (answer 2 after t1031: "(a)"): Limit's and Master's too, as Valor's; they played only when the
     // ini's `kh2_sounds` listed the motion. A voice still plays only with Battle Quotes KH2 (the
     // voice arm below).)
-    let valor = (super::form::in_valor() || super::form::in_final() || super::form::in_limit() || super::form::in_master()) && matches!(kind, EventKind::Sound(_) | EventKind::Voice(_));
+    // (Anti's too, testing-merge tm22: the owner, "yes" to Anti's KH2 sounds always playing.)
+    let anti = super::form::current() == Some(super::form::Kind::Anti);
+    let valor = (super::form::in_valor() || super::form::in_final() || super::form::in_limit() || super::form::in_master() || anti) && matches!(kind, EventKind::Sound(_) | EventKind::Voice(_));
     // (Battle quotes on every move, `kh2_voice`.)
     let quote = matches!(kind, EventKind::Voice(_)) && kh2_voice();
     if !(allowed(motion) || super::form::own_motion(motion) || valor || quote) {
