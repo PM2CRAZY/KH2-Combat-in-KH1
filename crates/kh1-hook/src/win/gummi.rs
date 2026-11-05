@@ -17,7 +17,7 @@
 //! a flight (its arrival events, story and first visits are the field's, as always). Flights
 //! started otherwise (the story's own, `0x14020EEB0`) are left alone.
 //!
-//! (t1068) The route's own event scripts too (`route_scripts`): a flight runs its stage's
+//! (t1068) The route's own event scripts too (`route_script`): a flight runs its stage's
 //! departure script (event 0x40, `worldmap/ev/wld_out_*`) when it starts and its arrival script
 //! (event 0x41, `wld_in_*`) after the landing list, with KH1's flag word `0x142867364` bit 8 set
 //! between (Steam `0x14023FBB0`, Checked (decomp)). The skip ran neither, so the story steps those
@@ -94,9 +94,11 @@ pub fn set(skip: bool) {
 // - `0x140213150 (event, mode)` runs one (KH1's script machine, waiting frames while it runs). The
 //   flight runs 0x40 at its start (`0x14023DF30`) and, once cleared (`0x14023FBB0`): the landing
 //   list, `0x142867364 |= 8`, then 0x41, then the landing or the world map.
-// The skip loads both into the buffer's first two slots (the world map's own two scripts there,
+// The skip loads them into the buffer's first two slots (the world map's own two scripts there,
 // `wld_st_event` / `gumi_manual_2` from `0x140213CA0`, are loaded again when the map next starts:
-// Assumption) after the landing list and runs them in the flight's order.
+// Assumption) in the flight's order: 0x40, the landing list, bit 8, 0x41 (t1068 ran 0x40 after
+// the list; fixed in the next version). With the Menus log on, the save block is compared after
+// each step and what changed is logged (a diagnostic, only during a skip).
 // ---------------------------------------------------------------------------------------------
 
 const LOAD_SCRIPT_STEAM: usize = 0x214780;
@@ -114,7 +116,51 @@ const ROUTE_SIZE: usize = 0x58;
 /// The route records with names (`test1` .. `route_pirate_1`, Checked (exe)).
 const ROUTES: i32 = 21;
 
-unsafe fn route_scripts(base: usize, route: i32) {
+/// KH1's save block (Steam; the whole of what KH1 saves and loads, script variables and bit
+/// flags included, `docs/kh1-softreset.md`, Checked (decomp)).
+const SAVE_STEAM: usize = 0x2DE9360;
+const SAVE_SIZE: usize = 0x16C00;
+
+/// (Diagnostic, Menus log only) a copy of the save block, to log what each step of the skip changed.
+unsafe fn save_copy(base: usize) -> Option<Vec<u8>> {
+    if !super::log_on(super::LogCat::Menus) || super::addr::Build::current() != super::addr::Build::Steam {
+        return None;
+    }
+    Some(std::slice::from_raw_parts((base + SAVE_STEAM) as *const u8, SAVE_SIZE).to_vec())
+}
+
+/// (Diagnostic) logs the save block's bytes `what` changed since `before` (runs of changed
+/// bytes, at most 24, offsets from the block's start), and takes a new copy for the next step.
+unsafe fn save_diff(base: usize, before: &mut Option<Vec<u8>>, what: &str) {
+    let Some(old) = before.as_mut() else { return };
+    let now = std::slice::from_raw_parts((base + SAVE_STEAM) as *const u8, SAVE_SIZE);
+    let mut runs = Vec::new();
+    let mut total = 0usize;
+    let mut i = 0;
+    while i < SAVE_SIZE {
+        if old[i] == now[i] {
+            i += 1;
+            continue;
+        }
+        let at = i;
+        while i < SAVE_SIZE && old[i] != now[i] && i - at < 16 {
+            i += 1;
+        }
+        total += 1;
+        if runs.len() < 24 {
+            let hex = |b: &[u8]| b.iter().map(|x| format!("{x:02x}")).collect::<String>();
+            runs.push(format!("+{at:#x} {}->{}", hex(&old[at..i]), hex(&now[at..i])));
+        }
+    }
+    log!(Menus, "Gummi skip: save block after {what}: {}{}", if runs.is_empty() { "no change".to_string() } else { runs.join(", ") }, if total > runs.len() { format!(" (+{} more)", total - runs.len()) } else { String::new() });
+    old.copy_from_slice(now);
+}
+
+/// One of the route's two event scripts (`slot` 0 the departure one, event 0x40, record `+0x34`;
+/// 1 the arrival one, event 0x41, record `+0x14`), loaded and run as the flight does. The
+/// arrival one sets flag word bit 8 first, as the cleared flight does, whether or not the route
+/// names a script.
+unsafe fn route_script(base: usize, route: i32, slot: usize, save: &mut Option<Vec<u8>>) {
     if super::addr::Build::current() != super::addr::Build::Steam || !(0..ROUTES).contains(&route) {
         return;
     }
@@ -130,26 +176,27 @@ unsafe fn route_scripts(base: usize, route: i32) {
     let load: unsafe extern "system" fn(usize, usize) = std::mem::transmute(base + LOAD_SCRIPT_STEAM);
     let run: unsafe extern "system" fn(i32, i32) = std::mem::transmute(base + RUN_EVENT_STEAM);
     let record = base + ROUTES_STEAM + route as usize * ROUTE_SIZE;
-    let name = |off: usize| {
-        let p = record + off;
-        let s = std::slice::from_raw_parts(p as *const u8, 0x20);
-        let n = s.iter().position(|&c| c == 0).unwrap_or(0);
-        (n > 0 && s[0] != b'-').then(|| (p, String::from_utf8_lossy(&s[..n]).into_owned()))
-    };
-    let mut said = Vec::new();
-    for (slot, (off, at, event)) in [(0x34usize, EVENT_40_STEAM, 0x40), (0x14, EVENT_41_STEAM, 0x41)].into_iter().enumerate() {
-        wr(base + at, 0usize);
-        if event == 0x41 {
-            wr(base + FLAGS_STEAM, rd::<u32>(base + FLAGS_STEAM) | 8);
-        }
-        let Some((p, n)) = name(off) else { continue };
-        let into = buffer + slot * 0x1000;
-        load(into, p);
-        wr(base + at, into);
-        run(event, 0);
-        said.push(format!("{n} (event {event:#x})"));
+    let (off, at, event) = if slot == 0 { (0x34usize, EVENT_40_STEAM, 0x40) } else { (0x14, EVENT_41_STEAM, 0x41) };
+    wr(base + at, 0usize);
+    if event == 0x41 {
+        let flags = rd::<u32>(base + FLAGS_STEAM);
+        wr(base + FLAGS_STEAM, flags | 8);
+        log!(Menus, "Gummi skip: flag word {flags:#x} -> {:#x}", flags | 8);
     }
-    log!(Menus, "Gummi skip: route {route}'s scripts run as after a flight: {}", if said.is_empty() { "none".to_string() } else { said.join(", ") });
+    let p = record + off;
+    let s = std::slice::from_raw_parts(p as *const u8, 0x20);
+    let n = s.iter().position(|&c| c == 0).unwrap_or(0);
+    if n == 0 || s[0] == b'-' {
+        log!(Menus, "Gummi skip: route {route} has no event {event:#x} script");
+        return;
+    }
+    let name = String::from_utf8_lossy(&s[..n]).into_owned();
+    let into = buffer + slot * 0x1000;
+    load(into, p);
+    wr(base + at, into);
+    run(event, 0);
+    log!(Menus, "Gummi skip: route {route}'s {name} (event {event:#x}) run as in a flight");
+    save_diff(base, save, &format!("{name} (event {event:#x})"));
 }
 
 unsafe extern "system" fn route_start(kind: i32, stage: i32) {
@@ -157,11 +204,17 @@ unsafe extern "system" fn route_start(kind: i32, stage: i32) {
     let dest = rd::<i32>(base + MAP_CHOICE_RVA);
     if SKIP.load(Ordering::Relaxed) && (0..WORLDS).contains(&dest) {
         log!(Menus, "Gummi route (kind {kind}, stage {stage}) to world {dest:#x} skipped: its landing at once");
+        let mut save = save_copy(base);
+        // The route's departure script first, as the flight runs it at its start (`0x14023DF30`,
+        // before the landing list: t1068 ran it after the list, so the list was built without
+        // what the script sets).
+        route_script(base, kind, 0, &mut save);
         let landing: unsafe extern "system" fn(i32) -> i32 = std::mem::transmute(base + LANDING_RVA);
         let at = landing(dest);
-        // (t1068) The route's departure and arrival scripts, as the flight runs them (the arrival
-        // one after the landing list, whatever it answered).
-        route_scripts(base, kind);
+        log!(Menus, "Gummi skip: landing list for world {dest:#x} answered {at}");
+        save_diff(base, &mut save, "the landing list");
+        // Then the arrival script after the landing list, whatever it answered (`0x14023FBB0`).
+        route_script(base, kind, 1, &mut save);
         if at < 0 {
             // (No landing, or backed out of it: the world map again, at the destination, as
             // after a flight.)

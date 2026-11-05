@@ -66,3 +66,24 @@ The owner: with the skip on, the story step that follows a world's first arrival
 - Assumptions: the world map reloads its own two scripts in those slots when it next starts; the
   departure script runs safely after the landing list instead of before it; the scripts don't need the
   flight's actors. Not checked in game.
+
+## The departure script before the landing list; a save-block diagnostic (after t1085)
+
+The owner (chat): "gummi skip completely breaks story flags".
+
+- What differed from a flown route (Checked (code, against the t1068 decomp notes above)): a flight runs the
+  departure script (event 0x40) at its start, before the landing list; t1068's skip ran it after the landing
+  list. So the landing list (`0x140215C80` Steam) was built before anything the departure script sets.
+  Assumption (not checked: no decomp in that session): the landing list or the landing reads a story
+  variable or flag the departure script sets, which would land Sora at a landing the story isn't at.
+- Now the skip runs, in the flight's order: event 0x40, the landing list, `0x142867364 |= 8`, event 0x41,
+  then the landing (or the map).
+- Diagnostic: with the Menus & Config log on, the skip copies KH1's save block (Steam `0x142DE9360`,
+  `0x16C00` bytes, script variables and bit flags in it, `docs/kh1-softreset.md`) and logs, after each
+  step, which bytes changed (`Gummi skip: save block after ...: +0xOFF old->new`). Nothing runs with
+  the log off or with the skip off.
+- Still not done by the skip (needs the Steam decomp): the route's results (`0x14020C420` Epic, the "GUMI"
+  save block; its Steam address and arguments aren't in the repo), anything else the flight's start
+  (`0x14023DF30`) or setup (`0x140241310`) writes, and the mode argument the flight passes to the script
+  runner `0x140213150` (the skip passes 0, Assumption). Also unchecked: whether a route script can change
+  the scene itself (a story landing) that the skip's own landing then overrides.
