@@ -114,10 +114,11 @@ command_lock = kh2\r\n\
 ; config_row: on = the Config menu's Camera Style row; off = no row (the ini alone switches)\r\n\
 config_row = on\r\n\
 ; experimental: on = the experimental settings (Enemy Weight, Clash Combo, Knock-back Numbers,\r\n\
-;   Medium Hits, KH2 Damage, Recoil, Guard Shape) show in the Config menu and their lines show at\r\n\
-;   the bottom of this file; off = they are hidden, their lines taken out, and each keeps its\r\n\
-;   default (Enemy Weight on, Clash Combo kh2, Knock-back Numbers scaled, Medium Hits blow, KH2\r\n\
-;   Damage off, Recoil kh1, Guard Shape kh1); turning it off again puts the defaults back\r\n\
+;   Medium Hits, KH2 Damage, Recoil, Guard Shape, Gummi Routes, In-game Scene Skip) show in the\r\n\
+;   Config menu and their lines show at the bottom of this file; off = they are hidden, their lines\r\n\
+;   taken out, and each keeps its default (Enemy Weight on, Clash Combo kh2, Knock-back Numbers\r\n\
+;   scaled, Medium Hits blow, KH2 Damage off, Recoil kh1, Guard Shape kh1, Gummi Routes vanilla,\r\n\
+;   In-game Scene Skip off); turning it off again puts the defaults back\r\n\
 experimental = off\r\n\
 ; shortcuts: 4 = KH2's four shortcuts (L1 + the cancel button is the fourth; set it in\r\n\
 ; Customize); 3 = KH1's three\r\n\
@@ -237,9 +238,6 @@ player_model = kh1\r\n\
 ; battle_quotes: kh1 or kh2, Sora's KH1 or KH2 battle quotes (the Config menu's row; without\r\n\
 ; this line kh2_voice decides)\r\n\
 battle_quotes = kh1\r\n\
-; gummi: vanilla = fly the Gummi Ship between worlds; skip = land in the chosen world at once\r\n\
-; (the Config menu's Gummi Routes row switches it in game too)\r\n\
-gummi = vanilla\r\n\
 ; trail_always: off = Keyblade trails show on swings, as KH1 does; on = every Keyblade shows its\r\n\
 ; trail whenever it is out (the Config menu's Cosmetics > Keyblade Trail row switches it in game too)\r\n\
 trail_always = off\r\n\
@@ -259,10 +257,6 @@ effects_after_fade = slider\r\n\
 cutscene_skip = off\r\n\
 ; cutscene_seen: the scenes already watched, kept by the mod for the seen setting (delete the line to forget them)\r\n\
 cutscene_seen =\r\n\
-; ingame_skip: off = nothing; on = skip the in-game scenes (the low-poly dialog you confirm line by line, which the\r\n\
-; pause menu can't skip) with KH1's own skip: items, abilities and story flags the scene gives are still given.\r\n\
-; Talks, shops, scenes with a choice and the pause menu's skippable cutscenes are left alone (QoL > In-game Scene Skip)\r\n\
-ingame_skip = off\r\n\
 ; chest_style: vanilla = KH1's chest opening (Sora stands still until the item window is closed); quick = Sora plays\r\n\
 ; a chest animation (chest_anim), then moves on; skip = as KH2 (the default): no animation, Sora is free at once.\r\n\
 ; Quick and skip show the item in the box at the top left, no window to close (QoL > Chest Opening; the old kh1 /\r\n\
@@ -374,13 +368,32 @@ kh2_damage = off\r\n\
 recoil = kh1\r\n\
 ; guard_shape: kh1 or kh2, the shape of KH2's guard on the Keyblade: KH1's own blade (kh1) or KH2's\r\n\
 ;   guard shapes (kh2)\r\n\
-guard_shape = kh1\r\n";
+guard_shape = kh1\r\n\
+; gummi: vanilla = fly the Gummi Ship between worlds; skip = land in the chosen world at once\r\n\
+;   (the Config menu's QoL > Gummi Routes row switches it in game too)\r\n\
+gummi = vanilla\r\n\
+; ingame_skip: off = nothing; on = skip the in-game scenes (the low-poly dialog you confirm line by\r\n\
+;   line, which the pause menu can't skip) with KH1's own skip: items, abilities and story flags the\r\n\
+;   scene gives are still given. Talks, shops, scenes with a choice and the pause menu's skippable\r\n\
+;   cutscenes are left alone (QoL > In-game Scene Skip)\r\n\
+ingame_skip = off\r\n";
 
 /// The experimental settings' ini keys and the value each keeps with `experimental = off` (the
 /// owner, t922: Enemy Weight on, Clash Combo on (KH2), Knock-back Numbers scaled, Medium Hits blow,
 /// KH2 Damage off, Recoil KH1, Guard Shape KH1); the block's defaults are the same.
-pub const EXPERIMENTAL_KEYS: [(&str, &str); 7] =
-    [("enemy_weight", "on"), ("clash_count", "kh2"), ("knockback_numbers", "scaled"), ("medium_hits", "blow"), ("kh2_damage", "off"), ("recoil", "kh1"), ("guard_shape", "kh1")];
+pub const EXPERIMENTAL_KEYS: [(&str, &str); 9] = [
+    ("enemy_weight", "on"),
+    ("clash_count", "kh2"),
+    ("knockback_numbers", "scaled"),
+    ("medium_hits", "blow"),
+    ("kh2_damage", "off"),
+    ("recoil", "kh1"),
+    ("guard_shape", "kh1"),
+    // (Gummi Routes and In-game Scene Skip: the owner, the bug-list thread, t1086: "in game scene skip
+    // should be moved to experimental along with gummi skip both being turned off as the default for now".)
+    ("gummi", "vanilla"),
+    ("ingame_skip", "off"),
+];
 
 /// A setting line's key (`None` for a comment or a line without `=`).
 fn line_key(l: &str) -> Option<&str> {
@@ -717,6 +730,9 @@ fn experimental_now(s: &Settings) {
     super::recoil::forget_clash_count();
     super::hitreact::forget();
     super::kh2damage::forget_kh2_damage();
+    // (t1086) The two skips, without writing the ini.
+    super::gummi::reload(s.gummi_skip);
+    unsafe { super::ingameskip::reload(s.ingame_skip) };
     for k in [super::styles::Kind::Recoil, super::styles::Kind::GuardShape] {
         super::styles::reload(k, s.styles[k as usize]);
     }
@@ -911,7 +927,8 @@ fn load(first: bool) -> Option<Settings> {
             _ => super::hitreact::Numbers::Scaled,
         },
         medium_hits_flinch: experimental && on(&text, "medium_hits", "flinch", false),
-        gummi_skip: on(&text, "gummi", "skip", false),
+        // (t1086: experimental, off with `experimental = off`.)
+        gummi_skip: experimental && on(&text, "gummi", "skip", false),
         trail_always: on(&text, "trail_always", "on", false),
         soft_reset: on(&text, "soft_reset", "on", false),
         volume_mute: on(&text, "volume_mute", "on", true),
@@ -922,7 +939,8 @@ fn load(first: bool) -> Option<Settings> {
             _ => 0,
         },
         cutscene_seen: setting(&text, "cutscene_seen").unwrap_or_default(),
-        ingame_skip: on(&text, "ingame_skip", "on", false),
+        // (t1086: experimental, off with `experimental = off`.)
+        ingame_skip: experimental && on(&text, "ingame_skip", "on", false),
         chest_style: match setting(&text, "chest_style").as_deref() {
             Some("vanilla") | Some("kh1") | Some("off") => 0,
             Some("quick") => 1,

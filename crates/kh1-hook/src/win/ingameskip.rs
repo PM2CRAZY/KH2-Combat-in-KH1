@@ -259,6 +259,19 @@ pub unsafe fn install() {
     log!(Menus, "In-game Scene Skip: {} (ingame_skip)", if on { "on" } else { "off" });
 }
 
+/// The ini read again (t1086: `experimental` turned on or off): on or off, without writing the ini.
+pub unsafe fn reload(v: bool) {
+    if ON.swap(v, Ordering::Relaxed) == v {
+        return;
+    }
+    if v {
+        verify();
+    } else {
+        release("experimental was turned off");
+    }
+    log!(Menus, "In-game Scene Skip: {} (the ini read again)", if v { "on" } else { "off" });
+}
+
 /// The Config menu's In-game Scene Skip row, kept in the ini.
 pub fn set(v: bool) {
     ON.store(v, Ordering::Relaxed);

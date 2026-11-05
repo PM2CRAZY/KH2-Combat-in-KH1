@@ -68,6 +68,13 @@ pub unsafe fn install() {
     log!(Menus, "Gummi routes: {}", if on { "skipped (gummi = skip)" } else { "flown (gummi = vanilla)" });
 }
 
+/// The ini read again (t1086: `experimental` turned on or off): skip or fly, without writing the ini.
+pub fn reload(skip: bool) {
+    if SKIP.swap(skip, Ordering::Relaxed) != skip {
+        log!(Menus, "Gummi routes: {} (the ini read again)", if skip { "skipped" } else { "flown" });
+    }
+}
+
 /// The Config menu's Gummi Routes row: skip (true) or fly them, kept in the ini.
 pub fn set(skip: bool) {
     SKIP.store(skip, Ordering::Relaxed);

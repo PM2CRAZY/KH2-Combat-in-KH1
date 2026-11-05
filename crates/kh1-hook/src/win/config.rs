@@ -415,10 +415,13 @@ impl List {
             // (Chest Animation only with Chest Opening on Quick: the user, t770; it is the list's last row.
             // Commented out t771..t782 until KH2's chest motion was found, t783.)
             List::QoL => {
+                // (Gummi Routes and In-game Scene Skip only with `experimental = on`: the owner, the
+                // bug-list thread, t1086.)
+                let all: &'static [Item] = if super::settings::get().experimental { &QOL } else { &QOL_STABLE };
                 if super::chest::style() == super::chest::QUICK {
-                    &QOL
+                    all
                 } else {
-                    &QOL[..QOL.len() - 1]
+                    &all[..all.len() - 1]
                 }
             }
             List::Cosmetics => &COSMETICS,
@@ -523,6 +526,9 @@ const QOL: [Item; 7] = [
     // (t783: the Chest Animation row, back: KH2's chest motion found.)
     Item::Set(kh(0x7F00_0234, 0x7F00_0235), Row::ChestAnim),
 ];
+// (t1086, the owner, the bug-list thread: "in game scene skip should be moved to experimental along with
+// gummi skip both being turned off as the default for now": without `experimental = on` QoL is this.)
+const QOL_STABLE: [Item; 5] = [QOL[1], QOL[2], QOL[4], QOL[5], QOL[6]];
 // (Cosmetics: the user, t704: "a new menu called cosmetics and put a setting in there for keyblades to
 // always have their trail on".)
 const COSMETICS: [Item; 1] = [Item::Set([0x7F00_0215, 0x7F00_0217, 0x7F00_0218, 0x7F00_0216], Row::TrailAlways)];
@@ -666,7 +672,7 @@ const STRINGS: [(u32, &str); 172] = [
     (0x7F00_022F, "Command Lock"),
     (0x7F00_0230, "KH2: a spell, item or summon is taken only once Sora can act, the\nlist stays open until then and nothing greys while he acts. KH1: KH1's."),
     (0x7F00_0211, "QoL"),
-    (0x7F00_0212, "Quality of life: Gummi routes, Soft Reset, Cutscene Skip, In-game Scene Skip,\nItem Pickup, Chest Opening."),
+    (0x7F00_0212, "Quality of life: Soft Reset, Cutscene Skip, Item Pickup, Chest Opening\n(Gummi Routes and In-game Scene Skip with experimental = on)."),
     (0x7F00_021B, "Soft Reset"),
     (0x7F00_021C, "On: L1 + L2 + R1 + R2 + Start + Select held for a second return to the title screen."),
     (0x7F00_021D, "Cutscene Skip"),

@@ -579,3 +579,10 @@ option for limits", and "in most menus, the text at the bottom extends past the 
   break, `s` the largest size that fits; worked out once per text. KH1's own help texts are left alone.
   **Assumption:** a line break doesn't reset the size code (put after each break anyway); the lines keep
   KH1's spacing; a 16:9 screen (wider screens have more room).
+- **t1086, the two skips are experimental.** The owner: "in game scene skip should be moved to experimental along
+  with gummi skip both being turned off as the default for now". `gummi` and `ingame_skip` are in
+  `settings::EXPERIMENTAL_KEYS` (vanilla / off): with `experimental = off` (the default) their lines leave the ini,
+  both are off, and QoL shows Soft Reset, Cutscene Skip, Item Pickup, Chest Opening (and Chest Animation with
+  Quick). With `experimental = on` they come back at the ini's bottom, off, and QoL shows them in their old places.
+  Turning `experimental` on or off in game re-reads both (`gummi::reload`, `ingameskip::reload`), without writing the
+  ini. Checked (code).
