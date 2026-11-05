@@ -12,6 +12,7 @@
 - [6. PM2CRAZY (owner, chat 2026-11-02, copied word for word): 1. a](#^m6)
 - [7. Assistant: t1085, growth abilities. Quick Run, Aerial Dodge and Dodge R](#^m7)
 - [8. PM2CRAZY (owner, chat 2026-11-05, copied word for word): 1. some kh2 moves like magnet burst don't cut out its audio ](#^m8)
+- [9. Assistant: Nine versions this round, t1086 to t1094. Two items aren't b](#^m9)
 
 ---
 
@@ -165,4 +166,49 @@
 > 3. d pad left in the command menu config should be renamed to "2nd Page" with the setting being off (kh1) or on (kh2)
 
 ^m8
+
+
+> [!tip] Assistant
+> Nine versions this round, t1086 to t1094. Two items aren't built yet (the second Keyblade's shadow and the form effects in a new room), and the reasons are below. None of this has been seen in game. There was no decomp, exe or KH2 file in this session, so every address is one the repo already had, and each fix says what's checked and what's Assumption.
+>
+> **Config**
+> - **t1086:** In-game Scene Skip and Gummi Routes are now experimental. With `experimental = off` (the default) both are off, hidden from QoL and out of the ini; with it on they come back, off.
+> - **t1087:** Command Menu's D-Pad Left row is now **2nd Page**, Off (KH1) / On (KH2). Your setting is unchanged.
+> - **t1092, Command Lock at KH1:** I found nothing of ours still locking at KH1. Vanilla KH1 already refuses a press while Sora is busy and leaves the list open. On KH2's attacks and spells, when he's "busy" follows KH2's timing, so it can still feel like the lock. This version adds a log line for every press KH1 refuses at KH1, and corrects an old note of ours that said KH1 takes any press.
+>
+> **Sounds**
+> - **t1090, Magnet Burst's hum:** KH2 fades an effect's sound out when the effect ends; ours let the sound play to its full length. Now the sound fades with its effect, for every move whose effect ends with its motion, in base Sora and in the forms.
+> - **t1088, Wisdom and Final footsteps:** their walk and run were built on KH1's walking animations and kept KH1's step sounds. A form whose KH2 walk or run has no footsteps now leaves them out. Assumption: Wisdom's and Final's KH2 walks have none and the other forms' do. The log will show which forms lost them.
+>
+> **Drive Forms**
+> - **t1091, the Coliseum win soft lock:** the t1073 fix could never trigger. The win scene waits on Donald's and Goofy's poses while the form has them hidden. Now, whenever a KH1 scene waits on a partner the form took, he comes straight back; once the scene lets Sora go, the form takes them again. The form still carries into the next round.
+> - **t1093, Final's Blizzard finisher:** only the first cast moment in the animation fired the spell. Now each one does. Assumption: that finisher's animation has several cast moments. The log line "cast motion 60 has N magic-cast events" settles it.
+> - **t1094, Final's finisher effects:** an effect group too big for KH1's texture slots was dropped whole. It's now split up instead, as spells already were. This may also bring back missing effects on other moves.
+>
+> **Gummi skip**
+> - **t1089:** a real flight runs the route's departure script before choosing where to land; the skip ran it after. It now runs in the flight's order. I couldn't finish the job: a flight also writes its route results, and I need the decomp to find that function in the Steam build. While Menus logging is on, the skip logs exactly which save bytes each step changes.
+>
+> **Not built yet**
+> - **Second Keyblade shadow:** we switched the shadow off on the actor that carries the left Keyblade back in t842, because KH1's shadow drew a whole T-posed Sora for it. To give back only the Keyblade's shadow, I need to read in the KH1 decomp how its shadow draw (`0x1402BD6F0`) handles weapons.
+> - **Form effects in a new room:** the form's looping effects (glows, Wisdom's sparkles) are started only by its arrival animation, so a new room doesn't restart them. The fix I have plays that short arrival pose again each time you enter a room in a form. My reading of KH2's code is that KH2 does this when it rebuilds a form in a new room, but I haven't confirmed it. It changes how forms play, so I'm asking before shipping it (question 1).
+>
+> **Please test** (logs on: Menus, Sound, Forms, Magic, Effects, Animation):
+> 1. Magnet Burst: let it finish and cancel it early. The hum should stop with its effect; the other sounds still play.
+> 2. Wisdom and Final on a few floors: no steps. Valor, Limit, Master and base Sora still have theirs.
+> 3. The Coliseum win in a form, with Donald and Goofy, then a few more rounds.
+> 4. Final's Blizzard finisher (count the shards) and its ground and air finishers (effects).
+> 5. Config: 2nd Page; QoL without the two skips; with `experimental = on` they're back.
+> 6. If you try the gummi skip (with experimental on): skip a route from a save, then fly the same route normally from that save, and tell me which story step differs.
+> 7. Command Lock at KH1: press a spell or item where it feels wrong and send the log ("KH1's run took no command" lines).
+>
+> **Questions**
+> 1. Form effects in a new room: (a) Sora plays the short arrival pose again in each new room, which brings the effects back; (b) bring back only the effects, with no pose. For (b) I need to find in the decomp how to start those effects on their own.
+> 2. Command Lock at KH1: what did you expect? (a) the press is taken during a move and runs when it ends; (b) the press follows KH1's own swing timing, even on KH2's attacks; (c) the rows grey out while Sora is acting.
+> 3. Was the Coliseum soft lock in a cup with Donald and Goofy, or a solo one? If solo, this fix won't cover it; please send the log.
+> 4. Footsteps: KH1's foot effects (dust puffs) still show under Wisdom and Final, and their jump and landing sounds come from KH1. Should those (a) stay or (b) go too?
+> 5. Magnet Burst and the like: when an effect ends on its own but its sound is longer, should the sound (a) play to its end (as now) or (b) be cut with the effect?
+>
+> To build the shadow, the effects without the pose, and the rest of the gummi skip, I need the KH1 decomp. If you add its folder on your PC to this chat with the "Add folder" button in the desktop app, I can do those.
+
+^m9
 

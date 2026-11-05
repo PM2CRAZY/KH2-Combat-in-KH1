@@ -105,6 +105,7 @@ Each thread has a title and is separated from the next one by a line. Finished t
   - [6. PM2CRAZY (owner, chat 2026-11-02, copied word for word): 1. a](../testers/drive-forms-drive-recovery-config-menu-and-title-screen-bugs/drive-forms-drive-recovery-config-menu-and-title-screen-bugs.md#^m6)
   - [7. Assistant: t1085, growth abilities. Quick Run, Aerial Dodge and Dodge R](../testers/drive-forms-drive-recovery-config-menu-and-title-screen-bugs/drive-forms-drive-recovery-config-menu-and-title-screen-bugs.md#^m7)
   - [8. PM2CRAZY (owner, chat 2026-11-05, copied word for word): 1. some kh2 moves like magnet burst don't cut out its audio ](../testers/drive-forms-drive-recovery-config-menu-and-title-screen-bugs/drive-forms-drive-recovery-config-menu-and-title-screen-bugs.md#^m8)
+  - [9. Assistant: Nine versions this round, t1086 to t1094. Two items aren't b](../testers/drive-forms-drive-recovery-config-menu-and-title-screen-bugs/drive-forms-drive-recovery-config-menu-and-title-screen-bugs.md#^m9)
 - [Drive Forms native](../testers/drive-forms-native/drive-forms-native.md)
   - [1. Assistant: I started this thread from What is still missing(../what-is-](../testers/drive-forms-native/drive-forms-native.md#^m1)
 - [Drive Forms](../testers/drive-forms/drive-forms.md)
