@@ -78,8 +78,13 @@ const MOUSE_PROLOGUE: [u8; 10] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x74
 const KBM_STEAM: usize = 0x22DB3E8;
 /// 0 not checked yet, 1 KH1's mouse function is where expected, 2 it isn't.
 static MOUSE_OK: AtomicU32 = AtomicU32::new(0);
-/// KH1's config block (`+8`: field camera 0 Auto / 1 Manual).
+/// KH1's config block (`+8`: field camera 0 Auto / 1 Manual; `+0x14`: camera up / down,
+/// 0 Normal / 1 Reverse, `CONFIG_TILT_OFF`).
 const CONFIG_PTR_RVA: Rva = Rva(0x2E1FE70);
+/// The camera up / down option in KH1's config block (Config row 4, `docs/kh1-config-menu.md`
+/// 1.2): 0 Normal, 1 Reverse. Read from the option itself, as `+8` is (KH1 derives its pitch sign
+/// float from it on set and on load).
+const CONFIG_TILT_OFF: usize = 0x14;
 /// The camera left/right option's sign (+1 normal).
 const TURN_SIGN_RVA: Rva = Rva(0x507AAC);
 const FLAGS_RVA: Rva = Rva(0x2867CD8);
@@ -794,6 +799,7 @@ unsafe fn run(lock: bool) -> Option<()> {
     let (r, l) = sticks(base, free, &m);
     let pressed = rd::<u32>(base + BUTTONS_RVA + 8);
     let turn = turn_sign(base);
+    let tilt = tilt_sign(base);
     let config = rd::<u64>(base + CONFIG_PTR_RVA) as usize;
     let auto = config < 0x10000 || rd::<i32>(config + 8) == 0;
     let hold = r2_held(base);
@@ -809,7 +815,7 @@ unsafe fn run(lock: bool) -> Option<()> {
         // ran toward the camera, turning him in a circle (tester trace f571370).
         // (Not held to 1: in a mouse frame KH2's pad scales both tilts by the sensitivity.)
         move_stick: Vec2::new(l[0], -l[1]),
-        look_stick: if stick_off { Vec2::ZERO } else { look(r, turn) },
+        look_stick: if stick_off { Vec2::ZERO } else { look(r, turn, tilt) },
         reset: !locked && free && pressed & R3 != 0,
         auto,
         hold,
@@ -1095,11 +1101,19 @@ unsafe fn turn_sign(base: usize) -> f32 {
     if rd::<f32>(base + TURN_SIGN_RVA) < 0.0 { -1.0 } else { 1.0 }
 }
 
+/// KH1's camera up / down option's sign (+1 Normal, -1 Reverse), from the config block (the
+/// player, main s303: "the KH2 camera doesn't seem to respect the inverted X or Y setting").
+/// The follow camera's up / down zooms (KH2's), first person's pitches; both follow it.
+unsafe fn tilt_sign(base: usize) -> f32 {
+    let config = rd::<u64>(base + CONFIG_PTR_RVA) as usize;
+    if config >= 0x10000 && rd::<i32>(config + CONFIG_TILT_OFF) != 0 { -1.0 } else { 1.0 }
+}
+
 /// The right stick as the camera crate's look stick (x right, y up).
-fn look(r: [f32; 2], turn: f32) -> Vec2 {
+fn look(r: [f32; 2], turn: f32, tilt: f32) -> Vec2 {
     // (Negated: KH1 world turns the other way round from the camera crate's; the user: x was
     // inverted.) (Not held to 1: KH2's mouse sensitivity factor can take the tilt past it.)
-    Vec2::new(-r[0] * turn, -r[1])
+    Vec2::new(-r[0] * turn, -r[1] * tilt)
 }
 
 /// Writes KH2's camera's eye and look point (crate units) to KH1's internal pair, with KH1's own
@@ -1237,7 +1251,7 @@ unsafe fn run_first_person(base: usize, sora: usize) -> Option<()> {
     let m = mouse(base);
     let (r, _) = sticks(base, true, &m);
     let pressed = rd::<u32>(base + BUTTONS_RVA + 8);
-    let ctl = kh2_camera::Controls { look_stick: look(r, turn_sign(base)), reset: pressed & R3 != 0, mouse: m.motion.map(Vec2::from), kbm: m.kbm, ..Default::default() };
+    let ctl = kh2_camera::Controls { look_stick: look(r, turn_sign(base), tilt_sign(base)), reset: pressed & R3 != 0, mouse: m.motion.map(Vec2::from), kbm: m.kbm, ..Default::default() };
     let mut g = CAM.lock().ok()?;
     let cam = g.as_mut()?;
     cam.update_first_person(&subject, eye_height, &ctl, dt);

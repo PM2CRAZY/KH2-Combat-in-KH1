@@ -109,6 +109,7 @@ All of these but mode 2 have a null exit. Modes 0, 7, 9, 10 and 11 keep KH1's ow
 | `0x1423405DC` / `0x14233FBDC` | frame step | read |
 | `0x14298D4A0` / `0x14298CA90`, `0x14298D4D0` / `0x14298CAC0`, `0x14298D4E0` / `0x14298CAD0` | buttons, right and left stick | read |
 | `0x142E1FE70` / `0x142E1F4D8` `+8`, `0x140507AAC` / `0x140506CDC` | KH1's Auto / Manual option, left / right sign | read |
+| `0x142E1FE70` / `0x142E1F4D8` `+0x14` | KH1's camera up / down option (0 Normal, 1 Reverse): KH2's right-stick up / down (zoom in the follow camera, pitch in first person) is flipped on Reverse (`camera.rs::tilt_sign`; main s303). Read from the option itself, not KH1's pitch-sign float `0x140507AA8` (Epic; no Steam address in testing's map). The `+0x14` offset is from the Epic Config analysis (`kh1-config-menu.md` 1.2); that it is the same on Steam is an **Assumption** (the block and its `+8` are, Checked (code): `auto` reads it on Steam) | read |
 | `0x142867CD8` / `0x142867364`, `0x142867CDC` / `0x142867368` | first person allowed / special world flags | read |
 
 All new Steam addresses were generated from both executables (`steam_map.in`). The new blend,
