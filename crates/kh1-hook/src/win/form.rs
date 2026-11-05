@@ -739,8 +739,9 @@ unsafe fn drain_step(d: &mut Drive, actor: usize, battle: bool) {
             Kind::Master => Some(super::tint::Look::Master),
             // (Final's look, the owner's carried answer, main's white spec, t1041.)
             Kind::Final => Some(super::tint::Look::Final),
-            // (Anti's look, KH1 Anti-Sora's textures, isn't built: KH1 Sora's own for now.)
-            Kind::Anti => None,
+            // (Anti's look, main s290 / s292: KH1 Anti-Sora's textures on Sora's, solid yellow
+            // eyes, `tint::bake_anti`.)
+            Kind::Anti => Some(super::tint::Look::Anti),
         }),
     );
     // Valor's second Keyblade's Strength and MP (and back to Sora's own after).

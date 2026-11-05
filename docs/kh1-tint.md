@@ -295,3 +295,46 @@ vertex colour). `solid_eye_frames` does the same on every 128-row frame of the e
 (a shut frame, under 12 texels of eyeball, stays shut, so he still blinks), and `find_frame` /
 `frames_from` rebuild a frame sheet from the new face where KH1 pastes it. Not checked here: the
 `-2c0` / `-2c1` sheets (not among the staged files).
+
+## Anti Form's look in the mod (`tint`, `Look::Anti`)
+
+Entering Anti Form swaps six of Sora's textures, as the other looks swap theirs (`+0x70` of each
+source `Axa::EntryTex`, KH1's own put back on leaving): `-1c0`, `-1c1`, `-1c3` as before, and for
+Anti also `-1c2` (the pockets, mesh table entry 2) and the face's eye and mouth frame sheets.
+
+- The frame sheets (`tint::frames_texture`): the face mesh draws a per-object copy of `-1c0` that
+  KH1 refreshes from the source each draw and then pastes the current eye and mouth frames onto,
+  so a dark face alone would get Sora's eyes pasted back. The sheets are found in the remastered
+  model data (the object at handle `header+0x14`, `0x96969696` at `header+0x10`): a count at
+  `+0x20` and 32-byte records from the pointer at `+0x28`, each record's `+0x18` the texture it
+  pastes from. Checked (decomp, Steam): `0x1401DD4D0` indexes the records exactly so, and its
+  caller `0x1401D4070` writes `+0x94` of the record's `+0x18` texture (the `Axa::EntryTex` scale
+  field). Which record is the eyes is told by the texture's name holding `mdls2c0.` (mouth
+  `mdls2c1.`): main's reading, Assumption here (not checked in game on testing), as is main's
+  reading that the paste samples the sheet's `+0x70` (main's Epic `0x140104450`, not looked up on
+  Steam), which is what makes the swap reach the face. No hook: memory read on the game thread
+  while in the form.
+- The pixels (`tint::bake_anti`, on the job's thread, once): from the PKG, Sora's skeleton, his
+  `-c0.cvbl` and his six HD textures (the bases: size and alpha kept), and Anti-Sora's
+  `xa_pp_3020.mdls`: his PS2 mesh (`mdls::parse_faces`, his own skeleton's bind pose) and his
+  textures. For each of his seven textures his HD one (`-1c<n>` of his remastered assets, main:
+  seven 512² textures in the PS2 layout) is used when it is his PS2 one drawn larger (within 12 of
+  255 at the PS2 size; Sora's own pair is 1.1 apart), else the PS2 one (128²). Assumption (main's
+  reading, Checked (main's docs) only): that his `-1c<n>` are his PS2 textures `n` drawn at 512²;
+  the log line "texture n: his HD …" or "his PS2 one …" says which was used. Then
+  `texmap::transfer` onto `-1c0..-1c3`; the frame sheets from the new face (`find_frame` against
+  Sora's face, then `frames_from`), the eye sheet with solid eyes on each open frame; last the
+  face's own solid eyes.
+- Main used Anti-Sora's remastered `-c0.cvbl` as the source mesh (Sora's PS2 mesh with its PS2
+  UVs, main's docs); testing reads his PS2 mesh from his `.mdls` itself, the same geometry and
+  UVs (Checked (files) on Sora's: the PS2 mesh lies on his remastered one within 0.0003). Not
+  checked: Anti-Sora's own file (not among the staged files).
+- Cached into the mod folder (`docs/kh1-asset-cache.md` §6), so this happens once.
+- If anything fails (a file missing, a mesh that doesn't read, a size that doesn't match KH1's
+  texture), the log says why (`form tint (Anti): …`) and that texture gets main's fallback instead,
+  `Op::Shadow`: every texel hue 260° at saturation 0.5, brightness `0.03 + 0.10 × v`, with the
+  solid eyes on the face and the eye sheet. Not cached.
+
+Not checked in game: how the carried-over textures look under KH1's lighting; whether KH1 draws
+its Anti-Sora with more than his textures (a tint, transparency or an aura); only the textures
+are carried over, as main did.

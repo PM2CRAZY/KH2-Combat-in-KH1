@@ -22,6 +22,17 @@
 //! (the tester, ram-use m1 answer 2 (a) and the assets built once). Each recoloured texture is
 //! made once per slot and look and kept for later sources (a model loaded again), not made again
 //! for each.
+//!
+//! Anti Form (the owner, main s272..s292: "make sora look like shadow sora in this form (the
+//! miniboss from neverland)", then "copying the exact textures of KH1 anti-sora onto sora's anti
+//! form model instead of replacing the model", and "the eyes ... solid yellow, the same yellow as
+//! in anti-sora's model"): KH1's own Anti-Sora (`xa_pp_3020.mdls`, read from the player's
+//! install) is Sora's PS2 mesh with his own textures, so his colours are carried onto Sora's HD
+//! textures by the surface (`kh1_data::texmap`, `bake_anti`), the shorts' pockets (`-1c2`) and
+//! the face's eye and mouth frame sheets (`-2c0`, `-2c1`, which KH1 pastes onto the face each
+//! draw) too, with solid yellow eyes. Built once into the mod folder like the other looks, and
+//! swapped in the same way. If it can't be made, Sora's textures are darkened instead
+//! (`Op::Shadow`, main's fallback) and the log says why.
 
 use super::addr::Rva;
 use super::{log, pose};
@@ -39,10 +50,49 @@ const TEX_DDS: usize = 0x68;
 const TEX_GPU: usize = 0x70;
 const TEX_W: usize = 0x7C;
 const TEX_H: usize = 0x7E;
-/// The slots recoloured (mesh table entries 0 and 1: `-1c0`, the collar; `-1c1`, the clothes;
-/// 3: `-1c3`, the shoes (the user: "soras shoes should turn from yellow to blue in this form";
-/// every texel of it is on a leg or foot bone, `docs/kh1-tint.md`).
-const SLOTS: [usize; 3] = [0, 1, 3];
+/// Where a swapped texture is found on Sora's model.
+#[derive(Clone, Copy)]
+enum Tex {
+    /// A mesh-table entry's source texture.
+    Mesh(usize),
+    /// A texture-animation frame sheet, by the end of its name (`mdls2c0.`: the eyes): KH1
+    /// pastes a frame of it onto the face's per-object copy each draw (`docs/kh1-tint.md`).
+    Frames(&'static [u8]),
+}
+
+/// The textures that can be swapped, in the order `ops` numbers them (`k`), with their asset in
+/// the PKG: mesh table entries 0 and 1 (`-1c0`, the collar; `-1c1`, the clothes), 3 (`-1c3`, the
+/// shoes; the user: "soras shoes should turn from yellow to blue in this form"; every texel of it
+/// is on a leg or foot bone, `docs/kh1-tint.md`), and for Anti also entry 2 (`-1c2`, the shorts'
+/// pockets) and the face's eye and mouth frames (`-2c0`, `-2c1`).
+const TEXTURES: [(Tex, &str); 6] = [
+    (Tex::Mesh(0), "-1c0"),
+    (Tex::Mesh(1), "-1c1"),
+    (Tex::Mesh(3), "-1c3"),
+    (Tex::Mesh(2), "-1c2"),
+    (Tex::Frames(b"mdls2c0."), "-2c0"),
+    (Tex::Frames(b"mdls2c1."), "-2c1"),
+];
+const NTEX: usize = TEXTURES.len();
+/// KH1's Anti-Sora (the dark Sora of Neverland's ship): Sora's PS2 mesh on his own textures
+/// (`docs/kh1-tint.md`). Main found him in `kh1_fifth` (Checked (main's docs)).
+const ANTI_MODEL: &str = "xa_pp_3020.mdls";
+/// A face frame sheet's frame height (Sora's eyes, `-2c0`: 320×128 frames; the mouth, `-2c1`;
+/// main's reading of his files, Checked (main's docs)).
+const FRAME_H: u32 = 128;
+/// How far (mean per channel, 0..255) a sheet's first frame may differ from the face where it is
+/// pasted and still count as found (main's value; Sora's about 6).
+const FRAME_MATCH: f32 = 24.0;
+/// How far (mean per channel) one of Anti-Sora's HD textures may be from his PS2 one and still
+/// count as the same texture drawn larger (Sora's: 1.1, `kh1_data` tests); past it his PS2 one is
+/// used.
+const HD_MATCH: f32 = 12.0;
+/// Anti's fallback (main's `Op::Shadow`): every texel near black at a blue-violet hue, its
+/// brightness `lo + (hi - lo) × v`, so the folds still faintly show.
+const SHADOW_HUE: f32 = 260.0;
+const SHADOW_SAT: f32 = 0.5;
+const SHADOW_LO: f32 = 0.03;
+const SHADOW_HI: f32 = 0.13;
 const YELLOW_HUE: f32 = 48.0;
 /// (Wide enough for the orange where the yellow shades off; only bright texels, so the dark
 /// brown beside the shoes stays.)
@@ -87,7 +137,7 @@ const FINAL_WHITE_LO: f32 = 0.5;
 const FINAL_WHITE_HI: f32 = 0.97;
 
 /// A form's look (`form`): Wisdom's blue, Valor's red, Limit's black (t974), Master's yellow
-/// (t1029), Final's white (t1041).
+/// (t1029), Final's white (t1041), Anti's KH1 Anti-Sora (testing-merge).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Look {
     Wisdom,
@@ -108,6 +158,10 @@ pub enum Look {
     /// own outfit (`P_EX100_ULTF`), so on KH1's model this is the owner's look, as Limit's and
     /// Master's.
     Final,
+    /// Anti Form (main s290 / s292): KH1 Anti-Sora's textures carried onto Sora's, solid yellow
+    /// eyes (`bake_anti`). KH2's own Anti Form is a model of its own (`P_EX100_HTLF`); on KH1's
+    /// model this is the owner's look.
+    Anti,
 }
 
 /// How dark a blackened texel is: its brightness scaled to this (its shading kept).
@@ -135,6 +189,18 @@ enum Op {
     /// `width`, at least `min_v` bright, as `Shift`) made grey: no saturation, brightness
     /// `lo + (hi - lo) × v` (white with its shading kept); within `rect` if given.
     Grey { from: f32, width: f32, min_v: f32, lo: f32, hi: f32, rect: Option<[f32; 4]> },
+    /// (Anti's fallback, main's op of the same name) Every texel near black (`SHADOW_*`); then
+    /// Anti's solid eyes where Sora's are, if `eyes`.
+    Shadow { eyes: Option<Eyes> },
+}
+
+/// Where an `Op::Shadow` puts Anti's solid eyes.
+#[derive(Clone, Copy)]
+enum Eyes {
+    /// The face's eyes (`texmap::SORA_FACE_EYES`).
+    Face,
+    /// Every frame (`FRAME_H` rows) of the eye frame sheet (`-2c0`).
+    Frames,
 }
 
 /// What each look does to each slot (`SLOTS` order); none: that slot isn't swapped.
@@ -198,8 +264,22 @@ fn ops(look: Look, k: usize) -> Vec<Op> {
             white(BLUE_HUE, BLUE_WIDTH, 0.0),
         ],
         (Look::Final, 2) => vec![white(YELLOW_HUE, YELLOW_WIDTH, YELLOW_MIN_V), white(RED, RED_WIDTH, 0.0), white(BLUE_HUE, BLUE_WIDTH, 0.0)],
+        // Anti: only when KH1 Anti-Sora's textures couldn't be carried over (`bake_anti`; the
+        // log says why): all of him near black, with the solid eyes (main's fallback).
+        (Look::Anti, _) => vec![Op::Shadow {
+            eyes: match TEXTURES[k].1 {
+                "-1c0" => Some(Eyes::Face),
+                "-2c0" => Some(Eyes::Frames),
+                _ => None,
+            },
+        }],
         _ => Vec::new(),
     }
+}
+
+/// Whether `look` swaps texture `k`.
+fn wears(look: Look, k: usize) -> bool {
+    !ops(look, k).is_empty()
 }
 
 static BASE: AtomicUsize = AtomicUsize::new(0);
@@ -257,6 +337,7 @@ fn look_name(look: Look) -> &'static str {
         Look::Limit => "Limit",
         Look::Master => "Master",
         Look::Final => "Final",
+        Look::Anti => "Anti",
     }
 }
 
@@ -283,9 +364,9 @@ fn pkg_entry(install: &kh1_data::Kh1Install) -> Option<String> {
     None
 }
 
-/// Slot `k`'s HD texture file (the DDS) from the PKG (the job's thread).
+/// Texture `k`'s HD file (the DDS) from the PKG (the job's thread).
 fn read_pkg(install: &kh1_data::Kh1Install, k: usize) -> Option<Vec<u8>> {
-    let asset = format!("-1c{}.dds", SLOTS[k]);
+    let asset = format!("{}.dds", TEXTURES[k].1);
     match install.read_remastered(kh1_data::Source::Live, MODEL, &asset) {
         Ok((name, bytes)) => {
             log!(Animation, "form tint: {MODEL} {name} read from the PKG, on first need");
@@ -304,7 +385,7 @@ fn start(k: usize, look: Look, name: String, w: u32, h: u32, mem: Option<Vec<u8>
     set_job(k, look, Job::Working);
     std::thread::spawn(move || {
         let t = std::time::Instant::now();
-        let d = crate::tintcache::Desc { look: look_name(look).into(), slot: SLOTS[k], name, w, h, build: format!("{:?}", super::addr::Build::current()) };
+        let d = crate::tintcache::Desc { look: look_name(look).into(), asset: TEXTURES[k].1.trim_start_matches('-').into(), name, w, h, build: format!("{:?}", super::addr::Build::current()) };
         let Some((ready, store)) = build(k, look, &d, mem, t) else {
             set_job(k, look, Job::Failed);
             return;
@@ -333,10 +414,19 @@ fn build(k: usize, look: Look, d: &crate::tintcache::Desc, mem: Option<Vec<u8>>,
             None
         }
     };
+    // Anti: KH1 Anti-Sora's textures carried over (`bake_anti`), known by both models' PKG
+    // entries; the recolour below only as the fallback.
+    if look == Look::Anti {
+        if let Some(r) = install.as_ref().and_then(|i| build_anti(k, d, i, t)) {
+            return Some(r);
+        }
+    }
     let key = match &mem {
         Some(dds) => Some(Key::Content(crate::tintcache::source_hash(dds, d))),
         None => install.as_ref().and_then(pkg_entry).map(Key::Pkg),
     };
+    // (Anti's fallback isn't cached: KH1 Anti-Sora's textures are tried again next start.)
+    let key = key.filter(|_| look != Look::Anti);
     let dir = cache_dir();
     if let Some(key) = &key {
         match crate::tintcache::load(&dir, d, key) {
@@ -377,6 +467,7 @@ fn build(k: usize, look: Look, d: &crate::tintcache::Desc, mem: Option<Vec<u8>>,
     let p = recoloured(p, &what, k, look);
     let store = match &origin {
         Origin::Pkg(id) if id.is_empty() => None,
+        _ if look == Look::Anti => None,
         _ => Some((source, origin)),
     };
     log!(Loading, "form tint cache: {} ({look:?}) recoloured in {:.0} ms", d.name, t.elapsed().as_secs_f32() * 1000.0);
@@ -394,7 +485,7 @@ struct Made {
 struct Swap {
     /// Per slot: the source texture swapped (its address), KH1's GPU texture to put back, and
     /// the look it wears.
-    swapped: [Option<(usize, u64, Look)>; 3],
+    swapped: [Option<(usize, u64, Look)>; NTEX],
     /// Our GPU texture for a slot and a look, made once and used again for every later source of
     /// the same name and size (Sora's model loaded again by an area change: the same file).
     /// Before, it was made per source address, so each area change made new ones and the old were
@@ -404,7 +495,7 @@ struct Swap {
     failed: Vec<(usize, Look)>,
 }
 
-static SWAP: Mutex<Swap> = Mutex::new(Swap { swapped: [None, None, None], ours: None, failed: Vec::new() });
+static SWAP: Mutex<Swap> = Mutex::new(Swap { swapped: [None; NTEX], ours: None, failed: Vec::new() });
 
 unsafe fn rd<T: Copy>(p: usize) -> T {
     std::ptr::read_unaligned(p as *const T)
@@ -454,6 +545,12 @@ fn apply(p: &mut Pixels, op: Op) -> usize {
         Op::Black { rect, .. } => rect,
         Op::Paint { rect, .. } => rect,
         Op::Grey { rect, .. } => rect,
+        Op::Shadow { .. } => None,
+    };
+    // (Sora's own eye drawing, for where Anti's solid eyes go.)
+    let eyes_from = match op {
+        Op::Shadow { eyes: Some(e) } => Some((e, kh1_data::image::Image { w: p.w, h: p.h, bgra: p.bgra.clone() })),
+        _ => None,
     };
     let [u0, v0, u1, v1] = rect.unwrap_or([0.0, 0.0, 1.0, 1.0]);
     let (x0, x1) = ((u0 * w as f32) as usize, ((u1 * w as f32).ceil() as usize).min(w));
@@ -501,6 +598,7 @@ fn apply(p: &mut Pixels, op: Op) -> usize {
                     let l = lo + (hi - lo) * v;
                     (k, (l, l, l))
                 }
+                Op::Shadow { .. } => (1.0, rgb(SHADOW_HUE, SHADOW_SAT, SHADOW_LO + (SHADOW_HI - SHADOW_LO) * v)),
             };
             if k <= 0.0 {
                 continue;
@@ -512,7 +610,168 @@ fn apply(p: &mut Pixels, op: Op) -> usize {
             px[2] = mix(r, nr);
         }
     }
+    if let Some((eyes, orig)) = eyes_from {
+        let mut img = kh1_data::image::Image { w: p.w, h: p.h, bgra: std::mem::take(&mut p.bgra) };
+        solid_eyes(&mut img, &orig, eyes);
+        p.bgra = img.bgra;
+    }
     changed
+}
+
+/// Anti's solid yellow eyes on `p` where Sora's are in `orig` (the same size). Returns how many
+/// eyes (the face) or open frames (the eye sheet) got them.
+fn solid_eyes(p: &mut kh1_data::image::Image, orig: &kh1_data::image::Image, eyes: Eyes) -> usize {
+    use kh1_data::texmap;
+    match eyes {
+        Eyes::Face => texmap::solid_eyes(p, orig, texmap::face_eyes_area(orig.w, orig.h), texmap::ANTI_EYE_RGB),
+        Eyes::Frames => texmap::solid_eye_frames(p, orig, FRAME_H, texmap::ANTI_EYE_RGB),
+    }
+}
+
+/// KH1 Anti-Sora's textures carried onto Sora's (`bake_anti`), per `TEXTURES` (`None`: that one
+/// not made, or already taken by its job); `Err`: why not.
+type Baked = Result<Vec<Option<kh1_data::image::Image>>, String>;
+
+/// The carry-over, made once a session and only when a cached file doesn't serve (the first Anti
+/// job makes it, the others wait on the lock; each takes its texture out, so the memory goes
+/// with the last).
+static ANTI: Mutex<Option<Baked>> = Mutex::new(None);
+
+/// What Anti's textures are made from, as text (both models' PKG entries: `Kh1Install::stamp`),
+/// so a later start uses the cached files without reading either.
+fn anti_id(install: &kh1_data::Kh1Install) -> String {
+    let src = kh1_data::Source::Live;
+    format!("{MODEL}: {}; {ANTI_MODEL}: {}", install.stamp(src, MODEL), install.stamp(src, ANTI_MODEL))
+}
+
+/// Anti's texture `k` (the job's thread): the cached file if it matches both models' PKG entries,
+/// else made (`bake_anti`) and written. `None`: not made (the fallback recolour then).
+#[allow(clippy::type_complexity)]
+fn build_anti(k: usize, d: &crate::tintcache::Desc, install: &kh1_data::Kh1Install, t: std::time::Instant) -> Option<(Ready, Option<(u128, crate::tintcache::Origin)>)> {
+    use crate::tintcache::{Key, Origin};
+    let id = anti_id(install);
+    let dir = cache_dir();
+    match crate::tintcache::load(&dir, d, &Key::Pkg(id.clone())) {
+        Ok(bgra) => {
+            log!(Loading, "form tint cache: {} (Anti, {}) from {} in {:.0} ms", d.name, d.file_name(), dir.display(), t.elapsed().as_secs_f32() * 1000.0);
+            return Some((Ready { w: d.w, h: d.h, bgra }, None));
+        }
+        Err(why) => log!(Loading, "form tint cache: {} (Anti) made now ({why})", d.file_name()),
+    }
+    let img = {
+        let mut g = ANTI.lock().ok()?;
+        let baked = g.get_or_insert_with(|| {
+            let r = bake_anti(install);
+            if let Err(e) = &r {
+                log!(Animation, "form tint (Anti): KH1 Anti-Sora's textures not made, Sora's darkened instead ({e})");
+            }
+            r
+        });
+        let img = baked.as_mut().ok()?.get_mut(k)?.take();
+        // (All taken: dropped; one needed again later, its cached file missing, is made again.)
+        if baked.as_ref().is_ok_and(|v| v.iter().all(|x| x.is_none())) {
+            *g = None;
+        }
+        img
+    };
+    let Some(img) = img else {
+        log!(Animation, "form tint (Anti): no Anti-Sora texture for {} ({}), darkened instead", d.name, TEXTURES[k].1);
+        return None;
+    };
+    if (img.w, img.h) != (d.w, d.h) {
+        log!(Animation, "form tint (Anti): {} is {}x{} in the game, Anti-Sora's made for {}x{}; darkened instead", d.name, d.w, d.h, img.w, img.h);
+        return None;
+    }
+    let source = crate::slotcache::hash(id.as_bytes());
+    Some((Ready { w: img.w, h: img.h, bgra: crate::slotcache::Block::new(img.bgra) }, Some((source, Origin::Pkg(id)))))
+}
+
+/// KH1 Anti-Sora's textures carried onto Sora's (`kh1_data::texmap`, `docs/kh1-tint.md`), from
+/// the PKG: Sora's skeleton, his remastered mesh and his own HD textures (each the base, its size
+/// and alpha kept); Anti-Sora's PS2 mesh and his textures (his HD ones where they are his PS2
+/// ones drawn larger, else the PS2 ones). The face gets Anti's solid eyes, and the eye and mouth
+/// sheets are made of the new face where KH1 pastes them (Anti-Sora has neither), the eyes' with
+/// the solid eyes on each open frame.
+fn bake_anti(install: &kh1_data::Kh1Install) -> Baked {
+    use kh1_data::image::Image;
+    use kh1_data::texmap;
+    let started = std::time::Instant::now();
+    let src = kh1_data::Source::Live;
+    let read = |name: &str| install.read(src, name).map_err(|e| format!("{name}: {e}"));
+    let asset = |name: &str, a: &str| install.read_remastered(src, name, a).map(|(_, b)| b).map_err(|e| format!("{name} {a}: {e}"));
+    // Sora: his remastered mesh in his bind pose.
+    let sora_mdls = read(MODEL)?;
+    let sora_bones = texmap::bind_pose(&sora_mdls).map_err(|e| format!("{MODEL}: {e}"))?;
+    drop(sora_mdls);
+    let target = texmap::posed(&kh1_data::mesh::cvbl_faces(&asset(MODEL, "-c0.cvbl")?).map_err(|e| format!("{MODEL} -c0.cvbl: {e}"))?, &sora_bones).map_err(|e| format!("{MODEL}: {e}"))?;
+    // Anti-Sora: his PS2 mesh in his bind pose, his textures.
+    let anti = read(ANTI_MODEL)?;
+    let bones = texmap::bind_pose(&anti).map_err(|e| format!("{ANTI_MODEL}: {e}"))?;
+    let tris = texmap::posed(&kh1_data::mdls::parse_faces(&anti).map_err(|e| format!("{ANTI_MODEL}: {e}"))?, &bones).map_err(|e| format!("{ANTI_MODEL}: {e}"))?;
+    let ps2 = kh1_data::mdls::parse_textures(&anti).map_err(|e| format!("{ANTI_MODEL}: {e}"))?;
+    drop(anti);
+    let textures: Vec<Option<Image>> = ps2
+        .into_iter()
+        .enumerate()
+        .map(|(n, p)| {
+            let hd = asset(ANTI_MODEL, &format!("-1c{n}")).ok().and_then(|b| Image::from_dds(&b));
+            match hd.as_ref().and_then(|h| p.difference_from_larger(h).map(|d| (h, d))) {
+                Some((h, d)) if d <= HD_MATCH => {
+                    log!(Animation, "form tint (Anti): {ANTI_MODEL} texture {n}: his HD -1c{n} ({}x{}; {d:.1} from his PS2 one)", h.w, h.h);
+                    hd
+                }
+                found => {
+                    log!(Animation, "form tint (Anti): {ANTI_MODEL} texture {n}: his PS2 one ({}x{}; HD -1c{n}: {:?})", p.w, p.h, found.map(|(h, d)| (h.w, h.h, d)));
+                    Some(p)
+                }
+            }
+        })
+        .collect();
+    let source = texmap::Source::new(&tris, &textures);
+    // Sora's own HD textures, the bases (from the PKG: the same files KH1 loads).
+    let own: Vec<Option<Image>> = TEXTURES.iter().map(|(_, a)| asset(MODEL, &format!("{a}.dds")).ok().and_then(|b| Image::from_dds(&b))).collect();
+    let mut out: Vec<Option<Image>> = vec![None; NTEX];
+    for (k, (tex, a)) in TEXTURES.iter().enumerate() {
+        let Tex::Mesh(_) = tex else { continue };
+        let Some(slot) = a.strip_prefix("-1c").and_then(|s| s.parse::<u32>().ok()) else { continue };
+        let Some(base) = &own[k] else {
+            log!(Animation, "form tint (Anti): Sora's {a} not read from the PKG, so Anti-Sora's isn't carried onto it");
+            continue;
+        };
+        let (img, st) = texmap::transfer(&target, slot, base, &source);
+        log!(
+            Animation,
+            "form tint (Anti): Anti-Sora onto Sora's {a} ({}x{}): {} triangles, {} texels covered, {} filled beside, gap to his surface {:.4} mean, {:.3} max",
+            img.w, img.h, st.triangles, st.covered, st.filled, st.mean_gap, st.max_gap
+        );
+        if st.triangles > 0 {
+            out[k] = Some(img);
+        }
+    }
+    // The eye and mouth sheets: the new face where KH1 pastes each (before the face's own eyes).
+    let face = TEXTURES.iter().position(|t| t.1 == "-1c0").unwrap_or(0);
+    for (k, (tex, a)) in TEXTURES.iter().enumerate() {
+        let Tex::Frames(_) = tex else { continue };
+        let (Some(sheet), Some(orig), Some(new)) = (&own[k], &own[face], &out[face]) else { continue };
+        match texmap::find_frame(orig, sheet, FRAME_H) {
+            Some((x, y, d)) if d <= FRAME_MATCH => {
+                let mut img = texmap::frames_from(new, x, y, sheet, FRAME_H);
+                let open = if *a == "-2c0" { solid_eyes(&mut img, sheet, Eyes::Frames) } else { 0 };
+                log!(Animation, "form tint (Anti): {a} frames made from the face at ({x}, {y}) (difference {d:.1}), solid eyes on {open} of {} frames", sheet.h / FRAME_H);
+                out[k] = Some(img);
+            }
+            found => log!(Animation, "form tint (Anti): {a}'s first frame not found on the face ({found:?})"),
+        }
+    }
+    if let (Some(img), Some(orig)) = (out[face].as_mut(), &own[face]) {
+        let n = solid_eyes(img, orig, Eyes::Face);
+        log!(Animation, "form tint (Anti): {n} solid eyes on the face");
+    }
+    if out.iter().all(|x| x.is_none()) {
+        return Err("none of Sora's textures could take Anti-Sora's".into());
+    }
+    log!(Animation, "form tint (Anti): KH1 Anti-Sora's textures ready in {:.1} s", started.elapsed().as_secs_f32());
+    Ok(out)
 }
 
 /// An uncompressed 32-bit DDS's pixels as B8G8R8A8 (whatever its masks), with its size.
@@ -553,9 +812,53 @@ pub fn install() {
     BASE.store(base, Ordering::Relaxed);
 }
 
-/// Sora's model's source texture for mesh-table entry `entry` (`docs/kh1-tint.md`), if it is an
-/// HD texture.
-unsafe fn source_texture(actor: usize, entry: usize) -> Option<usize> {
+/// Sora's model's source texture for `TEXTURES[k]` (`docs/kh1-tint.md`), if it is an HD texture.
+unsafe fn source_texture(actor: usize, k: usize) -> Option<usize> {
+    match TEXTURES[k].0 {
+        Tex::Mesh(entry) => mesh_texture(actor, entry),
+        Tex::Frames(tag) => frames_texture(actor, tag),
+    }
+}
+
+/// The remastered model data behind Sora's model header `+0x14` (`0x96969696` at `+0x10`): its
+/// mesh table at `+0`, its texture-animation patches at `+0x20` / `+0x28`.
+unsafe fn remastered(actor: usize) -> Option<usize> {
+    let inst = pose::ptr(rd::<u32>(actor + 0x15C));
+    if inst < 0x10000 || !super::crash::readable(inst + 8) {
+        return None;
+    }
+    let slot = rd::<u64>(inst) as usize;
+    if slot < 0x10000 || !super::crash::readable(slot + 8) {
+        return None;
+    }
+    let header = rd::<u64>(slot) as usize;
+    if header < 0x10000 || !super::crash::readable(header + 0x20) || rd::<u32>(header + 0x10) != 0x9696_9696 {
+        return None;
+    }
+    let p = pose::ptr(rd::<u32>(header + 0x14));
+    (p > 0x10000 && super::crash::readable(p + 0x30)).then_some(p)
+}
+
+/// The texture-animation frame sheet whose name holds `tag` (`mdls2c0.`: the eyes): the model's
+/// patches, a count at `+0x20` and 32-byte records from the pointer at `+0x28`, each record's
+/// `+0x18` the `Axa::EntryTex` it pastes from. Checked (decomp): KH1's `0x1401DD4D0` indexes
+/// the records so (`0x96969696` header, handle at `+0x14`, `+0x20` count, `+0x28` × 0x20), and
+/// its caller (`0x1401D4070`) writes the record's `+0x18` texture's `+0x94`. The names: main's
+/// reading (`…_mdls2c0.dds`, as KH1's own `xa_he_1000_mdls2c0.dds`), Assumption here.
+unsafe fn frames_texture(actor: usize, tag: &[u8]) -> Option<usize> {
+    let p = remastered(actor)?;
+    let n = rd::<u32>(p + 0x20) as usize;
+    let patches = rd::<u64>(p + 0x28) as usize;
+    if n == 0 || n > 64 || patches < 0x10000 || !super::crash::readable(patches) || !super::crash::readable(patches + 0x20 * n - 1) {
+        return None;
+    }
+    (0..n).map(|i| rd::<u64>(patches + 0x20 * i + 0x18) as usize).find(|&t| {
+        t >= 0x10000 && super::crash::readable(t + 0x98) && rd::<u32>(t + 0x10) == TEX_MAGIC && rd::<[u8; 32]>(t + 0x14).windows(tag.len()).any(|w| w == tag)
+    })
+}
+
+/// Mesh-table entry `entry`'s source texture.
+unsafe fn mesh_texture(actor: usize, entry: usize) -> Option<usize> {
     let inst = pose::ptr(rd::<u32>(actor + 0x15C));
     if inst < 0x10000 || !super::crash::readable(inst + 8) {
         return None;
@@ -662,6 +965,7 @@ unsafe fn ours_for(s: &mut Swap, k: usize, src: usize, look: Look) -> Option<u64
         Look::Limit => b"kh2combat_limit_black\0",
         Look::Master => b"kh2combat_master_yellow\0",
         Look::Final => b"kh2combat_final_white\0",
+        Look::Anti => b"kh2combat_anti_sora\0",
     };
     let t = create(r, &desc, p.bgra.as_ptr(), label.as_ptr(), 0);
     if t < 0x10000 {
@@ -685,9 +989,13 @@ pub unsafe fn refresh(actor: usize, look: Option<Look>) {
         return;
     }
     let Ok(mut s) = SWAP.try_lock() else { return };
-    for (k, &entry) in SLOTS.iter().enumerate() {
-        let src = source_texture(actor, entry);
-        let want = look.filter(|l| !ops(*l, k).is_empty());
+    for k in 0..NTEX {
+        let want = look.filter(|l| wears(*l, k));
+        // (Nothing worn and nothing to put back: Sora's model isn't looked at.)
+        if want.is_none() && s.swapped[k].is_none() {
+            continue;
+        }
+        let src = source_texture(actor, k);
         if let Some((was, orig, l)) = s.swapped[k] {
             if want != Some(l) || src != Some(was) {
                 let ours = s.ours.as_ref().and_then(|o| o.get(&(k, l))).map_or(0, |m| m.texture);

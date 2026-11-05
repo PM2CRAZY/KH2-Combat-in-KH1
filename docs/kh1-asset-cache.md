@@ -373,6 +373,19 @@ Log lines (Loading): "form tint cache: <name> (<look>, <file>) from <dir> in N m
 cache: <file> (<look>) made now (none yet | unusable (...) | changed: ...)", "recoloured in N ms",
 "written (<path>)" or "not written (<error>); made again next time".
 
+Anti Form's look (testing-merge): six files, `form-tint-anti-1c0` / `-1c1` / `-1c3` / `-1c2` and
+the face's frame sheets `form-tint-anti-2c0` / `-2c1` (the manifest's `asset` line names which; it
+was `slot`, a number, before: every older file is rebuilt once, as a mod update does anyway). They
+are KH1 Anti-Sora's textures carried onto Sora's (`tint::bake_anti`, `docs/kh1-tint.md`), so they
+are known by both models' PKG entries (`Kh1Install::stamp` of `xa_ex_0010.mdls` and
+`xa_pp_3020.mdls`), not by KH1's copy in memory: with them in the cache neither model nor any
+texture is read. Made once (about 3 s on a thread for all six, main's timing for the four atlases;
+2.5 s here in a release build), the first time Anti Form comes; while it runs Sora keeps his own
+colours. Memory while made: Anti-Sora's seven textures (512², about 7 MB if his HD ones are used),
+Sora's six bases and the six results (about 17 MB), each result dropped when its job takes it.
+Assumption: not timed in game. Anti's fallback (Sora darkened, when Anti-Sora's textures can't be
+made) isn't cached, so the carry-over is tried again next start.
+
 Not checked in game: the times above, and that the cached copy looks the same as before (it is the
 same bytes the recolour gives, stored and read back).
 

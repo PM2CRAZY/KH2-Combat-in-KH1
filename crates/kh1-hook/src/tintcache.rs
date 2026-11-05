@@ -8,7 +8,8 @@
 //! (`slotcache`: a manifest, one block, a check hash at the end, written to a temporary file and
 //! renamed). The manifest names what the pixels were made from:
 //! - the format here (`TINT_FORMAT`), the mod's version, the game build;
-//! - the look and the slot, the source texture's name and size;
+//! - the look and the asset (`1c1`: the remastered mesh table's texture slot 1; `2c0`: the face's
+//!   eye frame sheet), the source texture's name and size;
 //! - the source DDS's content hash, and where it came from: KH1's copy in memory, or the PKG with
 //!   the PKG entry's identity (package, entry offset and lengths, the `.pkg`'s size and time).
 //!
@@ -26,12 +27,13 @@ use std::path::{Path, PathBuf};
 /// Bump when the recolour's output changes for the same inputs without the mod's version changing.
 pub const TINT_FORMAT: u32 = 1;
 
-/// What one recoloured texture is: the look, the slot (the remastered mesh table's texture slot,
-/// the asset `-1c<slot>.dds`), the source texture's name and size, the game build.
+/// What one recoloured texture is: the look, the asset (`1c<slot>`: the remastered mesh table's
+/// texture slot, the asset `-1c<slot>.dds`; `2c0` / `2c1`: the face's eye and mouth frame
+/// sheets, Anti Form's), the source texture's name and size, the game build.
 #[derive(Clone, Debug)]
 pub struct Desc {
     pub look: String,
-    pub slot: usize,
+    pub asset: String,
     pub name: String,
     pub w: u32,
     pub h: u32,
@@ -39,9 +41,9 @@ pub struct Desc {
 }
 
 impl Desc {
-    /// The file's name in the cache folder: one per look and slot (`form-tint-wisdom-1c1.bin`).
+    /// The file's name in the cache folder: one per look and asset (`form-tint-wisdom-1c1.bin`).
     pub fn file_name(&self) -> String {
-        format!("form-tint-{}-1c{}.bin", self.look.to_ascii_lowercase(), self.slot)
+        format!("form-tint-{}-{}.bin", self.look.to_ascii_lowercase(), self.asset)
     }
 
     /// The pixel data's length (B8G8R8A8).
@@ -55,7 +57,7 @@ impl Desc {
         m.set("mod version", crate::VERSION.to_string());
         m.set("game build", self.build.clone());
         m.set("look", self.look.clone());
-        m.set("slot", self.slot.to_string());
+        m.set("asset", self.asset.clone());
         m.set("source name", self.name.clone());
         m.set("source size", format!("{}x{}", self.w, self.h));
         m
@@ -160,7 +162,7 @@ mod tests {
     use super::*;
 
     fn desc() -> Desc {
-        Desc { look: "Wisdom".into(), slot: 1, name: "xa_ex_0010mdls1c1".into(), w: 2, h: 2, build: "Steam".into() }
+        Desc { look: "Wisdom".into(), asset: "1c1".into(), name: "xa_ex_0010mdls1c1".into(), w: 2, h: 2, build: "Steam".into() }
     }
 
     fn dir(tag: &str) -> PathBuf {
@@ -217,6 +219,15 @@ mod tests {
         std::fs::write(&path, &b).unwrap();
         assert!(matches!(load(&dir, &d, &Key::Content(1)), Err(Miss::Damaged(_))));
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn one_file_per_look_and_asset() {
+        let mut d = desc();
+        assert_eq!(d.file_name(), "form-tint-wisdom-1c1.bin");
+        d.look = "Anti".into();
+        d.asset = "2c0".into();
+        assert_eq!(d.file_name(), "form-tint-anti-2c0.bin");
     }
 
     #[test]
