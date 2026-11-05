@@ -28,9 +28,58 @@ Confidence: **Checked (exe)** read from KH1's code; **Ours** a choice of the mod
   attack-vs-attack clash (`0x1402B2890`): when KH1 marks Sora's side as clashed (`+4` 0x10 /
   0x20), the swing stops there and his recoil is KH1's kind 6 / 7 record, which `hurt` plays as
   KH2's recoil.
-- Walls (ini `wall_clink`): the blade's points from last frame to now through KH1's background
-  ray, not KH2's shapes (those reached far beside the blade: clinks "at random moments").
+- Walls on our own sweep (only off Steam or without `bodyhits`; the Walls row at Clink): the
+  blade's points from last frame to now through KH1's background ray, not KH2's shapes (those
+  reached far beside the blade: clinks "at random moments"). On Steam a row of ours' Keyblade
+  object meets walls through KH1's own wall contact: next section.
 - Each clank is logged with where along the blade it touched (0% the blade's start, 100% its tip).
+
+## A swing meeting a wall: the Walls row (testing-merge)
+
+The owner, main s309: "keep the clinking mechanic for enemies that should have it ... let sora hit
+the walls without clinking", then a video of vanilla KH1: "this is how Base KH1 handles sora hitting
+a wall". Main's ini `walls = kh1 / clink / pass` is the Config row Combat > Tweaks > Walls here (ini
+`walls`, the same values; `wall_clink` no longer read). `combat::walls`, `kh1rows::build_kh1`.
+
+KH1's side (Checked (decomp), from main's notes of Epic `0x1402B1870`, which `steam_map.in` maps to
+Steam `0x1402B3A00`, and testing's notes of `0x1402B3800` / `0x1402B3A00`):
+- KH1's builder `0x1402B3800` ends with the wall contact `0x1402B3A00` unless the object is
+  "spent" (`+0` bit 20, from its data's `+0x38` bit 16 at construction).
+- The contact: KH1's background ray; the face's surface class (0 → kind 0x100, 5 → 8, else 2);
+  the weapon's wall sound (kinds 0x100 / 2, attacks with flag bit 22, which the Attack command's
+  rows set); the spark from the attack's effect table at the contact, turned by the face normal;
+  the kind ORed into the attack's results `+4` and its "connected" word (`*(+0x60)`, Sora's combat
+  info `+0x50`); then the stop: spent, a clash record on the owner (kind 6, `+8` -20, `+0x2C` the
+  data; kinds 0x100 / 2 only), which Sora plays as KH1's recoil 0x6E / 0x70 (KH2's 41 / 43 at
+  Recoil KH2, `recoil`), and dead (`+0` bit 21) unless it keeps itself.
+
+**Conflict, Assumption:** by the decomp KH1's own swings stop and recoil off any wall that isn't
+surface class 5; the owner's video (Agrabah, a rising swing into an arch) showed the spark and the
+swing going on. Whether that arch is class 5, or something else keeps vanilla's swing going, isn't
+known (no decomp in this session). So the Walls row is for KH2's moves only (rows of ours, base
+Sora): KH1's own moves (Base Combo KH1) keep KH1's whole contact at every value, unchanged.
+
+Ours (Steam, through the builder hook `bodyhits::entries`; no new hook):
+- **KH1** (the default): for the Keyblade object of a row of ours (its data one of ours, base Sora,
+  out of a Drive Form) whose wall test is still to run, KH1's builder runs as it is, so KH1's own
+  ray, sound and spark play at the contact. When its wall contact fired (the object spent with a new
+  wall kind in `+4` and no clash bit 0x10 / 0x20): the dead mark it set is taken off, the kind 6
+  record it put on Sora (new since the call, `+0x2C` this object's data) marked no effect (`+0`
+  0x20, as KH1's guard stop marks a record), and the kinds taken out of `+4` and the "connected"
+  word again (main's steps 2..4, not 5 and 6). The object stays spent (KH1's own mark): one spark
+  per object, i.e. per motion of ours (main: once a swing per blade).
+  - Assumption: no other part of `0x1402B3800` sets the spent bit together with a wall kind.
+  - Assumption: a no-effect kind 6 record plays no recoil in KH1's hit pass (hurt's guard relies on
+    the flag for enemy hits, Checked (code); for a kind 6 record not checked).
+  - Assumption: taking the dead mark off within the same pass keeps the object (and its later hits)
+    alive (the pass frees dead objects on the next run, `0x1402B47A0`, Checked (decomp)).
+- **Clink**: KH1's whole contact (the swing stops, the record, his recoil): testing's base Sora
+  before (the template's bit, t1064's "base Sora keeps KH1's wall bounce").
+- **Pass**: our rows' data take `+0x38` bit 16 (`kh1rows::rules`, written on the switch), so KH1
+  runs no wall contact for them.
+- Drive Forms keep t1064's rule (KH2's "BG hit" flag per ATKP) at every value. Enemy guards clink as
+  before at every value.
+- Logged (Combat): "Walls KH1: Sora's swing object ... met a wall".
 
 ## KH2's guard windows as KH1 guards (Checked + Ours)
 

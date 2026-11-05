@@ -1361,11 +1361,14 @@ unsafe extern "system" fn entries(obj: usize, list: usize, count: i32) -> i32 {
     if let Some(n) = body_guard_entries(obj, list, count) {
         return n;
     }
-    let Some(i) = pool_index(obj) else { return f(obj, list, count) };
-    let Ok(mut g) = STATE.try_lock() else { return f(obj, list, count) };
+    // (KH1's own builder for any other object; a row of ours' Keyblade object meets walls by the
+    // Walls row, `kh1rows::build_kh1`.)
+    let kh1 = || super::kh1rows::build_kh1(obj, || f(obj, list, count));
+    let Some(i) = pool_index(obj) else { return kh1() };
+    let Ok(mut g) = STATE.try_lock() else { return kh1() };
     if !g.live[i].is_some_and(|l| l.obj == obj && still_ours(&l)) {
         drop(g);
-        return f(obj, list, count);
+        return kh1();
     }
     if !TEST_OK.load(Ordering::Relaxed) || list < 0x10000 {
         return count;

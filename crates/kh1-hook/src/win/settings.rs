@@ -61,8 +61,11 @@ kh2_voice = off\r\n\
 ; auto_aim: off = swings turn toward only KH1's target (the R1 lock or the small cursor);\r\n\
 ; on = KH2's own pick, the nearest enemy in reach\r\n\
 auto_aim = off\r\n\
-; wall_clink: on = a swing that meets a wall clinks off it and bounces Sora back; off = it passes\r\n\
-wall_clink = on\r\n\
+; walls: what a KH2 swing of base Sora's does at a wall (the Config menu's Combat > Tweaks > Walls row):\r\n\
+;   kh1 = KH1's wall spark and sound where the Keyblade meets it, no bounce, the swing goes on (the\r\n\
+;   default, the owner's main-branch choice); clink = KH1's whole wall contact, the swing stops and\r\n\
+;   Sora bounces back (his recoil); pass = the swing passes through walls. Drive Forms keep KH2's rule.\r\n\
+walls = kh1\r\n\
 ; camera: kh2 = KH2's field camera (follows behind, right stick turns and zooms, R3 resets);\r\n\
 ; kh1 = KH1's own. The Config menu's camera row switches it in game too.\r\n\
 camera = kh2\r\n\
@@ -519,7 +522,9 @@ pub struct Settings {
     #[allow(dead_code)]
     pub kh2_voice: bool,
     pub auto_aim: bool,
-    pub wall_clink: bool,
+    /// A KH2 swing at a wall (`walls = kh1 | clink | pass`: 0, 1, 2; `combat::walls`). Replaces the
+    /// ini-only `wall_clink` (no longer read, as main's s309).
+    pub walls: u8,
     /// A KH2 swing's Keyblade hit shows KH2's hit element (`combat::swing_spark`).
     pub kh2_hit_sparks: bool,
     pub kh2_camera: bool,
@@ -814,7 +819,11 @@ fn load(first: bool) -> Option<Settings> {
         drop_hop: on(&text, "drop_hop", "on", false),
         kh2_voice: on(&text, "kh2_voice", "on", false),
         auto_aim: on(&text, "auto_aim", "on", false),
-        wall_clink: on(&text, "wall_clink", "on", true),
+        walls: match setting(&text, "walls").as_deref() {
+            Some("clink") => 1,
+            Some("pass") | Some("off") => 2,
+            _ => 0,
+        },
         kh2_hit_sparks: on(&text, "kh2_hit_sparks", "on", true),
         kh2_camera: on(&text, "camera", "kh2", true),
         config_row: on(&text, "config_row", "on", true),

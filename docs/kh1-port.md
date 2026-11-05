@@ -33,7 +33,7 @@ Next to the game; written with the defaults when missing, read when the game sta
 | `kh2_effects` | `magnet_explosion` (default), `all`, `off` | Which moves show KH2's own visual effects (its particle effects, from the KH2 install, played by KH1's own effect system). |
 | `flip_weapons` | KH1 item ids, `0x53` (default), `none` | Weapons KH2's grip holds the wrong way round, turned half round in his hand (the Dream Shield). |
 | `auto_aim` | `off` (default), `on` | Off: KH2's swings turn toward and home in on only KH1's own target, the R1 lock or the small cursor's soft target. On: KH2's own pick, the nearest enemy in reach. |
-| `wall_clink` | `off` (default), `on` | On: a swing that meets a wall clinks off it (KH1's background ray) and bounces Sora back. Off: swings pass through walls. |
+| `walls` | `kh1` (default), `clink`, `pass` | The Config menu's Combat > Tweaks > Walls. KH1: a KH2 swing that meets a wall gets KH1's wall spark and sound and goes on (no bounce). Clink: KH1's whole wall contact (the swing stops, Sora recoils). Pass: through walls. Replaces `wall_clink`, no longer read. |
 | `camera` | `kh2` (default), `kh1` | KH2's field camera (follows behind, swings behind while running with Auto, right stick turns and zooms, R3 resets, KH2's lock-on framing) or KH1's own. The Config menu's new last row, Camera Style, switches it in game and writes it here. |
 | `camera_scale` | `0.89` (default) | KH2's camera distances and heights are multiplied by this. 0.89 is KH1 Sora's size against KH2 Sora's (hips 78.9 / 88.5), so he is framed as in KH2. |
 | `camera_lower` | `0` (default) | KH2's camera, look point and eye together, this much lower. 0 = as KH2. |

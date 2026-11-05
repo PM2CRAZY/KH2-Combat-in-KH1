@@ -588,7 +588,7 @@ ini `clash_count = kh1 | kh2`, **KH2 by default**, as the other Tweaks rows defa
   - Built: in a Drive Form, our rows' data (`kh1rows::rules`, from the form's clip's first hit
     window's ATKP) and both blades' data (`lefthits::blade_data`, per ATKP) take KH2's rule: no "BG
     hit" flag, bit 16 set (through walls); with it, bit 16 clear. Out of a form, the template's own
-    bit, as before (base Sora keeps KH1's wall bounce at either Recoil setting). Nothing per frame
+    bit, as before (base Sora keeps KH1's wall bounce at either Recoil setting; since testing-merge only with the Tweaks row Walls at Clink, `docs/kh1-clash.md`). Nothing per frame
     (written on the form change and when a blade's data is made).
 
 - **The owner, after t1076: "final form shouldn't be clinking with anything". Not built (asked).**

@@ -1103,6 +1103,56 @@ unsafe fn meet_shot(sora: usize, shot: &Shot, at: &Shape, row: Row, unstoppable:
     (rd::<u32>(shot.obj) & 0x0100_0000 != 0, ours)
 }
 
+/// What a KH2 swing of base Sora's does at a wall: the Config menu's Combat > Tweaks > Walls row
+/// (ini `walls`; the owner, main s309: "keep the clinking mechanic for enemies that should have it
+/// ... let sora hit the walls without clinking", "this is how Base KH1 handles sora hitting a
+/// wall"). Enemy guards clink as before at every value; Drive Forms keep KH2's "BG hit" rule (t1064).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Walls {
+    /// KH1's wall contact's spark and sound, no clash record, no bounce, the swing goes on
+    /// (`kh1rows::build_kh1`). The default.
+    Kh1,
+    /// KH1's whole wall contact: the swing stops, a kind 6 record, his recoil.
+    Clink,
+    /// No wall test: the swing passes through (our rows' data `+0x38` bit 16, `kh1rows::rules`).
+    Pass,
+}
+
+impl Walls {
+    pub const ALL: [Walls; 3] = [Walls::Kh1, Walls::Clink, Walls::Pass];
+    fn key(self) -> &'static str {
+        match self {
+            Walls::Kh1 => "kh1",
+            Walls::Clink => "clink",
+            Walls::Pass => "pass",
+        }
+    }
+}
+
+/// The Walls row (0 not read yet, else 1 + its index in `Walls::ALL`).
+static WALLS: AtomicU8 = AtomicU8::new(0);
+
+pub fn walls() -> Walls {
+    match WALLS.load(Ordering::Relaxed) {
+        0 => {
+            let v = super::settings::get().walls.min(2);
+            WALLS.store(1 + v, Ordering::Relaxed);
+            Walls::ALL[v as usize]
+        }
+        v => Walls::ALL[(v as usize - 1).min(2)],
+    }
+}
+
+/// The Config row (Combat > Tweaks > Walls): live (our rows' data take Pass's bit at once, the
+/// next swing's object reads it), kept in the ini.
+pub fn set_walls(w: Walls) {
+    let v = Walls::ALL.iter().position(|x| *x == w).unwrap_or(0) as u8;
+    WALLS.store(1 + v, Ordering::Relaxed);
+    super::kh1rows::rules_again();
+    super::settings::save("walls", w.key());
+    log!(Combat, "Config menu: Walls {w:?}");
+}
+
 /// Where the map's walls stop a blade moving `from` → `to` (KH1 world, y down): KH1's
 /// background ray (`0x140191520`, the one its attacks use), and the hit face's normal
 /// (`0x14018FC60`) to tell walls from floors and ceilings.
@@ -1816,13 +1866,16 @@ impl Strikes {
             // A wall in the blade's way since last frame: KH1's background ray, as its own swings
             // have it (`0x1402B1870`), and KH2's repel off it (the user: swings went through
             // walls). Walls only: a floor or ceiling the blade dips into doesn't repel.
-            // (Off by default: the user would rather swings pass through walls; ini `wall_clink`.)
+            // (Only at the Walls row's Clink: KH1's spark needs a KH1 attack object, which these KH2
+            // shapes swept here aren't, so at KH1 and Pass the swing goes on. This sweep runs only
+            // off Steam or without `bodyhits`; on Steam the Keyblade's walls are KH1's own contact,
+            // `kh1rows::build_kh1`.)
             let wall = match (on_blade, blade.as_ref(), blade_prev.as_ref()) {
                 (Some(_), Some((now, _)), Some(prev)) if prev.len() == now.len() => prev.iter().zip(now).find_map(|(p, q)| wall_between(*p, *q)),
                 (Some(_), _, _) => None,
                 _ => before.iter().zip(shapes.iter()).find_map(|(p, s)| wall_between([p[0], -p[1], p[2]], [s.center[0], -s.center[1], s.center[2]])),
             };
-            if !super::settings::get().wall_clink {
+            if walls() != Walls::Clink {
             } else if let Some(at) = wall {
                 self.repelled.insert(h.swing);
                 let bounced = character.as_deref_mut().is_some_and(|c| c.register_wall_hit());

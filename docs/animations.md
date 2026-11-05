@@ -75,7 +75,7 @@ Other ini keys that change what is drawn or who moves him:
 | `keyblade_turn` | on | Keyblades turned teeth up under KH2's poses. |
 | `flip_weapons` | 0x53 | Weapons held with KH1's wrist under KH2's poses (the Dream Shield). |
 | `swing_fx`, `kh2_sounds`, `kh2_effects`, `battle_quotes` | on, abilities, magnet_explosion, kh1 | Trails, sounds, effects and voices per KH2 motion. They don't change the motion. |
-| `wall_clink` | on | A KH2 swing that meets a wall plays KH2's repelled motion (41 / 43). |
+| `walls` | kh1 | Combat > Tweaks > Walls. KH1: KH1's wall spark and sound, no bounce. Clink: KH1's whole wall contact, his recoil (KH1's 0x6E / 0x70, KH2's 41 / 43 at Recoil KH2). Pass: through walls. `docs/kh1-clash.md`. |
 | `camera`, `camera_calls` | kh2, kh2 | Whose camera follows each state (the camera notes below). |
 
 **Inconsistency:** `styles.rs` says "kh1 is on by default for all settings", and
@@ -278,7 +278,7 @@ all call it Finishing Leap; Upper Slash is ability 18, row 12, motion 161.
 | Air flinch | KH2 always | n/a | n/a | 14 (front), 15 (behind) | `hurt = kh2` | |
 | Knocked away (blow) | KH2 always | n/a | n/a | 16 (front), 18 (behind); +1 on landing (17, 19) | `hurt = kh2` | Kind 4 / 5 → a blow. No hit lands while down (`Fate::Down`). Aerial Recovery and Retaliating Slash come out of it. |
 | Special reaction (0xe) | KH2 always | n/a | n/a | 23 / 24 | `hurt = kh2` | `reaction::motion::SPECIAL`. Whether the hook ever sends one is **unconfirmed**: it sends only kinds 3 and 4. |
-| Guard repel / repelled | KH2 always | n/a | n/a | 42 (guard repel), 41 ground / 43 air (repelled by a wall or an attack) | `hurt`, `wall_clink` | KH1's attack clash (kind 6 / 7) → KH2's recoil. A wall clink plays 41 / 43; Final Form has neither, so no bounce. |
+| Guard repel / repelled | KH2 always | n/a | n/a | 42 (guard repel), 41 ground / 43 air (repelled by a wall or an attack) | `hurt`, `walls` (Clink) | KH1's attack clash (kind 6 / 7) → KH2's recoil. A wall clink plays 41 / 43; Final Form has neither, so no bounce. |
 | Evaded / reflected | KH2 always | n/a | n/a | no motion | `hurt` | Invulnerable frames, Reflect's barrier and the whole Reflect cast drop the hit. |
 | KO | KH1 only | KH1's | KH1's | KH1's | none | KH1's dying pass. Out of a Drive Form at once (`form::knocked_out`). |
 

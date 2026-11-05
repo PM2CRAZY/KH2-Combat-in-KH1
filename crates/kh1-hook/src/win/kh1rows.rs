@@ -893,11 +893,14 @@ pub fn kh2_rules() -> bool {
 /// clip of keeps KH2's rules from base Sora's data. Only on a change (base Sora, KH1 or KH2, or a form).
 unsafe fn rules() {
     let form = super::form::native_form();
+    // (The Walls row at Pass sets the wall-test bit on base Sora's rows: `0x40` in the key, so a
+    // switch writes the data again.)
+    let pass = form.is_none() && super::combat::walls() == super::combat::Walls::Pass;
     let want = match form {
         Some(k) => 3 + k as u8,
         None if super::recoil::kh2() => 2u8,
         None => 1,
-    };
+    } | if pass { 0x40 } else { 0 };
     if RULES.load(Ordering::Relaxed) == want {
         return;
     }
@@ -905,7 +908,7 @@ unsafe fn rules() {
     let mut said = Vec::new();
     for n in 0..OURS.len() {
         let d = DATA_AT[n].load(Ordering::Relaxed);
-        let mut v = if want == 1 { &CLASH_KH1[n] } else { &CLASH_KH2[n] }.load(Ordering::Relaxed);
+        let mut v = if want & 0x3F == 1 { &CLASH_KH1[n] } else { &CLASH_KH2[n] }.load(Ordering::Relaxed);
         if d == 0 || v == u32::MAX {
             continue;
         }
@@ -922,9 +925,12 @@ unsafe fn rules() {
         // Final's hits have no "BG hit" flag, so they never bounce off a wall); otherwise, or with
         // no clip of the form's, the template's own bit (KH1's wall bounce, base Sora as before).
         let own_wall = if form.is_some() { kh2.and_then(|k| window_atkp(OURS[n].motion, None).and_then(|id| k.battle.attack_for_level(id, 0, 0))).map(kh2_no_wall) } else { None };
+        // (Base Sora: the Walls row; at Pass no wall test for any row of ours, at KH1 and Clink the
+        // template's bit, KH1's wall contact, `build_kh1`.)
         let wall = match own_wall {
             Some(true) => WALL_OFF,
             Some(false) => 0,
+            None if pass => WALL_OFF,
             None => WALL_KH1[n].load(Ordering::Relaxed),
         };
         wr(d + 0x38, (rd::<u32>(d + 0x38) & !(7 | WALL_OFF)) | t | wall);
@@ -936,10 +942,103 @@ unsafe fn rules() {
     RULES.store(want, Ordering::Relaxed);
     let whose = match form {
         Some(k) => format!("KH2 ({}'s own data)", k.name()),
-        None if want == 2 => "KH2".to_string(),
+        None if want & 0x3F == 2 => "KH2".to_string(),
         None => "KH1".to_string(),
     };
     log!(Combat, "KH1's attack rows: {whose}'s clash rules: {}", said.join(", "));
+}
+
+/// The rules written again at the next posed frame (the Walls row switched, `combat::set_walls`).
+pub fn rules_again() {
+    RULES.store(0, Ordering::Relaxed);
+}
+
+/// KH1's attack object flags (`+0`): "spent", no more wall tests (the constructor `0x1402B2DC0`
+/// sets it from data `+0x38` bit 16; the wall contact sets it on a wall), and dead (freed on the
+/// next pass, `0x1402B47A0`). Checked (decomp) (`docs/kh1-anim-slots.md`, `docs/kh1-clash.md`).
+const SPENT: u32 = 0x10_0000;
+const DEAD: u32 = 0x20_0000;
+/// The wall contact's kinds by surface class (0 → 0x100, 5 → 8, else 2), which it ORs into the
+/// object's results `+4` and its "connected" word (`*(+0x60)`). Checked (decomp) (main's notes of
+/// Epic `0x1402B1870` = Steam `0x1402B3A00`, `steam_map.in`; `docs/kh1-kh2-recoil.md`).
+const WALL_KINDS: u32 = 0x100 | 8 | 2;
+/// A hit record's no-effect flag (`hurt::NO_EFFECT`, `+0`).
+const NO_EFFECT: u8 = 0x20;
+
+/// Sora's hit records (`+0x3EC`, next `+0x30`; `hurt`), at most 32, as handles.
+unsafe fn record_handles(actor: usize, out: &mut [u32; 32]) -> usize {
+    let mut n = 0;
+    let mut h = rd::<u32>(actor + 0x3EC);
+    while n < out.len() {
+        let r = pose::ptr(h);
+        if r < 0x10000 {
+            break;
+        }
+        out[n] = h;
+        n += 1;
+        h = rd::<u32>(r + 0x30);
+    }
+    n
+}
+
+/// (Walls row KH1, the default) KH1's builder `0x1402B3800` for the Keyblade object of a row of
+/// ours (base Sora, out of a Drive Form), from `bodyhits::entries`: KH1's own wall contact
+/// `0x1402B3A00` runs at its end as for every swing of KH1's (the ray, the surface class, the
+/// weapon's wall sound, the spark at the contact, turned by the face). That contact then stops the
+/// swing (spent and dead) and puts a kind 6 record (`+8` -20, `+0x2C` the data) on Sora, his
+/// recoil (Checked (decomp), the same notes). The owner's KH1 (main s309, from a video of
+/// vanilla KH1): the spark, no bounce, the swing goes on. So, when this build's wall contact
+/// fired (the object spent now with a wall kind in its results): the dead mark it set taken off,
+/// the record it put on him marked no effect, and its kinds taken out of the results and the
+/// "connected" word again (main's steps 2..4, not 5 and 6). The object stays spent, KH1's own
+/// mark, so one spark a swing object (one per motion of ours). Nothing for any other object or
+/// at Clink (KH1's whole contact) and Pass (no contact). Per live object: a flag read, then the
+/// data lookup only while its wall test is still to run.
+pub(super) unsafe fn build_kh1(obj: usize, build: impl FnOnce() -> i32) -> i32 {
+    if obj < 0x10000 || rd::<u32>(obj) & SPENT != 0 || super::combat::walls() != super::combat::Walls::Kh1 || super::form::in_form() {
+        return build();
+    }
+    let handle = rd::<u32>(obj + 0x5C);
+    let data = pose::ptr(handle);
+    let owner = pose::ptr(rd::<u32>(obj + 0x34));
+    if data == 0 || owner < 0x10000 || !DATA_AT.iter().any(|d| d.load(Ordering::Relaxed) == data) {
+        return build();
+    }
+    let results: u32 = rd(obj + 4);
+    let word = rd::<usize>(obj + 0x60);
+    let connected: u32 = if word > 0x10000 { rd(word) } else { 0 };
+    let mut before = [0u32; 32];
+    let nb = record_handles(owner, &mut before);
+    let flags0: u32 = rd(obj);
+    let count = build();
+    let flags: u32 = rd(obj);
+    let now: u32 = rd(obj + 4);
+    let kinds = now & WALL_KINDS & !results;
+    // (A clash in the same build, `+4` 0x10 / 0x20, stays KH1's.)
+    if flags & SPENT == 0 || kinds == 0 || now & 0x30 != 0 {
+        return count;
+    }
+    if flags & DEAD != 0 && flags0 & DEAD == 0 {
+        wr(obj, flags & !DEAD);
+    }
+    wr(obj + 4, now & !kinds);
+    if word > 0x10000 {
+        let c: u32 = rd(word);
+        wr(word, c & !(WALL_KINDS & !connected));
+    }
+    let mut after = [0u32; 32];
+    let na = record_handles(owner, &mut after);
+    let mut stopped = 0;
+    for &h in &after[..na] {
+        let r = pose::ptr(h);
+        if before[..nb].contains(&h) || rd::<u32>(r + 0x2C) != handle || rd::<u32>(r + 0xC) & 0x1F != 6 {
+            continue;
+        }
+        wr(r, rd::<u8>(r) | NO_EFFECT);
+        stopped += 1;
+    }
+    note(|| format!("Walls KH1: Sora's swing object {obj:#x} (data {data:#x}) met a wall (kind {kinds:#x}): KH1's spark and sound, {stopped} wall record(s) of no effect, the swing goes on"));
+    count
 }
 
 /// Sora's own KH1 row `row` (KH1's table, not ours): its attack data's address and its effect and

@@ -228,7 +228,7 @@ Main's `kh1-kh2.ini` must load on `testing` without the player losing their choi
 | abilities, hurt, carry, ceilings, grabs, commands, swing_fx, kh2_sounds, kh2_volume, damage_scale, glide, air_cast_fall, kh2_voice, auto_aim, camera, camera_scale, camera_lower, config_row, shortcuts, kh2_effects, flip_weapons, reflect, keyblade_turn, drive, valor_left_blade, ground_combo, air_combo, jump_style, glide_style, roll_style, misc_anims, player_model, battle_quotes, gummi | same key | Keep. Check each value still means the same thing. |
 | `physics` (on/off: hair, hood and chain sway) | `physics` exists with **another meaning** (kh1/kh2: whose movement physics) | **Drop main's line.** Must not be read as the new key. |
 | `kh2_hair` | none | Drop: hair, hood and chain are baked into the animations now (owner). |
-| `walls` (kh1 / clink / pass) | `wall_clink` (on/off) | clink → on; kh1 and pass → check what `wall_clink = off` does against main's kh1 and pass before mapping. |
+| `walls` (kh1 / clink / pass) | `walls` (kh1 / clink / pass, the Tweaks row Walls; testing-merge) | Keep: the same key and values. `wall_clink` is no longer read (as main's s309). |
 | `music_mute` (lowest / on / off) | `volume_mute` (on/off, every slider, t915) | lowest → on, off → off; on (music always silent) has no equivalent: ask. |
 | `magic`, `air_magic` | per-spell `magic_*`, `magic_air_physics` | `testing` already reads the old two (m19); confirm. |
 | `magic_scale` | none | Superseded: KH2 damage runs through KH1's magic stat with no KH2 bonus on top (owner). Drop. |

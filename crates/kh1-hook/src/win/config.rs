@@ -316,6 +316,8 @@ enum Pick {
     CutsceneSkip,
     /// QoL > Chest Opening (Vanilla | Quick | Skip, `chest::style`).
     Chest,
+    /// Tweaks > Walls (KH1 | Clink | Pass, `combat::walls`; main s309).
+    Walls,
 }
 
 fn pick_value(what: Pick) -> usize {
@@ -323,6 +325,7 @@ fn pick_value(what: Pick) -> usize {
         Pick::KnockNumbers => super::hitreact::numbers() as usize,
         Pick::CutsceneSkip => super::cutsceneskip::mode() as usize,
         Pick::Chest => super::chest::style() as usize,
+        Pick::Walls => super::combat::Walls::ALL.iter().position(|w| *w == super::combat::walls()).unwrap_or(0),
     }
 }
 
@@ -331,6 +334,7 @@ fn pick_set(what: Pick, v: usize) {
         Pick::KnockNumbers => super::hitreact::set_numbers(super::hitreact::Numbers::ALL[v.min(2)]),
         Pick::CutsceneSkip => super::cutsceneskip::set(v.min(2) as u8),
         Pick::Chest => super::chest::set_style(v.min(2) as u8),
+        Pick::Walls => super::combat::set_walls(super::combat::Walls::ALL[v.min(2)]),
     }
 }
 
@@ -548,7 +552,7 @@ const COSMETICS: [Item; 1] = [Item::Set([0x7F00_0215, 0x7F00_0217, 0x7F00_0218, 
 // (Hit Reactions, Knock-back Numbers, Medium Hits, KH2 Damage, Criticals, Party Criticals and Recoil
 // moved here from Combat: the user, t704: "put recoil, critical, party critical, kh2 damage, medium
 // hits, knock back numbers, and hit reactions into the tweaks section".)
-const TWEAKS: [Item; 13] = [
+const TWEAKS: [Item; 14] = [
     Item::Set([0x7F00_0191, 0x7F00_011D, 0x7F00_011E, 0x7F00_0192], Row::AbilityChance),
     Item::Set([0x7F00_0193, 0x7F00_011D, 0x7F00_011E, 0x7F00_0194], Row::EnemyWeight),
     Item::Set([0x7F00_0197, 0x7F00_011D, 0x7F00_011E, 0x7F00_0198], Row::GlideCast),
@@ -564,12 +568,15 @@ const TWEAKS: [Item; 13] = [
     Item::Set([0x7F00_0149, 0x7F00_011D, 0x7F00_011E, 0x7F00_014A], Row::Criticals),
     Item::Set([0x7F00_014B, 0x7F00_011D, 0x7F00_011E, 0x7F00_014C], Row::PartyCriticals),
     Item::Set(kh(0x7F00_0172, 0x7F00_0173), Row::Style(Kind::Recoil)),
+    // (Walls: the owner, main s309, "let sora hit the walls without clinking", "this is how Base
+    // KH1 handles sora hitting a wall"; main's ini `walls = kh1 / clink / pass` as a Tweaks row.)
+    Item::Pick([0x7F00_0263, 0x7F00_0002, 0x7F00_0264, 0x7F00_0265, 0x7F00_0266], Pick::Walls),
 ];
 // (Experimental, t922, the owner: "a setting in the ini that enables experimental settings in the
 // config menu ... here is what should be disabled": Enemy Weight, Clash Combo, Knock-back Numbers,
 // Medium Hits, KH2 Damage, Recoil, and Combat's Guard Shape. Without `experimental = on` the lists
 // are these, and each of those settings keeps its default (`settings::EXPERIMENTAL_KEYS`).)
-const TWEAKS_STABLE: [Item; 7] = [TWEAKS[0], TWEAKS[2], TWEAKS[4], TWEAKS[5], TWEAKS[6], TWEAKS[10], TWEAKS[11]];
+const TWEAKS_STABLE: [Item; 8] = [TWEAKS[0], TWEAKS[2], TWEAKS[4], TWEAKS[5], TWEAKS[6], TWEAKS[10], TWEAKS[11], TWEAKS[13]];
 const CAMERA: [Item; 2] = [
     Item::Set(kh(0x7F00_0001, 0x7F00_0004), Row::Camera),
     Item::Set([0x7F00_0121, 0x7F00_011D, 0x7F00_011E, 0x7F00_0122], Row::R2Hold),
@@ -632,7 +639,7 @@ const BUTTON_HELP: u32 = 0x7F00_0202;
 /// Misc's help, and the same without the debug menu (its row isn't there without the debug tools).
 const MISC_HELP: u32 = 0x7F00_020C;
 const MISC_HELP_NO_DEBUG: &str = "Battle quotes.";
-const STRINGS: [(u32, &str); 174] = [
+const STRINGS: [(u32, &str); 178] = [
     (0x7F00_0201, "KH1 in KH2"),
     (0x7F00_0202, "Choose KH1's or KH2's camera, combat, movement and more."),
     (0x7F00_0203, "Camera"),
@@ -752,6 +759,10 @@ const STRINGS: [(u32, &str); 174] = [
     (0x7F00_023D, "On: an attack with the floor giving out ahead hops Sora off the\nledge in an air swing, as in KH2. Off: no hop. Drive Forms keep theirs."),
     (0x7F00_0197, "Cast from Glide"),
     (0x7F00_0198, "On: a KH2 spell ends the glide and is cast in the air, as in\nKH2. Off: no spell while gliding."),
+    (0x7F00_0263, "Walls"),
+    (0x7F00_0264, "Clink"),
+    (0x7F00_0265, "Pass"),
+    (0x7F00_0266, "KH1: a KH2 swing that meets a wall sparks and sounds there and goes on,\nno bounce. Clink: it stops and Sora bounces back. Pass: through walls."),
     (0x7F00_0199, "Clash Combo"),
     (0x7F00_019A, "KH2: every clash counts as a hit for the combo, and each recoil\n(in the air too) takes one swing off it, as in KH2. KH1: KH1's."),
     (0x7F00_0001, "Camera Style"),
