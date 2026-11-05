@@ -890,6 +890,22 @@ Keyblade while KH1's actor pool has no place; KH1's own slots between Valor move
 
 **t852.** The left Keyblade's keychain kept the right one's shape: the holder motions start from the main bake's pose, whose chain bones are the right Keyblade's, and the left hold carried them along. In Valor's idle it pointed up, 126 degrees off KH2's left chain. Now the left chain is hung from KH2's left weapon motion the way the right one is from the right (`kh1_data::secondary`, chain only). Offline it's within 1 degree of KH2's in every motion checked. Checked (files, offline).
 
+**Open: the left Keyblade's shadow (owner, 2026-11: "the second keyblade on a drive form doesn't have a shadow").**
+Why it has none: t842 cleared the holder's actor `+0` bit 0x2, so KH1's per-actor draw (`0x1402A1B70`)
+skips its shadow pass (`0x1402BD6F0`) for it. Checked (code, t842 notes). With the bit back the pass
+drew a T-posed Sora: it doesn't honour the hidden-mesh mask `+0x38C`. Checked (t842 screenshot).
+Not known, and needed from the KH1 Steam decomp before a native fix:
+- whether `0x1402BD6F0` draws the actor's weapon object (`+0x14C` with `+0` bit 0x4000), or whether
+  Sora's Keyblade shadow comes from somewhere else;
+- whether it reads the instance's posed bones (`+0x15C` → `+0x1B4`) or poses on its own, and whether
+  it runs before or after `0x1402A1630` (t845's move of the holder's weapon bones onto the kept palm
+  happens in the queue call);
+- any mask or flag it does honour per mesh, and the first bytes of `0x1402BD6F0` / `0x1402A1B70`.
+The native fix then: (a) if the pass draws the weapon, the holder casts it again (bit 0x2) and its body
+is kept out of it, by a mask the pass honours or by the holder motions posing the body bones as a speck
+at the grip (data KH1 reads, no per-frame code); (b) if Sora's Keyblade shadow comes from another pass,
+the holder is given that one. Assumption: KH2 draws a shadow for the second weapon (not checked).
+
 ## 13. Put away with Sora's own Keyblade, and in cutscenes (t1061)
 
 The owner's report: in the Olympus Coliseum's victory poses the second Keyblade stayed in Sora's hand. The owner's decision: both rules, in Valor, Master and Final.
