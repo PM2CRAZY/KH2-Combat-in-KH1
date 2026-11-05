@@ -4101,6 +4101,7 @@ unsafe extern "system" fn run_entry(menu: usize, entry: i32) -> u64 {
     let open = super::cmdmenu::open_lists();
     let r = f(menu, entry);
     if r != 0 {
+        super::driveitems::command_taken(BASE.load(Ordering::Relaxed));
         super::cmdmenu::command_taken(&open);
     } else if super::log_on(super::LogCat::Menus) && !super::cmdmenu::lock_kh2() {
         // (Log only, Command Lock KH1: KH1's own run refused the press, for the owner's "command

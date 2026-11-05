@@ -121,6 +121,22 @@ pub fn command_record(template: &[u8; COMMAND], word: u16, arg: u8) -> [u8; COMM
     r
 }
 
+/// KH1's chosen command word (Steam `0x142D53A40`: `type | arg << 8`, the top byte KH1's flags),
+/// as KH1's menu run `0x140293480` writes it from a command record: it reads the argument as a
+/// signed byte (`(int)(char)record[7] << 8`, masked `0xFFFF00`; Checked (decomp)), so our
+/// arguments `0x91` / `0x92` become item `0xFF91` / `0xFF92` (bit 10 set: KH1's item use then
+/// neither takes the item from Sora's slot nor gives it back, `0x1402C2760` / `0x140284E60`, and its
+/// effect gets `0xFB91`, `0x1402C2B50`, which no effect knows). The word with our item's id put back
+/// (`Some`), or `None` for any other word (KH1's own items are all below `0x80`).
+pub fn battle_request(word: u32) -> Option<u32> {
+    if word & 0xFF != COMMAND_TYPE_ITEM as u32 {
+        return None;
+    }
+    let sub = word >> 8 & 0xFFFF;
+    let &id = IDS.iter().find(|&&i| sub == 0xFF00 | i as u32)?;
+    Some(word & 0xFF00_00FF | (id as u32) << 8)
+}
+
 /// KH1's item shops' lists (Steam `0x1404FEE00`, 0xD4 bytes each: a count, then up to 52 item ids;
 /// opened by `0x1403010A0`, Checked (decomp) and (exe)): the ones selling a Potion and a Tent (lists
 /// 0..3 and 7; KH1's other shop lists, weapons and accessories, don't) also sell ours (main's design,
@@ -283,5 +299,18 @@ mod tests {
         assert_eq!((points(0), points(1)), (300, 900));
         assert!(usable(2, 9) && !usable(9, 9));
         assert!(help(1, false).ends_with("Main Menu.") && !help(1, true).contains('\n'));
+    }
+
+    #[test]
+    fn battle_request_unsigned() {
+        // KH1's run of our command 0xAF (argument 0x91, read signed): 0x00FF9103.
+        assert_eq!(battle_request(0x00FF_9103), Some(0x0000_9103));
+        assert_eq!(battle_request(0x02FF_9203), Some(0x0200_9203));
+        // KH1's own items (a Potion, an Ether), another type, an unsigned word, a KH1 id 0x90.
+        assert_eq!(battle_request(0x0000_0103), None);
+        assert_eq!(battle_request(0x0000_0303), None);
+        assert_eq!(battle_request(0x00FF_9102), None);
+        assert_eq!(battle_request(0x0000_9103), None);
+        assert_eq!(battle_request(0x00FF_9003), None);
     }
 }

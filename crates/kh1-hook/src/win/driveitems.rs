@@ -26,9 +26,17 @@
 //!   battle item use (`0x1402C2880` → `0x1402C2B50` → `0x1402CD580`, the target actor's id). Ours:
 //!   KH2's value × 100 points to the gauge (`drivegauge::add`, KH2's `0x1403C0AD0`), returning bit 0
 //!   (KH1 then takes one from the inventory or the slot, plays its use sound 0xE and shows message
-//!   0x99 + 0, `0x14030F160`). Assumption: Sora's battle actor id is `0x10000 | 0` as the menu's
-//!   target is (`0x1402CD5E0` takes that form for a party member); since t1083 his actor as a handle
-//!   or its pointer is taken too (`is_sora`).
+//!   0x99 + 0, `0x14030F160`). In battle the target is the actor's `+4`, which KH1's effect resolves
+//!   with its actor lookup `0x140291D30` (`0x1402CD5E0`), as `is_sora` now does (Checked (decomp)).
+//! - **The battle use's item id** (Checked (decomp)): KH1's menu run `0x140293480` writes the chosen
+//!   command `0x142D53A40` as `type | (int)(char)arg << 8` (masked `0xFFFF00`): a signed byte, so
+//!   our `0x91` / `0x92` came out as `0xFF91` / `0xFF92`. The command step (`0x1402A3DB0` /
+//!   `0x1402A4150`, type 3) hands bits 8..23 to the item use `0x1402C2760`, where bit 10 means "not
+//!   from a slot": nothing taken, nothing given back; the use `0x1402C2B50` clears bit 10 and runs
+//!   the effect with `0xFB91`, which no case knows (nothing added). `command_taken` puts our id back
+//!   right after KH1's run (`combat::run_entry`), so KH1 takes it from Sora's slot
+//!   (`0x142D539E4`, the list row's slot) and runs our effect once. Its menu's command id is
+//!   `item + 0x1E` (the fill `0x1402944C0`, Checked (decomp): t1082's Assumption confirmed).
 //! - **The shops** (t950, round 5 answer 1 (a), main's design): KH1's shop open `0x1403010A0 (mode,
 //!   list, ..)` (mode 0 the item shops, 2 the other lists; the list a count and item ids from KH1's
 //!   table at `0x1404FEE00`, picked by the shop's event, `0x1401CA610`) is hooked: with Progression >
@@ -323,6 +331,40 @@ unsafe fn gauge_usable() -> bool {
 
 /// Sora's actor (KH1's first party slot, Steam `0x142D37280`, as `cmdmenu` / `chest` read it).
 const SORA_RVA: usize = 0x2D37280;
+/// KH1's chosen command word (`type | arg << 8`) and the record it came from (Steam `0x142D53A40`,
+/// `0x142D539E8`, written by the menu run `0x140293480`; Checked (decomp)).
+const CHOSEN_RVA: usize = 0x2D53A40;
+const CHOSEN_RECORD_RVA: usize = 0x2D539E8;
+/// KH1's battle item use's effect per item (`0x1402C2B50` plays `byte [0x14052A0A7 + item]`;
+/// Checked (decomp)). Its data ends before `0x14052A130` (another table's floats), so KH1's items
+/// reach `0x88`; ours read past it (logged, an Assumption what it plays).
+const USE_EFFECT_RVA: usize = 0x52A0A7;
+/// KH1's actor lookup `0x140291D30 (id)` (as `chest` calls it; Checked (decomp + exe) there): what
+/// KH1's battle item effect (`0x1402CD5E0`) resolves the use's target id with.
+const FIND_ACTOR_RVA: usize = 0x291D30;
+const FIND_ACTOR_BYTES: [u8; 10] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x6C, 0x24, 0x10];
+
+/// After KH1's menu run took a command (`combat::run_entry`, KH1's `0x140293480`): our item's id put
+/// back in KH1's chosen command (`items::battle_request`: KH1 read the argument signed). KH1's item
+/// use then takes it from Sora's slot (`0x1402C2760`), gives it back if he's interrupted
+/// (`0x140284E60`) and runs its effect (`0x1402C2B50` → `0x1402CD580` → `apply`) on its own. Once per
+/// command taken; nothing per frame.
+pub unsafe fn command_taken(base: usize) {
+    if !TAKEN.load(Ordering::Relaxed) || !on() {
+        return;
+    }
+    let word = rd::<u32>(base + CHOSEN_RVA);
+    let Some(fixed) = items::battle_request(word) else { return };
+    let id = (fixed >> 8 & 0xFF) as u8;
+    let record = rd::<u64>(base + CHOSEN_RECORD_RVA) as usize;
+    if record < 0x10000 || rd::<u8>(record + 6) != items::COMMAND_TYPE_ITEM || rd::<u8>(record + 7) != id {
+        log!(Forms, "Drive Recovery: chosen command {word:#010x} not from our record ({record:#x}); left as KH1 wrote it");
+        return;
+    }
+    wr(base + CHOSEN_RVA, fixed);
+    let effect = rd::<u8>(base + USE_EFFECT_RVA + id as usize);
+    log!(Forms, "Drive Recovery: battle use of item {id:#x} (KH1's command {word:#010x} -> {fixed:#010x}); KH1's use effect byte {effect:#x} (Assumption: past KH1's table)");
+}
 
 /// Whether a target of KH1's item use (or of its use test) is Sora (t1083): `0x10000 | 0` (Checked (decomp), `0x1402CD590`), or in battle his actor as a handle (KH1's
 /// `0x14038AD90` form, `pose::ptr`) or its pointer's low half. Assumption: the battle use's "target
@@ -334,7 +376,18 @@ unsafe fn is_sora(t: u32) -> bool {
     }
     let base = super::sys::GetModuleHandleA(std::ptr::null()) as usize;
     let sora = rd::<u64>(base + SORA_RVA) as usize;
-    sora > 0x10000 && (t as usize == sora & 0xFFFF_FFFF || (t & 0x8000_0000 != 0 && super::pose::ptr(t) == sora))
+    if sora <= 0x10000 {
+        return false;
+    }
+    // KH1's battle use passes the target actor's `+4` (`0x1402CD580`), which KH1's own effect
+    // resolves with its actor lookup (`0x1402CD5E0` → `0x140291D30`; Checked (decomp)): the same here.
+    if super::hook::prologue_is(base + FIND_ACTOR_RVA, &FIND_ACTOR_BYTES) {
+        let find: unsafe extern "system" fn(u32) -> usize = std::mem::transmute(base + FIND_ACTOR_RVA);
+        if find(t) == sora {
+            return true;
+        }
+    }
+    t as usize == sora & 0xFFFF_FFFF || (t & 0x8000_0000 != 0 && super::pose::ptr(t) == sora)
 }
 
 /// KH1's use test, ours for Drive Recovery.

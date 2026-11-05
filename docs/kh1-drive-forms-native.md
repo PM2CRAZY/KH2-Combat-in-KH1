@@ -2377,6 +2377,39 @@ the task with its own quad buffer `0x142866960` (→ inside slot 0's draw with K
   0 or the same forms. Every use and every refusal logs the target, so the owner's log shows the form if this still
   refuses. Assumption: one of these is the battle form.
 
+### 16.10 Why the battle use did nothing (Steam KH1 decomp, 2026-11-05)
+- The owner (chat): "sora can use drive recoveries in battle but they dont do anything".
+- KH1's battle Items list (the top fill `0x140294220`'s item part, Checked (decomp)): each row is command
+  `slot item + 0x1E` (byte) and `0x142D53A90[row]` its slot; t1082's `item + 0x1E` Assumption is confirmed.
+- Choosing the row runs `0x140293480 (menu, entry)` (Checked (decomp); Epic `0x1402912F0`): a record with a submenu
+  (`+8` > 0) pushes it (Potion's is 4, the party targets); else, or from the target list, it writes the chosen command
+  `0x142D53A40` = type | **`(int)(char)record[7] << 8`** masked `0xFFFF00` (the top byte kept), its target handle at
+  `0x142D53A44`, the record pointer at `0x142D539E8`, and, from the Items list, the row's slot in `0x142D539E4`.
+  The argument is read **signed**: our `0x91` / `0x92` became item `0xFF91` / `0xFF92` (Checked (decomp)).
+- KH1's command step, type 3 (`0x1402A3DB0` on the ground, `0x1402A4150` in the air) hands bits 8..23 to the item use
+  `0x1402C2760 (actor, target, item)` (Checked (decomp)). There bit 10 (`0x400`) means "not from a slot": without it
+  Sora's slot `save + 0x26 + slot` is zeroed (another member: `0x140284CE0`, the slot holding the item); with it nothing
+  is taken. The use task `0x1402C2880` waits, then calls `0x1402C2B50 (actor, item, target)` for the target (or each
+  of the three party slots with no target); if Sora is interrupted first it gives the item back (`0x140284E60`, again
+  skipped with bit 10).
+- `0x1402C2B50` clears bit 10 and calls `0x1402CD580` → the effect `0x1402CD780 (item, target +4)`, sends the target
+  event `0x140297CA0 (target, actor, item | 0x10000)`, and plays the use effect `byte [0x14052A0A7 + item]`
+  (Checked (decomp)). With `0xFB91` our effect hook didn't know the item and passed it to KH1's switch, which has no such
+  case: nothing added. With bit 10 nothing was taken either. That is the owner's "doesn't do anything".
+- The battle target: `+4` of the target actor; KH1's effect (`0x1402CD5E0`) finds the actor with its lookup
+  `0x140291D30` (party slots for 0..2, a member for `0x1xxxx`, else an actor's own `+4`; Checked (decomp)).
+- The fix: right after KH1's run took the command (`combat::run_entry`, the hook on `0x140293480`),
+  `driveitems::command_taken` puts our id back in `0x142D53A40`'s bits 8..23 when the word is type 3 with `0xFF91` /
+  `0xFF92` and `0x142D539E8` is our record. KH1 then takes the item from Sora's slot, gives it back if interrupted, and
+  calls our effect once with `0x91` / `0x92` (`drivegauge::add`, +3 / +9 bars). `is_sora` resolves the target id with
+  `0x140291D30` (its first bytes checked as `chest` does). Nothing per frame.
+- Assumption: the use effect byte for ours. KH1's table at `0x14052A0A7` ends before `0x14052A130` (another function's
+  floats start there, `0x1402C6550`), so KH1's items reach `0x88`; `0x91` / `0x92` read bytes `0x14052A138` / `0x139`,
+  inside a float. The log prints the byte at each use. Giving ours a chosen effect would need a hook on `0x1402C2B50`
+  (its first bytes aren't in the repo) or another way; not done.
+- Assumption: the target event (`0x140297CA0`) with our item id does nothing harmful on Sora (his handler
+  `0x1401A4D00` not read).
+
 ## 17. KH2's Drive support abilities (main-port round 6, row 5, 2026-10-30: research)
 
 ### 17.1 KH2 (Steam KH2)
