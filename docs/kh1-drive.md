@@ -220,14 +220,45 @@ list's alpha `0x142528820` isn't 0). A sprite record (`0x14027C660`): `+0..+0xC`
 (`0x14027C2C0`, animated with `+0x60` & 0x14), `+0x20` r, g, b, a ints (four vertices 0x10 apart
 with `+0x60` & 0x20, else one), colour animated instead with `+0x60` & 0xA or & 0xC0.
 
+**Where things go (Steam decomp).** A sprite record's rectangle is `[x, y, w, h]` in screen
+pixels: Steam `0x14027E430` copies it (record `+0..+0xC`, or the animated one), Steam
+`0x14027EA50` makes the vertices `(x + 0x700) << 4`, `(y + 0x740) << 4` and the far corner at
+`x + w`, `y + h`. Checked (decomp). Main's notes (s304, Epic): the header record `+0x20` is only the
+word "SUMMON", a 65x8 sprite at rectangle [7, 6, 65, 8]; the dark tab is the background pair; row k's
+panel at y + 0x14 + 0x16k. Assumption on Steam (main's in-game reading; the tm28 log line below
+gives the rectangle). A row's name: Steam `0x14027A920 (cmd, x, y, bright)` draws it at
+`x + 0x10`, `y + 2` (through the `+0x710`, `+0x742` wrap), r = g = b = bright, alpha
+`[0x142866A40] * 128`; `0x140278B40` gives the menu's byte `+0x24 + k` as bright (halved for some
+rows). The text draw, Steam `0x1402D1CD0 (packet, 1, rgba, x, y, text)`: outside KH1's languages 0
+and 7 (`[0x1421AAF18] + 0x274`) the top goes to y - height / 2 + 7, so the middle at y + 7; then
+`0x1402D2050` with the height `[0x14054534C]` (set to 0x12 in some languages by Steam `0x1402E9800`'s
+language switch; its start value, 14 on main's reading, Assumption). A string's width in pixels at a
+height: Steam `0x1402D0E10 (text, height)` (the sum of glyph widths in 1/16 pixel, `>> 4`), what
+`0x1402D2050` centres and right-aligns with. Checked (decomp). (Main's Epic `0x1402CEC60` /
+`0x14054603C` map to these two through main's `steam_map.in`, and the decomp agrees.)
+
 **Ours (`drive::list_draw`, a hook on 0x140277F40).** Kind 3 with the summon list holding the
 form ids on page 2: for that call only, every background / row panel's colour loses its hue (each
 vertex's r, g, b set to their brightest: a tint becomes white, greys and black stay), the header
-tab is swapped for a copy with no size (nothing drawn), and after it "DRIVES" is drawn as a row's
-name is, white (0x80, the list's alpha), at the tab's rectangle + the list's x (`+[0x14232E6CC]`)
-/ y; colours and the tab are put back right after. If KH1's tab texture itself is coloured (not
-tinted by vertex colour), the panels stay that colour; the log line "Drive list: title ..."
-gives the rectangle and colours seen, `TITLE_DX` / `TITLE_DY` move the title.
+word is swapped for a copy with no size (nothing drawn; the tab behind it stays), and after it
+"DRIVES" is drawn in the word's place: centred on the word's rectangle both ways (its width
+measured with KH1's own `0x1402D0E10`, Steam only), as bright as the brightest row name (KH1's byte
+per row; 0x80, the grey it had, at least), the list's alpha. Colours and the word are put back
+right after. Up to tm27 it was drawn where a row's name goes in its panel, the rectangle's corner
++ (0x10, 2): low, over the first row's panel, and 0x10 to the right (main's s304 found the same on
+main: "the "drives" isn't lined up properly"). Now its middle is the word's middle (y + 10 with
+main's [7, 6, 65, 8]). If KH1's tab texture itself is coloured (not tinted by vertex colour), the
+panels stay that colour. The log line "Drive list: menu count ..." comes each time the row count
+changes: the list's x / y, the word's rectangle, the title's size, place, middle and brightness;
+`TITLE_DX` / `TITLE_DY` nudge the title.
+
+**Costs (main s324, "remove the numbers in the drive menu").** Main's numbers were its own s318
+cost digits; this branch's Drive list never drew any (no cost drawing in `drive.rs`), so nothing to
+do. Checked (code).
+
+**Other lists.** Only the Drive list (kind 3) gets a title of ours. Limit Form's Limit list is the
+magic list (kind 1) refilled (`drive::limit_list`): KH1 draws its own header word ("MAGIC") there
+and we draw nothing over it, so it has no misplaced title. Anti Form has no list. Checked (code).
 
 **Items and Summon lists (`combat::spell_not_yet`).** As a spell: while KH2 has Sora and his move
 can't take a command (`can_take_command`, what `command` made such a command wait for), an item

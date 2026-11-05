@@ -21,9 +21,9 @@
 //!   for) arrives at `combat::command` as magic, argument `0x10 + form`, and comes to `chosen`.
 //! KH1 rebuilds all of it each frame, so the other page is KH1's own again as soon as it flips.
 
-use super::addr::Rva;
+use super::addr::{Build, Rva};
 use super::{hook, log};
-use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU32, AtomicUsize, Ordering};
 use std::sync::OnceLock;
 
 /// The forms (command record, word index, name).
@@ -551,7 +551,8 @@ const LIST_DRAW_PROLOGUE: [u8; 10] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 
 const SUMMON_LAYOUT_RVA: Rva = Rva(0x285A260);
 /// Added to the list's x by `0x140277F40`.
 const LIST_X_RVA: Rva = Rva(0x232E6CC);
-/// A sprite record's rectangle (`0x14027C2C0 (record, &[x0, y0, x1, y1])`, its animated one too).
+/// A sprite record's rectangle (`0x14027C2C0 (record, &[x, y, w, h])`, Steam `0x14027E430`: the
+/// record's `+0..+0xC`, or its animated one, Checked (decomp)).
 const RECT_RVA: Rva = Rva(0x27C2C0);
 /// The text packet: `0x1402CFB20 (packet, 1, rgba, x, y, text) -> packet`, then
 /// `0x1403028F0 (start)` runs it when the list is shown (`0x1402787B0`, a row's name, does the same).
@@ -563,10 +564,21 @@ const TEXT_ALPHA_RVA: Rva = Rva(0x3B31F8);
 /// The Drive list's title (the user: "the text in the sub menu says "SUMMON" when it needs to say
 /// "DRIVES" lets change the color of that sub menu as well to be white").
 const TITLE: &str = "DRIVES";
-/// Where the title sits in the header tab's rectangle (`0x1402CFB20` adds its own 0x10, 2, as for
-/// a row's name in its panel).
+/// Nudges for the title, in screen pixels, after it is centred on the header word's rectangle.
+/// (That word, the header record `+0x20`, is a sprite KH1 draws at the list's x / y plus its
+/// rectangle `[x, y, w, h]` (Steam `0x14027EA50`: vertices `(x + 0x700) << 4`, `(y + 0x740) << 4`,
+/// the far corner `x + w`, `y + h`, Checked (decomp)); the dark tab behind it is the background
+/// pair.)
 const TITLE_DX: i32 = 0;
 const TITLE_DY: i32 = 0;
+/// KH1's string width in pixels at a font height (Steam `0x1402D0E10 (text, height)`, what the
+/// text draw `0x1402D2050` centres and right-aligns with; it returns its 1/16 sum `>> 4`, Checked
+/// (decomp)) and the font height it is given (Steam `[0x14054534C]`, 0x12 in some languages, its
+/// start value (14) Assumption (main's note; no exe here)). Steam only (plain Steam RVAs).
+const TEXT_WIDTH_STEAM: usize = 0x2D0E10;
+const FONT_H_STEAM: usize = 0x54534C;
+/// The row count the title was last logged for.
+static TITLE_LOGGED_ROWS: AtomicI32 = AtomicI32::new(-1);
 static TITLE_TEXT: OnceLock<usize> = OnceLock::new();
 static ORIG_LIST_DRAW: AtomicUsize = AtomicUsize::new(0);
 /// The header tab's stand-in while the Drive list draws: its record with no size.
@@ -655,30 +667,52 @@ unsafe extern "system" fn list_draw(kind: i32, menu: usize, a3: i32, a4: i32, la
     for (rec, old) in saved.iter().rev() {
         wr(rec + 0x20, *old);
     }
-    // The title, as `0x1402787B0` draws a row's name: white, the list's alpha.
-    if alpha != 0.0 {
-        if let Some(&text) = TITLE_TEXT.get() {
-            let a = (alpha * rd::<f32>(base + TEXT_ALPHA_RVA)).clamp(0.0, 255.0) as u8;
-            let colour = u32::from_le_bytes([0x80, 0x80, 0x80, a]);
-            let lx = x.wrapping_add(rd::<i32>(base + LIST_X_RVA)) + rect[0] + TITLE_DX;
-            let ly = y + rect[1] + TITLE_DY;
-            let tx = (lx.wrapping_add(0x710).wrapping_shl(4) >> 4) - 0x700;
-            let ty = (ly.wrapping_add(0x742).wrapping_shl(4) >> 4) - 0x740;
-            let draw: unsafe extern "system" fn(usize, i32, u32, i32, i32, usize) -> usize = std::mem::transmute(base + TEXT_RVA);
-            let run: unsafe extern "system" fn(usize) = std::mem::transmute(base + TEXT_RUN_RVA);
-            let start = rd::<u64>(base + PACKET_RVA) as usize;
-            if start > 0x10000 {
-                let end = draw(start, 1, colour, tx, ty, text);
-                wr(base + PACKET_RVA, end as u64);
-                run(start);
-            }
+    // The title where KH1 draws the header word: centred on its rectangle both ways. (Up to tm27
+    // it went where a row's name goes in its panel, the rectangle's corner + (0x10, 2): low, over
+    // the first row's panel (from y + 0x14), and right of the word.)
+    // The text draw (Steam `0x1402D1CD0`) puts the text's top at y - height / 2 + 7 outside KH1's
+    // languages 0 and 7 (`[0x1421AAF18] + 0x274`), so its middle at y + 7; in those two the top is
+    // y itself, the middle y + 7 with the 14-high font (Checked (decomp)).
+    let lx = x.wrapping_add(rd::<i32>(base + LIST_X_RVA));
+    let steam = Build::current() == Build::Steam;
+    let height = if steam { rd::<i32>(base + FONT_H_STEAM) } else { 0 };
+    let text = TITLE_TEXT.get().copied().unwrap_or(0);
+    let width = if steam && text != 0 && (8..=32).contains(&height) {
+        let measure: unsafe extern "system" fn(usize, i32) -> i32 = std::mem::transmute(base + TEXT_WIDTH_STEAM);
+        measure(text, height)
+    } else {
+        0
+    };
+    // (Without a width, the title starts at the word's left edge.)
+    let tx = lx + rect[0] + if width > 0 { (rect[2] - width) / 2 } else { 0 } + TITLE_DX;
+    let ty = y + rect[1] + rect[3] / 2 - 7 + TITLE_DY;
+    // White as KH1's own usable rows' names are (Steam `0x14027A920 (cmd, x, y, bright)`, the
+    // brightness the menu's byte `+0x24 + k`, halved for some rows, Steam `0x140278B40`, Checked
+    // (decomp)); 0x80, the grey it was, at least. The list's alpha as before.
+    let count = rd::<i32>(menu + 0x10).clamp(0, 16);
+    let bright = (0..count as usize).map(|k| rd::<u8>(menu + 0x24 + k)).max().unwrap_or(0).max(0x80);
+    if alpha != 0.0 && text != 0 {
+        let a = (alpha * rd::<f32>(base + TEXT_ALPHA_RVA)).clamp(0.0, 255.0) as u8;
+        let colour = u32::from_le_bytes([bright, bright, bright, a]);
+        let draw: unsafe extern "system" fn(usize, i32, u32, i32, i32, usize) -> usize = std::mem::transmute(base + TEXT_RVA);
+        let run: unsafe extern "system" fn(usize) = std::mem::transmute(base + TEXT_RUN_RVA);
+        let start = rd::<u64>(base + PACKET_RVA) as usize;
+        if start > 0x10000 {
+            let end = draw(start, 1, colour, tx, ty, text);
+            wr(base + PACKET_RVA, end as u64);
+            run(start);
         }
     }
-    static LOGGED: AtomicBool = AtomicBool::new(false);
-    if !LOGGED.swap(true, Ordering::Relaxed) {
+    // Each time the row count changes (the list's y moves with it): where everything went.
+    if TITLE_LOGGED_ROWS.swap(count, Ordering::Relaxed) != count {
         log!(Forms,
-            "Drive list: title \"{TITLE}\" at header rect {rect:?} + list ({}, {y}); header tab hidden; {} panels whitened, {animated} animated (kept); colours before: {:?}",
-            x.wrapping_add(rd::<i32>(base + LIST_X_RVA)),
+            "Drive list: menu count {count}, list at ({lx}, {y}); header word (hidden) rect {rect:?} = ({}, {}) {}x{}; title \"{TITLE}\" {width}x{height} at ({tx}, {ty}), middle ({}, {}), brightness {bright:#x}; {} panels whitened, {animated} animated (kept); colours before: {:?}",
+            lx + rect[0],
+            y + rect[1],
+            rect[2],
+            rect[3],
+            tx + width / 2,
+            ty + 7,
             saved.len(),
             saved.iter().take(4).map(|(_, c)| [c[0], c[1], c[2], c[3]]).collect::<Vec<_>>()
         );
