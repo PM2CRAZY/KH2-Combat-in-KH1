@@ -500,3 +500,14 @@ is hidden)", s273 "sora still has keyblade trails while in this form, lets not h
 - Built (`win/driveorbs.rs`, the existing pickup hook, t946): in Anti, for a type 3 / 4 prize, Sora reads
   as not acting for that one call (his bit put back after), so KH1 leaves the orb or a partner on the
   field takes it, as KH2's loop lets a partner. Per frame: a type check in the hook KH1 already calls for each live prize; the flip only for an HP orb in Anti.
+
+**6. Anti's effects package** (main s272: "its own moveset, combo rows, physics, effect archive and
+sounds"): `P_EX100_HTLF.a.us` (already read with the form, `pose::Kh2::anti.archive`) is `kh2dpx::Pkg::Anti`,
+package number `kh2fx::ANTI` (22, after Master's 21), built as the other forms' packages (every element
+its motions' frame triggers 1 start), wanted while Sora could change into Anti or is in it
+(`kh2dpx::desired`), and Anti's motions' frame triggers 1 go to it (`form::effect` ->
+`kh2fx::form_event`); its elements' sounds join the form sound table (`formmagic`). KH1's effect engine
+plays them as the other forms'. Assumption: its PAX is named "p_ex" as the other forms' (not checked:
+the file isn't staged); the build logs if not. Not changed: Anti's motion sounds and voices still play
+only for the moves `kh2_sounds` lists (`kh2sound::event`'s form rule names Valor / Final / Limit /
+Master only) — a separate question.

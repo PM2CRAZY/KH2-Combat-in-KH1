@@ -75,6 +75,9 @@ pub const LIMIT: u8 = FINAL + 1;
 /// 17, Final 18, Limit 19, Master 20; `kh2dpx::pkg_of` reads it back.)
 pub const MASTER: u8 = LIMIT + 1;
 
+/// Anti Form's (`P_EX100_HTLF.a.us`, testing-merge), after Master's (21).
+pub const ANTI: u8 = MASTER + 1;
+
 /// A frame trigger 1 of Valor's or Final's motion (`takeover`, `form::takes`): its element from
 /// that form's package, on Sora; one that ends with its motion ends when the motion changes.
 pub fn form_event(motion: u16, el: i16) {
@@ -88,6 +91,8 @@ pub fn form_event(motion: u16, el: i16) {
     } else if super::form::in_master() {
         // (t1028.)
         (super::kh2dpx::Pkg::Master, MASTER)
+    } else if super::form::in_anti() {
+        (super::kh2dpx::Pkg::Anti, ANTI)
     } else {
         (super::kh2dpx::Pkg::Valor, VALOR)
     };

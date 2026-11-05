@@ -1287,8 +1287,8 @@ pub fn own_motion(motion: u16) -> bool {
 pub fn effect(motion: u16, n: i16) {
     if in_wisdom() {
         super::formmagic::effect(n);
-    } else if in_valor() || in_final() || in_limit() || in_master() {
-        // (t1028: Master's elements from its own package, `kh2fx::MASTER`.)
+    } else if in_valor() || in_final() || in_limit() || in_master() || in_anti() {
+        // (t1028: Master's elements from its own package, `kh2fx::MASTER`; Anti's, `kh2fx::ANTI`.)
         super::kh2fx::form_event(motion, n);
     }
 }

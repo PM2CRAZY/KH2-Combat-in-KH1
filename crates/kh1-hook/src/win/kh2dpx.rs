@@ -536,6 +536,8 @@ pub enum Pkg {
     Limit,
     /// Master Form's (`obj/P_EX100_TRIF.a.us`, t1028).
     Master,
+    /// Anti Form's (`obj/P_EX100_HTLF.a.us`, testing-merge).
+    Anti,
     /// One of the spell packages (`kh2fx::WISDOM`'s numbering): Reflect's levels 1..3, Wisdom's archive 4
     /// (`obj/P_EX100_MAGF.a.us`), then Fire, Blizzard, Thunder and Cure by level (Wisdom's and
     /// base Sora's KH2 magic, `formmagic`).
@@ -777,8 +779,8 @@ fn desired() -> Vec<(Pkg, String)> {
             super::form::Kind::Limit => Pkg::Limit,
             // (t1028: Master's archive, as Limit's.)
             super::form::Kind::Master => Pkg::Master,
-            // (Anti Form: no package of its own built yet, `P_EX100_HTLF.a.us`.)
-            super::form::Kind::Anti => continue,
+            // (Anti Form's archive, as Master's.)
+            super::form::Kind::Anti => Pkg::Anti,
         };
         v.push((pkg, String::new()));
     }
@@ -978,6 +980,7 @@ fn source(kh2: &'static super::pose::Kh2, pkg: Pkg, sig: &str) -> Option<Source>
         Pkg::Final => kh2.final_form.as_ref().and_then(|f| point(&f.rig)),
         Pkg::Limit => kh2.limit_form.as_ref().and_then(|f| point(&f.rig)),
         Pkg::Master => kh2.master.as_ref().and_then(|f| point(&f.rig)),
+        Pkg::Anti => kh2.anti.as_ref().and_then(|f| point(&f.rig)),
         Pkg::Spell(l) if l == super::kh2fx::WISDOM => kh2.wisdom.as_ref().and_then(|f| point(&f.rig)),
         _ => point(&kh2.rig),
     };
@@ -996,13 +999,16 @@ fn source(kh2: &'static super::pose::Kh2, pkg: Pkg, sig: &str) -> Option<Source>
             s(pkg, "p_ex100", "obj/P_EX100.a.us", Some("p_ex"), None, None, sets, false, anchor, 0)
         }
         Pkg::Weapon => s(pkg, "w_ex010", "obj/W_EX010.a.us", None, None, Some(WEAPON_ON), Vec::new(), true, weapon_anchor, ENDS_WITH_MOTION),
-        Pkg::Valor | Pkg::Final | Pkg::Limit | Pkg::Master => {
+        Pkg::Valor | Pkg::Final | Pkg::Limit | Pkg::Master | Pkg::Anti => {
             let (label, path, f) = match pkg {
                 Pkg::Valor => ("p_ex100_btlf", "obj/P_EX100_BTLF.a.us", kh2.valor.as_ref()?),
                 Pkg::Limit => ("p_ex100_kh1f", "obj/P_EX100_KH1F.a.us", kh2.limit_form.as_ref()?),
                 // (t1028: its motions' frame triggers 1, Checked (files): 53 → 1..12 and 100..102,
                 // 181 → 22, 182 → 23, 185 → 24, 183 → 25..32, 184 → 20 / 21.)
                 Pkg::Master => ("p_ex100_trif", "obj/P_EX100_TRIF.a.us", kh2.master.as_ref()?),
+                // (Anti's: every element its motions' frame triggers 1 start, as the other forms'.
+                // Assumption: its PAX is "p_ex" as theirs; not checked, the file isn't staged.)
+                Pkg::Anti => ("p_ex100_htlf", "obj/P_EX100_HTLF.a.us", kh2.anti.as_ref()?),
                 _ => ("p_ex100_ultf", "obj/P_EX100_ULTF.a.us", kh2.final_form.as_ref()?),
             };
             let sets = motion_sets(&f.character).into_iter().map(|x| x.1).collect();
@@ -2687,6 +2693,7 @@ pub fn pkg_of(level: u8) -> Pkg {
         l if l == super::kh2fx::LIMIT => Pkg::Limit,
         // (t1028.)
         l if l == super::kh2fx::MASTER => Pkg::Master,
+        l if l == super::kh2fx::ANTI => Pkg::Anti,
         l => Pkg::Spell(l),
     }
 }

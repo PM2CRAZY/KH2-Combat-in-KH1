@@ -242,6 +242,10 @@ pub fn element_sounds(kh2: &pose::Kh2) -> Vec<(u8, u16, i32)> {
     if let Some(a) = kh2.master.as_ref().and_then(|f| f.archive.as_ref()) {
         add(super::kh2fx::MASTER, a);
     }
+    // (Anti Form's, testing-merge: its elements' sounds, as Master's.)
+    if let Some(a) = kh2.anti.as_ref().and_then(|f| f.archive.as_ref()) {
+        add(super::kh2fx::ANTI, a);
+    }
     // (Also for base Sora's KH2 magic, `base_kh2_spell`, which the Config menu switches in game.)
     {
         for spell in 0..4u8 {

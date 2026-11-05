@@ -1,3 +1,6 @@
+### 2026-11-05: Stage tm20 (testing-merge branch: Anti Form's own KH2 effects package)
+- Inventory row 14: Anti's own KH2 effects. `P_EX100_HTLF.a.us` is `Pkg::Anti` / `kh2fx::ANTI` (22), built and played through KH1's effect engine exactly as Master's package, its element sounds registered. Assumption: its PAX is named "p_ex" (the file wasn't read in this session). Noticed, not changed: Anti's motion sounds and voices play only for moves in `kh2_sounds` (`kh2sound::event`'s form rule names Valor, Final, Limit, Master). Not checked in game. `win/kh2dpx.rs`, `win/kh2fx.rs`, docs. Per frame: as the other forms' packages.
+
 ### 2026-11-05: Stage tm19 (testing-merge branch: Anti Form doesn't pick up HP orbs, as KH2's)
 - Inventory row 14: KH2's Anti doesn't pick up HP orbs. KH2 (Checked (decomp), `0x1403DBEA0` / `0x1403DC7C0`): the player in form 6 skips prize kinds 0 / 1 (Assumption: those are the HP orbs). KH1: HP prizes are types 3 / 4; its pickup `0x1402AC080` skips a member whose `+0` lacks 0x8000. In the existing pickup hook, for an HP orb in Anti Sora reads as not acting for that one call: the orb stays and times out, or a partner on the field takes it. Main never had this rule. Not checked in game. `win/driveorbs.rs` (or the pickup hook's file), docs. Per frame: nothing new.
 
