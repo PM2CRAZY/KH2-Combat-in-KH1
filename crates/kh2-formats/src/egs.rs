@@ -190,8 +190,12 @@ impl Archive {
             let offset = r.i64()?;
             let stored_len = r.i32()?;
             let real_len = r.i32()?;
+            // A junk entry names no readable file: left out, not the whole package refused. KH1's
+            // own `kh1_fifth.hed` has one (a length of 0xFDFDFDFD; Checked (main's docs, the
+            // owner's install), `docs/kh1-tint.md`), and Anti-Sora's `xa_pp_3020.mdls` is in that
+            // package.
             if offset < 0 || stored_len < 0 || real_len < 0 {
-                return bad("negative value in hed entry");
+                continue;
             }
             entries.push(HedEntry { md5, offset: offset as u64, stored_len: stored_len as u32, real_len: real_len as u32 });
         }
@@ -447,6 +451,21 @@ mod tests {
     }
 
     use super::*;
+
+    #[test]
+    fn a_junk_entry_is_left_out() {
+        let dir = std::env::temp_dir().join(format!("egs-junk-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let hed = dir.join("y.hed");
+        let mut b = vec![0u8; 0x40];
+        b[0x18..0x1C].copy_from_slice(&0xFDFD_FDFDu32.to_le_bytes());
+        b[0x20] = 7;
+        std::fs::write(&hed, &b).unwrap();
+        let a = Archive::open(&hed).unwrap();
+        assert_eq!(a.entries.len(), 1);
+        assert_eq!(a.entries[0].md5[0], 7);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn encrypted_streams_are_padded_to_16() {
