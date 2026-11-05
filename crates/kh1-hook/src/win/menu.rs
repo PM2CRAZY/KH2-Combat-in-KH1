@@ -492,6 +492,8 @@ pub struct Growth {
     hj_level: Option<u8>,
     gl_level: Option<u8>,
     ad_level: Option<u8>,
+    /// KH1's Dodge Roll's KH2 level last seen (its "Ability Up" box; KH1's name kept).
+    dr_level: Option<u8>,
     /// The abilities last given before the debug menu's growth overrides (`debugmenu::
     /// growth_overrides`), and the overrides' count when they were applied.
     given: Option<character_core::Abilities>,
@@ -527,6 +529,17 @@ pub unsafe fn kh1_abilities_now(base: usize) -> Option<character_core::Abilities
 /// object, `takeover`'s driver): each frame of Sora's on KH1's states (`takeover`).
 static GROWTH: std::sync::Mutex<Option<Growth>> = std::sync::Mutex::new(None);
 
+/// Base Sora's growth levels as learned (`growth::Kh1Sora::learned_growth`: every growth ability in
+/// his lists, equipped or not), noted by the menu's once-a-second step (`Growth::update`), for the
+/// forms' growth under main's rule (main s301, `form::form_growth`). None before the first step and
+/// after a save change (`forget_levels`).
+static LEARNED: std::sync::Mutex<Option<growth::FormGrowth>> = std::sync::Mutex::new(None);
+
+/// `LEARNED` now, if noted.
+pub fn learned_growth() -> Option<growth::FormGrowth> {
+    LEARNED.try_lock().ok().and_then(|l| *l)
+}
+
 /// One frame of the ability menu's own work (`Growth::update`).
 pub unsafe fn growth_frame(base: usize) {
     if let Ok(mut g) = GROWTH.try_lock() {
@@ -557,13 +570,16 @@ pub unsafe fn frame_end(base: usize) {
 
 impl Growth {
     pub fn new() -> Growth {
-        Growth { mode: super::settings::get().abilities, frames: 0, seen: None, applied: false, no_room: Vec::new(), yielded: Vec::new(), prompts: Default::default(), idle: 0, qr_level: None, hj_level: None, gl_level: None, ad_level: None, given: None, ov_gen: 0, names: [None; 3], rf_level: None }
+        Growth { mode: super::settings::get().abilities, frames: 0, seen: None, applied: false, no_room: Vec::new(), yielded: Vec::new(), prompts: Default::default(), idle: 0, qr_level: None, hj_level: None, gl_level: None, ad_level: None, dr_level: None, given: None, ov_gen: 0, names: [None; 3], rf_level: None }
     }
 
     /// The growth levels and menu names last seen forgotten (a new save: its own are taken as they
     /// are, with no "Ability Up" box, and the names written again).
     fn forget_levels(&mut self) {
-        (self.qr_level, self.hj_level, self.gl_level, self.ad_level) = (None, None, None, None);
+        (self.qr_level, self.hj_level, self.gl_level, self.ad_level, self.dr_level) = (None, None, None, None, None);
+        if let Ok(mut l) = LEARNED.lock() {
+            *l = None;
+        }
         self.names = [None; 3];
         self.rf_level = None;
     }
@@ -698,7 +714,10 @@ impl Growth {
         // (The KH2 list once the save is on it; before, its bytes are nobody's.)
         let on_list = rd::<u16>(save + growth::LAYOUT_OFF) == growth::LAYOUT_KH2_LIST;
         let kh2 = if on_list { super::kh2list::read(base) } else { None }.unwrap_or_else(|| vec![0; growth::KH2_LIST_LEN]);
-        Some(Kh1Sora { level, abilities, shared, kh2, progress, form_growth: super::formexp::base_growth() })
+        // (Base Sora's growth levels by the rule in use, `growth::GROWTH_RULE`: main's by his level
+        // and story on testing-merge, or testing's from the forms' levels.)
+        let form_growth = growth::sora_growth(growth::GROWTH_RULE, level, &progress, super::formexp::base_growth);
+        Some(Kh1Sora { level, abilities, shared, kh2, progress, form_growth })
     }
 
     /// Gives Sora `a`, with the debug menu's growth overrides on it (the quick-run-native thread,
@@ -872,35 +891,41 @@ impl Growth {
                         }
                     }
                 }
-                // The growth abilities (the owner, the bug-list thread: "dodge roll and the other
-                // growth abilities can function how they do in KH2"; `growth::FORM_GIVEN`): KH2's
-                // level-up puts one in Sora's list when his level for it first reaches LV1 (an
-                // empty slot to LV1, `0x1403E8380`, Checked (decomp)); before that he hasn't got
-                // it. On every read, so a loaded save gets what its forms' levels give.
+                // The growth abilities, by the rule in use (`growth::GROWTH_RULE`). Main's
+                // (testing-merge, the owner: "the growth abilities to work how it does in the main
+                // branch"): Quick Run at Sora's level 12, Aerial Dodge for Genie Jafar
+                // (`growth::MAIN_GIVEN`), off until equipped as main gave them. Testing's (the
+                // owner, the bug-list thread: "dodge roll and the other growth abilities can
+                // function how they do in KH2"; `growth::FORM_GIVEN`): KH2's level-up puts one in
+                // Sora's list when his level for it first reaches LV1 (an empty slot to LV1,
+                // `0x1403E8380`, Checked (decomp)). Before that he hasn't got it. On every read, so
+                // a loaded save gets what its level / story / forms give.
+                let main_rule = growth::GROWTH_RULE == growth::GrowthRule::Main;
+                let rule = if main_rule { "main's growth rule" } else { "KH2's growth rule" };
                 for id in now.growth_early() {
                     // (Not one the debug menu gave this session.)
                     if super::debugmenu::ability_forced(id) == Some(true) {
                         continue;
                     }
                     if self.take_ours(base, save, id, on_list) {
-                        log!(Menus, "{}: no form level gives it yet (KH2's rule), taken out of {}", growth::name(id), if on_list { "the KH2 list" } else { "Sora's list" });
+                        log!(Menus, "{}: not learned yet ({rule}: {}), taken out of {}", growth::name(id), if main_rule { if id == growth::ours::QUICK_RUN { "Sora's level 12" } else { "Genie Jafar" } } else { "no form level gives it" }, if on_list { "the KH2 list" } else { "Sora's list" });
                     }
                 }
                 for id in now.growth_due() {
                     if super::debugmenu::ability_forced(id) == Some(false) {
                         continue;
                     }
-                    // Equipped (Assumption: KH2's growth abilities work at once; not confirmed in
-                    // the repo's KH2 data) while Sora's AP allows it, else off, so KH1's AP rule
-                    // holds.
+                    // Testing's rule: equipped (Assumption: KH2's growth abilities work at once;
+                    // not confirmed in the repo's KH2 data) while Sora's AP allows it, else off, so
+                    // KH1's AP rule holds. Main's: off until equipped (main s63 / s82).
                     let ap = super::kh2list::ap_of(base, id);
-                    let on = super::kh2list::ap_left_now(base).zip(ap).is_some_and(|(left, ap)| left >= ap as i32);
+                    let on = !main_rule && super::kh2list::ap_left_now(base).zip(ap).is_some_and(|(left, ap)| left >= ap as i32);
                     let byte = if on { id } else { id | 0x80 };
                     // (KH1's Dodge Roll in his own 48 as KH1 keeps it; ours in the KH2 list.)
                     let given = if id == growth::kh1::DODGE_ROLL { add(save + 0x44, 48, byte) } else { self.give_ours(base, save, byte, on_list) };
                     let what = growth::level_name(&growth::name(id), now.form_level(id));
                     if given {
-                        log!(Menus, "Sora is given {what} (id {id}, KH2's growth rule, {}, {})", if on { "on" } else { "off" }, if id == growth::kh1::DODGE_ROLL || !on_list { "his own list" } else { "KH2 list" });
+                        log!(Menus, "Sora is given {what} (id {id}, {rule}, {}, {})", if on { "on" } else { "off" }, if id == growth::kh1::DODGE_ROLL || !on_list { "his own list" } else { "KH2 list" });
                         self.prompts.push_back(("New Ability".to_string(), what, String::new()));
                     } else if !self.no_room.contains(&id) {
                         self.no_room.push(id);
@@ -990,7 +1015,8 @@ impl Growth {
                 self.qr_level = Some(l);
             }
             // KH1's High Jump and Glide keep KH1's names (the split); the box says how far KH2's
-            // own grows with them (only from the Drive Forms' levels now).
+            // own grows with them (by Sora's level under main's rule, `growth::GROWTH_RULE`; from
+            // the Drive Forms' levels under testing's).
             let l = if growth::has(&now.shared, growth::kh1::HIGH_JUMP) { now.high_jump_now() } else { 0 };
             if self.hj_level != Some(l) {
                 if let Some(old) = self.hj_level {
@@ -1001,8 +1027,9 @@ impl Growth {
                 }
                 self.hj_level = Some(l);
             }
-            // KH2's own Glide (t323, Glide style KH2): its menu name and a box as it grows (only
-            // from Final's level since m18 answer 3 (b)). At KH1 KH1's Glide and Superglide are vanilla: no boxes of ours.
+            // KH2's own Glide (t323, Glide style KH2): its menu name and a box as it grows (by
+            // Sora's level and Chernabog under main's rule; only from Final's level under
+            // testing's, m18 answer 3 (b)). At KH1 KH1's Glide and Superglide are vanilla: no boxes of ours.
             let l = if growth::has(&now.shared, growth::ours::GLIDE) { now.kh2_glide_now() } else { 0 };
             self.name(1, l);
             if self.gl_level != Some(l) {
@@ -1014,8 +1041,8 @@ impl Growth {
                 }
                 self.gl_level = Some(l);
             }
-            // Aerial Dodge (t1026): its level from Master Form's (KH2's only source of it), in its
-            // menu name and a box as it grows, as Quick Run's.
+            // Aerial Dodge (t1026): its level (by Sora's level under main's rule; Master Form's
+            // under testing's), in its menu name and a box as it grows, as Quick Run's.
             let l = if now.has_ours(AERIAL_DODGE) { now.aerial_dodge_now() } else { 0 };
             self.name(2, l);
             if self.ad_level != Some(l) {
@@ -1026,6 +1053,23 @@ impl Growth {
                     }
                 }
                 self.ad_level = Some(l);
+            }
+            // KH1's Dodge Roll keeps KH1's name (the split); the box says how far KH2's grows with
+            // it (by Sora's level under main's rule, main s92; by Limit's level under testing's).
+            let l = if growth::has(&now.abilities, growth::kh1::DODGE_ROLL) { now.dodge_roll_now() } else { 0 };
+            if self.dr_level != Some(l) {
+                if let Some(old) = self.dr_level {
+                    if old > 0 && l > old {
+                        let what = growth::level_name("Dodge Roll", l);
+                        log!(Menus, "Dodge Roll grows: {what}");
+                        self.prompts.push_back(("Ability Up".to_string(), what, String::new()));
+                    }
+                }
+                self.dr_level = Some(l);
+            }
+            // Base Sora's learned growth levels for the forms' (main's rule, `form::form_growth`).
+            if let Ok(mut g) = LEARNED.lock() {
+                *g = Some(now.learned_growth());
             }
         }
         if self.seen.as_ref() == Some(&now) {

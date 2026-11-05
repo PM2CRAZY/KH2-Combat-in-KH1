@@ -30,6 +30,12 @@
 //! growth levels come only from the Drive Forms' levels (`FormGrowth`); saves the older builds
 //! changed get KH1's abilities back once (`restore_vanilla`).
 //!
+//! Growth on testing-merge (the owner: "for the time being, the growth abilities to work how it
+//! does in the main branch"): main's rule (`GROWTH_RULE` = `GrowthRule::Main`, `main_growth`):
+//! base Sora's growth levels by his own level and the story, Quick Run learned at 12 and Aerial
+//! Dodge for Genie Jafar, each form's one above what he has learned. Testing's form-level rule
+//! (t1085) stays in the code behind `GrowthRule::FormLevels`.
+//!
 //! Bonus AP (testing-merge, the owner: "I also want the bonus ap back"): Sora's max AP grows by
 //! the AP of each KH2 ability of ours he holds (`bonus_ap`, main's rule), added where KH1 fills
 //! his stats (`win/menu.rs`, the party stats hook), so every AP KH1 shows or checks has it.
@@ -465,6 +471,8 @@ pub fn row(id: u8) -> Option<Row> {
     MENU.iter().find(|a| a.id == id).map(|a| Row { id, name: a.name, owner: Owner::Kh2, on_kh1: a.on_kh1, on_kh2: Kh2(a.effect) })
 }
 
+// (testing-merge: main's growth rule is the one in use, `GROWTH_RULE` / `main_growth`; what
+// follows is testing's rule, `GrowthRule::FormLevels`, kept for when it comes back.)
 // Growth levels (the tester, what-is-still-missing after m16, answer 6 (b): base Sora's growth
 // only from the Drive Forms' levels, as in KH2; after m17: "make it all vanilla"). Nothing grows
 // with Sora's own level or with bosses any more. An ability he has is LV1; Valor's, Wisdom's and
@@ -618,6 +626,94 @@ pub fn free(list: &[u8]) -> usize {
 /// Whether a list byte is one of our KH2 abilities.
 pub fn ours_byte(b: u8) -> bool {
     b != 0 && MENU.iter().any(|a| a.id == b & 0x7F)
+}
+
+/// Which rule gives the growth abilities (High Jump, Quick Run, Dodge Roll, Aerial Dodge, Glide)
+/// and their levels, for base Sora and for the Drive Forms.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GrowthRule {
+    /// Main's (testing-merge, the owner, chat 2026-11-05: "for the time being, the growth
+    /// abilities to work how it does in the main branch"): base Sora's levels by his own level
+    /// and the story (`main_growth`; main s91, s92, s105, s124 / s125), Quick Run learned at
+    /// level 12 and Aerial Dodge for Genie Jafar (`MAIN_GIVEN`); each form's growth ability one
+    /// level above what base Sora has learned, equipped or not (main s270: "always be one level
+    /// higher than the level unlocked by base sora"; s301: "EVEN IF SORA DOESNT ACTIVELY HAVE
+    /// QUICK RUN EQUIPPED"; `one_above`, `Kh1Sora::learned_growth`).
+    Main,
+    /// Testing's (t1085, KH2's rule): base Sora's levels one under the forms' (`FormGrowth`,
+    /// `formlevel::sora_growth`), Quick Run / Aerial Dodge / Dodge Roll given by the forms' levels
+    /// (`FORM_GIVEN`), each form's at its own form level (fmlv).
+    FormLevels,
+}
+
+/// The rule in use: the one place to switch (testing's t1085 rule back: `GrowthRule::FormLevels`).
+pub const GROWTH_RULE: GrowthRule = GrowthRule::Main;
+
+/// Main's growth tables (the owner's numbers on main, rebuilt here; Checked (docs): main's
+/// AGENTS.md stages 91, 92, 105, 124 / 125). Each is the Sora levels a step is reached at.
+pub mod main_levels {
+    /// Quick Run LV1 / LV2 / LV3 / MAX (main s63 / s91: learned at 12, then 20, 32, 45).
+    pub const QUICK_RUN: [u8; 4] = [12, 20, 32, 45];
+    /// High Jump LV2 / LV3 / MAX once KH1 has given it (main s105: 30 / 44 / 58).
+    pub const HIGH_JUMP: [u8; 3] = [30, 44, 58];
+    /// Aerial Dodge LV2 / LV3 / MAX once learned (main s125: "grows from 30", 30 / 42 / 54).
+    pub const AERIAL_DODGE: [u8; 3] = [30, 42, 54];
+    /// Dodge Roll LV2 / LV3 / MAX once KH1 has given it (main s92: 19 / 37 / 60).
+    pub const DODGE_ROLL: [u8; 3] = [19, 37, 60];
+    /// Glide LV2 / LV3 once KH1 has given it; MAX only for Chernabog (main s124: 40 / 52).
+    pub const GLIDE: [u8; 2] = [40, 52];
+}
+
+/// Genie Jafar beaten: Agrabah's progress (index 4) at 0x53, the point main gives Aerial Dodge
+/// at (main s125: "0x46 during Jafar, 0x53 after Genie Jafar's cutscene", from gaithern's
+/// KH-1FM-AP-LUA warp fixes, MIT). Checked (docs): main's AGENTS.md; not checked in game here.
+pub const GENIE_JAFAR: BossGift = BossGift { boss: "Genie Jafar", world: 4, progress: 0x53, ability: ours::AERIAL_DODGE };
+
+/// The growth abilities main's rule gives (main: Quick Run by level, Aerial Dodge by a boss; High
+/// Jump, Glide and Dodge Roll are KH1's own, given by KH1).
+pub const MAIN_GIVEN: [u8; 2] = [ours::QUICK_RUN, ours::AERIAL_DODGE];
+
+/// 1 + the steps of `steps` that `level` has reached.
+fn steps_reached(level: u8, steps: &[u8]) -> u8 {
+    1 + steps.iter().filter(|at| level >= **at).count() as u8
+}
+
+/// Base Sora's growth levels by main's rule at his `level` and story `progress`: Quick Run 0
+/// before level 12, Aerial Dodge 0 before Genie Jafar (not learned yet); High Jump, Dodge Roll and
+/// Glide the level they are at once KH1 has given them (counted only when he has them).
+pub fn main_growth(level: u8, progress: &[u8]) -> FormGrowth {
+    let quick_run = main_levels::QUICK_RUN.iter().filter(|at| level >= **at).count() as u8;
+    FormGrowth {
+        high_jump: steps_reached(level, &main_levels::HIGH_JUMP),
+        quick_run,
+        glide: if beaten(progress, &CHERNABOG) { 4 } else { steps_reached(level, &main_levels::GLIDE) },
+        dodge_roll: steps_reached(level, &main_levels::DODGE_ROLL),
+        aerial_dodge: if beaten(progress, &GENIE_JAFAR) { steps_reached(level, &main_levels::AERIAL_DODGE) } else { 0 },
+    }
+}
+
+/// Base Sora's growth levels by `rule` (`Kh1Sora::form_growth`): main's by his level and story,
+/// or testing's from the forms' levels (`forms`, read only for that rule).
+pub fn sora_growth(rule: GrowthRule, level: u8, progress: &[u8], forms: impl FnOnce() -> FormGrowth) -> FormGrowth {
+    match rule {
+        GrowthRule::Main => main_growth(level, progress),
+        GrowthRule::FormLevels => forms(),
+    }
+}
+
+/// A form's growth level by main's rule: one above base Sora's learned level, MAX (4) at most
+/// (main s270: none -> LV1, LV1 -> LV2, MAX stays MAX).
+pub fn one_above(level: u8) -> u8 {
+    level.saturating_add(1).min(4)
+}
+
+/// The growth abilities the mod itself gives under `rule` (main's: Quick Run, Aerial Dodge;
+/// testing's: `FORM_GIVEN`).
+pub fn given_by(rule: GrowthRule) -> &'static [u8] {
+    match rule {
+        GrowthRule::Main => &MAIN_GIVEN,
+        GrowthRule::FormLevels => &FORM_GIVEN,
+    }
 }
 
 /// The growth abilities the mod gives by the Drive Forms' levels, KH2's rule (the owner, the
@@ -889,8 +985,11 @@ impl Kh1Sora {
     /// (shared) only comes with the Glide style (`glide_swap`).
     /// Quick Run and Aerial Dodge aren't among them: they come from the Drive Forms' levels
     /// (`growth_due`, the owner's decision in the bug-list thread).
+    /// (Under main's rule, `GROWTH_RULE`, Quick Run and Aerial Dodge come by his level and Genie
+    /// Jafar instead, through the same `growth_due`.)
     pub fn grants(&self) -> Vec<MenuAbility> {
-        MENU.iter().filter(|ab| ab.list == List::Kh2 && !FORM_GIVEN.contains(&ab.id) && !self.has_ours(ab.id)).copied().collect()
+        let given = given_by(GROWTH_RULE);
+        MENU.iter().filter(|ab| ab.list == List::Kh2 && !given.contains(&ab.id) && !self.has_ours(ab.id)).copied().collect()
     }
 
     /// Base Sora's growth level for one of `FORM_GIVEN` from the Drive Forms' levels (0: none yet).
@@ -916,15 +1015,40 @@ impl Kh1Sora {
     /// The growth abilities a form's level has given LV1 of that he doesn't have yet (KH2's
     /// `0x1403E8380`: Sora's entry goes from an empty slot to LV1, Checked (decomp), formlevel.rs),
     /// in `FORM_GIVEN`'s order.
+    /// Under main's rule (`GROWTH_RULE`): Quick Run once his level reaches 12, Aerial Dodge once
+    /// Genie Jafar is beaten (`main_growth` gives them LV1 or more from then).
     pub fn growth_due(&self) -> Vec<u8> {
-        FORM_GIVEN.iter().copied().filter(|&id| self.form_level(id) >= 1 && !self.has_form_given(id)).collect()
+        self.growth_due_in(GROWTH_RULE)
+    }
+
+    /// `growth_due` under `rule`.
+    pub fn growth_due_in(&self, rule: GrowthRule) -> Vec<u8> {
+        given_by(rule).iter().copied().filter(|&id| self.form_level(id) >= 1 && !self.has_form_given(id)).collect()
     }
 
     /// Ours of `FORM_GIVEN` he has with no form level for them yet (older builds gave Quick Run
     /// and Aerial Dodge from the start; KH2 has none before the form's level gives LV1). KH1's
     /// Dodge Roll is never here: KH1 gives it on its own.
+    /// Under main's rule: Quick Run before level 12, Aerial Dodge before Genie Jafar (main gave
+    /// neither before; a save from testing's builds may have them from a form's level).
     pub fn growth_early(&self) -> Vec<u8> {
         [ours::QUICK_RUN, ours::AERIAL_DODGE].into_iter().filter(|&id| self.form_level(id) == 0 && self.has_ours(id)).collect()
+    }
+
+    /// Base Sora's growth levels as learned: every growth ability he has in his lists counted,
+    /// equipped or not (main s301, the user: a form's growth one above base Sora's "EVEN IF SORA
+    /// DOESNT ACTIVELY HAVE QUICK RUN EQUIPPED"); 0 for one he hasn't got. High Jump from KH1's
+    /// High Jump, Glide from KH1's Glide or Superglide or KH2's own Glide (the Glide style), Dodge
+    /// Roll from KH1's Dodge Roll, Quick Run and Aerial Dodge from ours.
+    pub fn learned_growth(&self) -> FormGrowth {
+        let shared = |id: u8| has(&self.shared, id);
+        FormGrowth {
+            high_jump: if shared(kh1::HIGH_JUMP) { self.high_jump_now() } else { 0 },
+            quick_run: if self.has_ours(ours::QUICK_RUN) { self.quick_run_now() } else { 0 },
+            glide: if shared(kh1::GLIDE) || shared(kh1::SUPERGLIDE) || shared(ours::GLIDE) { self.kh2_glide_now() } else { 0 },
+            dodge_roll: if has(&self.abilities, kh1::DODGE_ROLL) { self.dodge_roll_now() } else { 0 },
+            aerial_dodge: if self.has_ours(ours::AERIAL_DODGE) { self.aerial_dodge_now() } else { 0 },
+        }
     }
 }
 
@@ -1366,23 +1490,70 @@ mod tests {
     #[test]
     fn growth_abilities_come_from_form_levels() {
         let mut s = sora(1, &[], &[]);
-        assert!(s.growth_due().is_empty() && s.growth_early().is_empty());
+        assert!(s.growth_due_in(GrowthRule::FormLevels).is_empty() && s.growth_early().is_empty());
         s.form_growth = FormGrowth { quick_run: 1, aerial_dodge: 2, dodge_roll: 1, ..FormGrowth::default() };
-        assert_eq!(s.growth_due(), vec![ours::QUICK_RUN, ours::AERIAL_DODGE, kh1::DODGE_ROLL]);
+        assert_eq!(s.growth_due_in(GrowthRule::FormLevels), vec![ours::QUICK_RUN, ours::AERIAL_DODGE, kh1::DODGE_ROLL]);
         // KH1's own Dodge Roll (given by KH1's level-up, even off) and ours already there: none.
         s.abilities[0] = kh1::DODGE_ROLL | 0x80;
         s.kh2[0] = ours::QUICK_RUN;
-        assert_eq!(s.growth_due(), vec![ours::AERIAL_DODGE]);
+        assert_eq!(s.growth_due_in(GrowthRule::FormLevels), vec![ours::AERIAL_DODGE]);
         // High Jump and Glide are never given by a form.
         s.form_growth.high_jump = 3;
         s.form_growth.glide = 3;
-        assert!(!s.growth_due().contains(&kh1::HIGH_JUMP) && !s.growth_due().contains(&kh1::GLIDE));
+        assert!(!s.growth_due_in(GrowthRule::FormLevels).contains(&kh1::HIGH_JUMP) && !s.growth_due_in(GrowthRule::FormLevels).contains(&kh1::GLIDE));
         // An older build's Quick Run / Aerial Dodge with no form level yet; never KH1's Dodge Roll.
         let mut old = sora(1, &[kh1::DODGE_ROLL], &[]);
         old.kh2[..2].copy_from_slice(&[ours::QUICK_RUN | 0x80, ours::AERIAL_DODGE | 0x80]);
         assert_eq!(old.growth_early(), vec![ours::QUICK_RUN, ours::AERIAL_DODGE]);
         old.form_growth.quick_run = 1;
         assert_eq!(old.growth_early(), vec![ours::AERIAL_DODGE]);
+    }
+
+    /// Main's growth rule: base Sora's levels by his level and story, Quick Run from 12, Aerial
+    /// Dodge from Genie Jafar, High Jump / Glide / Dodge Roll counted once KH1 gives them; the
+    /// forms one above what he has learned, equipped or not.
+    #[test]
+    fn main_growth_by_level_and_story() {
+        let none = vec![0u8; 12];
+        let g = main_growth(1, &none);
+        assert_eq!((g.high_jump, g.quick_run, g.glide, g.dodge_roll, g.aerial_dodge), (1, 0, 1, 1, 0));
+        let g = main_growth(12, &none);
+        assert_eq!(g.quick_run, 1);
+        assert_eq!((main_growth(19, &none).quick_run, main_growth(20, &none).quick_run, main_growth(32, &none).quick_run, main_growth(45, &none).quick_run), (1, 2, 3, 4));
+        assert_eq!((main_growth(29, &none).high_jump, main_growth(30, &none).high_jump, main_growth(44, &none).high_jump, main_growth(58, &none).high_jump), (1, 2, 3, 4));
+        assert_eq!((main_growth(18, &none).dodge_roll, main_growth(19, &none).dodge_roll, main_growth(37, &none).dodge_roll, main_growth(60, &none).dodge_roll), (1, 2, 3, 4));
+        assert_eq!((main_growth(39, &none).glide, main_growth(40, &none).glide, main_growth(52, &none).glide, main_growth(99, &none).glide), (1, 2, 3, 3));
+        let mut story = none.clone();
+        story[11] = 0x33;
+        assert_eq!(main_growth(1, &story).glide, 4);
+        // Aerial Dodge: none before Genie Jafar, then by level (LV1, LV2 at 30, MAX at 54).
+        assert_eq!(main_growth(60, &none).aerial_dodge, 0);
+        story[4] = 0x52;
+        assert_eq!(main_growth(60, &story).aerial_dodge, 0);
+        story[4] = 0x53;
+        assert_eq!((main_growth(10, &story).aerial_dodge, main_growth(30, &story).aerial_dodge, main_growth(54, &story).aerial_dodge), (1, 2, 4));
+        // Given by the mod: Quick Run at 12, Aerial Dodge at Genie Jafar; KH1's Dodge Roll never.
+        let mut s = sora(11, &[], &[kh1::HIGH_JUMP]);
+        s.form_growth = main_growth(s.level, &s.progress);
+        assert!(s.growth_due_in(GrowthRule::Main).is_empty());
+        s.level = 12;
+        s.form_growth = main_growth(s.level, &s.progress);
+        assert_eq!(s.growth_due_in(GrowthRule::Main), vec![ours::QUICK_RUN]);
+        s.progress[4] = 0x53;
+        s.form_growth = main_growth(s.level, &s.progress);
+        assert_eq!(s.growth_due_in(GrowthRule::Main), vec![ours::QUICK_RUN, ours::AERIAL_DODGE]);
+        // A testing save's Quick Run before 12 is early.
+        let mut early = sora(8, &[], &[]);
+        early.kh2[0] = ours::QUICK_RUN | 0x80;
+        early.form_growth = main_growth(8, &early.progress);
+        assert_eq!(early.growth_early(), vec![ours::QUICK_RUN]);
+        // Learned: equipped or not; nothing for one he hasn't got.
+        let mut l = sora(30, &[kh1::DODGE_ROLL | 0x80], &[kh1::HIGH_JUMP | 0x80]);
+        l.kh2[0] = ours::QUICK_RUN | 0x80;
+        l.form_growth = main_growth(30, &l.progress);
+        let g = l.learned_growth();
+        assert_eq!((g.high_jump, g.quick_run, g.glide, g.dodge_roll, g.aerial_dodge), (2, 2, 0, 2, 0));
+        assert_eq!((one_above(g.high_jump), one_above(g.glide), one_above(4)), (3, 1, 4));
     }
 
     /// Bonus AP (main's rule): each of ours he holds, on or off, once, in either list; KH1's own
@@ -1415,7 +1586,7 @@ mod tests {
     fn grants_are_every_kh2_ability() {
         let all: Vec<u8> = MENU.iter().filter(|a| a.list == List::Kh2).map(|a| a.id).collect();
         assert_eq!(all.len(), 26);
-        let not_growth: Vec<u8> = all.iter().copied().filter(|id| !FORM_GIVEN.contains(id)).collect();
+        let not_growth: Vec<u8> = all.iter().copied().filter(|id| !given_by(GROWTH_RULE).contains(id)).collect();
         assert_eq!(sora(1, &[], &[]).grants().iter().map(|a| a.id).collect::<Vec<_>>(), not_growth);
         // Already there (even unequipped): not again.
         let g = sora(1, &[66 | 0x80, 68], &[]).grants();

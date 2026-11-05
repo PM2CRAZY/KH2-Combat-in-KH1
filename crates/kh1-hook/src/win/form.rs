@@ -647,7 +647,7 @@ pub fn form_abilities(sora: &Abilities, form: &Character, kind: Kind) -> Abiliti
         dodge_roll: 0,
         ..sora.clone()
     };
-    form_growth(&mut a, kind);
+    form_growth(&mut a, sora, kind);
     a.equipped = form.moveset.combo_rows.iter().map(|r| r.ability).filter(|&x| x != 0).collect();
     // (Sora's own moves added to the form, `pose::port_moves`: only while he has them equipped.)
     if kind == Kind::Valor {
@@ -660,8 +660,26 @@ pub fn form_abilities(sora: &Abilities, form: &Character, kind: Kind) -> Abiliti
 /// Lv1/3/5/7 giving LV1/2/3/MAX; Valor High Jump, Wisdom Quick Run, Final Glide;
 /// `formexp::growth`). It replaces t688's rules (Valor and Final at MAX, Wisdom one above Sora's
 /// own): the tester's answer 6 (b), what-is-still-missing after m14.
-fn form_growth(a: &mut Abilities, kind: Kind) {
-    let g = super::formexp::growth(kind);
+/// Under main's rule (testing-merge, `growth::GROWTH_RULE`; the owner: "the growth abilities to
+/// work how it does in the main branch") it is one level above base Sora's own instead (main s270:
+/// "always be one level higher than the level unlocked by base sora", none -> LV1, MAX stays MAX),
+/// from what he has learned, equipped or not (main s301, `menu::learned_growth`), at least what he
+/// has on (`sora`). The form's own level still sets its gauge, EXP and fmlv rewards (testing's).
+fn form_growth(a: &mut Abilities, sora: &Abilities, kind: Kind) {
+    let g = match crate::growth::GROWTH_RULE {
+        crate::growth::GrowthRule::Main => {
+            let learned = super::menu::learned_growth().unwrap_or_default();
+            let base = match kind {
+                Kind::Valor => sora.high_jump.max(learned.high_jump),
+                Kind::Wisdom => sora.quick_run.max(learned.quick_run),
+                Kind::Limit => sora.dodge_roll.max(learned.dodge_roll),
+                Kind::Master => sora.aerial_dodge.max(learned.aerial_dodge),
+                Kind::Final => sora.glide.max(learned.glide),
+            };
+            crate::growth::one_above(base)
+        }
+        crate::growth::GrowthRule::FormLevels => super::formexp::growth(kind),
+    };
     match kind {
         Kind::Valor => a.high_jump = g,
         Kind::Wisdom => a.quick_run = g,

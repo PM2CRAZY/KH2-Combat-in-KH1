@@ -218,7 +218,11 @@ unsafe fn add(kind: Kind, n: u32, why: &str) {
     put(s, kind, rec.pack());
     for u in &ups {
         let growth = u.form_growth.map(|g| format!(", {} {}", kind.growth(), growth_name(g))).unwrap_or_default();
-        log!(Forms, "{} LV{} ({why}, cap {cap}){growth}; Sora's own: {}{} (given by KH1's menu, abilities = kh1)", kind.name(), u.level, u.sora_growth.map(|g| format!("{} {}, ", kind.growth(), growth_name(g))).unwrap_or_default(), if u.reward != 0 { format!("KH2 ability {}", u.reward) } else { "no ability".into() });
+        // (Under main's growth rule, `growth::GROWTH_RULE`, neither growth level here is used: base
+        // Sora's grows with his own level and the form's is one above his, `form::form_growth`.)
+        let main_rule = crate::growth::GROWTH_RULE == crate::growth::GrowthRule::Main;
+        let growth = if main_rule && !growth.is_empty() { format!("{growth} (not used: main's growth rule)") } else { growth };
+        log!(Forms, "{} LV{} ({why}, cap {cap}){growth}; Sora's own: {}{} (given by KH1's menu, abilities = kh1)", kind.name(), u.level, if main_rule { String::new() } else { u.sora_growth.map(|g| format!("{} {}, ", kind.growth(), growth_name(g))).unwrap_or_default() }, if u.reward != 0 { format!("KH2 ability {}", u.reward) } else { "no ability".into() });
         super::menu::queue_prompt("Form Level Up", &format!("{} LV{}", kind.name(), u.level));
     }
     static LOGGED: AtomicUsize = AtomicUsize::new(0);

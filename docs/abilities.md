@@ -156,7 +156,8 @@ starts with "KH2's" so that they can be told apart in the menu.
   and stays in the shared list.
 - **KH1's 48 are KH1's alone** (the tester, after m18, answer 1). t718's `RESERVE` / `yield_one`
   (ours leaving places free in Sora's list and giving them back) are gone: ours are never in it.
-- **Growth only from Drive Form levels** (the tester, after m16, answer 6 (b); KH2's
+- **Growth only from Drive Form levels** (testing's rule; on testing-merge main's is in use, "Growth abilities as
+  main's" below) (the tester, after m16, answer 6 (b); KH2's
   `0x1403E8380`, Checked (decomp)). An ability he has is LV1. Valor's, Wisdom's and Final's
   levels raise High Jump, Quick Run and Glide to LV1 / 2 / 3 at form LV3 / 5 / 7
   (`Kh1Sora::form_growth`). Sora's level and bosses give none. KH1's own High Jump and Glide count
@@ -327,6 +328,42 @@ The owner: "loading into a save should give you the appropriate level of all gro
   so a second save loaded in one session showed an "Ability Up" box for levels it already had. They are forgotten
   whenever KH1 is on its title (mode 2 / 3 at `0x14233FBC0`, read at the frame's end, `menu::frame_end`). Not seen in
   game.
+
+## Growth abilities as main's (testing-merge)
+
+The owner (chat 2026-11-05): "for the time being, the growth abilities to work how it does in the main branch".
+One switch, `growth::GROWTH_RULE` (`GrowthRule::Main` now; `GrowthRule::FormLevels` brings back testing's t1085
+rule below, whose code paths are all kept). Main's rule as its AGENTS.md has it (Checked (docs), main's stages; its
+code read for what it did, nothing copied):
+
+- **Base Sora's levels by his own level and the story** (`growth::main_growth`, `main_levels`): Quick Run LV1 / 2 /
+  3 / MAX at Sora's level 12 / 20 / 32 / 45 (main s63, s91); High Jump LV2 / 3 / MAX at 30 / 44 / 58 (s105); Aerial
+  Dodge LV2 / 3 / MAX at 30 / 42 / 54 (s125); Dodge Roll LV2 / 3 / MAX at 19 / 37 / 60 (s92); Glide LV2 / 3 at 40 /
+  52, MAX once Chernabog is beaten (s124, End of the World progress 0x33, `growth::CHERNABOG`). LV1 when he gets the
+  ability. They go into `Kh1Sora::form_growth` (from `menu::Growth::kh1`, `growth::sora_growth`), which every reader
+  already took the levels from, so KH1's own High Jump / Glide / Superglide / Dodge Roll and KH2's own Glide take them
+  as before. Assumption: High Jump, Glide and Dodge Roll were KH1's own on main too (main's tables say "once he has
+  it"); KH1 gives them on its vanilla schedule here, unchanged.
+- **Quick Run and Aerial Dodge are learned as main's** (`growth::MAIN_GIVEN`, through the same `growth_due` /
+  `growth_early` as testing's rule): Quick Run once Sora's level reaches 12, Aerial Dodge once Genie Jafar is beaten
+  (`growth::GENIE_JAFAR`, Agrabah progress 0x53, main s125; Checked (docs), not in game), each into the KH2 list,
+  **off until equipped** (main s63 / s82), with a "New Ability" box naming its level ("Aerial Dodge LV2" when Genie
+  Jafar falls after level 30). Before that he hasn't got them: one a testing save got early from a form's level is
+  taken out (log "... not learned yet (main's growth rule: ...), taken out"), unless the debug menu gave it. Their AP
+  joins the bonus AP when they are given. KH1's Dodge Roll is never given or taken by the mod under this rule.
+- **The forms' growth one above base Sora's** (`form::form_growth`, `growth::one_above`): Valor's High Jump, Wisdom's
+  Quick Run, Limit's Dodge Roll, Master's Aerial Dodge and Final's Glide are base Sora's level + 1, MAX at most (none
+  -> LV1, MAX stays MAX; main s270, and main's Limit / Master entries), counted from what he has **learned, equipped or
+  not** (main s301; `Kh1Sora::learned_growth`, noted once a second by `menu::Growth::update` into
+  `menu::learned_growth`, at least what he has on). The form's own level still gives its gauge length, its EXP and its
+  fmlv rewards (testing's, the owner's earlier decisions; main's s325 growth-level gauge stays dropped); the form
+  level-up log says its fmlv growth isn't used.
+- **Boxes**: Quick Run, Aerial Dodge and KH2's Glide keep their menu names with the level; KH1's High Jump and Dodge
+  Roll keep KH1's names, and an "Ability Up" box says when KH2's level for them grows (Dodge Roll's box is new here,
+  main s92 had it; both rules). Not checked in game.
+- Not ported (main's progression, not its growth rule; testing's vanilla progression, t718, stands): main's
+  `one_only` (one High Jump / Glide), `make_room`, the KH1 abilities main gave on its own schedule (`LEVEL_GIFTS`, its
+  other `BOSS_GIFTS`), Superglide turned into Glide.
 
 ## Growth abilities given by form levels (the bug-list thread, the owner's decision)
 
