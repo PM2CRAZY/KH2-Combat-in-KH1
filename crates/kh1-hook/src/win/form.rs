@@ -1185,6 +1185,10 @@ unsafe fn native_arrive(d: &mut Drive, kh2: &pose::Kh2, actor: usize) {
     if kind != Kind::Anti {
         super::formexp::entered(kind);
     }
+    // (Anti: no Keyblade, `antiform::arrived`.)
+    if kind == Kind::Anti {
+        super::antiform::arrived(actor);
+    }
     let rec = super::formexp::record(kind);
     // (Valor's slots on his requests from now: before its arrival is asked.)
     super::kh2slots::refresh();
@@ -1240,6 +1244,10 @@ unsafe fn native_revert(d: &mut Drive, _kh2: &pose::Kh2, actor: usize, why: &str
         super::valor::ended();
     }
     super::kh2slots::refresh();
+    // (Anti: his Keyblade back, `antiform::left`.)
+    if f.kind == Kind::Anti {
+        super::antiform::left(actor);
+    }
     super::formmagic::end_all();
     super::kh2fx::owner_gone();
     for el in REVERT_ELEMENTS {

@@ -478,6 +478,8 @@ pub unsafe extern "system" fn DllMain(_inst: *mut c_void, reason: u32, _reserved
         ingameskip::install();
         // (A scene's wait on a partner a Drive Form took brings him back: event function 103.)
         driveparty::install(base);
+        // (Anti Form: no Keyblade, KH1's weapon out wrapped.)
+        antiform::install(base);
         chest::install();
         model::install();
         gates::install();

@@ -522,7 +522,8 @@ unsafe fn keyblade_due(base: usize) {
     if !KEYBLADE_DUE.load(Ordering::Relaxed) {
         return;
     }
-    if !super::form::native_now() {
+    // (Anti Form has none, `antiform`.)
+    if !super::form::native_now() || super::form::in_anti() {
         KEYBLADE_DUE.store(false, Ordering::Relaxed);
         return;
     }

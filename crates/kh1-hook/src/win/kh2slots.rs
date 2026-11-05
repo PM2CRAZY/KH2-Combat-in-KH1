@@ -1095,6 +1095,11 @@ fn make(mset: &[u8], src: &pose::Src, bake: Option<&pose::Baker>, cache: Option<
     if src.form == Some(super::form::Kind::Final) {
         tracks.extend(guard_tracks(clip));
     }
+    // (Anti Form has no Keyblade, so no Keyblade trail: no trail level (7.0) on its slots, KH1's
+    // trail step makes none without its bit, `0x1402C1F20`, Checked (decomp).)
+    if src.form == Some(super::form::Kind::Anti) {
+        tracks.retain(|t| t.kind != ks::TRAIL);
+    }
     // (Only KH2's own sounds for it: the template's left out, `kh1rows::Ours::own_sounds`.)
     // (KH2's chest motion, t802: only KH2's own sounds, its Keyblade's 500047 at frame 1 and 500034 at 28; the
     // owner: "the sound effect from the keyblade needs to be the one from kh2".)

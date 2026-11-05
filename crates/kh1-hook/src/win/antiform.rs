@@ -23,9 +23,20 @@
 //! - **No growth, no EXP** (no form-EXP adder for form 6, Checked (decomp)); no guard (no guard row in
 //!   its PTYA, Checked (files)); no magic and no items (the cmd form mask, Magic off in Valor / Limit /
 //!   Anti, Items in Anti only, Checked (files)).
+//! - **No Keyblade, no trail** (main s272 "no weapon ... KH1's Keyblade is hidden", s273 "sora still
+//!   has keyblade trails while in this form, lets not have that"): KH1 (Steam, Checked (decomp))
+//!   draws an actor's weapon only while its `+0` bit 0x4000 is set (the party draw `0x1402A1630`),
+//!   keeps a trail running only while `+0` has 0xC001 (the trail step `0x1402C1F20`), sets the bit
+//!   only in its weapon out `0x1402A2E30 (actor, n)` (callers: the motion start `0x14029FC40` for a
+//!   request of weapon mode 1, the event script's weapon ops `0x1401AA150` / `0x1401AA190`, three
+//!   handlers `0x1401D8B70` / `0x1401D8CA0` / `0x1401D8DD0`; ours, t1062's `driveparty`), and clears
+//!   it in `0x1402A3280` (a plain `& ~0x4000`). So: the bit cleared as `0x1402A3280` does when Anti
+//!   arrives (`arrived`), KH1's weapon out wrapped to do nothing for Sora while in Anti (`weapon_out`),
+//!   and KH1's weapon out (Sora, 1, as the motion start) when Anti ends if it was out (`left`). Anti's
+//!   slots carry no trail level (`kh2slots::make`). KH1's own draw and trail step do the rest.
 
 use super::log;
-use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU8, AtomicUsize, Ordering};
 
 /// The bars the secret code needs on the KH2 rule (KH2's Valor and Wisdom cost, cmd `+0x1C`,
 /// Checked (files); main's s318 "needs 3").
@@ -98,4 +109,72 @@ pub fn code_waiting() -> bool {
 
 pub fn take_code() -> bool {
     CODE.swap(false, Ordering::Relaxed)
+}
+
+// ---------------------------------------------------------------------------------------------
+// No Keyblade (module notes)
+
+/// KH1's weapon out (Steam `0x1402A2E30 (actor, n)`) and its first bytes (`driveparty`'s, Checked (exe)).
+const WEAPON_OUT_RVA: usize = 0x2A2E30;
+const WEAPON_OUT_BYTES: [u8; 15] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x57, 0x48, 0x83, 0xEC, 0x20, 0x48, 0x8B, 0xD9, 0x8B, 0xFA];
+/// An actor's `+0` bit: its weapon is out (drawn, its trail kept).
+const WEAPON_BIT: u32 = 0x4000;
+static ORIG_WEAPON_OUT: AtomicUsize = AtomicUsize::new(0);
+/// Sora's Keyblade was out when Anti arrived (it comes out again when Anti ends).
+static WAS_OUT: AtomicBool = AtomicBool::new(false);
+
+unsafe fn rd_u32(p: usize) -> u32 {
+    std::ptr::read_unaligned(p as *const u32)
+}
+unsafe fn wr_u32(p: usize, v: u32) {
+    std::ptr::write_unaligned(p as *mut u32, v)
+}
+
+/// KH1's weapon out wrapped (Steam only, its first bytes checked): nothing for Sora in Anti Form.
+pub unsafe fn install(base: usize) {
+    if super::addr::Build::current() != super::addr::Build::Steam {
+        return;
+    }
+    if super::hook::install(base + WEAPON_OUT_RVA, &WEAPON_OUT_BYTES, weapon_out as *const () as usize, &ORIG_WEAPON_OUT, "weapon out (Anti Form)").is_none() {
+        log!(Forms, "Anti Form: KH1's weapon out isn't where expected: the Keyblade may show in Anti");
+    }
+}
+
+unsafe extern "system" fn weapon_out(actor: usize, n: i32) {
+    let f: unsafe extern "system" fn(usize, i32) = std::mem::transmute(ORIG_WEAPON_OUT.load(Ordering::Acquire));
+    if super::form::in_anti() && actor != 0 && actor == super::takeover::sora_actor() {
+        static N: AtomicU32 = AtomicU32::new(0);
+        if N.fetch_add(1, Ordering::Relaxed) < 6 {
+            log!(Forms, "Anti Form: KH1's weapon out for Sora left undone (no Keyblade in Anti)");
+        }
+        return;
+    }
+    f(actor, n);
+}
+
+/// Anti has arrived (`form::native_arrive`): Sora's Keyblade away, as KH1's `0x1402A3280`.
+pub unsafe fn arrived(sora: usize) {
+    if sora < 0x10000 || !super::crash::readable(sora + 3) {
+        return;
+    }
+    let f0 = rd_u32(sora);
+    WAS_OUT.store(f0 & WEAPON_BIT != 0, Ordering::Relaxed);
+    wr_u32(sora, f0 & !WEAPON_BIT);
+    log!(Forms, "Anti Form: Sora's Keyblade away (it was {})", if f0 & WEAPON_BIT != 0 { "out" } else { "away" });
+}
+
+/// Anti has ended (`form::native_revert`, after the form is gone): Sora's Keyblade out again with
+/// KH1's own weapon out (Sora, 1: the motion start's arguments) if it was out when Anti came.
+pub unsafe fn left(sora: usize) {
+    if !WAS_OUT.swap(false, Ordering::Relaxed) || sora < 0x10000 || !super::crash::readable(sora + 3) || rd_u32(sora) & WEAPON_BIT != 0 {
+        return;
+    }
+    let base = super::takeover::game_base();
+    if base == 0 || !super::hook::prologue_is(base + WEAPON_OUT_RVA, &WEAPON_OUT_BYTES) {
+        log!(Forms, "Anti Form: Sora's Keyblade not brought out (KH1's weapon out not where expected)");
+        return;
+    }
+    let out: unsafe extern "system" fn(usize, i32) = std::mem::transmute(base + WEAPON_OUT_RVA);
+    out(sora, 1);
+    log!(Forms, "Anti Form ended: Sora's Keyblade out again (KH1's weapon out)");
 }

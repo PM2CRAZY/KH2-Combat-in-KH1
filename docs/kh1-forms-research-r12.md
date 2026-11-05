@@ -471,3 +471,20 @@ summons ... are all refused, with "can't", and greyed"):
 - KH2: page 2's Summon row is `0x48` (`0x1403F3860`, Checked (decomp)); its DisableForm byte in
   `03system.bin` isn't in our notes (the row `0x49`'s mask 0b1110000 is Party's, not Summon's:
   `docs/kh1-kh2-command-menu.md`). That KH2 greys summons in Anti: Assumption (Anti takes both partners).
+
+**4. No Keyblade and no trail in Anti** (main s272 "no weapon (its body's hit shapes clash; KH1's Keyblade
+is hidden)", s273 "sora still has keyblade trails while in this form, lets not have that"):
+- KH1 (Steam, Checked (decomp)): an actor's weapon is drawn only while `+0` bit 0x4000 is set (party draw
+  `0x1402A1630`); a running trail is kept only while `+0` has 0xC001 and is otherwise ended (trail step
+  `0x1402C1F20`), and a new one is made only while `+0x1CC` bit 0x800000 (the 7.0 trail level) is set.
+  The bit is set only by `0x1402A2E30 (actor, n)` (callers: the motion start `0x14029FC40` for a request
+  whose weapon mode, `0x1402A01E0` bits 12..14, is 1; the event script's weapon ops `0x1401AA150` /
+  `0x1401AA190`; `0x1401D8B70` / `0x1401D8CA0` / `0x1401D8DD0`; t1062's `driveparty`) and cleared by
+  `0x1402A3280` (`& ~0x4000`, 7 bytes).
+- Built (`win/antiform.rs`): at Anti's arrival the bit is cleared as `0x1402A3280` does; KH1's weapon out
+  `0x1402A2E30` is wrapped (first 15 bytes as `driveparty`'s, Checked (exe)) and does nothing for Sora
+  while in Anti; at the revert, if it was out when Anti came, KH1's weapon out (Sora, 1). Anti's slots
+  carry no trail level (`kh2slots::make`). t1062's room re-draw skips Anti. KH1's own draw and trail
+  step do the rest. Per frame: nothing (the wrapper runs only when KH1 draws a weapon).
+- Assumption: no other KH1 code sets the bit directly (the decomp shows only `0x1402A2E30` writing it
+  for an actor's weapon besides our holder). Cutscene weapon ops in Anti are refused too (Anti has none).
