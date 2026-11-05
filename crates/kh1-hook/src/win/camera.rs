@@ -60,7 +60,7 @@ const SELECT: u32 = 0x8000;
 /// (slot 0's `+4` held, PS2 order: the pads and the keyboard merged, the stick direction bits
 /// above). R2 is `0x200` there; KH1's remap (`0x140528290`) gives R2 no bit of its own (L2 and R2
 /// both set `0x400000`).
-const RAW_HELD_STEAM: usize = 0x298C9B4;
+pub(super) const RAW_HELD_STEAM: usize = 0x298C9B4;
 /// R2 in the PS2 order (KH2's camera hold, `r2_held`, and the R2 Camera Hold row).
 const RAW_R2: u32 = 0x200;
 /// L2 in the PS2 order (the L2 Stick Menu row, `l2_held`).

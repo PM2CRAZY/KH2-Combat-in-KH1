@@ -303,6 +303,8 @@ unsafe extern "system" fn physics(actor: usize) {
     // KH2's re-hit intervals on Sora's attacks run out (`rehit`), before KH1's collision pass.
     if sora {
         super::rehit::tick();
+        // The secret code (Anti Form) from KH1's merged pad word, Steam (`form::code_frame`).
+        super::form::code_frame(BASE.load(Ordering::Relaxed));
     }
     let took = ON.load(Ordering::Relaxed) && actor > 0x10000 && takeover(actor);
     if sora {

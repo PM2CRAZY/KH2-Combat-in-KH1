@@ -36,7 +36,7 @@
 //!   slots carry no trail level (`kh2slots::make`). KH1's own draw and trail step do the rest.
 
 use super::log;
-use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU8, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicU8, AtomicUsize, Ordering};
 
 /// The bars the secret code needs on the KH2 rule (KH2's Valor and Wisdom cost, cmd `+0x1C`,
 /// Checked (files); main's s318 "needs 3").
@@ -96,19 +96,26 @@ pub unsafe fn pay_gauge() -> bool {
     }
     super::drivegauge::pay_all(crate::drivegauge::cost(crate::formlevel::form::ANTI), needs())
 }
-/// The secret code was entered (`form::pad`): taken on the form's next frame (`form::native_frame`).
-static CODE: AtomicBool = AtomicBool::new(false);
+/// The secret code was entered (`form::code_read`): taken on the form's next frame
+/// (`form::native_frame`). The code clock's time it came, + 1 (0: none waiting).
+static CODE: AtomicU64 = AtomicU64::new(0);
 
-pub fn code_entered() {
-    CODE.store(true, Ordering::Relaxed);
+pub fn code_entered(now_ms: u64) {
+    CODE.store(now_ms + 1, Ordering::Relaxed);
 }
 
 pub fn code_waiting() -> bool {
-    CODE.load(Ordering::Relaxed)
+    CODE.load(Ordering::Relaxed) != 0
 }
 
 pub fn take_code() -> bool {
-    CODE.swap(false, Ordering::Relaxed)
+    CODE.swap(0, Ordering::Relaxed) != 0
+}
+
+/// The code waited longer than `wait_ms` without the form's frame taking it: dropped (true once).
+pub fn code_stale(now_ms: u64, wait_ms: u64) -> bool {
+    let at = CODE.load(Ordering::Relaxed);
+    at != 0 && now_ms + 1 > at + wait_ms && CODE.compare_exchange(at, 0, Ordering::Relaxed, Ordering::Relaxed).is_ok()
 }
 
 // ---------------------------------------------------------------------------------------------

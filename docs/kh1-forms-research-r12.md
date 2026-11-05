@@ -457,6 +457,32 @@ on the game thread takes it (`form::code_anti`) and asks for Anti as the Drive l
 Anti's partners as KH2's `0x140400740(6)` wants them (Drive > Party Required). In a form, in a change,
 or with Anti's slots not built, it is refused and logged. The code itself is unchanged (still secret).
 
+**2b. The secret code's input, re-checked (the owner: "antiform doesnt activate via the konami code").**
+- The code's buttons are KH1's pad bits in PS2 order (Select, L3, R3, Start, Up, Right, Down, Left, L2,
+  R2, L1, R1, Triangle, Circle, Cross, Square). KH1's XInput reader `0x140113A40` sets d-pad Up 0x10,
+  Right 0x20, Down 0x40, Left 0x80, Xbox A Cross 0x4000, B Circle 0x2000, X Square 0x8000, Y Triangle
+  0x1000, then `0x140112B30` maps them through the pad's config bytes (0xFF = the same bit) and drops
+  Up + Down / Left + Right held together. So the Konami code's B and A are Xbox B / A, PS Circle /
+  Cross, by position. Checked (decomp). The code matches main's, bit for bit. Checked (code).
+- The d-pad reaches us although it moves KH1's command menu: KH1's menus read the logical word
+  `0x14298D4A0`, made after the raw word; nothing upstream eats it (the debug menu's d-pad navigation
+  reads the same records). Checked (decomp + code).
+- The pad records (`0x140112B30`) come only from the pads' readers (XInput `0x140113A40`, DirectInput
+  `0x140113160`, `0x140111350`): the keyboard never passes there, so the code couldn't be typed on the
+  keyboard. Checked (decomp). Since this fix the Steam build reads KH1's own merged raw word
+  `0x14298C9B4` (slot 0's held word, PS2 order, built in `0x14028B0B0` from the input object's `+0x18`;
+  its stick bits start at bit 20, so the low 16 are buttons only, Checked (decomp)) once a Sora physics
+  frame. Assumption: KH1 merges the keyboard's keys into that word (not traced through `0x1400D7E80`).
+- The old matcher fell back to 0 or 1 on any wrong press, so a third Up (or any slip) needed the code
+  started over with no sign of it; it now falls back to the longest start of the code the last presses
+  still make (`crate::secretcode`, tested). The 1.5 s gap between presses is kept (main's).
+- An entered code that the form's frame never took (KH1's states not having Sora: an event, a script,
+  KH1's own move) waited forever and could start Anti later; it is dropped after 1.5 s with a log.
+- Every refusal is a Forms line: "Anti Form (the secret code): not taken: <why>" (in a form, a change,
+  Drive off, kh1_slots off, not Steam, slots not built, KH1's states not having Sora, a partner down or
+  missing with Party Required, Drive gauge n of 3 bars, MP, KH1 not letting him change this frame),
+  and "the secret code broke after n of 10 presses (gap / out of order)" once it was 2+ presses in.
+
 **3. No summons in Anti** (the owner's port spec, inventory row 14 / main s272: "Magic, Reflect, items,
 summons ... are all refused, with "can't", and greyed"):
 - KH1's Summon row is not a top-level entry: it is the magic list's last entry, command 6 (record 6

@@ -20,6 +20,7 @@ pub mod dpxcache;
 pub mod drivegauge;
 pub mod driveitems;
 pub mod driveparty;
+pub mod secretcode;
 pub mod drivedim;
 pub mod drivesupport;
 pub mod formcmds;
@@ -31,7 +32,7 @@ pub mod tintcache;
 /// The mod's version as the user sees it (the Config menu's Camera Style help line, the log):
 /// the stage of the latest `AGENTS.md` entry, bumped with every change to the source (a test
 /// checks). `t` for the testing branch (the user, from stage 300; `s` before it).
-pub const VERSION: &str = "tm32";
+pub const VERSION: &str = "tm33";
 
 #[cfg(all(windows, target_arch = "x86_64"))]
 mod win;

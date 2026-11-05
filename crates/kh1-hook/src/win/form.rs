@@ -264,48 +264,63 @@ pub fn two_blades() -> bool {
     current().is_some_and(|k| k.two_blades())
 }
 
-/// The secret code, kept unreadable on purpose (the user: it stays a secret): `code_bit`.
-const CODE: [u8; 10] = [94, 94, 92, 92, 93, 95, 93, 95, 87, 84];
+/// The secret code's matcher (`crate::secretcode`: the code itself, kept unreadable on purpose, the
+/// user: it stays a secret), and the clock its gaps are timed by.
+static CODE_STATE: std::sync::Mutex<crate::secretcode::Matcher> = std::sync::Mutex::new(crate::secretcode::Matcher::new());
 
-/// The pad bit of the code's `i`th button.
-fn code_bit(i: usize) -> u16 {
-    1 << (CODE[i] ^ 0x5A)
+fn code_clock_ms() -> u64 {
+    static START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+    START.get_or_init(std::time::Instant::now).elapsed().as_millis() as u64
 }
-/// The buttons the code watches (any other pressed starts it over), and the longest gap.
-const CODE_BUTTONS: u16 = (1 << 4) | (1 << 5) | (1 << 6) | (1 << 7) | (1 << 13) | (1 << 14) | (1 << 12) | (1 << 15);
-const CODE_GAP_MS: u64 = 1500;
-/// The code so far: buttons held last time, how far in, when the last one came; and whether it was
-/// just completed (taken on the game thread, `before_step`).
-static CODE_STATE: std::sync::Mutex<(u16, usize, Option<std::time::Instant>)> = std::sync::Mutex::new((0, 0, None));
 
-/// The pad as pressed, every read (`probe::pad`, KH1's own pad read): the secret code (the user: a
-/// button sequence, "in that exact sequence, put them into final form"; since the main-branch port's
-/// row 14 it gives Anti Form, the owner: "The secret code gives Anti Form", main s272). Taken on the
-/// game thread (`native_frame`, `code_anti`).
-pub fn pad(buttons: u16) {
-    let Ok(mut g) = CODE_STATE.try_lock() else { return };
-    let (held, at, last) = &mut *g;
-    let pressed = buttons & !*held & CODE_BUTTONS;
-    *held = buttons;
-    if pressed == 0 {
-        return;
+/// How long the code entered waits for the form's frame (`native_frame`, `code_anti`) before it is
+/// dropped with a log, so it never starts Anti later, somewhere else (the code's own gap).
+const CODE_WAIT_MS: u64 = crate::secretcode::GAP_MS;
+
+/// KH1's buttons as pressed, for the secret code (the user: a button sequence, "in that exact
+/// sequence, put them into final form"; since the main-branch port's row 14 it gives Anti Form, the
+/// owner: "The secret code gives Anti Form", main s272). Taken on the game thread (`native_frame`,
+/// `code_anti`). Every break of the code past its second press, and every way it isn't taken, is a
+/// Forms line.
+fn code_read(buttons: u16) {
+    let now = code_clock_ms();
+    if super::antiform::code_stale(now, CODE_WAIT_MS) {
+        log!(Forms, "Anti Form (the secret code): not taken: KH1's own states didn't have base Sora within {CODE_WAIT_MS} ms (an event or a script moving him, KH1's own move, another body, or KH2's files not loaded)");
     }
-    if last.is_some_and(|t| t.elapsed().as_millis() as u64 > CODE_GAP_MS) {
-        *at = 0;
-    }
-    *last = Some(std::time::Instant::now());
-    for bit in (0..16).map(|i| 1u16 << i).filter(|b| pressed & b != 0) {
-        if bit == code_bit(*at) {
-            *at += 1;
-        } else {
-            *at = usize::from(bit == code_bit(0));
-        }
-        if *at == CODE.len() {
-            *at = 0;
-            super::antiform::code_entered();
+    let Ok(mut m) = CODE_STATE.try_lock() else { return };
+    match m.feed(buttons, now) {
+        crate::secretcode::Event::Entered => {
+            super::antiform::code_entered(now);
             log!(Forms, "Anti Form: the secret code entered");
         }
+        crate::secretcode::Event::Broken { at, gap } => {
+            log!(Forms, "Anti Form: the secret code broke after {at} of {} presses ({})", crate::secretcode::LEN, if gap { "more than 1.5 s between two presses" } else { "a press out of order" });
+        }
+        crate::secretcode::Event::None => {}
     }
+}
+
+/// The pad as pressed, every pad record KH1 reads (`probe::pad`), on builds other than Steam (Steam:
+/// `code_frame`).
+pub fn pad(buttons: u16) {
+    if super::addr::Build::current() != super::addr::Build::Steam {
+        code_read(buttons);
+    }
+}
+
+/// Steam: the secret code read from KH1's own merged pad word (`camera::RAW_HELD_STEAM`, slot 0's
+/// held word in PS2 order, built by KH1's pad step `0x14028B0B0` from its input object's `+0x18`:
+/// every pad, the word KH1's button remap reads; Checked (decomp)), once a physics frame of Sora's
+/// (`takeover::physics`). The pad records (`probe::pad`, `0x140112B30`) are only the pads' own
+/// readers (XInput `0x140113A40`, DirectInput `0x140113160`, `0x140111350`), never the keyboard
+/// (KH1's DirectInput keyboard is read by `0x140112080` / `0x1400DA9F0` as key bytes; Checked
+/// (decomp)). **Assumption**: KH1 merges the keyboard's keys into that word (as `camera::r2_held`
+/// takes R2 from it), not traced through `0x1400D7E80`.
+pub unsafe fn code_frame(base: usize) {
+    if base == 0 || super::addr::Build::current() != super::addr::Build::Steam {
+        return;
+    }
+    code_read(rd::<u32>(base + super::camera::RAW_HELD_STEAM) as u16);
 }
 
 pub fn busy() -> bool {
@@ -913,26 +928,45 @@ pub fn native_running() -> bool {
     (NATIVE.load(Ordering::Relaxed) && (in_form() || CHANGING.load(Ordering::Relaxed) || REQUEST.load(Ordering::Relaxed) != 0)) || super::antiform::code_waiting()
 }
 
-/// The secret code entered (`pad`): Anti Form asked for as the Drive list asks for a form (`choose`:
-/// KH1 letting him change on this frame, no queue; its cost by `antiform`'s rules), with its partners
-/// as KH2's Anti needs them (`0x140400740(6)`, Drive > Party Required). Refused (logged) in a form, in
-/// a change, or where Anti can't run on KH1's states.
+/// The secret code entered (`code_read`): Anti Form asked for as the Drive list asks for a form
+/// (`choose`: KH1 letting him change on this frame, no queue; its cost by `antiform`'s rules), with
+/// its partners as KH2's Anti needs them (`0x140400740(6)`, Drive > Party Required). Every refusal is
+/// a Forms line naming its reason.
 unsafe fn code_anti(actor: usize) {
-    if in_form() || busy() {
-        log!(Forms, "Anti Form (the secret code): not taken, {}", if in_form() { "already in a form" } else { "a change is under way" });
-        return;
+    let no = |why: &str| log!(Forms, "Anti Form (the secret code): not taken: {why}");
+    if in_form() {
+        return no(&format!("already in {} Form", current().map_or("a", |k| k.name())));
     }
-    if !native_ok(Kind::Anti) || !super::shared::active() {
-        log!(Forms, "Anti Form (the secret code): not taken, it can't run on KH1's own states here (its slots didn't build, or the Drive is off)");
-        return;
+    if busy() {
+        return no("a change is under way");
     }
-    if !super::driveparty::ok(super::formown::form_id(Kind::Anti)) {
-        log!(Forms, "Anti Form (the secret code): not taken, its partners aren't both there and able (Drive > Party Required)");
-        return;
+    let s = super::settings::get();
+    if !s.drive {
+        return no("Drive Forms are off (Config > Drive)");
+    }
+    if s.kh1_slots.is_none() {
+        return no("KH2's moves on KH1's own slots are off (the ini's kh1_slots), and Anti runs only there");
+    }
+    if super::addr::Build::current() != super::addr::Build::Steam {
+        return no("Anti runs only on the Steam build");
+    }
+    if !super::kh2slots::form_built(Kind::Anti) {
+        return no("Anti's slots didn't build (P_EX100_HTLF's motions: see the slot load's lines)");
+    }
+    if !super::shared::active() {
+        return no("KH1's own states don't have base Sora this frame");
+    }
+    let form = super::formown::form_id(Kind::Anti);
+    if !super::driveparty::ok(form) {
+        let why = match crate::driveparty::availability(form, super::driveparty::slots()) {
+            1 => "Donald or Goofy is down (Drive > Party Required)",
+            _ => "Donald and Goofy aren't both in the party (Drive > Party Required)",
+        };
+        return no(why);
     }
     match choose(actor, Kind::Anti) {
-        Ok(_) => log!(Forms, "Anti Form (the secret code): asked for"),
-        Err(e) => log!(Forms, "Anti Form (the secret code): refused ({e})"),
+        Ok(_) => log!(Forms, "Anti Form (the secret code): asked for ({} rules, Form Cost {})", if super::antiform::balance() { "Balance" } else { "KH2" }, if gauge_cost() { "Drive Gauge" } else { "MP" }),
+        Err(e) => no(&e),
     }
 }
 
