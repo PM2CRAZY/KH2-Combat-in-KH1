@@ -587,6 +587,14 @@ unsafe fn command_step(actor: usize, dir: usize) {
         cmd_log(|| format!("command {kind:#x} ({full:08x}) refused: KH1's limits aren't used in a Drive Form (Limits in Forms KH2)"));
         return;
     }
+    // Anti Form: no Talk, Examine or Open (testing-merge, the owner: "yes", off as KH2), refused as
+    // KH1 refuses an unusable command.
+    if actor == sora && super::form::current() == Some(super::form::Kind::Anti) && crate::formcmds::anti_refuses(kind as u8) {
+        let sound: unsafe extern "system" fn(i32) = std::mem::transmute(base + SOUND_RVA);
+        sound(4);
+        cmd_log(|| format!("command {kind:#x} ({full:08x}) refused: Anti Form doesn't talk, examine or open"));
+        return;
+    }
     // (t1023: Valor's two-Keyblade refusal of KH1's commands, t962's `formcmds::valor_allows`, is
     // gone. The owner (§24.2 answer 6): "valor and master shouldn't refuse commands, we'll hand
     // tune which ones if something looks off, it should be the same as wisdom form". So a

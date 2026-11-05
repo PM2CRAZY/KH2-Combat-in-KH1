@@ -26,6 +26,17 @@
 //! Pure Rust (no Windows calls), unit tested on any host; the game side is `win::formlimits` (the
 //! limit offer and refusal).
 
+/// KH1's field commands Anti Form doesn't take (testing-merge, the owner, answer 3 "yes" to "talking
+/// and examining off in Anti, as KH2"): Talk 4, Examine 5 (Assumption, above), the chest's 0x1C /
+/// 0x1D / 0x1E and Open 0x37. Ids an object's own handler runs (save points, Assumption) aren't
+/// known by number and stay.
+pub const ANTI_REFUSES: [u8; 6] = [4, 5, 0x1C, 0x1D, 0x1E, 0x37];
+
+/// Whether Anti Form refuses KH1's command `id`.
+pub fn anti_refuses(id: u8) -> bool {
+    ANTI_REFUSES.contains(&id)
+}
+
 /// KH1's limits, starts and follow-ups.
 pub const LIMITS: [u8; 12] = [0x4B, 0x4D, 0x4E, 0x52, 0x57, 0x58, 0x59, 0x5A, 0x5B, 0x5E, 0x5F, 0x60];
 
@@ -45,6 +56,16 @@ mod tests {
         }
         for id in [0, 1, 2, 3, 4, 5, 0x1C, 0x37, 0x4F, 99, 0x7D] {
             assert!(!limit(id), "{id:#x}");
+        }
+    }
+
+    #[test]
+    fn anti_refuses_the_field_commands() {
+        for id in [4, 5, 0x1C, 0x37] {
+            assert!(anti_refuses(id));
+        }
+        for id in [0, 1, 2, 0x47, 0x7D] {
+            assert!(!anti_refuses(id));
         }
     }
 }
