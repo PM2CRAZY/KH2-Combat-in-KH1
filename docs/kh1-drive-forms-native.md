@@ -2937,6 +2937,26 @@ Paused here to move on to the next form; t1013..t1019 are untested in game. Open
   Final already hid Square (t1033), so the Final guard the owner saw has another start: not found by reading the code.
   **Not checked in game.** `combomods::kh1_guard_frame` (already reads `+0x164` each frame) logs once a play when KH1's
   guard request 0xD4 plays in Master or Final (KH1 state, Square on the pad), to find it.
+- Guard and roll in Master and Final, the cause (the owner: "sora can still guard and dodge roll in final and master
+  form, stop that"). Checked (decomp): KH1's guard row 0x3D (`0x1402A3980 (actor, 0x3D)`) and roll start
+  `0x1402C9E60` have one caller between them, KH1's Square handler `0x1402A7B30`, whose one caller is the control step
+  `0x1402A6220` (the one `takeover::control` wraps). The handler reads Square from the command record
+  (`0x142D53A40 & 0x4000000`), which KH1's command step `0x1402937F0` sets when the pressed word (`0x14298CA98`) has
+  bit `0x10` and not `0x4000000` (Triangle), outside states 8 / 0x18 / 0x19 / 0x21. Square's raw `0x8000` gives
+  both `0x100000` (in `0x14028B0B0`'s own code) and, by Assumption, `0x10` (its mapping table `0x140528290`, not
+  read here; §11 found the same path from Wisdom's trace). So hiding `0x100000` never reached it. Then, in ground
+  state 0 out of deep water (`0x1402C16E0`), it guards with ability bit `0x10` (Guard, ability 0x15) unless Dodge
+  Roll (`0x20`, ability 0x16) is on too and the stick is past the stats' threshold, else it rolls with `0x20`.
+  Those two bits of `0x142D5EC10` (built by `0x1402A6380` from the equipped abilities) are read nowhere else in
+  KH1 (every reader listed). Now `takeover::control` holds `0x10 | 0x20` back across KH1's control step for Sora
+  in native Master and Final (`shared::kh1_abilities_held`) and puts back only those it took: KH1's own ability
+  test finds no Guard or Dodge Roll there, at every Dodge Roll / Guard Animation style. Our KH2 guard / roll
+  presses (`combomods::guard_press` / `roll_press`) already refuse every form (Checked (code)). Base Sora, Valor,
+  Wisdom, Limit and Anti unchanged. `kh1_guard_frame`'s log now also covers KH1's roll request 0xDC. Not
+  checked in game.
+- Found, not changed: in Master KH1's Superglide (ability bit `0x100`) still starts from the same Square flag in
+  KH1's jump state 2 (`0x1402B2750`, the handler's first branch; Checked (decomp)) when KH1's Superglide is
+  equipped; KH2's Master has no glide (§24.1). Same path for Valor / Wisdom / Anti (their rules left as they are).
 
 ## 25. Final Form on KH1's states (the owner, after t1032: "start final", 2026-10-30)
 

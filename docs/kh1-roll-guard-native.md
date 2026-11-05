@@ -51,7 +51,7 @@ built from it.
 ### 3.1 The Square handler: roll or guard, `0x1402A7B30`
 
 Sora's per-frame button step (called from the control step `0x1402A6220`). For Square
-(`0x142D53A40 & 0x4000000`, **Assumption**: the "pressed" bit) in movement state 0 and not in deep
+(`0x142D53A40 & 0x4000000`, the command record's Square flag: set by KH1's command step `0x1402937F0` from the pressed word's bit `0x10` without `0x4000000`, Checked (decomp); in Master / Final the Guard / Dodge Roll bits below are held back from the step, `docs/kh1-drive-forms-native.md` §24.3) in movement state 0 and not in deep
 water (`0x1402C16E0`):
 
 - **Guard** if the Guard ability bit is on (`0x142D5EC10 & 0x10`) and either Dodge Roll is off

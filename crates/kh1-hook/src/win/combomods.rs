@@ -2642,12 +2642,15 @@ pub unsafe fn kh1_guard_frame(actor: usize) {
     let had = KH1_GUARD_OBJ.load(Ordering::Relaxed);
     let guard_request = actor >= 0x10000 && rd::<u32>(actor + 0x164) & 0xFFFF == 0xD4;
     // (The owner, after t1076: a guard in Master and Final. Neither form has one in KH2 (no row 11,
-    // no 173; Checked (files)), and KH1 sees no Square in either now (`shared::control`); KH1's
-    // guard request still playing in one of them is logged once a play, to find what started it.)
+    // no 173; Checked (files)). KH1's Square handler started it from the command record's Square
+    // flag with KH1's Guard ability bit; that bit is now held back from KH1's control step in both
+    // (`shared::kh1_abilities_held`). KH1's guard request still playing in one of them is logged
+    // once a play, in case another path is left.)
     static FORM_GUARD: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-    let form_guard = guard_request && matches!(super::form::native_form(), Some(super::form::Kind::Master | super::form::Kind::Final));
+    let request = if actor >= 0x10000 { rd::<u32>(actor + 0x164) & 0xFFFF } else { 0 };
+    let form_guard = matches!(request, 0xD4 | 0xDC) && matches!(super::form::native_form(), Some(super::form::Kind::Master | super::form::Kind::Final));
     if FORM_GUARD.swap(form_guard, Ordering::Relaxed) != form_guard && form_guard {
-        log!(Combat, "KH1's guard request 0xD4 is playing in {} Form, which has no guard in KH2 (KH1 state {}, Square on the pad {})", super::form::native_form().map_or("?", |k| k.name()), rd::<i32>(actor + 0x70), takeover::pad_square());
+        log!(Combat, "KH1's {} request {request:#x} is playing in {} Form, which has none in KH2 (KH1 state {}, Square on the pad {})", if request == 0xD4 { "guard" } else { "roll" }, super::form::native_form().map_or("?", |k| k.name()), rd::<i32>(actor + 0x70), takeover::pad_square());
     }
     let guarding = guard_request && !super::form::in_form() && super::styles::kh1_now(super::styles::Kind::GuardAnim);
     let now = if guarding && Build::current() == Build::Steam { super::combat::kh1_guard_object(actor) } else { None };

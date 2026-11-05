@@ -199,11 +199,40 @@ pub fn mark_air_dodged() {
 /// Master's: another model's guard on the form) and KH1's roll whenever the Dodge Roll style was
 /// KH1 (KH1's action bit was only taken at KH2). Master's jump in the air is still its Aerial
 /// Dodge (base Sora's path, `base_control`).
+/// (Hiding the action bit didn't stop that guard and roll: KH1's Square handler reads the command
+/// record's Square flag, made from the pressed bit `0x10`. What stops them in Master and Final is
+/// KH1's own ability test finding no Guard / Dodge Roll there, `kh1_abilities_held`.)
 pub fn control(s: &Seen) -> u32 {
     let hide = base_control(s);
     match super::form::native_form() {
         Some(super::form::Kind::Master) => hide | KH1_ACTION_BIT,
         _ => hide,
+    }
+}
+
+/// KH1's Guard and Dodge Roll ability bits in Sora's ability word (Steam `0x142D5EC10`: `0x10`
+/// from ability 0x15 Guard, `0x20` from 0x16 Dodge Roll, set by `0x1402A6380`; Checked (decomp)).
+pub const KH1_GUARD_ROLL_BITS: u32 = 0x10 | 0x20;
+
+/// The ability bits KH1's control step doesn't see for Sora now (`takeover::control` holds them
+/// back across the step and puts them back after, as `kh1picker::holding` does for its picker).
+///
+/// (The owner: "sora can still guard and dodge roll in final and master form, stop that.") KH2's
+/// Master and Final have no guard and no dodge roll (no row 11 in PTYA sets 4 / 5, no 173 / 209 in
+/// `P_EX100_TRIF.mset` / `P_EX100_ULTF.mset`; Checked (files), `docs/kh1-drive-forms-native.md`
+/// §24.1 / §25.1). KH1's guard row 0x3D and its roll `0x1402C9E60` are started only by KH1's Square
+/// handler `0x1402A7B30` (their only callers, Checked (decomp)), inside the control step
+/// `0x1402A6220` (its only caller), on the command record's Square flag (`0x142D53A40 &
+/// 0x4000000`, set by KH1's command step `0x1402937F0` from the pressed bit `0x10`, not from the
+/// action bit `0x100000` that `control` hides: why t1033 / t1081 didn't stop them), in ground
+/// state 0, out of deep water, with bit `0x10` (guard) or `0x20` (roll). Those two bits are read
+/// nowhere else in KH1 (Checked (decomp): every reader of `0x142D5EC10`). So in Master and Final
+/// KH1's own test finds neither ability, at every Dodge Roll / Guard style; base Sora and the other
+/// forms see them as KH1 set them.
+pub fn kh1_abilities_held() -> u32 {
+    match super::form::native_form() {
+        Some(super::form::Kind::Master | super::form::Kind::Final) => KH1_GUARD_ROLL_BITS,
+        _ => 0,
     }
 }
 

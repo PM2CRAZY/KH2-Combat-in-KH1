@@ -491,9 +491,42 @@ unsafe extern "system" fn control(actor: usize, dir: usize) {
     // (`first_person_mouse_turn`), its left stick put back after.
     let base = BASE.load(Ordering::Relaxed);
     let saved = first_person_mouse_turn(base, actor);
+    // KH1's Guard / Dodge Roll ability bits held back from its step in Master and Final
+    // (`shared::kh1_abilities_held`): its Square handler, run only inside this step, then starts
+    // neither its guard nor its roll. Only the bits taken are put back (anything else KH1 or we
+    // change in the word during the step stays).
+    let held = if base != 0 && actor > 0x10000 && actor == rd::<u64>(base + PARTY_RVA) as usize { super::shared::kh1_abilities_held() } else { 0 };
+    let taken = if held != 0 {
+        let at = base + ROLL_ABILITY_RVA;
+        let v = rd::<u32>(at);
+        if v & held != 0 {
+            wr(at, v & !held);
+            note_held(v & held);
+        }
+        v & held
+    } else {
+        0
+    };
     control_step(actor, dir);
+    if taken != 0 {
+        let at = base + ROLL_ABILITY_RVA;
+        wr(at, rd::<u32>(at) | taken);
+    }
     if let Some(l) = saved {
         wr(base + LEFT_STICK_RVA, l);
+    }
+}
+
+/// Logs (Forms) the first frame of a form's stay that KH1's Guard / Dodge Roll bits were held back.
+fn note_held(bits: u32) {
+    static AT: AtomicU64 = AtomicU64::new(u64::MAX);
+    let frame = GAME_FRAME.load(Ordering::Relaxed);
+    let prev = AT.swap(frame, Ordering::Relaxed);
+    if prev != frame && prev.wrapping_add(1) != frame {
+        log!(Forms, "{} Form: KH1's {} ability bit{} held back from its control step (KH1's Square handler starts no guard or roll in this form)",
+            super::form::native_form().map_or("?", |k| k.name()),
+            match bits { 0x10 => "Guard", 0x20 => "Dodge Roll", _ => "Guard and Dodge Roll" },
+            if bits == 0x30 { "s" } else { "" });
     }
 }
 
