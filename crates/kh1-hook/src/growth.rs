@@ -29,6 +29,10 @@
 //! growth ones, which come as KH2's do, from the Drive Forms' levels (`FORM_GIVEN`); KH2's
 //! growth levels come only from the Drive Forms' levels (`FormGrowth`); saves the older builds
 //! changed get KH1's abilities back once (`restore_vanilla`).
+//!
+//! Bonus AP (testing-merge, the owner: "I also want the bonus ap back"): Sora's max AP grows by
+//! the AP of each KH2 ability of ours he holds (`bonus_ap`, main's rule), added where KH1 fills
+//! his stats (`win/menu.rs`, the party stats hook), so every AP KH1 shows or checks has it.
 
 use character_core::Abilities;
 
@@ -398,6 +402,35 @@ pub const MENU: [MenuAbility; 27] = [
 /// Equipped copies of a KH2 support ability (`Effect::Support`'s number) in `a`.
 pub fn support_copies(a: &Abilities, n: u16) -> u8 {
     a.equipped.iter().filter(|&&x| x == n).count().min(255) as u8
+}
+
+/// Bonus AP is on (testing-merge, the owner, chat 2026-11-05: "I also want the bonus ap back";
+/// main's rule, main stage 43: "give Sora more AP to make up for the KH2 abilities"). One place
+/// to turn it off again (testing's t718 rule: "remove extra ap for now").
+pub const BONUS_AP: bool = true;
+
+/// KH1's own top for a member's max AP, which main kept the bonus under (main stage 43: max AP
+/// "at most 100"; Assumption: read on main's build, not checked in the Steam decomp here).
+pub const MAX_AP_TOP: i32 = 100;
+
+/// The AP Sora gets on top of KH1's own (main's `bonus_ap`): each KH2 ability of ours he has
+/// learned brings its own AP, so taking the KH2 abilities costs none of KH1's. "Learned" on this
+/// branch is "in his lists" (the KH2 list, or Sora's own for a save not moved over to it), on or
+/// off, as main counted a learned ability whether or not it was equipped. Each ability counts once
+/// (main counted each of its `MENU` rows once), however many copies he holds (Form Boost's fmlv
+/// copies, t1039). KH2's own Glide (shared) has no AP.
+pub fn bonus_ap(abilities: &[u8], kh2: &[u8]) -> u8 {
+    MENU.iter().filter(|ab| ab.ap > 0 && (has(kh2, ab.id) || has(abilities, ab.id))).map(|ab| ab.ap as u32).sum::<u32>().min(255) as u8
+}
+
+/// Sora's max AP with the bonus: KH1's own (`kh1`) plus `bonus`, under KH1's top (but never below
+/// KH1's own).
+pub fn max_ap_with_bonus(kh1: i32, bonus: u8) -> i32 {
+    if kh1 >= MAX_AP_TOP {
+        kh1
+    } else {
+        (kh1 + bonus as i32).min(MAX_AP_TOP)
+    }
 }
 
 /// Our Quick Run's ability id (`MENU`).
@@ -1350,6 +1383,30 @@ mod tests {
         assert_eq!(old.growth_early(), vec![ours::QUICK_RUN, ours::AERIAL_DODGE]);
         old.form_growth.quick_run = 1;
         assert_eq!(old.growth_early(), vec![ours::AERIAL_DODGE]);
+    }
+
+    /// Bonus AP (main's rule): each of ours he holds, on or off, once, in either list; KH1's own
+    /// abilities bring none; under KH1's top.
+    #[test]
+    fn bonus_ap_is_the_held_abilities_ap() {
+        let none = [0u8; 48];
+        assert_eq!(bonus_ap(&none, &none), 0);
+        // Quick Run (2) on, Upper Slash (4) off, KH1's Dodge Roll: 6.
+        let mut kh2 = [0u8; 48];
+        kh2[..2].copy_from_slice(&[ours::QUICK_RUN, ours::UPPER_SLASH | 0x80]);
+        let mut own = [0u8; 48];
+        own[0] = kh1::DODGE_ROLL;
+        assert_eq!(bonus_ap(&own, &kh2), 6);
+        // A copy in Sora's own list (a save not moved over) counts; a second copy doesn't.
+        own[1] = ours::FINISHING_PLUS | 0x80;
+        kh2[2] = ours::QUICK_RUN | 0x80;
+        assert_eq!(bonus_ap(&own, &kh2), 11);
+        // Everything of ours: the sum of their AP.
+        let all: Vec<u8> = MENU.iter().filter(|a| a.list == List::Kh2).map(|a| a.id | 0x80).collect();
+        assert_eq!(bonus_ap(&none, &all), MENU.iter().map(|a| a.ap).sum::<u8>());
+        assert_eq!(max_ap_with_bonus(10, 30), 40);
+        assert_eq!(max_ap_with_bonus(90, 30), MAX_AP_TOP);
+        assert_eq!(max_ap_with_bonus(100, 30), 100);
     }
 
     /// Every KH2 ability of Sora's own list but the growth ones is his at once, whatever his

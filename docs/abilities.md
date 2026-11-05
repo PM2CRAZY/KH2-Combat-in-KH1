@@ -148,9 +148,10 @@ starts with "KH2's" so that they can be told apart in the menu.
   story rewards). The mod never holds one back, takes one out, renames it, keeps only one copy
   or removes one to make room. Gone: the level schedule (`MenuAbility::level`) and the boss gifts (`BOSS_GIFTS`),
   the per-level growth tables, `make_room`, `one_only` (spare High Jump / Glide / Superglide
-  copies), Aerial Dodge taken back until Genie Jafar, the bonus AP.
+  copies), Aerial Dodge taken back until Genie Jafar, the bonus AP (back on testing-merge, below).
 - **Our KH2 abilities** (`Kh1Sora::grants`): every one of `MENU` (but KH2's own Glide) is his, in
-  the KH2 list, off until equipped, with KH2's AP out of Sora's AP (no bonus). Several at once get
+  the KH2 list, off until equipped, with KH2's AP out of Sora's AP (made up by the bonus AP on
+  testing-merge, below). Several at once get
   one box ("New Abilities: n KH2 Abilities"). KH2's own Glide (88) only comes with the Glide style
   and stays in the shared list.
 - **KH1's 48 are KH1's alone** (the tester, after m18, answer 1). t718's `RESERVE` / `yield_one`
@@ -175,8 +176,22 @@ starts with "KH2's" so that they can be told apart in the menu.
   `docs/kh1-drive-forms-native.md` §9. `abilities = kh1` only.
 - **Growth boxes.** KH1's High Jump keeps KH1's name in the menu. When KH2's level for it, Quick
   Run's or KH2 Glide's grows (from a form's level), an "Ability Up" box says so.
-- **No bonus AP.** The `bonus_ap` ini key is gone (an old ini's line is ignored); Sora has
-  KH1's own AP only.
+- **Bonus AP (testing-merge).** The owner (chat 2026-11-05): "I also want the bonus ap back"
+  (main's rule, main stage 43: "give Sora more AP to make up for the KH2 abilities"; testing had
+  removed it at t718). Sora's max AP gets the AP of each KH2 ability of ours he holds
+  (`growth::bonus_ap`): in the KH2 list (or still in his own list on a save not moved over), on or
+  off, each ability once (main counted each of its abilities once; Form Boost's extra fmlv copies
+  bring none). KH1's own abilities bring none. It is added where KH1 fills Sora's stats (the party
+  stats hook in `win/menu.rs`, Steam `0x1402A5130` via `steam_map.in`, Checked (code): the hook
+  already there for Valor's Keyblade), into the stats copy's max AP `+0xE4` (Steam `0x142E942C4`,
+  the field KH1's max AP function `0x1402E8560` reads, `win/kh2list.rs`), so AP left / used, the
+  Abilities / Status / Equipment pages and the KH2 row all have it. The save keeps KH1's own AP.
+  Kept under 100 as main did (Assumption: KH1's own top, from main's notes, not checked in the
+  Steam decomp). `abilities = kh1` only; one switch, `growth::BONUS_AP`. No ini key (main's
+  `bonus_ap` key isn't back). Assumption: KH1 refills the stats copy when the menu opens or an
+  ability changes, so a newly given ability's AP shows from the next refill. On this branch every
+  KH2 ability but the growth ones is given at once (t718), so their AP comes at once too; Quick
+  Run's and Aerial Dodge's join when they are given (the growth rule). Not checked in game.
 
 ## The KH2 list
 

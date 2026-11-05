@@ -299,8 +299,34 @@ unsafe fn stats_inner(member: i32, out: usize) {
     super::valorstats::add(member, out);
     // KH2's combo length in Sora's own stats where it is his (`kh1picker::after_stats`, t896).
     super::kh1picker::after_stats(out);
-    // (No extra AP for the KH2 abilities any more, nor for the form levels' abilities: the
-    // tester, what-is-still-missing after m17, "remove extra ap for now". KH1's own AP only.)
+    // Bonus AP (testing-merge, the owner: "I also want the bonus ap back"; main stage 43; t718
+    // had removed it, "remove extra ap for now"): Sora's max AP in KH1's own stats copy gets the
+    // AP of each KH2 ability of ours he holds (`growth::bonus_ap`), so KH1's AP left / used, its
+    // Abilities, Status and Equipment pages and the KH2 list's max AP (`kh2list::max_ap`, which
+    // reads this copy) all have it. The save keeps KH1's own.
+    bonus_ap(member, out);
+}
+
+/// `growth::bonus_ap` on Sora's max AP (stats `+0xE4`, i32: KH1's max AP function reads it,
+/// `kh2list::MAX_AP`), `abilities = kh1` only.
+unsafe fn bonus_ap(member: i32, out: usize) {
+    if !growth::BONUS_AP || member != 0 || out < 0x10000 || super::settings::get().abilities != Mode::Kh1 {
+        return;
+    }
+    let base = super::sys::GetModuleHandleA(std::ptr::null()) as usize;
+    let Some(save) = save_block(base) else { return };
+    let abilities = std::slice::from_raw_parts((save + 0x44) as *const u8, 48);
+    // (The KH2 list once the save is on it; before, its bytes are nobody's.)
+    let on_list = rd::<u16>(save + growth::LAYOUT_OFF) == growth::LAYOUT_KH2_LIST;
+    let kh2 = if on_list { super::kh2list::read(base) } else { None }.unwrap_or_default();
+    let bonus = growth::bonus_ap(abilities, &kh2);
+    let ap = rd::<i32>(out + 0xE4);
+    let now = growth::max_ap_with_bonus(ap, bonus);
+    std::ptr::write_unaligned((out + 0xE4) as *mut i32, now);
+    static LAST: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(-1);
+    if LAST.swap(now, std::sync::atomic::Ordering::Relaxed) != now {
+        log!(Menus, "Sora's max AP: {ap} (KH1's) + {bonus} (bonus AP: the KH2 abilities he holds) = {now}");
+    }
 }
 
 // (KH1's reward-line hook, `0x1401B6990`, which hid Zantetsuken's "learned" line, is gone: the
