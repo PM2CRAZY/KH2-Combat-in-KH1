@@ -26,13 +26,13 @@ Made 2026-11-05 from `testing` at t1094 (`bb3b65d`), at the owner's request (cha
 ## What main has that testing doesn't (the work list)
 
 From `docs/main-port-inventory.md` (main s339 against testing t948), its rows checked again against t1094.
-Status as of tm22 (2026-11-05). Nothing is checked in game yet.
+Status as of tm27 (2026-11-05). Nothing is checked in game yet.
 
 | # | Feature (main) | Inventory row | State |
 |---|---|---|---|
 | 1 | Bonus AP | 32 | tm7; tm12: by main's learn levels, no cap (the owner) |
 | 2 | Growth abilities as main's (by Sora's level, forms one above) | 16 | tm8 (testing's rule kept behind `growth::GROWTH_RULE`) |
-| 3 | Anti Form | 14 | tm10 (form, moves, rules), tm11 (secret code), tm14 (no talk / examine / open), tm17 (no summons), tm18 (no Keyblade or trail), tm19 (no HP orbs, KH2's), tm20 (its effects), tm21 (ledge hang: a log), next version: its ledge grab, hang and climb on KH1's ledge requests (`kh2slots::ANTI_LEDGE`). Not built: its look (KH1 Anti-Sora's textures and eyes: needs model / texture readers), tm22: its KH2 sounds always play. Anti comes only by the secret code, as main (the owner, answer 1 (a): no KH2 random Anti on Drive, no counter) |
+| 3 | Anti Form | 14 | tm10 (form, moves, rules), tm11 (secret code), tm14 (no talk / examine / open), tm17 (no summons), tm18 (no Keyblade or trail), tm19 (no HP orbs, KH2's), tm20 (its effects), tm22 (its KH2 sounds always), tm23 (ledge grab, hang and climb), tm24–tm27 (its look: KH1 Anti-Sora's textures and solid yellow eyes). Anti comes only by the secret code, as main (the owner, answer 1 (a)). All built; none checked in game |
 | 4 | Reflect levels by the story, "New Magic: Reflect" box | 9 | tm6 (Progression > Reflect by Story); tm15: on by default (the owner) |
 | 5 | Page Down hides the HUD | 26 | not being built (the owner: "dont implement the page down hud"); tm16 took tm2's research log out |
 | 6 | Swings meet walls as KH1's | 33 | tm9 (Tweaks > Walls: KH1 / Clink / Pass); tm13: Clink by default with Recoil KH2 (the owner) |
