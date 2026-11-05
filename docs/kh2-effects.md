@@ -1613,6 +1613,18 @@ elements; **Checked (files)**):
 - Not checked offline: neither file is staged here, so which bones, flags and programs their
   elements use is only known at load (logged: each element switched on, each left out and why).
 
+- **A motion group over KH1's texture slots (the owner: "final form finisher is missing its
+  affects").** A form's package (and Sora's) is grouped by motion, `motion_sets`: the elements one
+  motion starts go in one DPD (split by the DPD they come from). KH1 gives a DPD 10 TBP / 6 CBP
+  slots for its own textures (`kh1dpx`, §18.10); a group over that was left out whole ("elements
+  [...] not built (...); they don't play" on the package's load line), and only the spell packages
+  split such a group back into one DPD per effect. Final's finisher 154 starts 16 elements (25..40,
+  Checked (files), t1041's dump of `P_EX100_ULTF.mset`), the most of any Final motion. Now every
+  package splits a group left out into one per effect (logged "a DPD of all its pieces of one
+  motion isn't possible"). **Assumption** (Final's archive isn't in this session): 154's group is
+  one left out this way; the tester's load line for "p_ex100_ultf" (Effects logging) shows which
+  groups were left out and why. The cache file is rebuilt (the mod version is in its manifest).
+
 ### 18.9 The spells' programs
 
 The programs §12.2 lists for the spell packages (Reflect, Fire, Blizzard, Thunder, Cure, Wisdom's),

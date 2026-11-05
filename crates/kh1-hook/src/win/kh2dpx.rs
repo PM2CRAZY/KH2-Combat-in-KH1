@@ -1226,14 +1226,21 @@ fn build(install: &kh2_data::Install, src: kh2_data::Source, s: &Source) -> Resu
         }
     }
     let mut r = kh2_formats::kh1dpx::build_groups(pax_data, &common, &groups).map_err(|e| e.to_string())?;
-    if together && !r.skipped.is_empty() {
+    // (The owner: "final form finisher is missing its affects". A form's or Sora's package is
+    // grouped by motion (`motion_sets`: every element one motion starts, one DPD), so a motion with
+    // many elements, Final's finisher 154 with its 16 (25..40, Checked (files) t1041's dump), can
+    // need more than KH1's 10 TBP / 6 CBP slots for one DPD; that group was left out whole and none
+    // of its elements played. Every package now splits a group left out into one DPD per effect, as
+    // the spell packages already did. Assumption: 154's group is one left out this way (its load
+    // line, "elements [...] not built (...)", says so in the tester's log).)
+    if !r.skipped.is_empty() {
         let mut split: Vec<Vec<kh2_formats::kh1dpx::Variant>> = Vec::new();
         for (gi, g) in groups.iter().enumerate() {
             let Some((_, why)) = r.skipped.iter().find(|x| x.0 == gi) else {
                 split.push(g.clone());
                 continue;
             };
-            log!(Effects, "KH2 effects (native): {}: a DPD of all its pieces of one file isn't possible ({why}); one per effect", s.label);
+            log!(Effects, "KH2 effects (native): {}: a DPD of all its pieces of one {} isn't possible ({why}); one per effect", s.label, if together { "file" } else { "motion" });
             let mut effects: Vec<u32> = Vec::new();
             for v in g {
                 if !effects.contains(&v.effect) {
