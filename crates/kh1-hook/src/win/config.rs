@@ -262,7 +262,7 @@ enum Row {
     ChestAnim,
     /// Command Menu > Drive Page (Page 1 | Page 2, `cmdmenu::drive_page2`).
     DrivePage,
-    /// Command Menu > D-Pad Left (KH1 | KH2, `cmdmenu::dpad_kh2`).
+    /// Command Menu > 2nd Page (Off | On, `cmdmenu::dpad_kh2`; "D-Pad Left" before t1087).
     DpadLeft,
     /// Command Menu > Cursor Memory (KH1 | KH2, `cmdmenu::memory_kh2`).
     CursorMemory,
@@ -456,7 +456,9 @@ const TOP: [Item; 9] = [
 // and "(b) but you can add a config in the menu for vanilla kh1 behavior".)
 const COMMAND_MENU: [Item; 5] = [
     Item::Set([0x7F00_0227, 0x7F00_0228, 0x7F00_0229, 0x7F00_022A], Row::DrivePage),
-    Item::Set(kh(0x7F00_022B, 0x7F00_022C), Row::DpadLeft),
+    // (2nd Page, Off | On: the owner, the bug-list thread, t1087: "d pad left in the command menu config should be
+    // renamed to "2nd Page" with the setting being off (kh1) or on (kh2)".)
+    Item::Set([0x7F00_022B, 0x7F00_011D, 0x7F00_011E, 0x7F00_022C], Row::DpadLeft),
     Item::Set(kh(0x7F00_022D, 0x7F00_022E), Row::CursorMemory),
     Item::Set(kh(0x7F00_022F, 0x7F00_0230), Row::CommandLock),
     Item::Set([0x7F00_0123, 0x7F00_011D, 0x7F00_011E, 0x7F00_0124], Row::L2Dpad),
@@ -665,8 +667,8 @@ const STRINGS: [(u32, &str); 172] = [
     (0x7F00_0228, "Page 1"),
     (0x7F00_0229, "Page 2"),
     (0x7F00_022A, "Page 1: Drive is the fourth row and Summon is on page 2, as in KH2.\nPage 2: Summon is the fourth row, as in KH1, and Drive is on page 2."),
-    (0x7F00_022B, "D-Pad Left"),
-    (0x7F00_022C, "KH2: d-pad left at the battle menu's top flips page 1 and page 2.\nKH1: it moves the cursor to Attack and there is no page 2."),
+    (0x7F00_022B, "2nd Page"),
+    (0x7F00_022C, "On (KH2): d-pad left at the battle menu's top flips page 1 and page 2.\nOff (KH1): it moves the cursor to Attack and there is no page 2."),
     (0x7F00_022D, "Cursor Memory"),
     (0x7F00_022E, "KH2: after a command every list goes back to its top row, and a\ncursor stays on its command when a list changes. KH1: KH1's."),
     (0x7F00_022F, "Command Lock"),

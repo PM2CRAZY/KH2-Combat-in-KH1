@@ -586,3 +586,7 @@ option for limits", and "in most menus, the text at the bottom extends past the 
   Quick). With `experimental = on` they come back at the ini's bottom, off, and QoL shows them in their old places.
   Turning `experimental` on or off in game re-reads both (`gummi::reload`, `ingameskip::reload`), without writing the
   ini. Checked (code).
+- **t1087, "2nd Page".** The owner: "d pad left in the command menu config should be renamed to "2nd Page" with
+  the setting being off (kh1) or on (kh2)". Command Menu's D-Pad Left row is now 2nd Page, Off | On (Off = KH1:
+  d-pad left moves the cursor to Attack, no page 2; On = KH2: it flips page 1 / page 2). The ini key `dpad_left`
+  (kh1 / kh2) and the setting are unchanged.
