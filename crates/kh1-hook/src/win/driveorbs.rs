@@ -46,6 +46,11 @@ const ROW: usize = 0x14;
 const KH1_TYPES: usize = 7;
 pub const SMALL: u16 = 7;
 pub const BIG: u16 = 8;
+/// KH1's HP prizes (1 and 5 HP) and an actor's `+0` "acting" bit (KH1's pickup skips a member
+/// without it, `0x1402AC080`, Checked (decomp)).
+const HP_SMALL: u16 = 3;
+const HP_BIG: u16 = 4;
+const ACTING: u32 = 0x8000;
 const TYPES: usize = 9;
 /// The reads of the row table: (site, kind, the field): kind 0 `movss xmm, [r14 + r*4 + disp32]`
 /// (disp at +6, the base-relative field), 1 `mov r32, [r14 + r*4 + disp32]` (disp at +4), 2 `lea r64,
@@ -241,7 +246,27 @@ unsafe extern "system" fn drop(counts: usize, pos: usize, mode: i32) {
 unsafe extern "system" fn pickup(prize: usize, pos: usize) -> usize {
     let f: unsafe extern "system" fn(usize, usize) -> usize = std::mem::transmute(ORIG_PICKUP.load(Ordering::Relaxed));
     let ty = if prize >= 0x10000 { rd::<u16>(prize + 0x1C) } else { 0 };
+    // (Anti Form takes no HP orbs (KH2's prize pickups `0x1403DBEA0` / `0x1403DC7C0`: the player in
+    // form 6 skips kinds 0 / 1, Checked (decomp)). KH1's HP prizes are types 3 / 4 (`0x1402A4920
+    // (member, 1 / 5)` in this pickup, Checked (decomp)). KH1's pickup walks the party
+    // (`0x142D37280`..) and skips a member whose `+0` lacks 0x8000 (acting): for this call only Sora
+    // reads as not acting, so KH1 leaves the orb where it is (it stays and times out as KH1's do) or a
+    // partner in the field takes it, as KH2's loop lets a partner.)
+    let sora = if super::form::in_anti() && (ty == HP_SMALL || ty == HP_BIG) { super::takeover::sora_actor() } else { 0 };
+    let kept = (sora >= 0x10000 && super::crash::readable(sora + 3)).then(|| {
+        let f0 = rd::<u32>(sora);
+        std::ptr::write_unaligned(sora as *mut u32, f0 & !ACTING);
+        f0
+    });
     let who = f(prize, pos);
+    if let Some(f0) = kept {
+        let now = rd::<u32>(sora);
+        std::ptr::write_unaligned(sora as *mut u32, now | (f0 & ACTING));
+        static N: AtomicU32 = AtomicU32::new(0);
+        if N.fetch_add(1, Ordering::Relaxed) < 6 {
+            note(|| format!("an HP orb (type {ty}) not taken by Sora in Anti Form{}", if who != 0 { ": a partner took it" } else { "" }));
+        }
+    }
     if who != 0 && (ty == SMALL || ty == BIG) {
         let value = if ty == BIG { crate::drivegauge::BIG_ORB } else { crate::drivegauge::SMALL_ORB };
         if super::form::orb(value) {

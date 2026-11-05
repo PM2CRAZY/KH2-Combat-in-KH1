@@ -488,3 +488,15 @@ is hidden)", s273 "sora still has keyblade trails while in this form, lets not h
   step do the rest. Per frame: nothing (the wrapper runs only when KH1 draws a weapon).
 - Assumption: no other KH1 code sets the bit directly (the decomp shows only `0x1402A2E30` writing it
   for an actor's weapon besides our holder). Cutscene weapon ops in Anti are refused too (Anti has none).
+
+**5. No HP orbs in Anti** (KH2's rule; main didn't build it):
+- KH2 (Checked (decomp)): the prize pickups `0x1403DBEA0` / `0x1403DC7C0` walk the three players; the
+  player (`+0x6C8` bit 7) in form 6 (`+0xDE0 == 6`) skips prize kinds 0 / 1, partners skip 7 / 8 (Drive
+  orbs). That kinds 0 / 1 are the HP orbs: Assumption (KH2's prize kinds, as the research had it).
+- KH1 (Checked (decomp)): the pickup `0x1402AC080 (prize, position)` walks the party (`0x142D37280`..),
+  skips a member whose `+0` lacks 0x8000 (acting) or whose `+0x88` has 0x20, and gives types 3 / 4
+  their 1 / 5 HP (`0x1402A4920`); a 0 return leaves the prize where it is (`0x1402ACAD0`: it stays and
+  times out).
+- Built (`win/driveorbs.rs`, the existing pickup hook, t946): in Anti, for a type 3 / 4 prize, Sora reads
+  as not acting for that one call (his bit put back after), so KH1 leaves the orb or a partner on the
+  field takes it, as KH2's loop lets a partner. Per frame: a type check in the hook KH1 already calls for each live prize; the flip only for an HP orb in Anti.
