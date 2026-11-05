@@ -257,3 +257,41 @@ form model"), the mod reads three things from the player's own files (`kh1_data`
 
 `crates/kh1-data/tests/local_mesh.rs` checks all of this on the owner's files (skipped without
 them: `KH1_RE_DIR`, `KH1_HDTEX_DIR`).
+
+## Anti Form's look: the surface transfer (`kh1_data::texmap`)
+
+Rebuilt from main's description (main `texmap.rs`, `docs/kh1-tint.md` there), on testing's
+readers. Each texel of one of Sora's HD textures lies on one of his remastered triangles
+(rasterised in UV space, edge texels up to one texel outside), so it is a point on his bind-pose
+surface; the nearest point of the source's surface facing the same way (a grid of its triangles,
+the search widened until the nearest is inside it; one facing away counts as a grid cell further)
+gives the source's UV, and its texture is sampled (bilinear). Uncovered texels take their
+neighbours' colour (16 passes), then the mean; Sora's alpha is kept.
+
+Checked (files), the test the brief asked for: Sora's own PS2 mesh and PS2 textures (128²)
+carried onto his remastered layout come out as his own HD textures. Mean difference per channel
+over the covered opaque texels, against his own texture's difference from its mean colour (what a
+transfer that carried nothing would give):
+
+| texture | difference | his own from its mean | gap to the surface (mean / max) |
+|---|---|---|---|
+| `-1c0` (face, skin, hair) | 10.3 | 32.7 | 0.0003 / 0.07 |
+| `-1c1` (clothes) | 16.5 | 51.1 | 0.0003 / 0.08 |
+| `-1c2` (pockets) | 23.0 | 48.4 | 0.0003 / 0.03 |
+| `-1c3` (shoes, pouches) | 19.7 | 47.9 | 0.0012 / 0.08 |
+
+What is left is the HD remaster's redrawing at 8× the PS2's resolution (looked at side by side,
+`-1c1`'s jumpsuit, zipper, belt, crown, chain and hood land where his own are). About 2.5 s for
+the four in a release build here.
+
+The eyes (the owner, main s292: "solid yellow, the same yellow as in anti-sora's model"):
+`texmap::solid_eyes` fits an ellipse to each of Sora's eyeballs (iris: hue 220° ± 40°, saturation
+over 0.25; white: saturation under 0.25, brightness over 0.55) in `SORA_FACE_EYES` (main's plot,
+u 0.01..0.30 × v 0.115..0.195 of `-1c0`), enlarges it 1.12× and fills it with one flat colour,
+`ANTI_EYE_RGB` = (253, 230, 95). Checked (files): on the owner's `-1c0` both eyes are found and
+filled, nothing outside the area. Assumption (main's, not checked here): that colour is from the
+owner's reference picture of Anti-Sora; main found no eye colour in his model (greys only, no
+vertex colour). `solid_eye_frames` does the same on every 128-row frame of the eye sheet `-2c0`
+(a shut frame, under 12 texels of eyeball, stays shut, so he still blinks), and `find_frame` /
+`frames_from` rebuild a frame sheet from the new face where KH1 pastes it. Not checked here: the
+`-2c0` / `-2c1` sheets (not among the staged files).
