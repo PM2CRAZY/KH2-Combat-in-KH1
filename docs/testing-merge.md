@@ -26,18 +26,19 @@ Made 2026-11-05 from `testing` at t1094 (`bb3b65d`), at the owner's request (cha
 ## What main has that testing doesn't (the work list)
 
 From `docs/main-port-inventory.md` (main s339 against testing t948), its rows checked again against t1094.
+Status as of tm11 (2026-11-05). Nothing is checked in game yet.
 
-| # | Feature (main) | Inventory row | Needs |
+| # | Feature (main) | Inventory row | State |
 |---|---|---|---|
-| 1 | Bonus AP | 32 | code (main's rule read again) |
-| 2 | Growth abilities as main's (one level above base Sora) | 16 | code |
-| 3 | Anti Form: the secret code, its look, Anti Glide / Side Spin, foot ledge hang, its rules | 14 | KH1 + KH2 decomp, KH2 files |
-| 4 | Reflect levels by the story, "New Magic: Reflect" box | 9 | code (save bytes) |
-| 5 | Page Down hides the HUD | 26 | KH1 decomp (Steam draw address) |
-| 6 | Swings meet walls as KH1's (spark, sound, no bounce) | 33 | code |
-| 7 | KH2 camera follows KH1's up / down invert option | 34 | KH1 decomp (the option's address) |
-| 8 | Combo lunges don't carry Sora through room exits or into crate pushes | 35 | code, in-game check |
-| 9 | KH2 effects on Counterguard, Flash Step, Retaliating Slash | 36 | code / KH2 files |
-| 10 | Dream Shield stretching fix | 49 | in-game check first |
-| 11 | Epic Games Store support | 61 | the Epic exe and decomp |
-| 12 | README, install notes, `mod.yml` for players | 62 | docs |
+| 1 | Bonus AP | 32 | tm7 |
+| 2 | Growth abilities as main's (by Sora's level, forms one above) | 16 | tm8 (testing's rule kept behind `growth::GROWTH_RULE`) |
+| 3 | Anti Form | 14 | tm10 (form, moves, rules), tm11 (secret code). Not built: its look (model / texture readers), counter / roll save bytes, HP orbs, summon bit, its effects, ledge hang, no Keyblade / trails |
+| 4 | Reflect levels by the story, "New Magic: Reflect" box | 9 | tm6 (Progression > Reflect by Story, off by default) |
+| 5 | Page Down hides the HUD | 26 | tm2: research and a log of the Steam draw bytes; needs the KH1 decomp |
+| 6 | Swings meet walls as KH1's | 33 | tm9 (Tweaks > Walls: KH1 / Clink / Pass) |
+| 7 | KH2 camera follows KH1's up / down invert | 34 | tm1 |
+| 8 | Combo lunges don't carry Sora through room exits / into crates | 35 | tm3 (exits); crates were already refused by KH1 |
+| 9 | KH2 effects on Counterguard, Flash Step, Retaliating Slash | 36 | tm4 |
+| 10 | Dream Shield stretching | 49 | tm5 (drawn routes fixed; a log for the baked moves) |
+| 11 | Epic Games Store support | 61 | not started: needs the Epic exe and decomp |
+| 12 | README, install notes, `mod.yml` for players | 62 | not started |
