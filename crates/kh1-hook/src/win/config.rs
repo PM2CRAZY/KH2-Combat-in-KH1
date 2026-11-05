@@ -278,6 +278,8 @@ enum Row {
     GaugeRefill,
     /// Progression > Drive Gauge Growth (Off | On, `drivegauge::growth`, t935).
     GaugeGrowth,
+    /// Progression > Reflect by Story (Off | On, `reflect::by_story`).
+    ReflectStory,
     /// Drive > Recovery in Battle (Off | On, `driveitems::battle`, t949).
     RecoveryBattle,
     /// Progression > Drive Recovery (Off | On, `driveitems::sources`, t950).
@@ -468,10 +470,13 @@ const COMMAND_MENU: [Item; 5] = [
 // off by default, answer 2 (b).)
 // (Drive Gauge Growth: round 2 answer 3 (a), its own row; t935.)
 // (Drive Recovery: round 5 answer 1 (a): main's sources behind a toggle, on by default; t950.)
-const PROGRESSION: [Item; 3] = [
+// (Reflect by Story: the testing-merge branch, work list item 4: main's Reflect levels (s307) behind a
+// row of their own, off by default as Story Unlocks.)
+const PROGRESSION: [Item; 4] = [
     Item::Set([0x7F00_0240, 0x7F00_011D, 0x7F00_011E, 0x7F00_0241], Row::StoryUnlocks),
     Item::Set([0x7F00_024C, 0x7F00_011D, 0x7F00_011E, 0x7F00_024D], Row::GaugeGrowth),
     Item::Set([0x7F00_0250, 0x7F00_011D, 0x7F00_011E, 0x7F00_0251], Row::RecoverySources),
+    Item::Set([0x7F00_025F, 0x7F00_011D, 0x7F00_011E, 0x7F00_0260], Row::ReflectStory),
 ];
 // (Drive: the owner, the main-branch port, t927. MP Refill: KH2 refills HP and MP on entering a form,
 // `0x1403C17C0`; answer 8: "(a) but make it a toggle in drive config menu"; off by default.)
@@ -627,7 +632,7 @@ const BUTTON_HELP: u32 = 0x7F00_0202;
 /// Misc's help, and the same without the debug menu (its row isn't there without the debug tools).
 const MISC_HELP: u32 = 0x7F00_020C;
 const MISC_HELP_NO_DEBUG: &str = "Battle quotes.";
-const STRINGS: [(u32, &str); 172] = [
+const STRINGS: [(u32, &str); 174] = [
     (0x7F00_0201, "KH1 in KH2"),
     (0x7F00_0202, "Choose KH1's or KH2's camera, combat, movement and more."),
     (0x7F00_0203, "Camera"),
@@ -731,6 +736,8 @@ const STRINGS: [(u32, &str); 172] = [
     (0x7F00_024F, "On: Drive Recovery and High Drive Recovery go in the item slots\nand work in battle too. Off: from the menu only, as in KH2."),
     (0x7F00_024C, "Drive Gauge Growth"),
     (0x7F00_024D, "On: the Drive gauge starts at 3 bars and grows by one for Sabor, Riku,\nChernabog, Sephiroth, Kurt Zisa and the Unknown. Off: 9 bars."),
+    (0x7F00_025F, "Reflect by Story"),
+    (0x7F00_0260, "On: Reflect, Reflera and Reflega come one per fight won: Pot Centipede,\nthe Hercules Cup, Ice Titan. Off: with KH1's Aero and its levels."),
     (0x7F00_0240, "Story Unlocks"),
     (0x7F00_0241, "On: the Drive Forms open by the story (Guard Armor, Opposite\nArmor, the Pegasus Cup by the Dive's choice). Off: from the start."),
     (0x7F00_0236, "Item Pickup"),
@@ -836,6 +843,7 @@ fn value(what: Row) -> bool {
         Row::FormCost => super::form::gauge_cost(),
         Row::GaugeRefill => super::form::gauge_refill(),
         Row::GaugeGrowth => super::drivegauge::growth(),
+        Row::ReflectStory => super::reflect::by_story(),
         Row::RecoveryBattle => super::driveitems::battle(),
         Row::RecoverySources => super::driveitems::sources(),
         Row::PartyRequired => super::driveparty::required(),
@@ -891,6 +899,7 @@ fn set(what: Row, v: bool) {
         Row::FormCost => super::form::set_gauge_cost(v),
         Row::GaugeRefill => super::form::set_gauge_refill(v),
         Row::GaugeGrowth => super::drivegauge::set_growth(v),
+        Row::ReflectStory => super::reflect::set_by_story(v),
         Row::RecoveryBattle => super::driveitems::set_battle(v),
         Row::RecoverySources => super::driveitems::set_sources(v),
         Row::PartyRequired => super::driveparty::set_required(v),

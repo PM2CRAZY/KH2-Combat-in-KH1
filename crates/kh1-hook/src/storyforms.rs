@@ -10,6 +10,8 @@
 //!   Valor; Rod: Wisdom, Valor, Limit). Each fight stands alone (one won out of order opens its own
 //!   form).
 //! - Master after Anti-Sora, Final after Ansem-Riku (Riku 2).
+//! - Also read here: Reflect's three fights (`reflect_fights`, Progression > Reflect by Story) and
+//!   the Drive gauge's six (`gauge_fights`).
 //!
 //! The flags (all in Sora's save; main's findings from KH1's room scripts and save snapshots,
 //! **Assumption** on testing until rechecked; the offsets are Checked (decomp) on Steam, see §12):
@@ -50,6 +52,39 @@ pub fn gauge_fights(save: &[u8]) -> u8 {
     let p = |w: usize| save[PROGRESS + w];
     [p(1) >= 0x42, p(HOLLOW_BASTION) >= 0x32, p(11) >= 0x33, journal(0xA5), p(4) >= 0x96, journal(0xA9) && save[0x499 + 0x3C] >= 1].into_iter().filter(|b| *b).count() as u8
 }
+
+/// Reflect's three fights (the owner, main s307: "Reflect should be found ... after defeating Pot
+/// Centipede, after defeating Hercules (Hercules cup), after defeating Ice Titan (Gold match)"),
+/// behind Progression > Reflect by Story (`win::reflect::by_story`): 0 none won (no Reflect yet),
+/// 1 Reflect, 2 Reflera, 3 Reflega. Main's flags (Assumption on testing, from KH1's room scripts and
+/// save snapshots on main, not rechecked here):
+/// - Pot Centipede: Agrabah's story byte `+0x1504 + 4` >= 0x35 (set right after its prize). The
+///   story bytes' offset is Checked (decomp) on Steam (`docs/kh1-drive-forms-native.md` §12.2);
+///   the value is main's.
+/// - The Hercules Cup: its cup state `+0xF36 + 2` = `+0xF38` >= 1 (the cups Phil, Pegasus, Hercules,
+///   Hades at `+0xF36..`: not found in the Steam decomp, the cup scripts reach them through the
+///   script VM; Assumption, as the Pegasus Cup's `PEGASUS_CUP`).
+/// - Ice Titan: journal entry 0xA6 (`+0x16E3`, Checked (decomp) offset; the entry id main's) and
+///   Diamond Dust (item 0x65, the Gold Match's prize) owned (`+0x499 + 0x65`; the inventory's offset
+///   Checked (decomp), the id from `docs/kh1-equipment.md` §1, community list): the entry comes as
+///   the match starts and Diamond Dust only from winning it, so both are needed.
+/// Each fight stands alone: the level is how many are won, in any order (main's count).
+pub fn reflect_fights(save: &[u8]) -> u8 {
+    if save.len() < SPAN_END {
+        return 0;
+    }
+    let journal = |e: u8| save[JOURNAL + (e >> 3) as usize] & (0x80 >> (e & 7)) != 0;
+    [save[PROGRESS + AGRABAH] >= POT_CENTIPEDE_AG, save[HERCULES_CUP] >= 1, journal(ICE_TITAN_ENTRY) && save[INVENTORY + DIAMOND_DUST] >= 1].into_iter().filter(|b| *b).count() as u8
+}
+
+pub const AGRABAH: usize = 4;
+pub const POT_CENTIPEDE_AG: u8 = 0x35;
+/// The cups' states (`+0xF36 + cup`: Phil, Pegasus, Hercules, Hades; 0 not won).
+pub const CUPS: usize = 0xF36;
+pub const HERCULES_CUP: usize = CUPS + 2;
+pub const ICE_TITAN_ENTRY: u8 = 0xA6;
+pub const INVENTORY: usize = 0x499;
+pub const DIAMOND_DUST: usize = 0x65;
 
 /// The fights the table reads.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -177,6 +212,26 @@ mod tests {
         assert_eq!(gauge_fights(&s), 3);
         s[0x499 + 0x3C] = 1;
         assert_eq!(gauge_fights(&s), 4);
+    }
+
+    #[test]
+    fn reflect_fights_count() {
+        let mut s = save();
+        assert_eq!(reflect_fights(&s), 0);
+        s[PROGRESS + AGRABAH] = POT_CENTIPEDE_AG;
+        assert_eq!(reflect_fights(&s), 1);
+        s[HERCULES_CUP] = 1;
+        assert_eq!(reflect_fights(&s), 2);
+        // (Ice Titan's entry alone is a match started, not won.)
+        s[JOURNAL + (ICE_TITAN_ENTRY >> 3) as usize] |= 0x80 >> (ICE_TITAN_ENTRY & 7);
+        assert_eq!(reflect_fights(&s), 2);
+        s[INVENTORY + DIAMOND_DUST] = 1;
+        assert_eq!(reflect_fights(&s), 3);
+        // (Out of order: the Hercules Cup alone is level 1.)
+        let mut s = save();
+        s[HERCULES_CUP] = 3;
+        assert_eq!(reflect_fights(&s), 1);
+        assert_eq!(CUPS + 1, PEGASUS_CUP);
     }
 
     #[test]

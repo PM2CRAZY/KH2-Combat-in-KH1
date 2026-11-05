@@ -6,14 +6,17 @@
 //!   written as a spell of its own (type 2, spell byte 7, no target submenu) each time the battle
 //!   menus are filled (`0x140292330`), and put into the magic list (`0x140529638`: `+4` / `+8`
 //!   disabled bits, `+0x10` count, `+0x14` command ids) after KH1's spells, before Summon, once
-//!   Sora has Aero (`learned`). Greyed as KH1 greys a spell (magic sealed, MP short by KH1's own
+//!   Sora has Aero (`learned`; with Progression > Reflect by Story on, once its first fight is
+//!   won). Greyed as KH1 greys a spell (magic sealed, MP short by KH1's own
 //!   check `0x1402A2A80` with a cost of 1 MP, `COST`). Its name: KH1 draws a command's name from
 //!   its record's word index (`+4`) through `0x14028D820`, called once in its name drawer
 //!   `0x1402787B0`; that call is pointed at `word`, which answers our index with the level's
 //!   name (Reflect / Reflera / Reflega).
 //! - **Levels.** Reflect's level is KH1's Aero level (`level`): Aero / Aerora / Aeroga give
-//!   Reflect / Reflera / Reflega, each from its own KH2 files (`magic/REFLECT_<n>.mag`: script
-//!   and effect package; MAGC row of that level; ATKP and `magi` at sub `level × 2 − 2`).
+//!   Reflect / Reflera / Reflega; with Progression > Reflect by Story on, one level per fight of
+//!   the owner's three won (Pot Centipede, the Hercules Cup, Ice Titan; main s307,
+//!   `crate::storyforms::reflect_fights`). Each level from its own KH2 files
+//!   (`magic/REFLECT_<n>.mag`: script and effect package; MAGC row of that level; ATKP and `magi` at sub `level × 2 − 2`).
 //! - **Shortcuts.** `shortcuts` puts it in KH1's shortcuts (Customize and battle); a shortcut
 //!   gives KH1's command step the same command as the menu, so it comes here the same way.
 //! - **Rows.** KH1's magic list draws its rows with one of 7 row panels each (layout
@@ -41,7 +44,7 @@ use glam::{Mat4, Quat, Vec3};
 use kh2_formats::battle::{Atkp, Battle};
 use kh2_magic::{Event, Magic, ObjId, SpellFile, World};
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU8, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Instant;
 
@@ -120,18 +123,66 @@ fn note(s: impl FnOnce() -> String) {
     }
 }
 
-/// When Sora has Reflect: once he has KH1's Aero (the user's rule; one place to change it).
-/// `save` is KH1's save block (`*0x1428695A0`); party member 0's spells are the bits of
-/// `+0x74` (`0x1402830C0 (member, spell)`), Aero spell 6.
+/// Progression > Reflect by Story: 0 not read yet, 1 off, 2 on.
+static STORY: AtomicU8 = AtomicU8::new(0);
+
+/// Progression > Reflect by Story (the ini's `reflect_story`, off by default): on, Reflect comes
+/// with the owner's three fights from the main branch (`crate::storyforms::reflect_fights`); off,
+/// with KH1's Aero (testing's rule).
+pub fn by_story() -> bool {
+    match STORY.load(Ordering::Relaxed) {
+        0 => {
+            let on = super::settings::get().reflect_story;
+            STORY.store(1 + on as u8, Ordering::Relaxed);
+            on
+        }
+        v => v == 2,
+    }
+}
+
+/// Switches Reflect by Story (the Config menu), kept in the ini.
+pub fn set_by_story(on: bool) {
+    STORY.store(1 + on as u8, Ordering::Relaxed);
+    super::settings::save("reflect_story", if on { "on" } else { "off" });
+    log!(Magic, "Config menu: Reflect by Story {}", if on { "On" } else { "Off" });
+}
+
+/// How many of Reflect's three fights are won (`crate::storyforms::reflect_fights`), read from the
+/// save block's story bytes, cups, journal and inventory (`save` is KH1's save block,
+/// `*0x1428695A0`; the span's end is checked readable once per block address).
+pub unsafe fn fights(save: usize) -> u8 {
+    static CHECKED: AtomicUsize = AtomicUsize::new(0);
+    if save <= 0x10000 {
+        return 0;
+    }
+    if CHECKED.load(Ordering::Relaxed) != save {
+        if !super::crash::readable(save + crate::storyforms::SPAN_END - 1) {
+            return 0;
+        }
+        CHECKED.store(save, Ordering::Relaxed);
+    }
+    crate::storyforms::reflect_fights(std::slice::from_raw_parts(save as *const u8, crate::storyforms::SPAN_END))
+}
+
+/// When Sora has Reflect (one place to change it). Reflect by Story off: once he has KH1's Aero
+/// (the user's rule); party member 0's spells are the bits of `+0x74` (`0x1402830C0 (member,
+/// spell)`), Aero spell 6. On: once the first of its three fights is won (`fights`; main's rule).
 pub unsafe fn learned(save: usize) -> bool {
+    if by_story() {
+        return fights(save) >= 1;
+    }
     save > 0x10000 && rd::<u8>(save + 0x74) & (1 << 6) != 0
 }
 
-/// Reflect's level, 1..3: KH1's Aero level (the user: Aero / Aerora / Aeroga give Reflect /
-/// Reflera / Reflega; one place to change it). The level KH1 has loaded for Aero (its spell
+/// Reflect's level, 1..3 (one place to change it). Reflect by Story on: one per fight won
+/// (`fights`: Reflect, Reflera, Reflega; at least 1). Off: KH1's Aero level (the user: Aero /
+/// Aerora / Aeroga give Reflect / Reflera / Reflega). The level KH1 has loaded for Aero (its spell
 /// table `0x142D23580 + 6 * 0x38`, `+0`: what KH1's own menus name and cast, Aero / Aerora /
 /// Aeroga), else the save's (`save + 0x492 + spell`, which `0x14028D3D0` keeps with it), else 1.
 pub unsafe fn level(save: usize) -> u8 {
+    if by_story() {
+        return fights(save).clamp(1, LEVELS);
+    }
     let loaded = rd::<i32>(base() + SPELLS_RVA + 6 * 0x38);
     if (1..=LEVELS as i32).contains(&loaded) {
         return loaded as u8;
@@ -142,6 +193,11 @@ pub unsafe fn level(save: usize) -> u8 {
     } else {
         1
     }
+}
+
+/// The level's name (for the "New Magic" / "Magic Up" box, `menu::Growth`).
+pub fn level_name(level: u8) -> &'static str {
+    NAMES[(level.clamp(1, LEVELS) - 1) as usize]
 }
 
 /// Reflect's level now, if Sora has it and it is on (`kh2dpx`: which level's effects can play).
@@ -406,8 +462,9 @@ unsafe fn in_menus(base: usize) -> bool {
     let l = level(save);
     if LEVEL_LOGGED.swap(l as u32, Ordering::Relaxed) != l as u32 {
         log!(Magic,
-            "Reflect: level {l}, {} (KH1's Aero level: loaded {}, saved {}){}",
+            "Reflect: level {l}, {} ({}; KH1's Aero level: loaded {}, saved {}){}",
             NAMES[(l - 1) as usize],
+            if by_story() { format!("by the story, {} of its 3 fights won", fights(save)) } else { "by Aero".to_string() },
             rd::<i32>(base + SPELLS_RVA + 6 * 0x38),
             rd::<u8>(save + 0x492 + 6),
             match (PARSED.get().is_some(), cast_level(save)) {

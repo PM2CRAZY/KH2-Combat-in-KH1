@@ -69,7 +69,21 @@ user's files; **Ours** a choice of the mod's where the games don't say.
 - **Name**: the call at `0x1402787FB` goes to our `word`, which returns the level's name
   ("Reflect", "Reflera", "Reflega"; KH1 text codes) for index `0x1FF` and KH1's word otherwise.
 - **Level** (Ours: the user's rule, `reflect::level`): Aero's level, read as KH1's menus read
-  it (the spell table's `+0` for spell 6), else the save's `+0x498`, else 1. Each level uses
+  it (the spell table's `+0` for spell 6), else the save's `+0x498`, else 1. With Config >
+  Progression > Reflect by Story on (ini `reflect_story`, off by default; the owner's rule from
+  the main branch, s307), Sora has Reflect once the first of three fights is won and its level is
+  how many are won, in any order (`crate::storyforms::reflect_fights`): Pot Centipede (Agrabah's
+  story byte `save + 0x1504 + 4` >= 0x35), the Hercules Cup (cup state `save + 0xF36 + 2` >= 1),
+  Ice Titan (journal entry 0xA6 at `save + 0x16E3`, high bit first, and Diamond Dust, item 0x65,
+  owned at `save + 0x499 + 0x65`). Checked (decomp, `docs/kh1-drive-forms-native.md` §12.2): the
+  story bytes', journal's and inventory's offsets. Assumption (main's, from KH1's room scripts and
+  save snapshots, not rechecked): the value 0x35, entry 0xA6, the cup bytes at `+0xF36..` (no
+  displacement in the Steam decomp; reached through the script VM) and Diamond Dust's id (community
+  list). A fight won while the same save plays shows KH1's prompt box (`menu::Growth::reflect_box`,
+  through the queue the "New Drive Form" box uses): "New Magic: Reflect", then "Magic Up: Reflera"
+  / "Reflega" (main's titles); no box on a save's first look (a save loaded: KH1's title seen) or
+  right after the row is switched on. KH2 itself gives Reflect as an item at its own story points;
+  KH1 has no such story, so these are the owner's fights. Each level uses
   its own KH2 files: `magic/REFLECT_<n>.mag` (script and effect package), the MAGC row of that
   level (Data: every level casts with motions 71 / 72 / 73 and voices 7 / 25), ATKP and `magi`
   at sub `level × 2 − 2` (Data: the barrier 573 kind 3 at subs 0 / 2 / 4; the counter 574 power

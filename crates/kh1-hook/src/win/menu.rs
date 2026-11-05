@@ -472,6 +472,9 @@ pub struct Growth {
     ov_gen: u32,
     /// Quick Run's, Glide's and Aerial Dodge's levels last written into their menu names.
     names: [Option<u8>; 3],
+    /// Reflect by the story (`reflect_box`): (the row and Reflect on, its fights won) last seen
+    /// (None: not looked yet on this save).
+    rf_level: Option<(bool, u8)>,
 }
 
 unsafe fn rd<T: Copy>(p: usize) -> T {
@@ -528,7 +531,7 @@ pub unsafe fn frame_end(base: usize) {
 
 impl Growth {
     pub fn new() -> Growth {
-        Growth { mode: super::settings::get().abilities, frames: 0, seen: None, applied: false, no_room: Vec::new(), yielded: Vec::new(), prompts: Default::default(), idle: 0, qr_level: None, hj_level: None, gl_level: None, ad_level: None, given: None, ov_gen: 0, names: [None; 3] }
+        Growth { mode: super::settings::get().abilities, frames: 0, seen: None, applied: false, no_room: Vec::new(), yielded: Vec::new(), prompts: Default::default(), idle: 0, qr_level: None, hj_level: None, gl_level: None, ad_level: None, given: None, ov_gen: 0, names: [None; 3], rf_level: None }
     }
 
     /// The growth levels and menu names last seen forgotten (a new save: its own are taken as they
@@ -536,6 +539,26 @@ impl Growth {
     fn forget_levels(&mut self) {
         (self.qr_level, self.hj_level, self.gl_level, self.ad_level) = (None, None, None, None);
         self.names = [None; 3];
+        self.rf_level = None;
+    }
+
+    /// Reflect by the story (Progression > Reflect by Story, `reflect::by_story`): KH1's prompt box
+    /// when one of its three fights is won while the same save plays (the owner, main s308: "the game
+    /// should tell you when you get a drive form and reflect"): "New Magic: Reflect" for the first,
+    /// "Magic Up: Reflera" / "Reflega" after (main's titles), through the same queue as the "New
+    /// Drive Form" box (t929). Silent on a save's first look (a save loaded since: `forget_levels`),
+    /// right after the row (or Reflect) is switched on, and with either off. Once a second.
+    unsafe fn reflect_box(&mut self, save: usize) {
+        let on = super::settings::get().reflect && super::reflect::by_story();
+        let n = if on { super::reflect::fights(save) } else { 0 };
+        let Some((was_on, old)) = self.rf_level.replace((on, n)) else { return };
+        if !on || !was_on || n <= old {
+            return;
+        }
+        let name = super::reflect::level_name(n);
+        let title = if old == 0 { "New Magic" } else { "Magic Up" };
+        log!(Magic, "Reflect by Story: {n} of its 3 fights won (was {old}): \"{title}: {name}\"");
+        self.prompts.push_back((title.to_string(), name.to_string(), String::new()));
     }
 
     /// Quick Run's (0), Glide's (1) or Aerial Dodge's (2) menu name at level `l` (his own), or at
@@ -713,6 +736,8 @@ impl Growth {
         if let Some(save) = save_block(base) {
             // The owned Drive Forms' byte, set up once a save (t925, `formown`).
             super::formown::check(save);
+            // Reflect by the story: its box as a fight is won.
+            self.reflect_box(save);
             if self.mode == Mode::Kh1 {
                 // A save the mod's older builds changed is moved over once (the save's mark,
                 // `growth::LAYOUT_OFF`): the split (KH1's modifiers stood for KH2's before testing
