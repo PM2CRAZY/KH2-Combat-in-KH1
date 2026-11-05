@@ -560,6 +560,8 @@ fn mark(b: u16) -> &'static str {
 unsafe extern "system" fn frame_end(renderer: usize) {
     // (t783) The frame's length for the load profiler (`loadprof`), before anything else of ours.
     super::loadprof::frame_end();
+    // (The title watch: when the frame end last ran, `titlewatch`.)
+    super::titlewatch::frame_end();
     let base = BASE.load(Ordering::Relaxed);
     if base != 0 {
         if super::debug_on() {

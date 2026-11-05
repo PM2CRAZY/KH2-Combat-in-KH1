@@ -521,6 +521,15 @@ are never cut.
   every 5 s while it isn't a game, with both lists' counts, how many of ours are in, and the bank
   slots. If those 5 s lines stop while the screen is stuck, KH1's frame itself has stopped (a wait
   inside one call), not a mode waiting.
+- **Corrected (titlewatch round, Checked (decomp)).** The suspect was wrong as written: KH1's game
+  mode stays the game's through its whole way back to the title, and `0x1400D2C70 (1)` (the whole bank list
+  released) runs only on that way and on the quit, inside one frame: never on a room or world
+  change (its four callers, `0x14016FFA0`, `0x140170230`, `0x140170300`, `0x140170D50`, are all that
+  path). So t1079's hold-out never applied there, and our banks are first released by KH1 at that
+  moment, each through the bank destructor's wait-until-the-engine-unloads-it loop on the game
+  thread. The path, its waits and the log that will tell which one doesn't end:
+  `docs/kh1-softreset.md`, "The way back to the title". The earlier notes above ("most likely room
+  / world loads", "Not seen in a room or world change") are superseded by this.
 
 ## A move's element sounds stop with their effect
 

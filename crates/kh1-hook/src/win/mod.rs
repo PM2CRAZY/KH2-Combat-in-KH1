@@ -63,6 +63,7 @@ mod magnet;
 mod holder;
 mod loadprof;
 mod loadscreen;
+mod titlewatch;
 mod menu;
 mod kh2list;
 mod mpcost;
@@ -443,6 +444,8 @@ pub unsafe extern "system" fn DllMain(_inst: *mut c_void, reason: u32, _reserved
         }
         // (t783) The load profiler: with the debug tools and the Loading & Cache log on.
         loadprof::start();
+        // The title watch's log (debug tools only): KH1's way back to its title.
+        titlewatch::start();
         pose::install();
         kh2slots::install();
         probe::install();

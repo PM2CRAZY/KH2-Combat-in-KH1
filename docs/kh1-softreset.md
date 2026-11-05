@@ -21,3 +21,64 @@ The tester (auto-cutscene-skipper, after t717): after a soft reset and loading h
 - **KH1's other reset.** The game object's vtable (`0x1403B1AE8`) has a fuller one at `+0x20`, `0x140171410`: the same steps as `0x140170630` after closing the live tasks (`0x1400E3920`) and a few renderer and menu closes (`0x1402E1DF0`, `0x140202F20`, `0x14020F2D0`, a fade). The soft reset runs the shorter one (mode 1). Checked (decomp). Whether the tasks left running by the shorter one matter is not known (Assumption: they don't hold story state).
 - **The mod's own state** for the skip rows is per scene and is reset when the room's script runs again (`ingameskip`'s entry 0), and the Cutscene Skip row's Seen list isn't used with All (the tester's setting in his log). Checked (code + trace).
 - **Not pinned.** The game folder also holds `autosave_1..9.dat`; if the save loaded was one written after those scenes, the state is the save's own. Needed: the Cutscenes and Menus logs, loading the same save once from a fresh start of the game and once after a soft reset, entering Merlin's house each time.
+
+## The way back to the title (the owner's endless loading screen; titlewatch)
+
+The owner: "when going to the title screen from a save menu, the game gets stuck on a loading
+screen indefinitely", and after t1079 "going back to the title screen still gets you stuck in a
+endless loading screen". Traced in the KH1 Steam decomp (addresses Steam; not read from the exe in
+that session, so no hook uses them; the watch only reads them).
+
+- **The request.** The PC's confirm box `0x1400D94C0 (kind)` (a window message `0x8001` to KH1's
+  window, the game thread sleeping 10 ms at a time until it is answered) sets the game object's
+  (`[0x1421AAF18]`) `+0x1290` to 0x100 for kinds 5 and 7 (5 only when confirmed); its callers are
+  `0x1400D9FE0` / `0x1400DA020` (callbacks), the save menu `0x1402E1780` (kinds 2..4) and
+  `0x1402F9310`. Kind 1 is the quit (it starts `WaitTitleProject.exe`, `0x1400D9800`). Checked
+  (decomp). Which box the save menu's "return to title" is: Assumption (not traced to the text).
+- **The wait.** The field frame `0x140170D50` (and its copy `0x14016FFA0`, in the loop `0x14017F590`
+  that the frame runs through `0x14017F150`; that this is the pause menu's loop: Assumption) sees `+0x1290 >= 0`, sets `0x1422EC090` = 2, and then each frame waits for, in
+  order: a movie to end (`0x1422EC094` and `0x1423408D0`), a save being written (`0x142E205BC`, the
+  save menu's step 0x47 sets it), and KH1's two job slots to empty (`0x14234AFA8`, 0x18 bytes
+  each: `0x14028C390`'s file reads (`0x14028C200`'s queue) and `0x1401FA880`, run on KH1's job
+  thread `0x14018DA50`, each clearing its own slot when done). `0x1400D31F0` is `return 0`. While
+  it waits the frame goes on (KH1 draws and presents). Checked (decomp).
+- **The teardown, all in one frame.** `0x1400D2C70 (1)` -> `0x1400DBAC0`: first every pending
+  music stream delete (`0x1404D65F8`, count `0x1404D6608`) is retried in a loop until the engine
+  lets it go; then every bank entry of `0x1404D65D8` is destroyed, each destructor
+  (`0x1400DB470` / `0x1400DB7A0`) stopping the bank's sounds and sleeping 10 ms at a time until
+  `0x14004D870 (handle, 0)` says the engine unloaded it. Then `0x14017EF70`, `0x140266530`,
+  `0x1401E1490 (0)`, `0x14018C790`, the volume reset, `0x14018D1F0`, `0x14018BC90 (0)`;
+  `0x14233FBEC` = 0 and the frame returns 2 to the game's loop. Checked (decomp). What the loop
+  does with it (the game object's vtable `0x1403B1AE8`: reset
+  `0x140171410` at `+0x20`, shutdown `0x140170CA0`): Assumption; the reset sets mode 2 (the title).
+- **That release runs only here.** `0x1400D2C70 (1)` has exactly four callers, `0x14016FFA0`,
+  `0x140170230`, `0x140170300`, `0x140170D50`, and each runs it only on this quit / return path
+  (after the same waits). Room and world changes never release the whole bank list. Checked
+  (decomp). So our ~104 KH2 banks (`kh1bank`, in that list since the first room) are released by
+  KH1 for the first time on the way back to the title, each through that wait-until-unloaded loop
+  on the game thread. Whether KH1's engine lets ours go: not known (its unload is behind two
+  engine vtables, `0x142F124E8 + 0x180` and `0x142F124E0 + 0x38`, not resolved without the exe).
+  If it didn't, the game thread would sleep in that loop for ever and the screen would stay on the
+  last frame drawn.
+- **t1079 couldn't have changed it.** KH1's game mode stays the game's (5 in the field: Assumption)
+  through the whole wait and the teardown (nothing writes `0x14233FBC0` on this path until the reset), so `kh1bank`'s "a game"
+  test is true there, and the release is one call inside one frame, with no frame end of ours in
+  between. Checked (decomp, code).
+- **Other ways.** Game over: "Continue" is mode 0xC and "Load" mode 0x11 (`0x14018BA00` /
+  `0x14018BA60`); neither goes to the title or releases the bank list. Checked (decomp). The Soft
+  Reset row (mode 1 -> `0x140170630`) clears the job slots (`0x14018DC60`) without waiting and
+  doesn't release the bank list either. Checked (decomp). So only the return-to-title / quit path
+  has these waits.
+- **KH1's Loading line** (sysmsg 0xF at 320, 404) is drawn by the 2D work `0x14017B190` while
+  `0x1423404EC` (a frame copy of the script runner's skip bit `0x1423AB2D0` & 1, `0x1400D2830`) or
+  `0x1423404F4` (a room data load, `0x14017D580`) is 1; the reset clears both (`0x1400D2A20`,
+  `0x140171410`). Checked (decomp).
+- **The title watch (`win/titlewatch.rs`, debug tools, Loading & Cache).** Once a second, while
+  KH1's return or quit is pending, while KH1's Loading line has been up 5 s, or while KH1's frame
+  end hasn't run for 2 s: "title watch (N s): why: mode, quit/return state and request, teardown
+  done or not, what it still waits on (the movie, the save, each job slot with the file KH1 is
+  reading), the Loading line's flags, the bank list's count and the stream deletes pending", and,
+  when the frame has stopped, "game thread at X <- Y <- ..." (its instruction and KH1's return
+  addresses, Steam). A stop in `0x1400DB470` / `0x1400DB7A0` / `0x1400DBAC0` settles the bank
+  release; a job slot that never empties, a save flag that stays, or a stop elsewhere point at
+  something else.

@@ -134,14 +134,14 @@ unsafe fn rd<T: Copy>(p: usize) -> T {
 
 /// A module's base, size and executable sections (from its PE headers).
 #[derive(Clone, Default)]
-struct Module {
-    base: usize,
+pub(super) struct Module {
+    pub(super) base: usize,
     size: usize,
     code: Vec<(usize, usize)>,
 }
 
 impl Module {
-    unsafe fn read(base: usize) -> Module {
+    pub(super) unsafe fn read(base: usize) -> Module {
         if base == 0 {
             return Module::default();
         }
@@ -161,7 +161,7 @@ impl Module {
         Module { base, size, code }
     }
 
-    fn holds(&self, a: usize) -> bool {
+    pub(super) fn holds(&self, a: usize) -> bool {
         a >= self.base && a < self.base + self.size
     }
 
@@ -173,7 +173,7 @@ impl Module {
 
 /// The value is a return address: in a module's code, after a call instruction (`E8 rel32`, or
 /// `FF /2` with a register, a register and a byte or four of displacement, or RIP-relative).
-unsafe fn after_call(m: &Module, v: usize) -> bool {
+pub(super) unsafe fn after_call(m: &Module, v: usize) -> bool {
     if !m.in_code(v) {
         return false;
     }
