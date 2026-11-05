@@ -777,7 +777,7 @@ const STRINGS: [(u32, &str); 183] = [
     (0x7F00_0263, "Walls"),
     (0x7F00_0264, "Clink"),
     (0x7F00_0265, "Pass"),
-    (0x7F00_0266, "KH1: a KH2 swing that meets a wall sparks and sounds there and goes on,\nno bounce. Clink: it stops and Sora bounces back. Pass: through walls."),
+    (0x7F00_0266, "KH1: a KH2 swing that meets a wall sparks and sounds there and goes on,\nno bounce. Clink: it stops and Sora bounces back (KH2). Pass: through walls.\nUntil set here: Clink with Recoil KH2, KH1 otherwise."),
     (0x7F00_0199, "Clash Combo"),
     (0x7F00_019A, "KH2: every clash counts as a hit for the combo, and each recoil\n(in the air too) takes one swing off it, as in KH2. KH1: KH1's."),
     (0x7F00_0001, "Camera Style"),

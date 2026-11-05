@@ -1110,7 +1110,7 @@ unsafe fn meet_shot(sora: usize, shot: &Shot, at: &Shape, row: Row, unstoppable:
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Walls {
     /// KH1's wall contact's spark and sound, no clash record, no bounce, the swing goes on
-    /// (`kh1rows::build_kh1`). The default.
+    /// (`kh1rows::build_kh1`). The default with Recoil KH1 (`walls`).
     Kh1,
     /// KH1's whole wall contact: the swing stops, a kind 6 record, his recoil.
     Clink,
@@ -1129,17 +1129,26 @@ impl Walls {
     }
 }
 
-/// The Walls row (0 not read yet, else 1 + its index in `Walls::ALL`).
+/// The Walls row (0 not read yet, else 1 + its index in `Walls::ALL`, or 4: auto).
 static WALLS: AtomicU8 = AtomicU8::new(0);
 
+/// The Walls value now. Auto (the default: the ini's `walls = auto` or no line) is Clink with
+/// Recoil at KH2 and KH1 otherwise (the owner, testing-merge, answer 2: "clink when recoil is kh2";
+/// KH2's own rule bounces base Sora off walls: base ATKPs 126 / 128 / 131 carry "BG hit"), read
+/// live, so switching Recoil switches it.
 pub fn walls() -> Walls {
-    match WALLS.load(Ordering::Relaxed) {
+    let v = match WALLS.load(Ordering::Relaxed) {
         0 => {
-            let v = super::settings::get().walls.min(2);
+            let v = super::settings::get().walls.min(3);
             WALLS.store(1 + v, Ordering::Relaxed);
-            Walls::ALL[v as usize]
+            v
         }
-        v => Walls::ALL[(v as usize - 1).min(2)],
+        v => (v - 1).min(3),
+    };
+    match v {
+        3 if super::styles::kh2(super::styles::Kind::Recoil) => Walls::Clink,
+        3 => Walls::Kh1,
+        v => Walls::ALL[v as usize],
     }
 }
 

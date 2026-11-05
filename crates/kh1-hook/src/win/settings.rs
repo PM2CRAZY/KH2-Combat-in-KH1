@@ -63,9 +63,10 @@ kh2_voice = off\r\n\
 auto_aim = off\r\n\
 ; walls: what a KH2 swing of base Sora's does at a wall (the Config menu's Combat > Tweaks > Walls row):\r\n\
 ;   kh1 = KH1's wall spark and sound where the Keyblade meets it, no bounce, the swing goes on (the\r\n\
-;   default, the owner's main-branch choice); clink = KH1's whole wall contact, the swing stops and\r\n\
-;   Sora bounces back (his recoil); pass = the swing passes through walls. Drive Forms keep KH2's rule.\r\n\
-walls = kh1\r\n\
+;   owner's main-branch choice); clink = KH1's whole wall contact, the swing stops and Sora bounces\r\n\
+;   back (his recoil, KH2's own rule); pass = the swing passes through walls; auto (the default) =\r\n\
+;   clink with recoil = kh2, kh1 otherwise. Drive Forms keep KH2's rule.\r\n\
+walls = auto\r\n\
 ; camera: kh2 = KH2's field camera (follows behind, right stick turns and zooms, R3 resets);\r\n\
 ; kh1 = KH1's own. The Config menu's camera row switches it in game too.\r\n\
 camera = kh2\r\n\
@@ -824,9 +825,11 @@ fn load(first: bool) -> Option<Settings> {
         kh2_voice: on(&text, "kh2_voice", "on", false),
         auto_aim: on(&text, "auto_aim", "on", false),
         walls: match setting(&text, "walls").as_deref() {
+            Some("kh1") => 0,
             Some("clink") => 1,
             Some("pass") | Some("off") => 2,
-            _ => 0,
+            // (auto, or no line: Clink with Recoil KH2, else KH1; the owner, testing-merge tm13.)
+            _ => 3,
         },
         kh2_hit_sparks: on(&text, "kh2_hit_sparks", "on", true),
         kh2_camera: on(&text, "camera", "kh2", true),
