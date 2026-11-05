@@ -589,7 +589,9 @@ pub unsafe fn holds_back(actor: usize, group: i32, from: usize) -> bool {
 }
 
 /// The return address of KH1's voice-group call in its command step (Steam `0x1402A3600`: a spell
-/// command with bit 25 plays group `spell + 7`, `0x1402901F0` at `0x1402A3661`, Checked (exe)).
+/// command with bit 25 plays group `spell + 7`, `0x1402901F0` at `0x1402A3661`, Checked (exe));
+/// another command with bit 25 its command type's group (`+2` of `0x142D36D50 + type * 16`; an
+/// item's is 3, `item_line`). Checked (decomp).
 const SPELL_VOICE_RETURN_STEAM: usize = 0x2A3666;
 
 /// t746: KH1's spell line on Sora (its command step, a spell of KH1's: KH1's own rows, Gravity, Stop
@@ -846,21 +848,60 @@ pub unsafe fn voice(v: i16) {
 }
 
 /// KH2's item-use voice (motion 9's frame trigger 14 at frame 0: voice 3, Sora's share of it clips
-/// 23 / 24, the -3 choice being a partner's line; Checked (files), `P_EX100.mset` and VTBL), t748
-/// (the user: "kh2 sora is missing item throw sound"): said as KH1's own item motion starts with
-/// Battle Quotes KH2, which has no KH2 key to fire it (KH1's motion carries only its item sound,
-/// 11003 / 11004 at 30.8, Checked (files)).
+/// 23 / 24; Checked (files), `P_EX100.mset` and VTBL), t748 (the user: "kh2 sora is missing item
+/// throw sound").
+///
+/// Since the owner's "sora doesnt do his KH2 quote when using an item" (testing-merge): KH1's
+/// command step says a line of its own on every item (the Potion's command word `0x02000803` has
+/// bit 25, so `0x1402A3600` plays the command type's group, 3, at `0x1402A3661`: clip 18 at
+/// priority 3; Checked (decomp) and (trace), the missing-sleeves log f49463, the frame before slot
+/// 58). That line took Sora's voice channel first and KH1's priority rule kept KH2's out: at Misc
+/// Animations KH1 ours (priority 1) was asked just before KH1's step and cut by it; at KH2 the item
+/// slot's frame-0 key fires only after KH1's 8-frame blend (`0x14029F0A0` holds the time at 0
+/// while it blends, Checked (decomp)), with KH1's line still playing. Now, with Battle Quotes KH2,
+/// KH1's line is left out (`item_line`) and this is said once KH1's step has started the item
+/// (`combat`, its item request queued: ground or flight, either Misc Animations setting, every
+/// form), the slots' key for it gone (`kh2slots`, no double line). KH2 says it as motion 9 starts
+/// (its frame-0 triggers fire on the start, Checked (decomp)), which is this moment.
 pub const ITEM_VOICE: i16 = 3;
 pub unsafe fn item_voice() {
     if !kh2_voice() {
         return;
     }
     let Ok(g) = LOADED.try_lock() else { return };
-    match g.as_ref().and_then(|l| l.voices.get(&ITEM_VOICE)).and_then(|c| c.say()) {
-        Some(clip) => note_play(|| format!("item voice {ITEM_VOICE} (clip {clip}) on KH1's item motion")),
-        None => note_play(|| format!("item voice {ITEM_VOICE} not loaded or not Sora's")),
+    let said = g.as_ref().and_then(|l| l.voices.get(&ITEM_VOICE)).and_then(|c| c.say());
+    static N: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+    if N.fetch_add(1, std::sync::atomic::Ordering::Relaxed) < 20 {
+        match said {
+            Some(clip) => log!(Sound, "KH2 quotes: item use, KH2's voice {ITEM_VOICE} (clip {clip})"),
+            None => log!(Sound, "KH2 quotes: item use, KH2's voice {ITEM_VOICE} not loaded"),
+        }
     }
 }
+
+/// KH1's item line (its command step's voice group for an item command, `ITEM_VOICE`) with Battle
+/// Quotes KH2 and KH2's item voice loaded: true, left out for KH2's, which `combat` says once the
+/// item has started (and only then: KH1 says its line before it knows the item can run). KH1's
+/// line stays at Battle Quotes KH1, and when KH2's voice isn't loaded.
+pub unsafe fn item_line(actor: usize, group: i32, from: usize) -> bool {
+    if from != SPELL_VOICE_RETURN_STEAM || super::addr::Build::current() != super::addr::Build::Steam || !kh2_voice() {
+        return false;
+    }
+    if actor < 0x10000 || actor != super::takeover::sora_actor() || super::combat::command_kind() != ITEM_COMMAND {
+        return false;
+    }
+    if !LOADED.try_lock().map_or(false, |g| g.as_ref().map_or(false, |l| l.voices.contains_key(&ITEM_VOICE))) {
+        return false;
+    }
+    static N: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+    if N.fetch_add(1, std::sync::atomic::Ordering::Relaxed) < 20 {
+        log!(Sound, "KH2 quotes: KH1's item line (group {group}) left out for KH2's item voice {ITEM_VOICE}");
+    }
+    true
+}
+
+/// KH1's item command type (`combat`'s, the command record's type byte).
+const ITEM_COMMAND: u8 = 3;
 
 /// Sora's hurt line `v` (`hitreact::hurt_line`, KH2's battle quotes): whether it was said.
 pub unsafe fn hurt_voice(v: i16) -> bool {

@@ -167,9 +167,9 @@ unsafe extern "system" fn voice_group(actor: usize, group: i32, other: usize) ->
         return 0;
     }
     // (KH1's swing voice under KH2's quotes, `kh2sound::holds_back`; t746: KH1's spell line under
-    // them, `kh2sound::spell_line`.)
+    // them, `kh2sound::spell_line`; KH1's item line under them, `kh2sound::item_line`.)
     let from_rva = caller_rva();
-    let held = super::kh2sound::spell_line(actor, group, from_rva) || super::kh2sound::holds_back(actor, group, from_rva);
+    let held = super::kh2sound::spell_line(actor, group, from_rva) || super::kh2sound::item_line(actor, group, from_rva) || super::kh2sound::holds_back(actor, group, from_rva);
     // (t747: KH1's Gravity, Stop and Aero on KH2's cast animation at Battle Quotes KH1: a grunt
     // before the finisher, `kh2sound::kh1_spell_group`.)
     let group = if held { group } else { super::kh2sound::kh1_spell_group(actor, group, from_rva).unwrap_or(group) };

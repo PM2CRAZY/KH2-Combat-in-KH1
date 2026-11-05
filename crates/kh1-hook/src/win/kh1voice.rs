@@ -194,8 +194,8 @@ const MASTER_STAND_INS: [(u16, i16, Line); 3] = [(183, 4, Line::Group(SWING_GROU
 /// finisher line 5 where KH2 says 4 / 6 / 6), and only the later ones get a stand-in: (motion,
 /// voice, KH2's frame, what plays). 151's and 181's later line is the same voice as their frame-0
 /// one, so a row here plays only when the key fired nearer its own frame than frame 0
-/// (`past_start`). Item use 9's voice 3 at 0 gets none: KH1's own item use says no line (its motion
-/// carries only its item sound, `kh2sound::ITEM_VOICE`), as base Sora's and Master's at KH1. Only
+/// (`past_start`). Item use 9's voice 3 at 0 gets none: KH1's command step says its own item line
+/// as the item starts (group 3, `kh2sound::ITEM_VOICE`), as for base Sora and Master at KH1. Only
 /// in Final (`form::in_final`): the ids are shared with base Sora's and the other forms' moves.
 const FINAL_STAND_INS: [(u16, i16, u32, Line); 7] = [
     (151, 4, 52, Line::Group(SWING_GROUP)),

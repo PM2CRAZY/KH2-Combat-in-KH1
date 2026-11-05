@@ -231,9 +231,11 @@ lock stays KH1's own); 3 "(b) kh2 voice plays if the toggle for kh2 voices is on
   queued idle (KH1's own action end).
 - Sounds: KH1's item sound (track type 6 at 30.8 in slots 58 / 59) is left out of the slot; KH2's
   own sound 305 at frame 10 plays from the slot's KH2 events (`kh2slots::tick` →
-  `kh2sound::event`), whatever `kh2_sounds` lists (`kh2sound::allowed`); KH2's voice 3 at frame 0
-  only with KH2's battle quotes on (`kh2sound::kh2_voice`). No KH1 voice is started by the item's
-  command step or its task (**Checked (decomp)**, `0x1402A3DB0` case 3, `0x1402C2760`).
+  `kh2sound::event`), whatever `kh2_sounds` lists (`kh2sound::allowed`). KH2's voice 3 at frame 0
+  is not keyed in the slot (testing-merge): with KH2's battle quotes on it is said as KH1's command
+  step starts the item, in place of KH1's own item line (`docs/kh1-voice.md`). No KH1 voice is
+  started by the item step or its task (**Checked (decomp)**, `0x1402A3DB0` case 3, `0x1402C2760`);
+  KH1's item line comes from the command step before it (`0x1402A3600`, bit 25, group 3).
 - `takeover::item_use_now` ends with KH1's item slot (58 / 59) when the slot is built, no longer by
   the 51-frame wall clock (`ITEM_CUT` stays for the hand-off path, `kh1_cut_frame`).
 - Per frame: nothing new (the slot is in KH1's table; the item's draw-over and its retarget are gone

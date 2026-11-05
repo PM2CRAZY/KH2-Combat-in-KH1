@@ -161,8 +161,34 @@ finisher cast; Magnet 24, no finisher cast. KH2's Drive motion 52: voice 8 (clip
 - **Battle Quotes KH1, KH1's Gravity or Stop on KH2's cast animation** (t747): a swing grunt
   (group 4) on a cast, the spell's own group on the combo's finisher (`kh2sound::kh1_spell_group`).
   Aero keeps KH1's own line on every cast (t749), as it isn't part of the combo.
-- **Battle Quotes KH2, an item on KH1's item motion** (t748): KH2's item voice 3 as the use starts
-  (`kh2sound::item_voice`); on KH2's item motion it fires from the slot's key as before.
+- **Battle Quotes KH2, an item** (t748; corrected in testing-merge, the owner: "sora doesnt do his
+  KH2 quote when using an item"): KH1 **does** say a line on every item. The item's command word
+  has bit 25 (a Potion's `0x02000803`), so KH1's command step `0x1402A3600` plays the command
+  type's voice group (`+2` of the 16-byte type row `0x142D36D50 + type * 16`; items: group 3) at
+  `0x1402A3661`: clip 18 at priority 3 (**Checked (decomp)**; **Checked (trace)**: the
+  missing-sleeves log, f49463 "voice group 3 on Sora (from game +0x2a3666)", "voice clip 18 priority
+  3", slot 58 the next frame). t748 looked only at the item motion and `0x1402A3DB0`, so it missed
+  it. That line held Sora's voice channel and KH1's priority rule kept KH2's out (priority 1): at Misc
+  Animations KH1 ours was asked just before KH1's step and was cut by it; at KH2 the slot's frame-0
+  key fired only after KH1's 8-frame blend (`0x14029F0A0` holds the motion time at 0 while it
+  blends and fires the keys from 0 when it ends, **Checked (decomp)**), with KH1's line still on.
+  Now: KH1's item line is left out (`kh2sound::item_line`, from the soundlog's voice-group hook,
+  command type 3) and KH2's voice 3 is said once KH1's step has queued the item request
+  (`combat`: 0x3E / 0x3F on the ground, 0x8B / 0x8C in flight, `+0x178` / `+0x17C`), at either Misc
+  Animations setting, base Sora and every form; motion 9's voice key is no longer baked into the item
+  slots (no double line). KH2 fires a motion's frame-0 triggers on its start (**Checked (decomp)**),
+  which is this moment. KH1's line is untouched at Battle Quotes KH1.
+- **KH2's item voice choices** (VTBL row 3, **Checked (files)** in the testers' logs: priority 1,
+  `(-3, 100), (23, 0), (24, 0)`): KH2's pick `0x1403CDB60 (character, id, partner, &priority)`
+  turns -3 into one of the speaker's own clips by the partner: none when the partner is the speaker
+  or 0 or above 15 (and when character 5 is either, unless flag `0x184C`, `0x180C` or `0x182E` is
+  set); partner 1..3 → clip partner - 1; 4..14 → 3; 15 → 4. A -3 that resolves to none takes no
+  chance off the roll. The partner is the character id (`+0x4C` of the data) of the object at the
+  speaker's `+0xBF8`, 0 when it is the speaker or isn't valid (`0x1403D5180`, the frame-trigger-14
+  call through the object's table `+0xA0`). **Checked (decomp)**. So on himself (partner 0) KH2
+  says 23 or 24, evenly, as we do; on a partner (100%) the partner's clip (Donald 1, Goofy 2, a
+  world partner 3). **Assumption**: `+0xBF8` is the item's target during the item use, and clips
+  1 / 2 / 3 are the partner's name. We say 23 / 24 on a partner too (open).
 
 Not covered yet: the summon call with Battle Quotes KH2 (KH2's summon line not found yet; KH1's
 summon sequences play KH1's groups 17, 15, 5).

@@ -224,7 +224,8 @@ const fn recoil_spec(i: usize) -> Spec {
 /// With Misc Animations at KH2, KH1 plays it in its own item step: KH1's "may be left" is KH2's free
 /// state (`Leave::Kh2OrTemplate`), and its end is KH1's queued idle. KH1's item sound is left out of
 /// the slot and KH2's own sound plays (the tester's answer 3, "(b)"); KH2's voice only with KH2's
-/// battle quotes on ("kh2 voice plays if the toggle for kh2 voices is on", `kh2sound::event`).
+/// battle quotes on ("kh2 voice plays if the toggle for kh2 voices is on"), said as KH1's command
+/// step starts the item, not keyed in the slot (`kh2sound::item_voice`, testing-merge).
 const ITEMS: [(u16, usize, usize); 2] = [(KH2_ITEM_USE, 58, 0x3E), (KH2_ITEM_USE, 59, 0x3F)];
 /// KH2 Sora's item-use motion (P_EX100 motion 9, `A110`).
 pub const KH2_ITEM_USE: u16 = 9;
@@ -1192,8 +1193,12 @@ fn make(mset: &[u8], src: &pose::Src, bake: Option<&pose::Baker>, cache: Option<
     // (t880) KH2's next attacks on the Keyblade as edges of ours (`rearm_keys`), first, so the
     // edge budget never drops them.
     let mut triggers = rearm_keys(motion, clip);
-    triggers.extend(kh2_trigger_keys(motion, clip, reaction, src.form.is_some()));
-    let events: Vec<(u32, EventKind)> = if steam { Vec::new() } else { kh2_trigger_events(clip, reaction) };
+    // (An item's use: its KH2 voice, 3 at frame 0, isn't keyed: `kh2sound::item_voice` says it as
+    // KH1's command step starts the item, in place of KH1's own item line, at either Misc
+    // Animations setting; keyed too it would be said twice.)
+    let no_voice = reaction || item;
+    triggers.extend(kh2_trigger_keys(motion, clip, no_voice, src.form.is_some()));
+    let events: Vec<(u32, EventKind)> = if steam { Vec::new() } else { kh2_trigger_events(clip, no_voice) };
     if steam {
         let dropped = ks::add_sound_keys(&mut tracks, &triggers);
         if dropped > 0 {

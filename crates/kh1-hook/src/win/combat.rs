@@ -549,12 +549,6 @@ unsafe fn command_step(actor: usize, dir: usize) {
     if actor == sora && kind == ITEM_COMMAND_TYPE && super::shared::active() {
         takeover::ITEM_COMMAND.store(true, Ordering::Relaxed);
         takeover::item_started();
-        // (t748: Battle Quotes KH2 on KH1's own item motion, Misc Animations KH1: KH2's item voice,
-        // which KH2's item use says at its frame 0 and our KH2 item slot carries as a key, is said
-        // as the use starts, `kh2sound::item_voice`.)
-        if super::styles::kh1_now(super::styles::Kind::MiscAnims) || !super::kh2slots::has(0x3E, super::kh2slots::KH2_ITEM_USE) {
-            super::kh2sound::item_voice();
-        }
     }
     if actor == sora && kind == 2 && super::drive::on() && (super::drive::FORM_ARG..super::drive::FORM_ARG + super::drive::FORMS.len() as u8).contains(&arg) {
         super::drive::chosen(actor, (arg - super::drive::FORM_ARG) as usize);
@@ -616,6 +610,12 @@ unsafe fn command_step(actor: usize, dir: usize) {
     // momentum as out of KH2's own moves (below; `shared::physics`).
     let on_kh2 = if actor == sora && kind == 1 { super::shared::physics::kh2_air_motion(actor) } else { None };
     f(actor, dir);
+    // (KH2's item voice, Battle Quotes KH2: said once KH1's command step has started the item, at
+    // either Misc Animations setting, `kh2sound::item_voice`; KH1's own item line from that step is
+    // left out for it, `kh2sound::item_line`.)
+    if actor == sora && kind == ITEM_COMMAND_TYPE && item_queued(actor) {
+        super::kh2sound::item_voice();
+    }
     // (A native KH2 air cast at physics KH2: KH2's kept velocity and hop back over KH1's halving
     // and 30 hop, `shared::physics::cast_after_command`.)
     if actor == sora && kind == 2 {
@@ -4081,6 +4081,27 @@ pub unsafe fn install() {
 const RUN_ENTRY_RVA: Rva = Rva(0x2912F0);
 /// KH1's item command type (the log: "command 0x3 (02000803)", a Potion).
 const ITEM_COMMAND_TYPE: u8 = 3;
+
+/// The type byte of KH1's command record now (`0x142D53A40` on Steam; KH1's command step reads it
+/// while it runs the command, and clears it after, `0x1402A7510`, Checked (decomp)).
+pub unsafe fn command_kind() -> u8 {
+    let base = BASE.load(Ordering::Relaxed);
+    if base == 0 {
+        return 0;
+    }
+    rd::<u8>(base + COMMAND_RVA)
+}
+
+/// KH1's item requests: on himself or no target 0x3E, on someone else 0x3F (its ground item step
+/// `0x1402A3DB0`, states 0 / 6 / 0x18), and 0x8B / 0x8C in flight (`0x1402A4150`, state 8); each
+/// asked with `0x14029F980`, which puts the request (bit 24 taken off) first in the actor's motion
+/// queue, `+0x178` the count, `+0x17C` the request. Checked (decomp).
+const ITEM_REQUESTS: [u32; 4] = [0x3E, 0x3F, 0x8B, 0x8C];
+
+/// KH1's command step has just started an item's use on `actor` (its item request is queued).
+unsafe fn item_queued(actor: usize) -> bool {
+    actor >= 0x10000 && rd::<i32>(actor + 0x178) >= 1 && ITEM_REQUESTS.contains(&(rd::<u32>(actor + 0x17C) & 0xFFFF))
+}
 /// `mov [rsp+0x10], rbx; mov [rsp+0x18], rbp; push rsi; push rdi; push r12`.
 const RUN_ENTRY_PROLOGUE: [u8; 14] = [0x48, 0x89, 0x5C, 0x24, 0x10, 0x48, 0x89, 0x6C, 0x24, 0x18, 0x56, 0x57, 0x41, 0x54];
 const RECORD_RVA: Rva = Rva(0x28D7D0);
