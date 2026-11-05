@@ -1,3 +1,6 @@
+### 2026-11-05: Stage tm15 (testing-merge branch: Reflect by Story on by default)
+- The owner (chat 2026-11-05), answer 4: Reflect by Story "on" by default. `reflect_story` defaults on (the ini's default line and a missing line); an ini that already has `reflect_story = off` (written since tm6) keeps it until the row is switched. Checked (code). `win/settings.rs`, `win/reflect.rs`. Per frame: nothing.
+
 ### 2026-11-05: Stage tm14 (testing-merge branch: Anti Form doesn't talk, examine or open)
 - The owner (chat 2026-11-05), answer 3 "yes": the secret code needs the partners with Party Required on (already so in tm11), and Anti Form doesn't talk or examine. KH1's command step now refuses, in Anti only, KH1's field commands Talk 4, Examine 5 (Assumption, `formcmds` notes), the chest's 0x1C / 0x1D / 0x1E and Open 0x37, with KH1's "can't" sound (`formcmds::anti_refuses`, tested); objects' own handler ids (save points) aren't known by number and stay. Conflict noted: KH2's `03system.bin` `cmd` gives Talk / Examine / Open / Save DisableForm 0 (`formcmds` notes, Checked (files)), which reads as allowed in every form, Anti included; built as the owner chose. Not checked in game. `formcmds.rs`, `win/combat.rs`. Per frame: nothing (on a command only).
 

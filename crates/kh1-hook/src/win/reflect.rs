@@ -126,7 +126,7 @@ fn note(s: impl FnOnce() -> String) {
 /// Progression > Reflect by Story: 0 not read yet, 1 off, 2 on.
 static STORY: AtomicU8 = AtomicU8::new(0);
 
-/// Progression > Reflect by Story (the ini's `reflect_story`, off by default): on, Reflect comes
+/// Progression > Reflect by Story (the ini's `reflect_story`, on by default since tm15: the owner, "on"): on, Reflect comes
 /// with the owner's three fights from the main branch (`crate::storyforms::reflect_fights`); off,
 /// with KH1's Aero (testing's rule).
 pub fn by_story() -> bool {

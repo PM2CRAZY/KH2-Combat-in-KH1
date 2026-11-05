@@ -159,7 +159,7 @@ gauge_growth = off\r\n\
 ; reflect_story: on = Reflect, Reflera and Reflega come with the owner's three fights from the main branch\r\n\
 ;   (Pot Centipede, the Hercules Cup, Ice Titan); off = with KH1's Aero level (Config: Progression >\r\n\
 ;   Reflect by Story)\r\n\
-reflect_story = off\r\n\
+reflect_story = on\r\n\
 ; drive_mp_refill: on = entering a Drive Form refills MP as well as HP, as KH2's does; off = HP only\r\n\
 ;   (Config: Drive > MP Refill)\r\n\
 drive_mp_refill = off\r\n\
@@ -579,7 +579,7 @@ pub struct Settings {
     /// The Drive gauge's maximum by the owner's six fights (`gauge_growth = on`; off: 9); Config:
     /// Progression > Drive Gauge Growth, t935; `drivegauge::growth`.
     pub gauge_growth: bool,
-    /// Reflect's levels by the owner's three fights (`reflect_story = on`; off: KH1's Aero level);
+    /// Reflect's levels by the owner's three fights (`reflect_story = on`, the default since tm15; off: KH1's Aero level);
     /// Config: Progression > Reflect by Story; `reflect::by_story`.
     pub reflect_story: bool,
     /// Entering a Drive Form refills MP too (`drive_mp_refill = on`; off by default; Config: Drive >
@@ -897,7 +897,7 @@ fn load(first: bool) -> Option<Settings> {
         drive: on(&text, "drive", "on", true),
         story_unlocks: on(&text, "story_unlocks", "on", false),
         gauge_growth: on(&text, "gauge_growth", "on", false),
-        reflect_story: on(&text, "reflect_story", "on", false),
+        reflect_story: on(&text, "reflect_story", "on", true),
         drive_mp_refill: on(&text, "drive_mp_refill", "on", false),
         drive_cost_gauge: on(&text, "drive_cost", "gauge", true),
         drive_refill: on(&text, "drive_refill", "kh2", true),
