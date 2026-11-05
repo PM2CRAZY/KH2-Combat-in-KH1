@@ -344,6 +344,53 @@ const USE_EFFECT_RVA: usize = 0x52A0A7;
 const FIND_ACTOR_RVA: usize = 0x291D30;
 const FIND_ACTOR_BYTES: [u8; 10] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x6C, 0x24, 0x10];
 
+/// KH1's party target list (menu 4, Steam `0x1405289E0`: `+0xC` cursor, `+0x10` count, `+0x14` the
+/// rows' commands, `0x38 + member`) with each row's actor at `0x142D53A60 + row × 8`, the Items list
+/// (menu 2, `0x140528970`; `+0x34` the row whose list is open below), and the menu chain's current
+/// level (`0x142D53A50`, a pointer into the chain `0x142D539F0`). KH1's top fill `0x140294220` makes
+/// the target list anew each frame before the menu's navigation (the party in order, Sora's row
+/// `0x38` first), Checked (decomp).
+const TARGETS_RVA: usize = 0x5289E0;
+const TARGET_ACTORS_RVA: usize = 0x2D53A60;
+const ITEMS_MENU_RVA: usize = 0x528970;
+const LEVEL_RVA: usize = 0x2D53A50;
+const CHAIN_RVA: usize = 0x2D539F0;
+/// Sora's row in the party target list (`0x38 + member 0`, Checked (decomp)).
+const SORA_ROW: u8 = 0x38;
+
+/// After KH1's top fill (`cmdmenu`'s hook on it): while the party target list is open from the Items
+/// list on one of ours, it holds only Sora's row (the owner: "when selecting the item, just have soras
+/// name appear"), as KH1's own one-member list is. KH1 makes it anew each frame, so nothing is put
+/// back. A few reads a frame while KH1's menu runs; a write only while ours is open.
+pub unsafe fn sora_only_targets(base: usize, sora: usize) {
+    if !TAKEN.load(Ordering::Relaxed) || !on() || !battle() {
+        return;
+    }
+    let level = rd::<u64>(base + LEVEL_RVA) as usize;
+    let chain = base + CHAIN_RVA;
+    if level <= chain || level > chain + 7 * 8 || rd::<u64>(level) as usize != base + TARGETS_RVA || rd::<u64>(level - 8) as usize != base + ITEMS_MENU_RVA {
+        return;
+    }
+    let items = base + ITEMS_MENU_RVA;
+    let (n, row) = (rd::<i32>(items + 0x10), rd::<i32>(items + 0x34));
+    if !(0..n.min(16)).contains(&row) || !IDS.iter().any(|&id| items::command_of(id) == rd::<u8>(items + 0x14 + row as usize) as u32) {
+        return;
+    }
+    let targets = base + TARGETS_RVA;
+    let count = rd::<i32>(targets + 0x10);
+    if count <= 1 || rd::<u8>(targets + 0x14) != SORA_ROW || rd::<u64>(base + TARGET_ACTORS_RVA) as usize != sora {
+        return;
+    }
+    wr(targets + 0x10, 1i32);
+    if rd::<i32>(targets + 0xC) != 0 {
+        wr(targets + 0xC, 0i32);
+    }
+    static LOGGED: AtomicBool = AtomicBool::new(false);
+    if !LOGGED.swap(true, Ordering::Relaxed) {
+        log!(Forms, "Drive Recovery: KH1's party target list shows only Sora for ours (was {count} rows)");
+    }
+}
+
 /// After KH1's menu run took a command (`combat::run_entry`, KH1's `0x140293480`): our item's id put
 /// back in KH1's chosen command (`items::battle_request`: KH1 read the argument signed). KH1's item
 /// use then takes it from Sora's slot (`0x1402C2760`), gives it back if he's interrupted

@@ -2410,6 +2410,25 @@ the task with its own quad buffer `0x142866960` (→ inside slot 0's draw with K
 - Assumption: the target event (`0x140297CA0`) with our item id does nothing harmful on Sora (his handler
   `0x1401A4D00` not read).
 
+### 16.11 Only Sora in the battle target list (2026-11-05)
+- The owner (chat, 2026-11-02): "when selecting the item, just have soras name appear". Not built before (no entry in
+  AGENTS.md or here).
+- KH1 (Checked (decomp)): our commands copy Potion's record, whose submenu `+8` is 4, the party target list (menu 4,
+  Steam `0x1405289E0`). KH1's top fill `0x140294220` (run every frame by the menu step `0x1402937F0` before its
+  navigation) rebuilds it: for each of the three party slots (`save + 0x48E`) with a live actor (`0x1402B0030`), row
+  `0x38 + member` (record `0x38` is Sora's name) and its actor at `0x142D53A60 + row × 8`. Choosing a row of menu 4 takes
+  that actor as the target (`0x140293480`).
+- Menu 6 (Steam `0x140528A50`, KH1's one-row list, row `0x4C`, count set to 1 by the fill) was looked at: its target
+  `0x142D53A80[0]` is never written in the decomp, so it means "no target" (the use then runs on each party slot,
+  `0x1402C2880`); row `0x4C` is not Sora's name, and its row is KH1's static data shared with KH1's own uses. Not used.
+- Built: after KH1's top fill (`cmdmenu`'s hook), `driveitems::sora_only_targets`: while the chain's current level is
+  menu 4 and the level under it is the Items list (`0x140528970`) with its open row (`+0x34`) on command `0xAF` /
+  `0xB0`, and row 0 is Sora's (`0x38`, his actor), the count is set to 1 and the cursor to 0: KH1's own one-member list.
+  KH1 rebuilds it the next frame, so nothing is put back. With Sora missing from the list (not alive), KH1's list stays.
+- Not covered: an L1 shortcut to one of ours (its parent is the shortcut menu, not the Items list). Assumption: KH1
+  draws and navigates a count of 1 as when Sora is alone in the party.
+- Per frame: a few reads after KH1's top fill while its menu runs; two writes only while our item's list is open.
+
 ## 17. KH2's Drive support abilities (main-port round 6, row 5, 2026-10-30: research)
 
 ### 17.1 KH2 (Steam KH2)

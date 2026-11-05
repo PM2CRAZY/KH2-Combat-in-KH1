@@ -288,6 +288,7 @@ unsafe extern "system" fn top_fill() {
     if sora > 0x10000 {
         page2_rows(base, sora);
         follow_commands(base);
+        super::driveitems::sora_only_targets(base, sora);
     }
 }
 
