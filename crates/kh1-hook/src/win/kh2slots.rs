@@ -1062,6 +1062,14 @@ fn make(mset: &[u8], src: &pose::Src, bake: Option<&pose::Baker>, cache: Option<
     if ours.is_some_and(|o| o.own_sounds) || item || motion == pose::CHEST_MOTION {
         tracks.retain(|t| t.kind != ks::SOUND);
     }
+    // (A Drive Form's walk / run with no KH2 footstep in its clip, Wisdom's and Final's that float:
+    // the template's KH1 floor sounds left out, `silent_steps`.)
+    if silent_steps(src.form, request, kind, clip) {
+        let before: usize = tracks.iter().filter(|t| t.kind == ks::SOUND).map(|t| t.keys.len()).sum();
+        drop_floor_sounds(&mut tracks);
+        let after: usize = tracks.iter().filter(|t| t.kind == ks::SOUND).map(|t| t.keys.len()).sum();
+        log!(Animation, "KH2 slots: {}'s motion {motion} on KH1's request {request:#x} has no KH2 footstep: {} of KH1's floor sounds left out", src.form.map_or("?", |f| f.name()), before - after);
+    }
     // (The Aerial Dodge: KH1's "may be left" one frame before KH2's free frame, `INPUT_LEAD`.)
     if own && motion == character_core::motion::AERIAL_DODGE {
         if let Some(f) = clip.first_free() {
@@ -2093,6 +2101,27 @@ fn kh2_trigger(a: i32, c: u32) -> Option<EventKind> {
 /// one at 68 of 86, Fire's second part 57 at 46 of 60, Checked (files)): KH2's cast motions hold
 /// him to their end (none has a free range, id 0 / 1; `P_EX100.mset`, Checked (files)), where
 /// KH1's queue takes him on. (KH2's magic-only window, range id 35, is not KH1's yet.)
+/// KH1's material sound codes in a sound key's `a` (type 6): `1..=0x1D`, through the table at
+/// `0x140528A87` to `0x140295B40` (the floor's footstep / landing sound; `0` is a sound by id and
+/// `0x19` his voice, which are kept). Checked (exe / decomp notes, `docs/kh1-anim-baking.md` §13.1).
+const FLOOR_SOUNDS: std::ops::RangeInclusive<u16> = 1..=0x1D;
+
+/// A Drive Form's idle / walk / run (`CYCLES`' requests 0x0..0x2) whose KH2 clip has no footstep
+/// (frame trigger 2, `EventKind::Footstep`): KH2 plays none there (Wisdom and Final float), so the
+/// KH1 template's floor sounds are left out of the form's slot. A form clip with footsteps (one
+/// that walks) keeps them as before; base Sora's slots are never touched (`form` `None`).
+fn silent_steps(form: Option<super::form::Kind>, request: usize, kind: Kind, clip: &character_core::Clip) -> bool {
+    form.is_some() && kind == Kind::MiscAnims && CYCLES.iter().any(|c| c.request == request) && !clip.events.iter().any(|e| matches!(e.kind, EventKind::Footstep(_)))
+}
+
+/// Leaves KH1's floor sounds (`FLOOR_SOUNDS`) out of the sound tracks; other sounds and voices stay.
+fn drop_floor_sounds(tracks: &mut Vec<EventTrack>) {
+    for t in tracks.iter_mut().filter(|t| t.kind == ks::SOUND) {
+        t.keys.retain(|k| !FLOOR_SOUNDS.contains(&k.a));
+    }
+    tracks.retain(|t| t.kind != ks::SOUND || !t.keys.is_empty());
+}
+
 fn kh1_tracks(template: &[EventTrack], clip: &character_core::Clip, r: f32, leave: Leave) -> Vec<EventTrack> {
     let len = clip.length as f32;
     let span = |w: &character_core::Window| (w.start as f32, w.end.map_or(len, |e| e as f32));
