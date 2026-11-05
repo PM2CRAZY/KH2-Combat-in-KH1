@@ -125,7 +125,8 @@ experimental = off\r\n\
 shortcuts = 4\r\n\
 ; kh2_effects: KH2's own visual effects for these moves, from your KH2 install, played by\r\n\
 ; KH1's own effect system: magnet_explosion (Magnet Burst, Explosion, Vicinity Break, Aerial Finish, Guard\r\n\
-;   Break, Finishing Leap, Aerial Recovery), all (every move), off\r\n\
+;   Break, Finishing Leap, Aerial Recovery, Quick Run, Counterguard, Flash Step, Retaliating\r\n\
+;   Slash), all (every move), off\r\n\
 kh2_effects = magnet_explosion\r\n\
 ; kh2_hit_sparks: on = a KH2 swing's Keyblade hit on an enemy shows KH2's own hit effect for its\r\n\
 ;   attack (Kingdom Key, base Sora); off = KH1's Keyblade spark. Needs kh2_effects\r\n\

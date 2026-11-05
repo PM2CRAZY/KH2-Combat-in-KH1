@@ -20,8 +20,12 @@
 /// 194, Sora's combo row 29, ability 100) when it was missing), then Guard Break (165: elements
 /// 31, 30, 32), Finishing Leap (167: 33, 34) and Aerial Recovery (40: element 0), the user
 /// finding them without theirs; Quick Run (203: its start effect above LV1, `quickrun`, the
-/// tester's quick-run-native, 1:1 with KH2).
-pub const DEFAULT_MOTIONS: [u16; 8] = [166, 170, 197, 194, 165, 167, 40, 203];
+/// tester's quick-run-native, 1:1 with KH2). Then (testing-merge, main s332: a player:
+/// "Counterguard doesn't have it VFX") the three moves whose frame triggers 1 only `all` played:
+/// Counterguard (171: 40, 41), Flash Step (169: 53..56) and Retaliating Slash (172: 39), all KH1
+/// rows with baked slots whose effect keys already fire (`kh2slots::effects_at`), their elements
+/// already checked through KH1 (`docs/kh2-effects.md` §18.5).
+pub const DEFAULT_MOTIONS: [u16; 11] = [166, 170, 197, 194, 165, 167, 40, 203, 171, 169, 172];
 use character_core::EventKind;
 use glam::Mat4;
 

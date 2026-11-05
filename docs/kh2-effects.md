@@ -1542,6 +1542,15 @@ elements; **Checked (files)**):
   moves only `kh2_effects = all` plays: 169 (53..55 by position on the toes, KH2 18 / 47, bound
   until started; 56), 171 (40, 41 by position on the spine), 172 (39). Their programs are all
   KH1_SAME or KH2's own (**Checked (files)**).
+- (testing-merge) Those three, Flash Step 169, Counterguard 171 and Retaliating Slash 172, are in
+  the default list now (`kh2fx::DEFAULT_MOTIONS`, main s332: a player: "Counterguard doesn't have
+  it VFX"). Why they didn't play before (**Checked (code)**): each is a KH1 row of ours
+  (`kh1rows`) on a baked slot whose `KH2_EFFECTS` keys KH1's motion pass fires
+  (`kh2slots::kh2_trigger_keys` / `effects_at`), but `kh2fx::event` drops a motion not in
+  `kh2_effects`, and Sora's package (`kh2dpx::source`) is built only with the elements of the
+  allowed motions, so at the default setting their elements were neither built nor started.
+  Sora's package now builds their sets too (its cache file is rebuilt: the setting is in its
+  signature, and the mod's version in its manifest).
 - KH1 instances start unturned: the pool's claim (`0x1401EC690`) clears the instance, and the
   start (`0x1401E0100`) only hands out handles of its place, turn and scale. **Checked (exe)**.
 - 0x04 on KH2's object root (Fire 3's elements 2, 6, 7, 10 in the t430 log; none in Sora's
