@@ -360,6 +360,8 @@ unsafe extern "system" fn physics(actor: usize) {
     let f: PhysFn = std::mem::transmute(ORIG_PHYS.load(Ordering::Acquire));
     f(actor);
     if sora {
+        // A room exit one of our KH2 attacks touched in that step: refused, its move undone (`gates`).
+        super::gates::undo(actor, start);
         // A KH1 air attack out of KH2's air move: its lunge (`shared::physics::seed_kh1_lunge`).
         super::shared::physics::seed_kh1_lunge(actor);
         trace_frame(actor, start);
@@ -947,7 +949,6 @@ fn drop_pose() {
 }
 
 fn release(why: &str) {
-    super::gates::released();
     KH2_MOTION.store(u32::MAX, Ordering::Relaxed);
     let mut changed = false;
     if let Ok(mut w) = LAST_WHY.try_lock() {

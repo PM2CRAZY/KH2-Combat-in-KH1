@@ -3016,6 +3016,19 @@ pub unsafe fn moves_itself(actor: usize) -> bool {
     current(actor).is_some_and(|m| m.travel)
 }
 
+/// (tm) Sora (`actor`) plays one of our KH2 attacks now (`gates`: KH1's map face events refused
+/// meanwhile): a slot of ours on one of KH1's own combo requests (kinds `GroundCombo` /
+/// `AirCombo`: KH2's swings, finishers and air swings, base Sora's and the forms'), or on a row of
+/// ours that is an attack (`kh1rows::Ours::attack`: not Quick Run, the guard, Aerial Recovery,
+/// the Aerial Dodge, the glide hover, Reflect, the Drive and the form stances). KH1's own motions
+/// (the Ground / Aerial Combo styles at KH1) are none of ours, so KH1's own attacks never count.
+pub unsafe fn attack_now(actor: usize) -> bool {
+    current(actor).is_some_and(|m| match (m.request as u32).checked_sub(super::kh1rows::FIRST_REQUEST) {
+        Some(n) => super::kh1rows::OURS.get(n as usize).is_some_and(|o| o.attack),
+        None => matches!(m.kind, Kind::GroundCombo | Kind::AirCombo),
+    })
+}
+
 /// Our slot plays KH2's field variant of its motion (`CYCLES`).
 pub fn is_field(slot: usize) -> bool {
     moved(slot).is_some_and(|m| m.field)

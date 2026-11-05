@@ -202,3 +202,33 @@ KH1's own swing does. It also changes KH1's walk-motion choice (`0x1402C9FF0`), 
   Walking into a crate should count to 12 and then give state 27. A combo into it should stay
   at 0.
 - Log the slots behind requests 0xBC / 0xBD / 0xBE from Sora's motion table once.
+
+## On testing-merge (Steam, KH2's moves on KH1's own states)
+
+Since t901 nothing called `gates::pre_move` / `post_move` / `attacking` (they hung off the deleted
+KH2 controller's move), so both redirects installed but never refused anything. Checked (code).
+Steam logs show both call sites matched their expected bytes ("KH2 attacks: room exits kept out,
+crate pushes kept out", tester logs). Checked (log).
+
+- **Exits: KH1 doesn't stop them on its own.** The mover queues the face event for Sora in any
+  state (§1, from the decomp notes; Checked (docs)). Our KH2 swings run in KH1's own states and
+  move through KH1's own mover, so a lunge reaches the exit as before. The gate now sits at KH1's
+  queue call only (`0x14029B686`, Steam): Sora's face event is refused while one of our KH2
+  attacks plays on him (`kh2slots::attack_now`: our slot on KH1's combo requests 0xC8..0xCE, or on
+  a row of ours with `attack`), unless he was touching that same event on every frame since
+  before the attack. A refused step is undone after KH1's physics step (`takeover`'s wrapper of
+  `0x14029A3C0`, Steam): his `+0x10` goes back to where the step began. KH1's own motions (combo
+  styles at KH1) are never refused. Nothing runs per frame but one flag test after the step.
+  - Assumption: the restored spot is clear of the face (the step before it didn't touch it, or
+    touched only the allowed event), so the first move after the attack doesn't fire the exit.
+  - Assumption: `+0x448` (the mover's last event, written by the loop even for a refused event)
+    is read by nothing that starts the exit later; not checked on Steam.
+  - Assumption: the floor fields (`+0x320`, `+0x3D4`) left for the undone spot are one frame's
+    lunge off and KH1's next step puts them right.
+- **Crates: KH1 already refuses.** The crate's push check counts Sora only with actor flag `0x4`
+  clear (§2). Our KH2 ground swings run through KH1's row runner, whose set-motion
+  (`motion | 0x1000000`) sets that flag: `shared::physics::ground_step` tells a ground swing by
+  flag `0x4` in state 0, and that works in game. Air swings are in state 2, which the check
+  refuses too. So the crate redirect was removed. Checked (docs, code); Assumption: the Steam
+  push check is the Epic one (the resolver maps it, same prologue), and the flag stays set to the
+  swing's end (a push still needs 12 frames of facing contact after it, as after KH1's own combo).
