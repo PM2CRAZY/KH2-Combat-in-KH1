@@ -710,6 +710,20 @@ impl Magic {
         if self.casts[i].fresh {
             self.run_cast(i, world);
         }
+        self.trigger_release(i)
+    }
+
+    /// Another magic-cast event of the same cast motion (a motion with more than one frame
+    /// trigger 17 naming it, e.g. Final Form's Blizzard finisher cast): trigger 21 once more on
+    /// the caster's latest cast that was released and still runs (its threads, or its main
+    /// context), so its release code runs again. False when none is left to take it.
+    pub fn release_again(&mut self, caster: ObjId) -> bool {
+        let Some(i) = self.casts.iter().rposition(|c| c.t.caster == caster && c.released && !c.finished && !c.object) else { return false };
+        self.trigger_release(i)
+    }
+
+    /// Trigger 21 on cast `i`'s main context (`release`, `release_again`).
+    fn trigger_release(&mut self, i: usize) -> bool {
         let c = &mut self.casts[i];
         c.released = true;
         let main = c.main;

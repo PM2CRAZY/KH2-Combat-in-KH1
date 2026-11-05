@@ -1144,6 +1144,28 @@ What runs now (`combat::kh2_spell_refused`, from `combat::command`):
 None of these is borrowed by KH2's controller any more. A spell at Magic KH2 can still be borrowed
 in a state KH1 casts in when its slot didn't build (the fallback). Not checked in game.
 
+## 4q. A cast motion with more than one magic-cast event (the owner: Final's Blizzard finisher "only casts one blizzard")
+
+- **Before:** the release (trigger 21) was sent once per cast: `formmagic::shots_step` dropped the
+  cast's wait at its first magic-cast event, and `kh2_magic::Magic::release` only takes a cast not
+  yet released. A clip with a second trigger 17 naming the same motion had its later ones ignored.
+  Checked (code).
+- **Now:** after the first release, each further trigger 17 of the same motion that KH1's time in
+  our slot passes (or the KH2 step's events) sends trigger 21 again to the caster's latest cast
+  that still runs (`Magic::release_again`: its threads or its main context alive), so the script's
+  release code runs once per event. Over once the motion is left. A motion with one event plays as
+  before (nothing kept). Logged (Magic): the motion's event frames once per motion, and each
+  release again.
+- **KH2:** the frame trigger pass `0x14040DD70` hands every trigger 17 the motion passes to the
+  magic cast `0x1403C6150` (Checked (decomp), §4l). **Assumption:** `0x1403C6150` sends trigger 21
+  each time, not only the first (its body not read in this round; no decomp in the session).
+- **Assumption (files not in this session):** Final's Blizzard finisher cast 60 (`E361`, 104
+  frames at 60 Hz in `P_EX100_ULTF.mset`, main's `drive-model.md` table) carries more than one
+  trigger 17 naming 60. The new log line "cast motion 60 has N magic-cast events (frames ...)"
+  confirms or rules it out on the tester's first Final Blizzard finisher.
+- If the log shows one event for 60, the extra shards come from the script itself (BLIZZARD_n.mag
+  at sub 31 / 33 / 35 and its `magi` record), and this is not the cause.
+
 ## 8. KH2's spell scripts as KH1 script processes (the tester, m12 question 1 "(a)"; t797..t800)
 
 What KH1's script machine is (Steam KH1, **Checked (decomp)**, first bytes **Checked (exe)**):

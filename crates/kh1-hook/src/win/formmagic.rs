@@ -288,6 +288,10 @@ struct Runtime {
     /// since the script started, the frame it is released at, and whether KH1 has applied the
     /// request yet (it plays from KH1's next animation step).
     kh1_clock: Option<(u32, f32, f32, bool)>,
+    /// A cast motion released by its first magic-cast event whose clip has more of them (KH2's
+    /// frame trigger 17 naming the motion again: Final Form's Blizzard finisher cast): each later
+    /// one releases the cast again while the motion plays (`Magic::release_again`).
+    again: Option<u16>,
     fired: u32,
     hits: u32,
     /// The world as the scripts saw it at our last step, for KH1's script machine stepping a cast
@@ -355,7 +359,7 @@ fn runtime(g: &mut Option<Runtime>) -> &mut Runtime {
                 }
             }
         });
-        Runtime { magic, wisd, files: HashMap::new(), package, fx: HashMap::new(), queued: Vec::new(), arrival: Vec::new(), arrival_age: 0, fresh: None, casting: None, kh1_clock: None, fired: 0, hits: 0, world: None, actor: 0, limi, limit: None }
+        Runtime { magic, wisd, files: HashMap::new(), package, fx: HashMap::new(), queued: Vec::new(), arrival: Vec::new(), arrival_age: 0, fresh: None, casting: None, kh1_clock: None, again: None, fired: 0, hits: 0, world: None, actor: 0, limi, limit: None }
     })
 }
 
@@ -479,6 +483,7 @@ pub fn end_all() {
     rt.fresh = None;
     rt.casting = None;
     rt.kh1_clock = None;
+    rt.again = None;
     rt.limit = None;
     if let Some(f) = rt.limi {
         rt.magic.limit_end(f);
@@ -497,7 +502,7 @@ pub fn end_all() {
 
 /// Something of the scripts' still runs or plays (`takeover::native_spells` runs their frame).
 pub fn busy() -> bool {
-    RT.try_lock().is_ok_and(|g| g.as_ref().is_some_and(|rt| !rt.queued.is_empty() || rt.fresh.is_some() || rt.limit.is_some() || rt.casting.is_some() || rt.kh1_clock.is_some() || !rt.magic.casts.is_empty() || !rt.magic.effects.is_empty() || !rt.fx.is_empty()))
+    RT.try_lock().is_ok_and(|g| g.as_ref().is_some_and(|rt| !rt.queued.is_empty() || rt.fresh.is_some() || rt.limit.is_some() || rt.casting.is_some() || rt.kh1_clock.is_some() || rt.again.is_some() || !rt.magic.casts.is_empty() || !rt.magic.effects.is_empty() || !rt.fx.is_empty()))
 }
 
 // ------------------------------------------------- KH2's spells in KH1's own cast state
@@ -1421,11 +1426,47 @@ pub unsafe fn kh1_step(id: u64, ctx: kh2_magic::kh2_bdx::CtxId) -> bool {
     goes
 }
 
+/// How many magic-cast events (frame trigger 17) naming `motion` its clip has, in the moveset
+/// playing (a native Drive Form's, `pose::kh2_moves`, else base Sora's), logged once a motion
+/// when more than one: their frames. KH2's frame trigger pass (`0x14040DD70`, Checked (decomp),
+/// `docs/kh1-magic-native.md` §4l) hands each trigger 17 the motion passes to the magic cast
+/// `0x1403C6150`. Assumption (its body not read): each one sends the caster's spell script its
+/// trigger 21 again, as the first does, so the script's release code runs once per event (Final
+/// Form's Blizzard finisher cast 60, E361, 104 frames: the owner, "only casts one blizzard").
+fn more_casts(motion: u16) -> usize {
+    let Some(kh2) = pose::kh2() else { return 0 };
+    let Some(clip) = pose::kh2_moves().unwrap_or(&kh2.character).moveset.clips.get(&motion) else { return 0 };
+    let frames: Vec<u32> = clip.events.iter().filter(|e| matches!(e.kind, character_core::EventKind::MagicCast(x) if x as u16 == motion)).map(|e| e.frame).collect();
+    if frames.len() > 1 {
+        static SAID: Mutex<Vec<u16>> = Mutex::new(Vec::new());
+        let first = SAID.lock().is_ok_and(|mut g| {
+            let new = !g.contains(&motion);
+            if new {
+                g.push(motion);
+            }
+            new
+        });
+        if first {
+            log!(Magic, "{}: cast motion {motion} has {} magic-cast events (frames {frames:?}): each releases the spell", who(), frames.len());
+        }
+    }
+    frames.len()
+}
+
+/// One more release of the cast playing `motion` (`Magic::release_again`), logged (bounded).
+fn release_again(rt: &mut Runtime, motion: u16, frame: u32) {
+    let took = rt.magic.release_again(SORA);
+    static N: AtomicUsize = AtomicUsize::new(0);
+    if N.fetch_add(1, Ordering::Relaxed) < 40 {
+        log!(Magic, "{}: cast motion {motion}'s next magic-cast event (frame {frame}): {}", who(), if took { "released again (trigger 21)" } else { "no running script of the cast to release" });
+    }
+}
+
 /// After KH2's step and the swings: the form's scripts' frame (casts, shots, effects, hits).
 pub unsafe fn shots_step(actor: usize, out: &Output, airborne: bool, strikes: &mut combat::Strikes, battle: &Arc<Battle>, lock: Option<u32>) {
     let Ok(mut g) = RT.try_lock() else { return };
     let Some(rt) = g.as_mut() else { return };
-    if rt.queued.is_empty() && rt.fresh.is_none() && rt.limit.is_none() && rt.casting.is_none() && rt.kh1_clock.is_none() && rt.magic.casts.is_empty() && rt.magic.effects.is_empty() && rt.fx.is_empty() {
+    if rt.queued.is_empty() && rt.fresh.is_none() && rt.limit.is_none() && rt.casting.is_none() && rt.kh1_clock.is_none() && rt.again.is_none() && rt.magic.casts.is_empty() && rt.magic.effects.is_empty() && rt.fx.is_empty() {
         return;
     }
     let mut world = world_now(actor, out, airborne, strikes, lock, 0x51A7_0000 ^ rt.fired.wrapping_mul(2_654_435_761));
@@ -1494,6 +1535,7 @@ pub unsafe fn shots_step(actor: usize, out: &Output, airborne: bool, strikes: &m
             match made {
                 Ok(_) => {
                     rt.casting = Some((f.motion, 0));
+                    rt.again = None;
                     rt.kh1_clock = f.kh1_anim.map(|(request, at)| (request, 0.0, at, false));
                 }
                 Err(e) => log!(Magic, "{} {}'s script didn't start ({e})", who(), SPELL_NAMES[f.spell as usize]),
@@ -1518,7 +1560,10 @@ pub unsafe fn shots_step(actor: usize, out: &Output, airborne: bool, strikes: &m
             let _ = m;
         }
     } else if let Some((m, waited)) = rt.casting {
-        let fired = out.motion == m && out.events.iter().any(|e| matches!(e, character_core::EventKind::MagicCast(x) if *x as u16 == out.motion));
+        // (Each magic-cast event of the motion passed this frame: KH1 at 30 fps passes two frames
+        // an update.)
+        let casts = if out.motion == m { out.events.iter().filter(|e| matches!(e, character_core::EventKind::MagicCast(x) if *x as u16 == out.motion)).count() } else { 0 };
+        let fired = casts > 0;
         let waited = if out.motion == m { SEEN } else { waited.saturating_add(1).min(SEEN - 1) };
         rt.casting = Some((m, waited));
         // (In KH1's cast state the motion starts at KH1's next animation step: not cut before it
@@ -1527,6 +1572,24 @@ pub unsafe fn shots_step(actor: usize, out: &Output, airborne: bool, strikes: &m
             rt.casting = None;
             // (Cut off before its release: released anyway, as the spell was paid for.)
             rt.magic.release(SORA, &mut world);
+            // (A motion with more magic-cast events naming it releases again at each, `again`.)
+            if fired && more_casts(m) > 1 {
+                rt.again = Some(m);
+                for _ in 1..casts {
+                    release_again(rt, m, out.clip_frame);
+                }
+            }
+        }
+    } else if let Some(m) = rt.again {
+        // (Its later magic-cast events, KH2's trigger 17 again: the release code run again. Over
+        // once the motion is left.)
+        if out.motion != m {
+            rt.again = None;
+        } else {
+            let casts = out.events.iter().filter(|e| matches!(e, character_core::EventKind::MagicCast(x) if *x as u16 == m)).count();
+            for _ in 0..casts {
+                release_again(rt, m, out.clip_frame);
+            }
         }
     }
     // The shots (and the arrival's light).
