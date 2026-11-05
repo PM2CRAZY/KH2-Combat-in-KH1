@@ -959,3 +959,30 @@ We bring the Keyblade out with `(sora, 1)`, as the motion start does, since that
 Cost: one load in the form's frame; the rest once a room.
 
 **Not checked.** No room change in a form is in the log. Assumption: vanilla brings the Keyblade back around when Sora becomes playable; ours comes back at that point. A room whose arrival scene keeps the scene flag on while Sora can move would hold it back until the flag clears.
+
+## 15. The Dream Shield's stretch (testing-merge, main s329)
+
+Main's player: "having the dream shield equipped leads to some pretty bad stretching issues"
+(video in the Dive: a thin grey bar several body lengths long out of his hand in KH2's swings).
+
+- **Where testing can still do it** (**Checked (code)**): `pose::kh1_wrist` (the Dream Shield, the
+  one `flip_weapons` item) and `pose::dream_hold` run only on the poses we draw ourselves
+  (`follow_play`: KH2's look on a KH1 slot that isn't baked, the Misc Animations item use, Wisdom's /
+  Master's / base Sora's KH1-spell casts, `kh1_bake = off`). On those, KH1 posed its own slot under
+  ours that frame, and `kh1_wrist` took KH1's whole forearm-to-hand matrix. Main's s328 log had that
+  hand thousands of units off on KH1's blend frames; the drawn hand went there and the forearm and
+  shield stretched to it. **Assumption**: KH1 does the same under testing's drawn routes (it is
+  KH1's own pose pass either way); the new log line names any such frame.
+- **Fix there**: only KH1's turn of the wrist, at our own forearm-to-hand offset, and only from a
+  frame whose KH1 hand is rigid and a bone's length (±25%) from the forearm; else the last good
+  wrist ("KH1's wrist this frame not used ..."). `dream_hold` notes a hold from the grip and the
+  skinned bones only (282..291, §1.4); 281 and 292 take the bind's place; until a hold is noted the
+  bones after the grip stay rigid as in the bind (the keychain swing would bend the mesh).
+- **Baked slots** (every KH2 move KH1 plays itself, `kh1_bake = on`, the default): `wanted` is
+  `None` there, so neither function runs and main's cause can't happen. But the bake is
+  weapon-blind (`Baker::poses`: the Keyblade's teeth-up turn and KH2's keychain on 283..291 for
+  every weapon, §4 of `kh1-anim-baking.md`: "lost in a raw bake: ... `flip_weapons`, the dream
+  weapons' hold"). The Dream Shield's mesh is skinned to 282..291, so KH2's keychain directions on
+  283..291 may bend it on those moves. **Not checked**: whether the shield's vertices are weighted
+  to 283..291 at all. The log line "weapon 0x53 on a baked slot (KH2 motion n): bone b d units
+  from a rigid hold" (logging on, Animation, first 10 over 2 units) answers it.
