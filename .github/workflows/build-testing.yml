@@ -1,11 +1,11 @@
-# Builds the mod's DLL on Windows for every source change pushed to the testing branch, and
+# Builds the mod's DLL on Windows for every source change pushed to the testing-merge branch, and
 # commits it as kh1-kh2.dll at the top of the repo (what mod.yml installs), so testers always
-# have a build of the latest testing version.
-name: Build testing DLL
+# have a build of the latest testing-merge version.
+name: Build testing-merge DLL
 
 on:
   push:
-    branches: [testing]
+    branches: [testing-merge]
     paths:
       - "crates/**"
       - "Cargo.toml"
@@ -16,7 +16,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: build-testing
+  group: build-testing-merge
   cancel-in-progress: false
 
 jobs:
@@ -25,7 +25,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: testing
+          ref: testing-merge
       - name: Rust (stable, MSVC)
         run: rustup toolchain install stable --profile minimal && rustup default stable
       - name: Build kh1-hook
@@ -41,7 +41,7 @@ jobs:
           if git diff --cached --quiet; then echo "no change"; exit 0; fi
           git commit -m "Build ${version} (kh1-kh2.dll, from ${GITHUB_SHA::7})"
           for i in 1 2 3; do
-            git pull --rebase origin testing && git push origin HEAD:testing && exit 0
+            git pull --rebase origin testing-merge && git push origin HEAD:testing-merge && exit 0
             sleep 5
           done
           exit 1
