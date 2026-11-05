@@ -34,6 +34,7 @@
 //! code on the pad (`pad`) asks for it, as the Drive list would.
 //! (t1033: Final is in the Drive list on KH1's own states, KH2's fifth form, `Kind::ALL`; the code
 //! sets nothing anyone reads now and stays for Anti, research round 2 for Final §5.)
+//! (The main-branch port's row 14: the code asks for Anti Form, `code_anti`.)
 
 use super::{log, pose};
 use character_core::{Abilities, Character, EventKind};
@@ -276,10 +277,11 @@ const CODE_GAP_MS: u64 = 1500;
 /// The code so far: buttons held last time, how far in, when the last one came; and whether it was
 /// just completed (taken on the game thread, `before_step`).
 static CODE_STATE: std::sync::Mutex<(u16, usize, Option<std::time::Instant>)> = std::sync::Mutex::new((0, 0, None));
-static CODE_DONE: AtomicBool = AtomicBool::new(false);
 
-/// The pad as pressed, every read (`probe::pad`): the secret code for Final Form (the user: a
-/// button sequence, "in that exact sequence, put them into final form").
+/// The pad as pressed, every read (`probe::pad`, KH1's own pad read): the secret code (the user: a
+/// button sequence, "in that exact sequence, put them into final form"; since the main-branch port's
+/// row 14 it gives Anti Form, the owner: "The secret code gives Anti Form", main s272). Taken on the
+/// game thread (`native_frame`, `code_anti`).
 pub fn pad(buttons: u16) {
     let Ok(mut g) = CODE_STATE.try_lock() else { return };
     let (held, at, last) = &mut *g;
@@ -300,8 +302,8 @@ pub fn pad(buttons: u16) {
         }
         if *at == CODE.len() {
             *at = 0;
-            CODE_DONE.store(true, Ordering::Relaxed);
-            log!(Forms, "Final Form: the secret code entered");
+            super::antiform::code_entered();
+            log!(Forms, "Anti Form: the secret code entered");
         }
     }
 }
@@ -907,7 +909,30 @@ pub fn native_form() -> Option<Kind> {
 /// Something of a form on KH1's own states to run each frame (`takeover::form_native_frame`):
 /// its change asked for or under way, or the form itself.
 pub fn native_running() -> bool {
-    NATIVE.load(Ordering::Relaxed) && (in_form() || CHANGING.load(Ordering::Relaxed) || REQUEST.load(Ordering::Relaxed) != 0)
+    (NATIVE.load(Ordering::Relaxed) && (in_form() || CHANGING.load(Ordering::Relaxed) || REQUEST.load(Ordering::Relaxed) != 0)) || super::antiform::code_waiting()
+}
+
+/// The secret code entered (`pad`): Anti Form asked for as the Drive list asks for a form (`choose`:
+/// KH1 letting him change on this frame, no queue; its cost by `antiform`'s rules), with its partners
+/// as KH2's Anti needs them (`0x140400740(6)`, Drive > Party Required). Refused (logged) in a form, in
+/// a change, or where Anti can't run on KH1's states.
+unsafe fn code_anti(actor: usize) {
+    if in_form() || busy() {
+        log!(Forms, "Anti Form (the secret code): not taken, {}", if in_form() { "already in a form" } else { "a change is under way" });
+        return;
+    }
+    if !native_ok(Kind::Anti) || !super::shared::active() {
+        log!(Forms, "Anti Form (the secret code): not taken, it can't run on KH1's own states here (its slots didn't build, or the Drive is off)");
+        return;
+    }
+    if !super::driveparty::ok(super::formown::form_id(Kind::Anti)) {
+        log!(Forms, "Anti Form (the secret code): not taken, its partners aren't both there and able (Drive > Party Required)");
+        return;
+    }
+    match choose(actor, Kind::Anti) {
+        Ok(_) => log!(Forms, "Anti Form (the secret code): asked for"),
+        Err(e) => log!(Forms, "Anti Form (the secret code): refused ({e})"),
+    }
 }
 
 
@@ -981,6 +1006,9 @@ unsafe fn ask_own_then(actor: usize, motion: u16, then: Option<u16>, air: bool) 
 /// The form's frame on KH1's own states (`takeover::form_native_frame`, each physics frame of
 /// Sora's while KH1's states have him: `steps` 60 Hz frames of it, `battle` KH1's battle flag).
 pub unsafe fn native_frame(kh2: &pose::Kh2, actor: usize, battle: bool, steps: u32) {
+    if super::antiform::take_code() {
+        code_anti(actor);
+    }
     if !NATIVE.load(Ordering::Relaxed) {
         return;
     }

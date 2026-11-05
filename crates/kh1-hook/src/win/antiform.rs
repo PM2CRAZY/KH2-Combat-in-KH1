@@ -85,3 +85,17 @@ pub unsafe fn pay_gauge() -> bool {
     }
     super::drivegauge::pay_all(crate::drivegauge::cost(crate::formlevel::form::ANTI), needs())
 }
+/// The secret code was entered (`form::pad`): taken on the form's next frame (`form::native_frame`).
+static CODE: AtomicBool = AtomicBool::new(false);
+
+pub fn code_entered() {
+    CODE.store(true, Ordering::Relaxed);
+}
+
+pub fn code_waiting() -> bool {
+    CODE.load(Ordering::Relaxed)
+}
+
+pub fn take_code() -> bool {
+    CODE.swap(false, Ordering::Relaxed)
+}

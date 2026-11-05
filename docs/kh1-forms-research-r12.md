@@ -449,3 +449,10 @@ Tags: Checked (decomp) = Steam KH2 kh2.c / KH1 kh1.c; (files) = 00battle.bin / 0
   (`P_EX100_HTLF.a.us` as a `kh2dpx::Pkg`); the KH2 player model's body (`model.rs`); the ledge hang
   (KH1's hang / climb request ids for a form spec, not in the repo); no Keyblade or trail (KH1's weapon
   draw and trail flags, not located).
+
+**2. The secret code gives Anti** (the owner: "The secret code gives Anti Form", main s272): `form::pad`
+(called from `probe::pad`, the wrapper on KH1's own pad read) marks the code entered; the form's frame
+on the game thread takes it (`form::code_anti`) and asks for Anti as the Drive list asks for a form
+(`form::choose`: KH1's can-change test on that frame, no queue; cost by `antiform`'s rules), with
+Anti's partners as KH2's `0x140400740(6)` wants them (Drive > Party Required). In a form, in a change,
+or with Anti's slots not built, it is refused and logged. The code itself is unchanged (still secret).
