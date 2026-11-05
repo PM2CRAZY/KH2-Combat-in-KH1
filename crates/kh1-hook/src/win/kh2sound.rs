@@ -695,7 +695,12 @@ pub unsafe fn event(motion: u16, kind: character_core::EventKind) {
     match kind {
         EventKind::Effect(el) => {
             if let Some(s) = l.elements.get(&el) {
-                play(s);
+                // (Kept with the element KH1 plays for it, `kh2dpx::tie_sound`: faded out as its
+                // effect is ended, KH2's bind node's rule.)
+                match super::kh1bank::play_id(s.kh1, s.ms) {
+                    Some(id) => super::kh2dpx::tie_sound(super::kh2dpx::Pkg::Sora, el, s.kh1, id),
+                    None => dropped(|| format!("se{}: KH1's effect queue or bank list can't take it now", s.kh1)),
+                }
                 note_play(|| format!("Sora's element {el} (motion {motion})"));
             }
         }
@@ -716,6 +721,23 @@ pub unsafe fn event(motion: u16, kind: character_core::EventKind) {
             }
         }
         _ => {}
+    }
+}
+
+/// A form's motion element `el` of package `level` started (`kh2fx::form_event`): its sound, kept
+/// with the element KH1 plays (`kh2dpx::tie_sound`), as Sora's own elements' (`event`).
+pub unsafe fn form_element(level: u8, el: u16) {
+    let Ok(g) = LOADED.try_lock() else { return };
+    match g.as_ref().and_then(|l| l.spell_elements.get(&(level, el))) {
+        Some(s) => {
+            match super::kh1bank::play_id(s.kh1, s.ms) {
+                Some(id) => super::kh2dpx::tie_sound(super::kh2dpx::pkg_of(level), el as i16, s.kh1, id),
+                None => dropped(|| format!("se{}: KH1's effect queue or bank list can't take it now", s.kh1)),
+            }
+            note_play(|| format!("package {level}'s element {el}"));
+        }
+        None if g.is_none() => note_play(|| format!("package {level}'s element {el}: KH2 sounds not loaded (yet)")),
+        None => {}
     }
 }
 
@@ -743,7 +765,7 @@ pub unsafe fn spell_element(level: u8, el: u16) {
 /// effect; `element_sound_stop` fades it out through KH1's own `kh1bank::fade_stop`.
 static TIED: Mutex<Vec<(u64, i32, i32)>> = Mutex::new(Vec::new());
 /// KH2's fade for it (`0x1401DE500`'s 0x78).
-const TIED_FADE: i32 = 0x78;
+pub(super) const TIED_FADE: i32 = 0x78;
 
 /// `spell_element`, its sound kept against script effect `effect`.
 pub unsafe fn spell_element_tied(level: u8, el: u16, effect: u64) {

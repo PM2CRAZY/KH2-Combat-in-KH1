@@ -381,16 +381,69 @@ struct Run {
     /// keeps its fade apart from the colour the binding writes, `0x1402BE6A0` `+0x38`).
     follows: bool,
     level: f32,
+    /// The element's sound as KH1's effect queue plays it (bank, id), when it was started with it
+    /// (`tie_sound`): KH2's bind node keeps it and stops it as the effect goes (`sound_off`).
+    sound: Option<(i32, i32)>,
+    /// Ended by us (its motion changed, its owner went): its sound stops once the effect is gone.
+    ended: bool,
 }
 
 impl Run {
     fn new(element: usize, serial: u32, motion: u16, layer: Layer) -> Run {
         let follows = layer.flags & (ALPHA_FOLLOWS | BIND) == ALPHA_FOLLOWS | BIND;
-        Run { element, serial, motion, layer, fade: None, follows, level: 1.0 }
+        Run { element, serial, motion, layer, fade: None, follows, level: 1.0, sound: None, ended: false }
     }
 }
 
 static RUNNING: Mutex<Vec<Run>> = Mutex::new(Vec::new());
+
+/// An element's sound and its effect (KH2's rule, Steam KH2, Checked (decomp) in t1014): the bind
+/// node `0x1402C6B30` starts the element's sound (its PAX `+0x18`) and keeps the handle (`+0x60`);
+/// freed as its effect goes (a kill, a fade's end: `0x1402C4660` / `0x1402C63B0`), it stops it with
+/// a fade, `0x1401DE500 (handle, 0x78)`. Ours played Sora's motion elements' sounds fire-and-forget
+/// in KH1's effect queue, so a move cut short or ended (its elements with 0x20 ended by the motion
+/// change, `tick`) left its sound playing to its length (the owner: "some kh2 moves like magnet
+/// burst don't cut out its audio after the move ends": element 51, flags 0x261, fade-out 4, sound
+/// 169, 2.7 s, Checked (files) `docs/kh2-effects.md` §12, `docs/kh2-sound.md`). The sound and the
+/// element are started by two calls side by side (`kh2sound::event` then `kh2fx::event`, or
+/// `kh2fx::form_event` then its sound), in either order: whichever comes second ties them. Cleared
+/// each frame (`tick`).
+static SOUND_PENDING: Mutex<Option<(Pkg, i16, i32, i32)>> = Mutex::new(None);
+static LAST_RUN: Mutex<Option<(Pkg, i16, usize, u32)>> = Mutex::new(None);
+
+/// The sound `(no, id)` KH1's queue plays for element `el` of `pkg` just asked (`kh2sound`): kept
+/// with the element's run if it was just started, else until it starts this frame.
+pub fn tie_sound(pkg: Pkg, el: i16, no: i32, id: i32) {
+    let last = LAST_RUN.lock().ok().and_then(|mut l| l.take_if(|x| x.0 == pkg && x.1 == el));
+    match last {
+        Some((_, _, element, serial)) => {
+            if let Ok(mut g) = RUNNING.lock() {
+                if let Some(r) = g.iter_mut().find(|r| r.element == element && r.serial == serial) {
+                    r.sound = Some((no, id));
+                }
+            }
+        }
+        None => {
+            if let Ok(mut p) = SOUND_PENDING.lock() {
+                *p = Some((pkg, el, no, id));
+            }
+        }
+    }
+}
+
+/// A run leaving us: its sound faded out with KH1's own fading stop, as KH2's bind node does,
+/// when we ended it (`ended`) or stopped it (`stopped`). An element that played to its own end
+/// with nothing of ours ending it keeps its sound to its length (Assumption: whether KH2's node,
+/// freed then too, cuts a sound longer than its effect isn't in the decomp notes).
+fn sound_off(r: &Run, stopped: bool) {
+    if let Some((no, id)) = r.sound.filter(|_| stopped || r.ended) {
+        unsafe { super::kh1bank::fade_stop(no, id, super::kh2sound::TIED_FADE) };
+        static N: AtomicU32 = AtomicU32::new(0);
+        if super::log_on(super::LogCat::Sound) && N.fetch_add(1, Ordering::Relaxed) < 40 {
+            log!(Sound, "KH2 sound se{no} (id {id:#x}) faded out with its effect (element {}, motion {})", r.layer.el, r.motion);
+        }
+    }
+}
 
 /// A continuous binding of ours whose stored matrix is still read KH2's way (`posed`): KH1's
 /// element and serial, the binding node and record, and Sora's skeleton passes when it started.
@@ -2012,6 +2065,25 @@ fn start_el(pkg: Pkg, motion: u16, el: i16) -> Started {
         unsafe { note_binding(base, element, actor, pos) };
     }
     let set = element != 0 && unsafe { apply(element, &layer, motion) };
+    if set {
+        // (Its sound, asked just before or just after: `tie_sound`.)
+        let serial = unsafe { rd::<u32>(element + EL_SERIAL) };
+        let pending = SOUND_PENDING.lock().ok().and_then(|mut p| p.take_if(|x| x.0 == pkg && x.1 == el));
+        match pending {
+            Some((_, _, no, id)) => {
+                if let Ok(mut g) = RUNNING.lock() {
+                    if let Some(r) = g.iter_mut().find(|r| r.element == element && r.serial == serial) {
+                        r.sound = Some((no, id));
+                    }
+                }
+            }
+            None => {
+                if let Ok(mut l) = LAST_RUN.lock() {
+                    *l = Some((pkg, el, element, serial));
+                }
+            }
+        }
+    }
     if element != 0 && bone == Anchor::Code(KH1_BODY_CENTRE) {
         unsafe { note_body_centre(base, actor) };
     }
@@ -2417,7 +2489,13 @@ unsafe fn apply(element: usize, l: &Layer, motion: u16) -> bool {
     }
     if l.flags & (ENDS_WITH_MOTION | ENDS_WITH_OWNER) != 0 || Run::new(element, serial, motion, *l).follows {
         if let Ok(mut r) = RUNNING.lock() {
-            r.retain(|x| unsafe { instance(x.element, x.serial) }.is_some());
+            r.retain(|x| {
+                let live = unsafe { instance(x.element, x.serial) }.is_some();
+                if !live {
+                    sound_off(x, false);
+                }
+                live
+            });
             r.push(Run::new(element, serial, motion, *l));
         }
     }
@@ -2456,20 +2534,35 @@ unsafe fn end(r: &mut Run, inst: usize) -> bool {
 /// Elements that end with their motion end when it changes; fades step.
 pub fn tick(motion: u16, delta: f32) {
     manage();
+    // (A sound and its element are tied within one frame's calls, `tie_sound`.)
+    if let Ok(mut p) = SOUND_PENDING.lock() {
+        *p = None;
+    }
+    if let Ok(mut l) = LAST_RUN.lock() {
+        *l = None;
+    }
     let changed = LAST_MOTION.swap(motion as u32, Ordering::Relaxed) != motion as u32;
     let Ok(mut g) = RUNNING.lock() else { return };
     if g.is_empty() {
         return;
     }
     g.retain_mut(|r| unsafe {
-        let Some(inst) = instance(r.element, r.serial) else { return false };
-        if changed && r.layer.flags & ENDS_WITH_MOTION != 0 && r.motion != motion && end(r, inst) {
+        let Some(inst) = instance(r.element, r.serial) else {
+            sound_off(r, false);
             return false;
+        };
+        if changed && r.layer.flags & ENDS_WITH_MOTION != 0 && r.motion != motion {
+            r.ended = true;
+            if end(r, inst) {
+                sound_off(r, true);
+                return false;
+            }
         }
         if let Some(rate) = r.fade {
             let a = fade_from(r, inst) - rate * delta.max(0.0);
             if a <= 0.0 {
                 stop(r.element, inst);
+                sound_off(r, true);
                 return false;
             }
             if r.follows {
@@ -2526,15 +2619,20 @@ unsafe fn follow_alpha(anchor: Anchor) -> f32 {
 pub fn owner_gone() {
     let Ok(mut g) = RUNNING.lock() else { return };
     g.retain_mut(|r| unsafe {
-        let Some(inst) = instance(r.element, r.serial) else { return false };
+        let Some(inst) = instance(r.element, r.serial) else {
+            sound_off(r, false);
+            return false;
+        };
         if r.layer.flags & ENDS_WITH_OWNER == 0 || r.fade.is_some() {
             return true;
         }
+        r.ended = true;
         if r.layer.fadeout > 0.0 {
             r.fade = Some(fade_from(r, inst) / r.layer.fadeout);
             true
         } else {
             stop(r.element, inst);
+            sound_off(r, true);
             false
         }
     });

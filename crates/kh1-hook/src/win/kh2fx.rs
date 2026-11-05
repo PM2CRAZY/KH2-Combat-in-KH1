@@ -88,7 +88,7 @@ pub fn form_event(motion: u16, el: i16) {
         (super::kh2dpx::Pkg::Valor, VALOR)
     };
     if super::kh2dpx::form_event(pkg, motion, el) {
-        unsafe { super::kh2sound::spell_element(package, el as u16) };
+        unsafe { super::kh2sound::form_element(package, el as u16) };
     }
 }
 

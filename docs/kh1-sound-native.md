@@ -521,3 +521,37 @@ are never cut.
   every 5 s while it isn't a game, with both lists' counts, how many of ours are in, and the bank
   slots. If those 5 s lines stop while the screen is stuck, KH1's frame itself has stopped (a wait
   inside one call), not a mode waiting.
+
+## A move's element sounds stop with their effect
+
+The owner (bug list): "some kh2 moves like magnet burst don't cut out its audio after the move ends".
+
+- **KH2's rule.** An effect element's sound (its PAX `+0x18`) is started by the element's bind node
+  (`0x1402C6B30`, handle at `+0x60`), and the node, freed as its effect goes (a kill, a fade's end:
+  `0x1402C4660` / `0x1402C63B0`), stops it with a fade, `0x1401DE500 (handle, 0x78)`. **Checked
+  (decomp)** in the t1014 round (`docs/kh1-drive-forms-native.md` t1014).
+- **Magnet Burst.** Motion 197's element 51 (frame 10, flags 0x261: bound, ends with its motion,
+  fade-out over 4 frames, ends with its owner) carries sound 169 (se000 entry 156, 2.7 s); element
+  52 (frame 60, flags 0x003, no ending) carries 999021. **Checked (files)** (`docs/kh2-effects.md`
+  §12, `docs/kh2-sound.md`). So in KH2 169 is faded out about 4 frames after the move's motion
+  ends or is cut; 999021 plays on.
+- **Why ours played on.** `kh2sound::event` sent a move's element sound into KH1's effect queue
+  fire-and-forget; only its length stopped it (`kh1bank::tend`). Our native element itself was
+  ended at the motion change (`kh2dpx::tick`, 0x20), so the picture went and the sound stayed.
+  **Checked (code)**. t1014 had tied only the form scripts' effect sounds.
+- **Now.** Sora's motion elements' sounds (`kh2sound::event`) and the forms' (Valor, Final, Limit,
+  Master: `kh2fx::form_event` → `kh2sound::form_element`) are played with `kh1bank::play_id` and kept
+  with the KH1 element started for them (`kh2dpx::tie_sound`; the two calls come side by side in
+  either order, matched by package and element id within the frame). When `kh2dpx` ends that element
+  (its motion changed, its owner went) and the effect is gone (stopped at once, its fade-out done,
+  or its loops ended and its last pieces done), the sound gets KH1's own fading stop
+  `0x140179A20 (no, id, 0x78)`, as t1014's. Only elements `kh2dpx` tracks (an ending flag
+  0x20 / 0x200, or 0x800) are tied; the others' sounds play to their length as before. **Checked
+  (code)**. Logged (Sound): "KH2 sound seN ... faded out with its effect".
+- **Assumptions / open.** The fade's unit is the same in KH1's call as KH2's (as t1014). An element
+  that plays to its own end with nothing of ours ending it keeps its sound to its length: whether
+  KH2's node, freed then too, cuts a sound longer than its effect isn't in the decomp notes. With
+  KH2 Effects off for a move (no KH1 element), its element sounds can't be tied and play to their
+  length. Frame trigger 8 sounds (the Keyblade bank's, e.g. 500044 on Magnet Burst) aren't element
+  sounds and aren't stopped by KH2's motion end as far as the notes go (Assumption). The spell
+  scripts' element sounds (`spell_element`) are unchanged.
