@@ -1,3 +1,6 @@
+### 2026-11-05: Stage tm21 (testing-merge branch: Anti Form's ledge hang: KH1's hang requests found, a log for the rest)
+- Main s279 / s280: Anti hangs from a ledge by his foot. Not built yet; found (Checked (KH1 decomp)): the grab `0x1402C9FB0` sets state 15 and plays request 0xE, then 0xD (the hang); the climb `0x1402CABA0`: state 19, request 0x10, then 0x32, then state 18 (`0x1402CB0B0`); 0xF likely the let-go (Assumption). Missing: each request's KH1 slot (from `xa_ex_0010.mset`), whether HTLF has motions 7 / 8, and how low motion 7's root hangs. A one-time log (Animation) "Anti Form's ledge hang not built" lists those slots and clips, so the specs can be written from the next log. `win/kh2slots.rs`, docs. Per frame: nothing.
+
 ### 2026-11-05: Stage tm20 (testing-merge branch: Anti Form's own KH2 effects package)
 - Inventory row 14: Anti's own KH2 effects. `P_EX100_HTLF.a.us` is `Pkg::Anti` / `kh2fx::ANTI` (22), built and played through KH1's effect engine exactly as Master's package, its element sounds registered. Assumption: its PAX is named "p_ex" (the file wasn't read in this session). Noticed, not changed: Anti's motion sounds and voices play only for moves in `kh2_sounds` (`kh2sound::event`'s form rule names Valor, Final, Limit, Master). Not checked in game. `win/kh2dpx.rs`, `win/kh2fx.rs`, docs. Per frame: as the other forms' packages.
 

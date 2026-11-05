@@ -511,3 +511,20 @@ plays them as the other forms'. Assumption: its PAX is named "p_ex" as the other
 the file isn't staged); the build logs if not. Not changed: Anti's motion sounds and voices still play
 only for the moves `kh2_sounds` lists (`kh2sound::event`'s form rule names Valor / Final / Limit /
 Master only) — a separate question.
+
+**7. Anti's ledge hang (not built; a log for it)** (main s273 "antiform has it's own unique ledge grab
+animation", s277 / s279 / s280 "hanging from his foot"):
+- KH1 (Steam, Checked (decomp)): the ledge grab `0x1402C9FB0` sets state 15 and asks request 0xE, with
+  0xD queued (the hang); state 15's step `0x1402CA640` climbs through `0x1402CABA0` (state 19, request
+  0x10, then 0x32 queued) or plays 0xF (state 16, then a fall; Assumption: the let-go); state 19's step
+  `0x1402CAC60` goes to state 18 (`0x1402CB0B0`) with 0x32. Main's log matched: "state 15 hanging, then
+  19 and 18 pulling up".
+- Native plan: Anti's 7 (looping hang) on 0xE / 0xD and 8 (climb) on 0x10 (and 0x32) as `ANTI_SPECS`
+  entries, as every form's slots. What's missing: each request's KH1 slot (`Spec::stands_for`, from Sora's
+  request table in `xa_ex_0010.mset`, not in the repo, and never guessed: `make` leaves a wrong one out),
+  and whether `P_EX100_HTLF.mset` holds 7 / 8 and how low its root hangs (main's "by the foot" was a per-
+  frame shift of 6 under the edge; natively it would be the clip's own root, or a root offset baked into
+  the slot).
+- Added (log only, `kh2slots::anti_ledge_log`, once a slot build): the five requests' slots and kinds
+  and Anti's 7 / 8 (frames, root height range). The tester's next `kh1-kh2.log` ("Anti Form's ledge hang
+  not built") gives what the specs need.

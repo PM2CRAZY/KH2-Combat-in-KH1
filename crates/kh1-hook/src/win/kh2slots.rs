@@ -958,6 +958,10 @@ pub fn prepare(mset: &[u8], kh2: &pose::Kh2, bake: Option<&pose::Baker>, mut cac
         // form-only rows on our own requests), slots of their own after base Sora's.
         for (f, v) in forms.iter() {
             let before = moves.len();
+            // (Anti's ledge hang, not built yet: what a spec would need, logged once a build.)
+            if f.kind == super::form::Kind::Anti {
+                anti_ledge_log(v, &requests, &form_has);
+            }
             for s in f.specs.iter().filter(|s| wanted(s.motion) && form_has(v, s.motion)) {
                 if let Some((m, block)) = make(mset, v, bake, cache.as_deref_mut(), &requests, (s.motion, s.stands_for, s.request, s.kind), true, (false, 0), KH1_SLOTS + moves.len(), false)? {
                     moves.push(m);
@@ -3855,6 +3859,39 @@ unsafe fn redirect(p: &mut Placed) {
             }
         }
     }
+}
+
+/// KH1's ledge hang and climb requests (Steam, Checked (decomp)): the grab `0x1402C9FB0` sets state 15
+/// and asks 0xE, then 0xD queued (the hang); state 15's step `0x1402CA640` climbs through `0x1402CABA0`
+/// (state 19, 0x10, then 0x32 queued) or plays 0xF (state 16, then a fall: Assumption, the let-go);
+/// state 19's step `0x1402CAC60` goes to state 18 (`0x1402CB0B0`) with 0x32.
+const LEDGE_REQUESTS: [(usize, &str); 5] = [(0xE, "grab"), (0xD, "hang"), (0xF, "drop"), (0x10, "climb"), (0x32, "climb's end")];
+/// Anti Form's own hang and climb (main s273: "antiform has it's own unique ledge grab animation":
+/// its motions 7, looping, and 8). **Assumption**: `P_EX100_HTLF.mset` holds them (not staged).
+const ANTI_LEDGE_MOTIONS: [u16; 2] = [7, 8];
+
+/// Anti's ledge hang isn't a spec yet: a spec needs each request's KH1 slot (its `stands_for`, from
+/// Sora's request table, `xa_ex_0010.mset`), which isn't in the repo, and Anti's clips. This logs
+/// both (log only), so a spec can be written from the tester's log.
+fn anti_ledge_log(v: &pose::Src, requests: &[u32], has: &dyn Fn(&pose::Src, u16) -> bool) {
+    let reqs: Vec<String> = LEDGE_REQUESTS
+        .iter()
+        .map(|&(r, what)| match requests.get(r) {
+            Some(&e) if e & 0xFFF != 0xFFF => format!("{r:#x} {what}: slot {}, kind {}", e & 0xFFF, (e >> 12) & 7),
+            _ => format!("{r:#x} {what}: none"),
+        })
+        .collect();
+    let clips: Vec<String> = ANTI_LEDGE_MOTIONS
+        .iter()
+        .map(|&m| match v.character.moveset.clips.get(&m).filter(|_| has(v, m)) {
+            Some(c) => {
+                let (lo, hi) = c.root.iter().fold((f32::MAX, f32::MIN), |(lo, hi), r| (lo.min(r[1]), hi.max(r[1])));
+                format!("{m}: {} frames, root y {lo:.1}..{hi:.1}", c.length)
+            }
+            None => format!("{m}: none"),
+        })
+        .collect();
+    log!(Animation, "KH2 slots: Anti Form's ledge hang not built (needs its KH1 slots): KH1's requests {}; Anti's clips {}", reqs.join(", "), clips.join(", "));
 }
 
 /// KH2's row selection on KH1's own ground or air swing (`combomods::attack`, Base / Aerial
