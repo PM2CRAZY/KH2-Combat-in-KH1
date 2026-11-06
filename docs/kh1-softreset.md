@@ -101,6 +101,15 @@ that session, so no hook uses them; the watch only reads them).
   done or not, what it still waits on (the movie, the save, each job slot with the file KH1 is
   reading), the Loading line's flags, the bank list's count and the stream deletes pending", and,
   when the frame has stopped, "game thread at X <- Y <- ..." (its instruction and KH1's return
-  addresses, Steam). A stop in `0x1400DB470` / `0x1400DB7A0` / `0x1400DBAC0` settles the bank
+  addresses, Steam). tm35: a thread that can't be read says why ("ended (exit code ...)" or the
+  failed call and Windows' error); "KH1's game thread has ended" replaces "frame end hasn't run"
+  once its end reached our `DllMain`; and once per stuck stretch on the way back (pending or the
+  game thread ended) one line lists every thread of the process with KH1's code or ours on its
+  stack ("<id> at X <- Y ...", up to 8 return addresses, the game thread marked) and counts the
+  rest. `DllMain` adds "[exit] title watch: KH1's game thread has ended" and "[exit] title watch:
+  the game's process is ending" (written with nothing allocated and the log's lock only if free).
+  No "process is ending" line after the game thread's end means the old game never got to its
+  end (the thread list says what holds it); with it and still a loading screen, the new game
+  (`WaitTitleProject.exe`'s) is the one to look at. A stop in `0x1400DB470` / `0x1400DB7A0` / `0x1400DBAC0` settles the bank
   release; a job slot that never empties, a save flag that stays, or a stop elsewhere point at
   something else.

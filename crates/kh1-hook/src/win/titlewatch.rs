@@ -24,7 +24,10 @@
 //!   0 or more): which of KH1's waits is still false;
 //! - KH1's frame end hasn't run for 2 s (the game thread stuck in a call): where the game thread
 //!   is (its instruction and KH1's return addresses on its stack, Steam addresses, innermost
-//!   first) with the same state;
+//!   first) with the same state; a thread that can't be read says why (ended, with its exit code,
+//!   or Windows' error); and once per stretch, on the way back to the title (pending, or the game
+//!   thread ended), one line with every thread of the process that has KH1's code or ours on its
+//!   stack (where it is) and a count of the rest;
 //! - KH1 has drawn its Loading line for 5 s (it draws it while `0x1423404EC` or `0x1423404F4` is
 //!   1, `0x14017B190`, Checked (decomp)).
 //!
@@ -63,6 +66,28 @@ const LOADING_B: usize = 0x23404F4;
 const BANK_COUNT: usize = 0x4D65E8;
 const STREAM_DELETES: usize = 0x4D6608;
 
+#[link(name = "kernel32")]
+extern "system" {
+    fn GetLastError() -> u32;
+    fn GetExitCodeThread(thread: *mut c_void, code: *mut u32) -> i32;
+    fn CreateToolhelp32Snapshot(flags: u32, pid: u32) -> *mut c_void;
+    fn Thread32First(snap: *mut c_void, entry: *mut ThreadEntry) -> i32;
+    fn Thread32Next(snap: *mut c_void, entry: *mut ThreadEntry) -> i32;
+}
+
+/// Toolhelp's THREADENTRY32.
+#[repr(C)]
+#[derive(Default)]
+struct ThreadEntry {
+    size: u32,
+    usage: u32,
+    id: u32,
+    owner: u32,
+    base_pri: i32,
+    delta_pri: i32,
+    flags: u32,
+}
+
 static STARTED: AtomicBool = AtomicBool::new(false);
 static GAME_THREAD: AtomicU32 = AtomicU32::new(0);
 /// KH1's game thread has ended (its thread end reached our `DllMain`).
@@ -76,6 +101,9 @@ const MAX_PER_STRETCH: u32 = 90;
 /// The stack copied from the game thread when it's stuck.
 const STACK_COPY: usize = 16 * 1024;
 const DEPTH: usize = 16;
+/// The process's threads listed at most, and the return addresses shown for each.
+const MAX_THREADS: usize = 64;
+const THREAD_DEPTH: usize = 8;
 
 /// The watch thread (the debug tools only).
 pub unsafe fn start() {
@@ -187,12 +215,15 @@ unsafe fn state(base: usize) -> (bool, bool, String) {
     (pending, loading, line)
 }
 
-/// Where the game thread is: its instruction and the return addresses on its stack (KH1's as
-/// Steam addresses, ours as `ours+offset`). Nothing allocated while it is held.
-unsafe fn where_is(thread: *mut c_void, stack: &mut [u64], ctx: &mut Context, exe: &super::loadprof::Module, ours: &super::loadprof::Module) -> String {
+/// Where a thread is: its instruction and the return addresses on its stack (KH1's as Steam
+/// addresses, ours as `ours+offset`), `depth` of them at most. Nothing allocated while it is held.
+/// A thread that can't be read says why: ended (its exit code), or the call that failed and
+/// Windows' error.
+unsafe fn where_is(thread: *mut c_void, depth: usize, stack: &mut [u64], ctx: &mut Context, exe: &super::loadprof::Module, ours: &super::loadprof::Module) -> (String, bool) {
     std::ptr::write_unaligned(ctx.0.as_mut_ptr().add(0x30) as *mut u32, 0x10_0003);
     let mut copied = 0usize;
     let mut rip = 0u64;
+    let mut failed: Option<(&str, u32)> = None;
     if SuspendThread(thread) != u32::MAX {
         if GetThreadContext(thread, ctx.0.as_mut_ptr() as *mut c_void) != 0 {
             rip = std::ptr::read_unaligned(ctx.0.as_ptr().add(0xF8) as *const u64);
@@ -203,8 +234,19 @@ unsafe fn where_is(thread: *mut c_void, stack: &mut [u64], ctx: &mut Context, ex
                 copied = top.saturating_sub(rsp).min(stack.len() * 8) / 8;
                 std::ptr::copy_nonoverlapping(rsp as *const u64, stack.as_mut_ptr(), copied);
             }
+        } else {
+            failed = Some(("its registers not read", GetLastError()));
         }
         ResumeThread(thread);
+    } else {
+        failed = Some(("not suspended", GetLastError()));
+    }
+    if let Some((what, err)) = failed {
+        let mut code = 0u32;
+        if GetExitCodeThread(thread, &mut code) != 0 && code != 0x103 {
+            return (format!("ended (exit code {code:#x})"), true);
+        }
+        return (format!("not readable: {what} (error {err})"), true);
     }
     let at = |v: usize| {
         if exe.holds(v) {
@@ -216,16 +258,79 @@ unsafe fn where_is(thread: *mut c_void, stack: &mut [u64], ctx: &mut Context, ex
         }
     };
     let mut out = vec![format!("at {}", at(rip as usize))];
+    let mut game_code = exe.holds(rip as usize) || ours.holds(rip as usize);
     for &v in &stack[..copied] {
-        if out.len() > DEPTH {
+        if out.len() > depth {
             break;
         }
         let v = v as usize;
         if (exe.holds(v) && super::loadprof::after_call(exe, v)) || (ours.holds(v) && super::loadprof::after_call(ours, v)) {
             out.push(at(v));
+            game_code = true;
         }
     }
-    out.join(" <- ")
+    (out.join(" <- "), game_code)
+}
+
+/// Every thread of the game's process but this one (ids, KH1's game thread marked), from
+/// Windows' list; `MAX_THREADS` at most.
+unsafe fn threads(game: u32) -> Vec<u32> {
+    let mut out = Vec::with_capacity(MAX_THREADS);
+    let me = GetCurrentThreadId();
+    let pid = GetCurrentProcessId();
+    // (TH32CS_SNAPTHREAD 4.)
+    let snap = CreateToolhelp32Snapshot(4, 0);
+    if snap.is_null() || snap as isize == -1 {
+        return out;
+    }
+    let mut e = ThreadEntry { size: std::mem::size_of::<ThreadEntry>() as u32, ..Default::default() };
+    let mut more = Thread32First(snap, &mut e) != 0;
+    while more && out.len() < MAX_THREADS {
+        if e.owner == pid && e.id != me {
+            // (The game thread first.)
+            if e.id == game {
+                out.insert(0, e.id);
+            } else {
+                out.push(e.id);
+            }
+        }
+        e.size = std::mem::size_of::<ThreadEntry>() as u32;
+        more = Thread32Next(snap, &mut e) != 0;
+    }
+    CloseHandle(snap);
+    out
+}
+
+/// Where every thread of the process is (once per stuck stretch on KH1's way back to its title,
+/// the game's frame stopped): a line for each thread with KH1's code or ours on its stack (KH1's
+/// window thread, its render thread, a sound thread, or one of ours), a count for the rest (only
+/// in Windows' or a driver's code, a pool's idle wait say), so a process that hangs on its way out
+/// shows what holds it.
+unsafe fn every_thread(stack: &mut [u64], ctx: &mut Context, exe: &super::loadprof::Module, ours: &super::loadprof::Module) {
+    let game = GAME_THREAD.load(Ordering::Relaxed);
+    let ids = threads(game);
+    let total = ids.len();
+    let mut lines = Vec::new();
+    let mut others = 0usize;
+    for id in ids {
+        // (THREAD_SUSPEND_RESUME 0x2, THREAD_GET_CONTEXT 0x8, THREAD_QUERY_INFORMATION 0x40.)
+        let h = OpenThread(0x4A, 0, id);
+        let (place, game_code) = if h.is_null() { ("not opened".to_string(), true) } else { where_is(h, THREAD_DEPTH, stack, ctx, exe, ours) };
+        if !h.is_null() {
+            CloseHandle(h);
+        }
+        if game_code || id == game {
+            lines.push(format!("{id}{} {place}", if id == game { " (KH1's game thread)" } else { "" }));
+        } else {
+            others += 1;
+        }
+    }
+    log!(
+        Loading,
+        "title watch: the process's threads ({total}{}; {others} only in Windows' or a driver's code), innermost first: {}",
+        if total == MAX_THREADS { " or more" } else { "" },
+        lines.join(" | ")
+    );
 }
 
 unsafe extern "system" fn watch(_: *mut c_void) -> u32 {
@@ -241,6 +346,8 @@ unsafe extern "system" fn watch(_: *mut c_void) -> u32 {
     let mut stretch = 0u32;
     let mut since = 0u64;
     let mut loading_since = 0u64;
+    // (The process's threads listed this stuck stretch.)
+    let mut listed = false;
     loop {
         Sleep(1000);
         if !super::log_on(super::LogCat::Loading) || base == 0 || super::addr::Build::current() != super::addr::Build::Steam {
@@ -257,6 +364,7 @@ unsafe extern "system" fn watch(_: *mut c_void) -> u32 {
                 log!(Loading, "title watch: over after {:.0} s: {line}", now.saturating_sub(since) as f32 / 1000.0);
             }
             stretch = 0;
+            listed = false;
             continue;
         }
         if stretch == 0 {
@@ -272,7 +380,9 @@ unsafe extern "system" fn watch(_: *mut c_void) -> u32 {
             continue;
         }
         lines += 1;
-        let why = if stuck {
+        let why = if stuck && GAME_ENDED.load(Ordering::Relaxed) {
+            format!("KH1's game thread has ended ({:.1} s since its last frame end)", now.saturating_sub(last) as f32 / 1000.0)
+        } else if stuck {
             format!("KH1's frame end hasn't run for {:.1} s", now.saturating_sub(last) as f32 / 1000.0)
         } else if pending {
             "KH1's return to the title (or quit) is pending".to_string()
@@ -289,9 +399,13 @@ unsafe extern "system" fn watch(_: *mut c_void) -> u32 {
                 }
             }
             if !thread.is_null() {
-                place = format!("; game thread {}", where_is(thread, &mut stack, &mut ctx, &exe, &ours));
+                place = format!("; game thread {}", where_is(thread, DEPTH, &mut stack, &mut ctx, &exe, &ours).0);
             }
         }
         log!(Loading, "title watch ({:.0} s): {why}: {line}{place}", now.saturating_sub(since) as f32 / 1000.0);
+        if stuck && !listed && (pending || GAME_ENDED.load(Ordering::Relaxed)) {
+            listed = true;
+            every_thread(&mut stack, &mut ctx, &exe, &ours);
+        }
     }
 }
