@@ -10,8 +10,8 @@ use std::sync::{Mutex, OnceLock};
 const INI: &str = "kh1-kh2.ini";
 const DEFAULT_INI: &str = "; kh1-kh2 settings (read when the game starts, and again whenever this file is saved)\r\n\
 ;\r\n\
-; abilities: kh1 = KH1's vanilla progression, and every KH2 ability in KH1's Ability menu (normal\r\n\
-; play); remove = take the KH2 abilities back out of your save (load it, save once, then\r\n\
+; abilities: kh1 = KH1's vanilla progression, and each KH2 ability in KH1's Ability menu where\r\n\
+; the main branch gave it (normal play); remove = take the KH2 abilities back out of your save (load it, save once, then\r\n\
 ; uninstall); test = every KH2 movement ability at MAX; all = everything, every modifier\r\n\
 abilities = kh1\r\n\
 ; hurt: kh2 = Sora takes hits KH2's way (dodge-roll invulnerability, KH2 guard, KH2\r\n\

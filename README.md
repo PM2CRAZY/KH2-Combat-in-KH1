@@ -243,8 +243,16 @@ the secret code.
   Spiral, Upper Slash, Finishing Plus, Retaliating Slash, Aerial Dive, Magnet Burst, Flash Step,
   Aerial Sweep, Counterguard, Finishing Leap, Slapshot, Slide Dash, Explosion, Vicinity Break,
   Guard Break, Aerial Finish, and the support abilities Damage Drive, Form Boost, Damage Control
-  and Drive Converter. Sora has them from the start, off until you equip them. They use KH2's AP
-  out of Sora's AP.
+  and Drive Converter. They use KH2's AP out of Sora's AP, off until you equip them.
+- **Each KH2 ability is learned where the main branch gave it** (a "New Ability" box):
+  - By level: Aerial Recovery 4, Dodge Slash 10, Damage Drive 14, Horizontal Slash 16, Negative
+    Combo 20, Counterguard 22, Form Boost 24, Aerial Spiral 25, Slide Dash 30, Finishing Plus 34,
+    Drive Converter 35, Vicinity Break 36, Damage Control 38, Retaliating Slash 43, Finishing
+    Leap 48.
+  - By a boss: Flash Step and Upper Slash (Sabor), Aerial Dive (Cerberus), Aerial Finish (Jafar),
+    Guard Break (Pot Centipede), Magnet Burst (Captain Hook), Explosion (Dragon Maleficent).
+  - Aerial Sweep: Clayton or level 28, whichever comes first. Slapshot: with KH1's own Slapshot.
+  - A save from an earlier build that already has one too early loses it until its point comes.
 - **Quick Run and Aerial Dodge** are learned (each with a "New Ability" box, off until equipped):
   Quick Run at Sora's level 12, and Aerial Dodge once Genie Jafar is beaten.
 - **Bonus AP** (the main branch's rule): Sora's max AP grows by each KH2 ability's AP as he reaches
@@ -271,8 +279,6 @@ the secret code.
 - **Epic is newer than Steam here**: the Epic build has had less testing. Its log's first lines
   say which build was found.
 - **Not built yet:**
-  - Anti Form's look, HP orbs, effects and ledge hang. Anti also still has the Keyblade and its
-    trails.
   - Page Down to hide the HUD: not being built.
   - KH2's MP and MP Charge.
 - **Experimental and off by default for now:** Gummi Routes (skipping the Gummi Ship's flights,

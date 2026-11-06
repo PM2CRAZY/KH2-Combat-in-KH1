@@ -446,6 +446,82 @@ pub const BONUS_SCHEDULE: [(u8, Learned); 16] = [
     (ours::DRIVE_CONVERTER, Learned::Level(35)),
 ];
 
+/// (tm43) When main's player got each of KH2's modifiers that main showed on a KH1 ability (the
+/// owner, chat 2026-11-06: "make sure you get all the KH2 abilities where the main branch gets
+/// them"). Main gave those KH1 ids on its own schedule and held KH1's own copy back until then
+/// (main's `BOSS_GIFTS`, `LEVEL_GIFTS`, `held_back`; Checked (code): main's `growth.rs`); here they
+/// are KH2's own abilities (the split, testing s261), so KH2's comes at main's point and KH1's
+/// stays on KH1's schedule. Slapshot main left to KH1: KH2's comes with KH1's.
+pub enum Gift {
+    /// At main's level, or once main's boss is beaten (`BONUS_SCHEDULE`'s rules).
+    Main(Learned),
+    /// Whichever comes first: main gave Aerial Sweep for Clayton or at level 28.
+    LevelOrBoss(u8, BossGift),
+    /// Once Sora has KH1's own ability `id` (main left it on KH1's schedule).
+    WithKh1(u8),
+}
+
+const fn boss(boss: &'static str, world: usize, progress: u8, ability: u8) -> BossGift {
+    BossGift { boss, world, progress, ability }
+}
+
+/// Main's points for the split modifiers, by our ids (main's bosses' worlds and progress values:
+/// Assumption, main's story bytes as `BONUS_SCHEDULE`'s).
+pub const SPLIT_SCHEDULE: [(u8, Gift); 10] = [
+    (ours::FLASH_STEP, Gift::Main(Learned::Boss(boss("Sabor", 1, 0x42, ours::FLASH_STEP)))),
+    (ours::AERIAL_SWEEP, Gift::LevelOrBoss(28, boss("Clayton", 1, 0x56, ours::AERIAL_SWEEP))),
+    (ours::COUNTERGUARD, Gift::Main(Learned::Level(22))),
+    (ours::FINISHING_LEAP, Gift::Main(Learned::Level(48))),
+    (ours::SLAPSHOT, Gift::WithKh1(kh1::SLAPSHOT)),
+    (ours::SLIDE_DASH, Gift::Main(Learned::Level(30))),
+    (ours::EXPLOSION, Gift::Main(Learned::Boss(boss("Dragon Maleficent", 10, 0x6E, ours::EXPLOSION)))),
+    (ours::VICINITY_BREAK, Gift::Main(Learned::Level(36))),
+    (ours::GUARD_BREAK, Gift::Main(Learned::Boss(boss("Pot Centipede", 4, 0x35, ours::GUARD_BREAK)))),
+    (ours::AERIAL_FINISH, Gift::Main(Learned::Boss(boss("Jafar", 4, 0x49, ours::AERIAL_FINISH)))),
+];
+
+fn learned_by(l: &Learned, level: u8, progress: &[u8]) -> bool {
+    match l {
+        Learned::Level(at) => level >= *at,
+        Learned::Boss(g) => beaten(progress, g),
+    }
+}
+
+/// (tm43) Whether main's player has KH2 ability `id` by now: his `level`, the story `progress`
+/// and KH1's own list `kh1_list`. None for one main had no point for (the growth ones, which
+/// `GROWTH_RULE` gives, and KH2's own Glide, which the Glide style gives).
+pub fn main_has(id: u8, level: u8, progress: &[u8], kh1_list: &[u8]) -> Option<bool> {
+    if MAIN_GIVEN.contains(&id) || id == ours::GLIDE {
+        return None;
+    }
+    if let Some((_, l)) = BONUS_SCHEDULE.iter().find(|(i, _)| *i == id) {
+        return Some(learned_by(l, level, progress));
+    }
+    SPLIT_SCHEDULE.iter().find(|(i, _)| *i == id).map(|(_, g)| match g {
+        Gift::Main(l) => learned_by(l, level, progress),
+        Gift::LevelOrBoss(at, b) => level >= *at || beaten(progress, b),
+        Gift::WithKh1(k) => has(kh1_list, *k),
+    })
+}
+
+/// (tm43) What `id` waits for, for the log ("Sabor", "level 22", "Clayton or level 28", "KH1's
+/// Slapshot").
+pub fn main_point(id: u8) -> String {
+    let l = |l: &Learned| match l {
+        Learned::Level(at) => format!("level {at}"),
+        Learned::Boss(g) => g.boss.to_string(),
+    };
+    if let Some((_, x)) = BONUS_SCHEDULE.iter().find(|(i, _)| *i == id) {
+        return l(x);
+    }
+    match SPLIT_SCHEDULE.iter().find(|(i, _)| *i == id).map(|(_, g)| g) {
+        Some(Gift::Main(x)) => l(x),
+        Some(Gift::LevelOrBoss(at, b)) => format!("{} or level {at}", b.boss),
+        Some(Gift::WithKh1(k)) => format!("KH1's {}", name(*k)),
+        None => "nothing".into(),
+    }
+}
+
 /// The AP Sora gets on top of KH1's own (main's `bonus_ap`): each of main's KH2 abilities brings
 /// its own AP once main's player would have learned it (`BONUS_SCHEDULE`: his `level`, or its boss
 /// beaten by the story `progress`), so taking the KH2 abilities costs none of KH1's. No top (the
@@ -453,10 +529,7 @@ pub const BONUS_SCHEDULE: [(u8, Learned); 16] = [
 pub fn bonus_ap(level: u8, progress: &[u8]) -> u32 {
     BONUS_SCHEDULE
         .iter()
-        .filter(|(_, l)| match l {
-            Learned::Level(at) => level >= *at,
-            Learned::Boss(g) => beaten(progress, g),
-        })
+        .filter(|(_, l)| learned_by(l, level, progress))
         .filter_map(|(id, _)| MENU.iter().find(|ab| ab.id == *id))
         .map(|ab| ab.ap as u32)
         .sum()
@@ -1015,9 +1088,25 @@ impl Kh1Sora {
     /// (`growth_due`, the owner's decision in the bug-list thread).
     /// (Under main's rule, `GROWTH_RULE`, Quick Run and Aerial Dodge come by his level and Genie
     /// Jafar instead, through the same `growth_due`.)
+    /// (tm43, the owner: "make sure you get all the KH2 abilities where the main branch gets
+    /// them") Each only once main's player had it (`main_has`): his level, a boss, or KH1's own.
     pub fn grants(&self) -> Vec<MenuAbility> {
         let given = given_by(GROWTH_RULE);
-        MENU.iter().filter(|ab| ab.list == List::Kh2 && !given.contains(&ab.id) && !self.has_ours(ab.id)).copied().collect()
+        MENU.iter()
+            .filter(|ab| ab.list == List::Kh2 && !given.contains(&ab.id) && !self.has_ours(ab.id))
+            .filter(|ab| main_has(ab.id, self.level, &self.progress, &self.abilities) != Some(false))
+            .copied()
+            .collect()
+    }
+
+    /// (tm43) Ours he has that main's player wouldn't have yet (a save from the builds that gave
+    /// every KH2 ability at once, t718): taken out until main's point, as main held KH1's back.
+    pub fn kh2_early(&self) -> Vec<u8> {
+        MENU.iter()
+            .filter(|ab| ab.list == List::Kh2 && self.has_ours(ab.id))
+            .filter(|ab| main_has(ab.id, self.level, &self.progress, &self.abilities) == Some(false))
+            .map(|ab| ab.id)
+            .collect()
     }
 
     /// Base Sora's growth level for one of `FORM_GIVEN` from the Drive Forms' levels (0: none yet).
@@ -1613,15 +1702,42 @@ mod tests {
     /// Every KH2 ability of Sora's own list but the growth ones is his at once, whatever his
     /// level or story.
     #[test]
-    fn grants_are_every_kh2_ability() {
+    fn grants_follow_mains_points() {
         let all: Vec<u8> = MENU.iter().filter(|a| a.list == List::Kh2).map(|a| a.id).collect();
         assert_eq!(all.len(), 26);
-        let not_growth: Vec<u8> = all.iter().copied().filter(|id| !given_by(GROWTH_RULE).contains(id)).collect();
-        assert_eq!(sora(1, &[], &[]).grants().iter().map(|a| a.id).collect::<Vec<_>>(), not_growth);
-        // Already there (even unequipped): not again.
-        let g = sora(1, &[66 | 0x80, 68], &[]).grants();
-        assert!(!g.iter().any(|a| a.id == 66 || a.id == 68));
-        assert_eq!(g.len(), 23);
+        // Every KH2-list ability but the growth ones has a point of main's.
+        for id in all.iter().copied().filter(|id| !given_by(GROWTH_RULE).contains(id)) {
+            assert!(main_has(id, 1, &[], &[]).is_some(), "no point for {id}");
+        }
+        // Level 1, no story: nothing yet.
+        assert!(sora(1, &[], &[]).grants().is_empty());
+        // Level 99, every world done, KH1's Slapshot: all but the growth ones.
+        let done = [0xFFu8; 12];
+        let mut s = sora(99, &[kh1::SLAPSHOT], &[]);
+        s.progress = done.to_vec();
+        assert_eq!(s.grants().len(), 24);
+        // Main's points.
+        assert_eq!(main_has(ours::AERIAL_RECOVERY, 4, &[], &[]), Some(true));
+        assert_eq!(main_has(ours::AERIAL_RECOVERY, 3, &[], &[]), Some(false));
+        assert_eq!(main_has(ours::COUNTERGUARD, 22, &[], &[]), Some(true));
+        let mut sabor = [0u8; 12];
+        sabor[1] = 0x42;
+        assert_eq!(main_has(ours::FLASH_STEP, 1, &sabor, &[]), Some(true));
+        assert_eq!(main_has(ours::UPPER_SLASH, 1, &sabor, &[]), Some(true));
+        assert_eq!(main_has(ours::AERIAL_SWEEP, 28, &[], &[]), Some(true));
+        assert_eq!(main_has(ours::AERIAL_SWEEP, 27, &[], &[]), Some(false));
+        let mut clayton = [0u8; 12];
+        clayton[1] = 0x56;
+        assert_eq!(main_has(ours::AERIAL_SWEEP, 1, &clayton, &[]), Some(true));
+        assert_eq!(main_has(ours::SLAPSHOT, 50, &[], &[]), Some(false));
+        assert_eq!(main_has(ours::SLAPSHOT, 1, &[], &[kh1::SLAPSHOT | 0x80]), Some(true));
+        assert_eq!(main_has(ours::GLIDE, 1, &[], &[]), None);
+        // A save that has them all early: the early ones out.
+        let mut early = sora(10, &[], &[]);
+        early.kh2 = all.iter().map(|id| id | 0x80).chain(std::iter::repeat(0)).take(48).collect();
+        let out = early.kh2_early();
+        assert!(out.contains(&ours::EXPLOSION) && out.contains(&ours::FINISHING_PLUS));
+        assert!(!out.contains(&ours::AERIAL_RECOVERY) && !out.contains(&ours::DODGE_SLASH));
     }
 
     /// KH2's Drive support abilities (t953): one number in `equipped` a copy, none when off.
@@ -1651,7 +1767,9 @@ mod tests {
         assert!(after.kh2().equipped.contains(&kh2::AERIAL_FINISH) && after.kh2().equipped.contains(&kh2::HORIZONTAL_SLASH));
         assert!(after.has_ours(66) && !has(&after.abilities, 66));
         assert!(!after.grants().iter().any(|a| [66, 70, 87].contains(&a.id)));
-        assert_eq!(after.grants().len(), 22);
+        // (tm43) Only main's by level 40 with no story: 9 of main's own, Aerial Sweep, Counterguard,
+        // Slide Dash, Vicinity Break.
+        assert_eq!(after.grants().len(), 13);
         // Nothing more to move.
         let again = move_to_kh2_list(&after);
         assert!(again.lines.is_empty() && again.abilities == after.abilities && again.kh2 == after.kh2);

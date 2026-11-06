@@ -29,6 +29,8 @@ Logs worth turning on: General, Menus, Combat, Forms, Magic, Sound, Effects, Ani
 
 ## 2. Abilities, AP and growth
 
+- [ ] KH2 abilities come at main's points, each with a "New Ability" box: a new game has none of them; level 4 Aerial Recovery, 10 Dodge Slash, 22 Counterguard; Sabor Flash Step + Upper Slash; Clayton (or 28) Aerial Sweep; KH1's Slapshot brings KH2's. A save from tm42 or older loses the ones not due yet. (tm43)
+
 - [ ] Max AP grows by main's schedule: +2 at level 4, Dodge Slash at 10, Quick Run at 12, Damage Drive 14, ... and after Sabor (Upper Slash), Cerberus (Aerial Dive), Captain Hook (Magnet Burst), Genie Jafar (Aerial Dodge). No cap. (tm12)
 - [ ] Quick Run appears at level 12 and Aerial Dodge after Genie Jafar, off, with a "New Ability" box. (tm8)
 - [ ] Growth levels rise with Sora's level (Quick Run 12/20/32/45, High Jump 30/44/58, Aerial Dodge 30/42/54, Dodge Roll 19/37/60, Glide 40/52, MAX after Chernabog); each form's growth is one above, even unequipped. (tm8)
@@ -87,4 +89,4 @@ Logs worth turning on: General, Menus, Combat, Forms, Magic, Sound, Effects, Ani
 - The second Keyblade's shadow (needs the exe's bytes).
 - Form effects after a room change on testing's question (arrival pose or not).
 
-_Last updated: tm41._
+_Last updated: tm43._

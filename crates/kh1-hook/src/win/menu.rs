@@ -901,6 +901,16 @@ impl Growth {
                 // Sora's list when his level for it first reaches LV1 (an empty slot to LV1,
                 // `0x1403E8380`, Checked (decomp)). Before that he hasn't got it. On every read, so
                 // a loaded save gets what its level / story / forms give.
+                // (tm43) Ours main's player wouldn't have yet (a save from the builds that gave
+                // every KH2 ability at once): out until main's point (`growth::main_has`).
+                for id in now.kh2_early() {
+                    if super::debugmenu::ability_forced(id) == Some(true) {
+                        continue;
+                    }
+                    if self.take_ours(base, save, id, on_list) {
+                        log!(Menus, "{}: not learned yet (main's point: {}), taken out of {}", growth::name(id), growth::main_point(id), if on_list { "the KH2 list" } else { "Sora's list" });
+                    }
+                }
                 let main_rule = growth::GROWTH_RULE == growth::GrowthRule::Main;
                 let rule = if main_rule { "main's growth rule" } else { "KH2's growth rule" };
                 for id in now.growth_early() {
