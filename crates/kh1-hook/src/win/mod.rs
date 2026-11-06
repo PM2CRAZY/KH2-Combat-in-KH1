@@ -277,6 +277,20 @@ pub fn log_line(c: LogCat, line: &str) {
     trace::note_as(if c == LogCat::Kh1Sounds { trace::cat::SOUNDS } else { trace::cat::LOG }, line);
 }
 
+/// A fixed line written with nothing allocated and no lock waited on (the log's lock only if it is
+/// free): for `DllMain`'s thread and process ends, where the loader's lock is held and, at the
+/// process's end, every other thread was stopped wherever it was (`titlewatch::detach`).
+pub fn log_line_quiet(line: &[u8]) {
+    if let Ok(mut g) = LOG.try_lock() {
+        if let Some(f) = g.as_mut() {
+            let _ = f.write_all(b"[exit] ");
+            let _ = f.write_all(line);
+            let _ = f.write_all(b"\n");
+            let _ = f.flush();
+        }
+    }
+}
+
 /// `log!(Category, "format", args...)`: a line of that category (`LogCat`), formatted and written
 /// only while the category is on (`log_on`), so a category that is off costs one load.
 macro_rules! log {
@@ -391,7 +405,15 @@ unsafe extern "system" fn monitor(_: *mut c_void) -> u32 {
 }
 
 #[no_mangle]
-pub unsafe extern "system" fn DllMain(_inst: *mut c_void, reason: u32, _reserved: *mut c_void) -> i32 {
+pub unsafe extern "system" fn DllMain(_inst: *mut c_void, reason: u32, reserved: *mut c_void) -> i32 {
+    // (A thread's end (3) or the process's (0): the title watch's lines only, KH1's way back to
+    // its title being a restart of the game, `titlewatch::detach`.)
+    if reason == 0 || reason == 3 {
+        if IN_KH1.load(Ordering::Relaxed) {
+            titlewatch::detach(reason, !reserved.is_null());
+        }
+        return 1;
+    }
     if reason == 1 {
         let exe = exe_path();
         let kh1 = exe.rsplit('\\').next().is_some_and(|n| n.eq_ignore_ascii_case(KH1_EXE));

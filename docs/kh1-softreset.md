@@ -48,9 +48,31 @@ that session, so no hook uses them; the watch only reads them).
   (`0x1400DB470` / `0x1400DB7A0`) stopping the bank's sounds and sleeping 10 ms at a time until
   `0x14004D870 (handle, 0)` says the engine unloaded it. Then `0x14017EF70`, `0x140266530`,
   `0x1401E1490 (0)`, `0x14018C790`, the volume reset, `0x14018D1F0`, `0x14018BC90 (0)`;
-  `0x14233FBEC` = 0 and the frame returns 2 to the game's loop. Checked (decomp). What the loop
-  does with it (the game object's vtable `0x1403B1AE8`: reset
-  `0x140171410` at `+0x20`, shutdown `0x140170CA0`): Assumption; the reset sets mode 2 (the title).
+  `0x14233FBEC` = 0 and the frame returns 2 to the game's loop. Checked (decomp). (tm32 guessed
+  the loop then runs KH1's reset and the title: wrong, see "The way back is a restart" below.)
+- **The way back is a restart (tm35, the owner's tm34 log).** The owner's stuck return (from a
+  save point) was state **1**, not 2: "quit/return 1 (request -1)". State 1 comes from
+  `0x1422EC0B4` (set by `0x140170220`, called from the save menu's step `0x1402DFFE0` and from
+  `0x1401B5410`; which one is the save point's "return to title": Assumption) once the sound
+  `0x1400DEEE0 (2, 2, 0)` has stopped. After the same waits and teardown, state 1 calls
+  `0x1401B53D0` and `0x1400D9800 (1)`, which sets the game object's `+0x1298` to 1 (what
+  `Axa.AppInterface.IsReBoot` `0x140284250` reads), starts `WaitTitleProject.exe` from KH1's
+  folder (`ShellExecuteA`), sleeps 1 s and returns 1; the frame returns 2. The game thread's loop
+  (`0x140103460`, the thread `0x1401095A0` started by `0x1400FE770`'s `_beginthreadex`) calls the
+  game object's slot `+0x18` (`0x140171410`) only when the frame returns 1; on 2 it calls the
+  shutdown `0x140170CA0` (slot `+0x28`; the vtable's slots read as starting at `0x1403B1AF0`),
+  which returns 1, and the loop ends. The thread then jumps through `[0x140527F00]` (its target
+  isn't in the decomp: Assumption, the CRT's `exit` or the host's; the quit box kind 1 calls the
+  same) and `_endthreadex`. So on Steam KH1's way back to the title ends this game and
+  `WaitTitleProject.exe` brings up a new one; nothing in this process ever runs KH1's reset or
+  title. Checked (decomp), but for the jump's target. Our hooks: none sits on a function of that
+  path (the teardown, `0x1400D9800`, the shutdown and its callees; Checked (code: no hook address,
+  Steam or Epic-mapped, matches)); the owner's log shows the bank release finished (bank list 0).
+  The watch's "game thread at 0x0" at 2.8 s is what a read of an ended thread gives
+  (Assumption: Windows refuses to suspend or read a thread that has ended); so the game thread most likely wasn't stuck at all but
+  had ended, and the hang is after it: the old process not ending, or the new one not starting.
+  Assumption until the next log: tm35's lines say which (the game thread's end and the process's
+  end reaching our `DllMain`, and every thread's place, see below).
 - **That release runs only here.** `0x1400D2C70 (1)` has exactly four callers, `0x14016FFA0`,
   `0x140170230`, `0x140170300`, `0x140170D50`, and each runs it only on this quit / return path
   (after the same waits). Room and world changes never release the whole bank list. Checked

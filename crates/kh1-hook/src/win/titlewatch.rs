@@ -12,8 +12,11 @@
 //! (among it `0x1400D2C70 (1)` -> `0x1400DBAC0`, which releases every bank of KH1's bank list, each
 //! bank's destructor `0x1400DB470` / `0x1400DB7A0` sleeping 10 ms at a time on the game thread
 //! until KH1's sound engine lets the bank go), sets `0x14233FBEC` to 0 and returns 2 to the
-//! game's loop. Checked (decomp); what the loop does with that 2 isn't traced (Assumption: KH1's
-//! reset `0x140171410`, then the title from mode 2).
+//! game's loop. Checked (decomp). On the way the owner took (state 1, from a save point) the
+//! frame first starts `WaitTitleProject.exe` (`0x1400D9800 (1)`), and the 2 ends the game thread's
+//! loop (`0x140103460`: the shutdown `0x140170CA0`, then the thread ends): KH1's way back to its
+//! title is a restart of the game, not its reset (Checked (decomp); `docs/kh1-softreset.md`, "The
+//! way back is a restart"). `detach` logs the game thread's end and the process's end.
 //!
 //! Nothing here changes what KH1 does. Loaded with the debug tools only; a thread of ours looks
 //! once a second, and only while the Loading & Cache log is on writes a line when:
@@ -62,6 +65,8 @@ const STREAM_DELETES: usize = 0x4D6608;
 
 static STARTED: AtomicBool = AtomicBool::new(false);
 static GAME_THREAD: AtomicU32 = AtomicU32::new(0);
+/// KH1's game thread has ended (its thread end reached our `DllMain`).
+static GAME_ENDED: AtomicBool = AtomicBool::new(false);
 /// When KH1's frame end last ran (`frameadv::wall_ms`; 0: not yet).
 static LAST_END: AtomicU64 = AtomicU64::new(0);
 
@@ -89,6 +94,28 @@ pub fn frame_end() {
         GAME_THREAD.store(unsafe { GetCurrentThreadId() }, Ordering::Relaxed);
     }
     LAST_END.store(super::frameadv::wall_ms().max(1), Ordering::Relaxed);
+}
+
+/// Our `DllMain`'s thread end (3) and process end (0): KH1's game thread ending and the process
+/// ending are logged (Loading & Cache, the watch running), with nothing allocated and no lock
+/// waited on (`log_line_quiet`). On Steam KH1's way back to its title ends the game thread and
+/// starts `WaitTitleProject.exe` (`0x1400D9800`, `docs/kh1-softreset.md`): these lines tell how
+/// far the old game got.
+pub fn detach(reason: u32, process_ending: bool) {
+    if !STARTED.load(Ordering::Relaxed) || !super::log_on(super::LogCat::Loading) {
+        return;
+    }
+    if reason == 3 {
+        let id = GAME_THREAD.load(Ordering::Relaxed);
+        if id != 0 && id == unsafe { GetCurrentThreadId() } {
+            GAME_ENDED.store(true, Ordering::Relaxed);
+            super::log_line_quiet(b"title watch: KH1's game thread has ended (its thread end reached our DllMain)");
+        }
+    } else if process_ending {
+        super::log_line_quiet(b"title watch: the game's process is ending (DLL_PROCESS_DETACH reached our DllMain; every other thread already stopped)");
+    } else {
+        super::log_line_quiet(b"title watch: our DLL is being unloaded (DLL_PROCESS_DETACH, FreeLibrary)");
+    }
 }
 
 unsafe fn rd<T: Copy + Default>(at: usize) -> T {
