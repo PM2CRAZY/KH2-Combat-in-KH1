@@ -88,6 +88,35 @@ impl Matcher {
     }
 }
 
+/// KH1's button remap (Steam, in its pad step `0x14028B0B0` after slot 0's held word is built;
+/// Checked (decomp)): slot 0's held word in PS2 order (`raw`) to KH1's logical word. Each of the
+/// remap table's 19 `(mask, bit)` pairs (`0x140528290`, read from the running game) gives `bit`
+/// when every bit of `mask` is held; then Triangle `0x1000` gives `0x80000`, Square `0x8000`
+/// `0x100000`, and the confirm button `0x210001`, the cancel button `6`: Cross confirms and Circle
+/// cancels, swapped when KH1's settings block (`0x1404D8614`) `+0x1E` is not 0 (`0x1402F6AD0`).
+pub fn kh1_logical(raw: u32, table: &[(u32, u32)], swap: bool) -> u32 {
+    let mut v = table.iter().filter(|(m, _)| raw & m == *m).fold(0, |v, (_, b)| v | b);
+    if raw & 0x1000 != 0 {
+        v |= 0x8_0000;
+    }
+    if raw & 0x8000 != 0 {
+        v |= 0x10_0000;
+    }
+    let (confirm, cancel) = if swap { (0x2000, 0x4000) } else { (0x4000, 0x2000) };
+    if raw & confirm != 0 {
+        v |= 0x21_0001;
+    }
+    if raw & cancel != 0 {
+        v |= 6;
+    }
+    v
+}
+
+/// The logical bits only `button` gives with `raw` held (`kh1_logical` with and without it).
+pub fn logical_only(button: u32, raw: u32, table: &[(u32, u32)], swap: bool) -> u32 {
+    kh1_logical(raw | button, table, swap) & !kh1_logical(raw & !button, table, swap)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -151,6 +180,19 @@ mod tests {
         let ev = enter(&mut m, &c[4..], 10_000, 200);
         assert_eq!(ev, vec![Event::Broken { at: 4, gap: true }]);
         assert_ne!(m.at(), LEN);
+    }
+
+    #[test]
+    fn crosss_own_logical_bits() {
+        // (A made-up table: Cross alone gives 0x40, L1 + Cross 0x800, Up 0x1000.)
+        let t = [(0x4000, 0x40), (0x4400, 0x800), (0x10, 0x1000)];
+        assert_eq!(logical_only(0x4000, 0x10, &t, false), 0x21_0041);
+        assert_eq!(logical_only(0x4000, 0x400, &t, false), 0x21_0841);
+        // (Swapped: Cross cancels, Circle confirms.)
+        assert_eq!(logical_only(0x4000, 0, &t, true), 0x46);
+        assert_eq!(kh1_logical(0x2000, &t, true), 0x21_0001);
+        // (A bit Circle held gives too stays.)
+        assert_eq!(logical_only(0x4000, 0x2000, &[(0x4000, 6)], false), 0x21_0001);
     }
 
     #[test]

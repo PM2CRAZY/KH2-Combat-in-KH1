@@ -280,7 +280,8 @@ fn code_clock_ms() -> u64 {
 /// attack: Sora's attack slots 95..117 run 38..100 frames at 60 fps (slots 113 / 116, 100 frames,
 /// 1.67 s; Checked (files), `xa_ex_0010.mset`); the change is taken earlier, at the swing's combo
 /// window (`native_can_change`). A room change, an event, a knock-out or another form starting end
-/// the wait at once (`code_cancel`, `code_anti`).
+/// the wait at once (`code_cancel`, `code_anti`). (tm38: the completing Cross is kept from KH1,
+/// `pad_step`, so it starts no swing; the wait stays for a move already running when it came.)
 const CODE_WAIT_MS: u64 = 2000;
 
 /// KH1's buttons as pressed, for the secret code (the user: a button sequence, "in that exact
@@ -288,26 +289,27 @@ const CODE_WAIT_MS: u64 = 2000;
 /// owner: "The secret code gives Anti Form", main s272). Taken on the game thread (`native_frame`,
 /// `code_anti`). Every break of the code past its second press, and every way it isn't taken, is a
 /// Forms line.
-fn code_read(buttons: u16) {
+/// True when this read entered the code (its last press fresh in `buttons`).
+fn code_read(buttons: u16) -> bool {
     let now = code_clock_ms();
     if super::antiform::code_stale(now, CODE_WAIT_MS) {
         log!(Forms, "Anti Form (the secret code): not taken: waited {CODE_WAIT_MS} ms and {}", super::antiform::code_wait_why());
     }
-    let Ok(mut m) = CODE_STATE.try_lock() else { return };
+    let Ok(mut m) = CODE_STATE.try_lock() else { return false };
     match m.feed(buttons, now) {
         crate::secretcode::Event::Entered => {
             super::antiform::code_entered(now);
             log!(Forms, "Anti Form: the secret code entered");
+            return true;
         }
         crate::secretcode::Event::Broken { at, gap } => {
             log!(Forms, "Anti Form: the secret code broke after {at} of {} presses ({})", crate::secretcode::LEN, if gap { "more than 1.5 s between two presses" } else { "a press out of order" });
         }
         crate::secretcode::Event::None => {}
     }
+    false
 }
 
-/// The pad as pressed, every pad record KH1 reads (`probe::pad`), on builds other than Steam (Steam:
-/// `code_frame`).
 /// The waiting code ends now (`takeover`: an event starts, a room change), logged with `why`.
 pub fn code_cancel(why: &str) {
     if super::antiform::code_waiting() && super::antiform::code_clear() {
@@ -315,25 +317,112 @@ pub fn code_cancel(why: &str) {
     }
 }
 
+/// The pad as pressed, every pad record KH1 reads (`probe::pad`), on builds other than Steam (Steam:
+/// KH1's pad step, `pad_step`).
 pub fn pad(buttons: u16) {
     if super::addr::Build::current() != super::addr::Build::Steam {
         code_read(buttons);
     }
 }
 
-/// Steam: the secret code read from KH1's own merged pad word (`camera::RAW_HELD_STEAM`, slot 0's
-/// held word in PS2 order, built by KH1's pad step `0x14028B0B0` from its input object's `+0x18`:
-/// every pad, the word KH1's button remap reads; Checked (decomp)), once a physics frame of Sora's
-/// (`takeover::physics`). The pad records (`probe::pad`, `0x140112B30`) are only the pads' own
-/// readers (XInput `0x140113A40`, DirectInput `0x140113160`, `0x140111350`), never the keyboard
-/// (KH1's DirectInput keyboard is read by `0x140112080` / `0x1400DA9F0` as key bytes; Checked
-/// (decomp)). **Assumption**: KH1 merges the keyboard's keys into that word (as `camera::r2_held`
-/// takes R2 from it), not traced through `0x1400D7E80`.
-pub unsafe fn code_frame(base: usize) {
+// ---------------------------------------------------------------------------------------------
+// The secret code on Steam: read in KH1's pad step, its last Cross kept from KH1 (tm38)
+
+/// KH1's pad step (Steam `0x14028B0B0`, no arguments, called once a pass of the frame loop from
+/// `0x14018C790`, before anything of the frame reads the buttons; Checked (decomp)): `push rbp;
+/// sub rsp, 0x40` (6 bytes, whole instructions; the next one is rip-relative, not moved; Checked
+/// (exe), the lead's read).
+const PAD_STEP_STEAM: usize = 0x28B0B0;
+const PAD_STEP_BYTES: [u8; 6] = [0x40, 0x55, 0x48, 0x83, 0xEC, 0x40];
+static ORIG_PAD_STEP: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+static PAD_BASE: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+/// KH1's button records, each `+4` held, `+8` pressed, `+0xC` released, `+0x10` / `+0x14` the two
+/// repeats (`0x14028B430 (record, held)`: pressed = held now and not at the last step; Checked
+/// (decomp)). Slot 0's, in PS2 order (`camera::RAW_HELD_STEAM` is its `+4`; the slot index
+/// `0x14298CB10` is only ever set to 0), built from the input object's `+0x18`, where the pads and
+/// the keyboard's keys (`0x1400D7E80`, called at the end of `0x1400DA9F0`, which the pad step calls
+/// first) are already merged; then the logical record, remapped from slot 0's held word
+/// (`secretcode::kh1_logical`), which KH1's menus and its command step read.
+const SLOT0_STEAM: usize = 0x298C9B0;
+const LOGICAL_STEAM: usize = 0x298CA90;
+/// KH1's remap table (19 `(mask, bit)` pairs) and its settings block (`+0x1E`: the confirm swap).
+const REMAP_STEAM: usize = 0x528290;
+const SETTINGS_STEAM: usize = 0x4D8614;
+/// Cross in PS2 order: the code's last press, KH1's Attack and confirm.
+const CROSS: u32 = 0x4000;
+/// The code's last Cross is being kept from KH1 (until it is let go), and the logical bits taken
+/// off at the last step (put back as held before KH1's next step, so it sees no new press).
+static KEEP_CROSS: AtomicBool = AtomicBool::new(false);
+static KEPT_LOGICAL: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+/// Sora's physics frame count at the last pad step (`takeover::GAME_FRAME`): the code is read only
+/// when a physics frame of his ran since, as before (not in the pause or the menus).
+static CODE_PHYS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(u64::MAX);
+
+/// KH1's pad step wrapped (Steam only, its first bytes checked; always in: the secret code).
+pub unsafe fn install_code(base: usize) {
     if base == 0 || super::addr::Build::current() != super::addr::Build::Steam {
         return;
     }
-    code_read(rd::<u32>(base + super::camera::RAW_HELD_STEAM) as u16);
+    PAD_BASE.store(base, Ordering::Relaxed);
+    if super::hook::install(base + PAD_STEP_STEAM, &PAD_STEP_BYTES, pad_step as *const () as usize, &ORIG_PAD_STEP, "pad step (the secret code)").is_none() {
+        log!(Forms, "Anti Form: KH1's pad step isn't where expected: the secret code can't be entered");
+    }
+}
+
+unsafe fn wr32(p: usize, v: u32) {
+    std::ptr::write_unaligned(p as *mut u32, v)
+}
+
+/// Takes `bits` off a button record's held, pressed, released and repeat words (while held).
+unsafe fn strip(record: usize, bits: u32) {
+    for off in [4, 8, 0xC, 0x10, 0x14] {
+        wr32(record + off, rd::<u32>(record + off) & !bits);
+    }
+}
+
+/// KH1's pad step, then the secret code read from slot 0's held word it built (the pads and the
+/// keyboard: the word `camera::RAW_HELD_STEAM` reads), once per physics frame of Sora's; nothing
+/// else feeds the code on Steam. When a fresh Cross completes it (the owner, 2026-11-06: "Have anti
+/// for start before the swing"), that Cross is taken off KH1's slot-0 and logical records before
+/// anything of KH1's frame reads them (no attack, no confirm), and kept off until it is let go: the
+/// records' last held word gets it back before each step (KH1 sees no new press and its repeat
+/// timers run on), and comes out of every word after (held, pressed, released, repeats). Anti is
+/// asked for this frame (`code_entered`, taken by `code_anti` on Sora's physics frame; tm35's wait
+/// stays the fallback). Every other press, and Cross at any other time, is untouched.
+unsafe extern "system" fn pad_step() {
+    let f: unsafe extern "system" fn() = std::mem::transmute(ORIG_PAD_STEP.load(Ordering::Acquire));
+    let base = PAD_BASE.load(Ordering::Relaxed);
+    let keep = KEEP_CROSS.load(Ordering::Relaxed);
+    if keep {
+        let kept = KEPT_LOGICAL.load(Ordering::Relaxed);
+        wr32(base + SLOT0_STEAM + 4, rd::<u32>(base + SLOT0_STEAM + 4) | CROSS);
+        wr32(base + LOGICAL_STEAM + 4, rd::<u32>(base + LOGICAL_STEAM + 4) | kept);
+    }
+    f();
+    let raw = rd::<u32>(base + SLOT0_STEAM + 4);
+    let phys = super::takeover::GAME_FRAME.load(Ordering::Relaxed);
+    let entered = CODE_PHYS.swap(phys, Ordering::Relaxed) != phys && code_read(raw as u16);
+    if entered && raw & CROSS != 0 && rd::<u32>(base + SLOT0_STEAM + 8) & CROSS != 0 {
+        KEEP_CROSS.store(true, Ordering::Relaxed);
+        log!(Forms, "Anti Form: the code's last Cross kept from KH1");
+    } else if !keep {
+        return;
+    }
+    if raw & CROSS == 0 {
+        // (Let go: only this step's release of it comes out, then KH1 has Cross again.)
+        KEEP_CROSS.store(false, Ordering::Relaxed);
+        let kept = KEPT_LOGICAL.swap(0, Ordering::Relaxed);
+        wr32(base + SLOT0_STEAM + 0xC, rd::<u32>(base + SLOT0_STEAM + 0xC) & !CROSS);
+        wr32(base + LOGICAL_STEAM + 0xC, rd::<u32>(base + LOGICAL_STEAM + 0xC) & !kept);
+        log!(Forms, "Anti Form: the code's last Cross let go: KH1 sees Cross again");
+        return;
+    }
+    let table = std::ptr::read_unaligned((base + REMAP_STEAM) as *const [(u32, u32); 19]);
+    let swap = rd::<i16>(base + SETTINGS_STEAM + 0x1E) != 0;
+    let logical = crate::secretcode::logical_only(CROSS, raw, &table, swap);
+    KEPT_LOGICAL.store(logical, Ordering::Relaxed);
+    strip(base + SLOT0_STEAM, CROSS);
+    strip(base + LOGICAL_STEAM, logical);
 }
 
 pub fn busy() -> bool {

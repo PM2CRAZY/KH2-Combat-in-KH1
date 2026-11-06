@@ -285,8 +285,8 @@ unsafe extern "system" fn pad(src: usize, out: usize, cfg: usize) {
     super::cutsceneskip::pad();
     // In-game Scene Skip (`ingameskip`): the low-poly event scenes through KH1's own skip, two words read when on.
     super::ingameskip::pad();
-    // The secret code (Anti Form, `form::pad`; on Steam it reads KH1's merged pad word instead,
-    // `form::code_frame`, so this does nothing there).
+    // The secret code (Anti Form, `form::pad`; on Steam it is read in KH1's pad step instead,
+    // `form::pad_step`, so this does nothing there).
     super::form::pad(b_all);
     // L1 held: KH1's shortcuts (L1 + a face button cast the spells set there), so KH1 keeps
     // Circle and Square then (the user: the Square shortcut didn't cast).

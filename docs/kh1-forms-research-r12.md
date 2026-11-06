@@ -497,6 +497,39 @@ or with Anti's slots not built, it is refused and logged. The code itself is unc
   "asked for after n ms", or "not taken: waited 2000 ms and <why>". The last Cross still starts KH1's
   swing (no input eaten). Assumption: the swing's combo window, or its end, comes inside 2 s for every
   KH1 move Cross can start there (KH2 slots on KH1's requests may be longer; not checked in game).
+- **The code's last Cross is kept from KH1 (tm38; the owner, 2026-11-06: "Have anti for start before
+  the swing").** Where KH1 makes its presses, Checked (decomp): the pad step `0x14028B0B0` (no
+  arguments, once a pass of the frame loop from `0x14018C790`, before the frame's other work) first
+  calls `0x1400DA9F0`, which reads every pad into the input object's device words (`+0x18 + 0x44 * i`,
+  the active device moved to `+0x18`) and at its end calls the keyboard mapping `0x1400D7E80`, which ORs
+  the keys' pad bits into those same words (so the keyboard does reach `+0x18`: tm33's Assumption is now
+  Checked (decomp)). The step then builds slot 0's record `0x14298C9B0` from `+0x18` (OR the mouse /
+  stick bits of `0x14028B4F0`) with `0x14028B430 (record, held)`: `+4` held, `+8` pressed = held and not
+  held at the last step, `+0xC` released, `+0x10` / `+0x14` repeats (timers `+0x1C` / `+0x20`). The slot
+  index `0x14298CB10` is only ever set to 0. Then, unless `0x142867368 & 4`, the logical record
+  `0x14298CA90` (Epic `0x14298D4A0`), the same way, from slot 0's held word remapped: the 19 `(mask,
+  bit)` pairs at `0x140528290`, Triangle `0x1000` -> `0x80000`, Square `0x8000` -> `0x100000`, and
+  confirm -> `0x210001`, cancel -> `6`, where confirm is Cross and cancel Circle unless KH1's settings
+  block `0x1404D8614` `+0x1E` is set (`0x1402F6AD0`), which swaps them. The command step `0x1402937F0`
+  and the menus read the logical record; many menus read slot 0's. After the step `0x14018C790` copies
+  the records to a backup at `0x1423407B0`.
+- So the code is now read there, once: `form::pad_step` wraps the pad step (first bytes `40 55 48 83 EC
+  40`, push rbp / sub rsp: whole instructions, the next one rip-relative and not moved), runs KH1's step,
+  then feeds the matcher slot 0's held word (`0x14298C9B4`, the same word tm33 read from Sora's physics
+  frame, which no longer reads it), only when a physics frame of Sora's ran since the last step (so
+  never in the pause or the full-screen menus). If that read enters the code and KH1's record has Cross
+  freshly pressed, Cross comes out of slot 0's record and the logical bits only Cross gives (the remap
+  above with the table and the swap read from the running game, `secretcode::logical_only`, tested) come
+  out of the logical record, held / pressed / released / repeats, before anything of KH1's frame reads
+  them: no attack, no confirm. While Cross stays held, before each later step the records' last held
+  word gets Cross (and those bits) back, so KH1's step sees no new press and its repeat timers aren't
+  reset, and after it they come out again; on the step where Cross is let go only the release comes
+  out, and KH1 has Cross again from the next press. Anti is asked for on that frame (`code_entered`;
+  `code_anti` runs on Sora's physics frame later in it); tm35's 2 s wait stays as the fallback (a move
+  already running when the code came). Forms log: "the code's last Cross kept from KH1" and "... let
+  go: KH1 sees Cross again". Only that Cross; nothing when the code isn't complete. Assumption: the
+  table holds no pair that needs Cross plus another button which matters here (each such pair is
+  removed too, as only Cross gives it). Not checked in game.
 
 **3. No summons in Anti** (the owner's port spec, inventory row 14 / main s272: "Magic, Reflect, items,
 summons ... are all refused, with "can't", and greyed"):

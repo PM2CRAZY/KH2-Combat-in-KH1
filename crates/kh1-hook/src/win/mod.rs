@@ -505,6 +505,8 @@ pub unsafe extern "system" fn DllMain(_inst: *mut c_void, reason: u32, reserved:
         driveparty::install(base);
         // (Anti Form: no Keyblade, KH1's weapon out wrapped.)
         antiform::install(base);
+        // (The secret code read in KH1's pad step, its last Cross kept from KH1.)
+        form::install_code(base);
         chest::install();
         model::install();
         gates::install();
