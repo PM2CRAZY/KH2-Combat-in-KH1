@@ -120,9 +120,10 @@ const KH2_BAR_MIDDLE: f32 = 13.5;
 /// can move the drive gauge a little left, so that curve at the top of the drive gauge starts right
 /// after the blue bar") `NUDGE` 16 → −4 across: the top edge's rise about 30 px further left in his
 /// screenshot, so it ends at the ring's outer edge instead of under it. Assumption (files: his
-/// screenshots, about 1.5 px a KH1 HUD unit).
+/// screenshots, about 1.5 px a KH1 HUD unit). (tm42, the owner: "now the gauge is way off, move it
+/// right", his mock-up 29 px right of tm40's place) `NUDGE` −4 → 16 across, tm39's place again.
 const SIZE: f32 = 1.125;
-const NUDGE: [f32; 2] = [-4.0, -0.6];
+const NUDGE: [f32; 2] = [16.0, -0.6];
 
 static ORIGINAL: AtomicUsize = AtomicUsize::new(0);
 static BASE: AtomicUsize = AtomicUsize::new(0);
