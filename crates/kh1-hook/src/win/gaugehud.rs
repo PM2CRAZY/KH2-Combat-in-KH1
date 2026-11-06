@@ -115,9 +115,13 @@ const KH2_BAR_MIDDLE: f32 = 13.5;
 /// part of sora's inner circle") The gauge 1.125 × main's size, the centre moved by `NUDGE` KH1 HUD
 /// units (right, up). Assumption (files: the owner's before / after screenshots, about 1.46 px a KH1
 /// HUD unit from Sora's portrait): the bar's fill 16 → 18 px tall, its bottom edge down 5 px onto the
-/// HP bar's outline, the number kept where it was.
+/// HP bar's outline, the number kept where it was. (tm40, the owner: "this is the right size. If you
+/// can move the drive gauge a little left, so that curve at the top of the drive gauge starts right
+/// after the blue bar") `NUDGE` 16 → −4 across: the top edge's rise about 30 px further left in his
+/// screenshot, so it ends at the ring's outer edge instead of under it. Assumption (files: his
+/// screenshots, about 1.5 px a KH1 HUD unit).
 const SIZE: f32 = 1.125;
-const NUDGE: [f32; 2] = [16.0, -0.6];
+const NUDGE: [f32; 2] = [-4.0, -0.6];
 
 static ORIGINAL: AtomicUsize = AtomicUsize::new(0);
 static BASE: AtomicUsize = AtomicUsize::new(0);
