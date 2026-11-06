@@ -41,10 +41,11 @@ Logs worth turning on: General, Menus, Combat, Forms, Magic, Sound, Effects, Ani
 - [ ] Limit Form: L1 shows its limits; your shortcuts come back after the form, a save in the form keeps your own. (t1080)
 - [ ] The Coliseum: win a round in a form with Donald and Goofy (no soft lock), next rounds, a cup end. (t1091)
 - [ ] The second Keyblade has no shadow (known, not fixed: needs the exe).
+- [ ] The Drive gauge: its bottom edge sits on the HP bar's outline and its right end on the flat part of Sora's portrait ring, at 16:9 and other resolutions; the number, MAX and the in-form bar line up. (tm39)
 
 ## 4. Anti Form
 
-- [ ] The secret code (Up Up Down Down Left Right Left Right, then B and A on Xbox / Circle and Cross on PS; pad and keyboard; with a slip in the middle) with 3+ bars (and Donald and Goofy with Party Required on) starts Anti; if not, the Forms log says why. (tm11, tm33)
+- [ ] The secret code (Up Up Down Down Left Right Left Right, then B and A on Xbox / Circle and Cross on PS; pad and keyboard; with a slip in the middle) with 3+ bars (and Donald and Goofy with Party Required on) starts Anti, standing, running and mid-combo, with no swing from the last A; A attacks normally after; if not, the Forms log says why. (tm11, tm33, tm35, tm38)
 - [ ] Rules KH2: needs 3 bars, takes 9, Revert greyed in battle; Balance: free, no Revert. (tm10)
 - [ ] ×1.5 damage taken; no magic, items or summons (greyed); no talk / examine / open. (tm10, tm14, tm17)
 - [ ] Square: Anti Glide on the ground, Side Spin mid-combo. (tm10)
@@ -84,4 +85,4 @@ Logs worth turning on: General, Menus, Combat, Forms, Magic, Sound, Effects, Ani
 - The second Keyblade's shadow (needs the exe's bytes).
 - Form effects after a room change on testing's question (arrival pose or not).
 
-_Last updated: tm34._
+_Last updated: tm39._

@@ -110,6 +110,14 @@ const ANGLE_PER_POINT: f32 = 0.004_014_257_3;
 /// KH1 HUD units per KH2 unit (main s322, the owner's measured size) and the place's terms.
 const KH2_UNIT: f32 = 384.0 / 448.0 * 1.34;
 const KH2_BAR_MIDDLE: f32 = 13.5;
+/// (tm39, the owner: "increase the size of the drive gauge just slightly so that the bottom part of
+/// the gauge is flush with the HP bar ... move it to the right a little so it's flush with the flat
+/// part of sora's inner circle") The gauge 1.125 × main's size, the centre moved by `NUDGE` KH1 HUD
+/// units (right, up). Assumption (files: the owner's before / after screenshots, about 1.46 px a KH1
+/// HUD unit from Sora's portrait): the bar's fill 16 → 18 px tall, its bottom edge down 5 px onto the
+/// HP bar's outline, the number kept where it was.
+const SIZE: f32 = 1.125;
+const NUDGE: [f32; 2] = [16.0, -0.6];
 
 static ORIGINAL: AtomicUsize = AtomicUsize::new(0);
 static BASE: AtomicUsize = AtomicUsize::new(0);
@@ -251,13 +259,13 @@ fn centre() -> Option<(f32, f32, f32)> {
     let g = LAYOUT.lock().ok()?;
     let l = g.as_ref()?;
     let p = l.portrait?;
-    let k = KH2_UNIT;
+    let k = KH2_UNIT * SIZE;
     let below = 0.3 * (p[2] - p[0]) as f32 / 2.0 + 1.3;
     let cy = match l.label.iter().max_by_key(|x| (x.1[2] - x.1[0]) * (x.1[3] - x.1[1])) {
-        Some((_, r, _)) => (r[1] + r[3]) as f32 / 2.0 - KH2_BAR_MIDDLE * k + below,
+        Some((_, r, _)) => (r[1] + r[3]) as f32 / 2.0 - KH2_BAR_MIDDLE * KH2_UNIT + below,
         None => (p[1] + p[3]) as f32 / 2.0 + below,
     };
-    Some(((p[0] + p[2]) as f32 / 2.0 + 6.0, cy, k))
+    Some(((p[0] + p[2]) as f32 / 2.0 + 6.0 + NUDGE[0], cy + NUDGE[1], k))
 }
 
 // ------------------------------------------------------------------------------- KH2's pieces
