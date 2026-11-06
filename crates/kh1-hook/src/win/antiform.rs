@@ -96,11 +96,20 @@ pub unsafe fn pay_gauge() -> bool {
     }
     super::drivegauge::pay_all(crate::drivegauge::cost(crate::formlevel::form::ANTI), needs())
 }
-/// The secret code was entered (`form::code_read`): taken on the form's next frame
-/// (`form::native_frame`). The code clock's time it came, + 1 (0: none waiting).
+/// The secret code was entered (`form::code_read`): it waits, as a Drive request that waits, until
+/// KH1 lets Sora change (`form::code_anti`, on the form's frames, `form::native_frame`). The code
+/// clock's time it came, + 1 (0: none waiting).
 static CODE: AtomicU64 = AtomicU64::new(0);
+/// Why the code waits now (`form::code_anti`): 0 the form's frame hasn't run since (KH1's states
+/// didn't have base Sora: a script, another body), 1 KH1's move has him and he can't change yet,
+/// 2 KH1's own states don't have base Sora this frame. Logged once per code (`WAIT_LOGGED`) and
+/// when the wait runs out.
+static WAIT_WHY: AtomicU8 = AtomicU8::new(0);
+static WAIT_LOGGED: AtomicBool = AtomicBool::new(false);
 
 pub fn code_entered(now_ms: u64) {
+    WAIT_WHY.store(0, Ordering::Relaxed);
+    WAIT_LOGGED.store(false, Ordering::Relaxed);
     CODE.store(now_ms + 1, Ordering::Relaxed);
 }
 
@@ -108,11 +117,33 @@ pub fn code_waiting() -> bool {
     CODE.load(Ordering::Relaxed) != 0
 }
 
-pub fn take_code() -> bool {
+/// How long the waiting code has waited (None: none waiting).
+pub fn code_age(now_ms: u64) -> Option<u64> {
+    let at = CODE.load(Ordering::Relaxed);
+    (at != 0).then(|| (now_ms + 1).saturating_sub(at))
+}
+
+/// The waiting code ended (taken, refused or cancelled): true if one was waiting.
+pub fn code_clear() -> bool {
     CODE.swap(0, Ordering::Relaxed) != 0
 }
 
-/// The code waited longer than `wait_ms` without the form's frame taking it: dropped (true once).
+/// The code waits this frame for `why` (1 or 2, `WAIT_WHY`): true the first time for this code (to log it).
+pub fn code_wait(why: u8) -> bool {
+    WAIT_WHY.store(why, Ordering::Relaxed);
+    !WAIT_LOGGED.swap(true, Ordering::Relaxed)
+}
+
+/// Why the code was waiting, in words (`WAIT_WHY`).
+pub fn code_wait_why() -> &'static str {
+    match WAIT_WHY.load(Ordering::Relaxed) {
+        1 => "KH1's move had him and never let him change",
+        2 => "KH1's own states didn't have base Sora",
+        _ => "KH1's states didn't have base Sora (a script moving him, another body, or KH2's files not loaded)",
+    }
+}
+
+/// The code waited longer than `wait_ms` without KH1 letting him change: dropped (true once).
 pub fn code_stale(now_ms: u64, wait_ms: u64) -> bool {
     let at = CODE.load(Ordering::Relaxed);
     at != 0 && now_ms + 1 > at + wait_ms && CODE.compare_exchange(at, 0, Ordering::Relaxed, Ordering::Relaxed).is_ok()

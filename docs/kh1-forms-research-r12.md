@@ -482,6 +482,21 @@ or with Anti's slots not built, it is refused and logged. The code itself is unc
   Drive off, kh1_slots off, not Steam, slots not built, KH1's states not having Sora, a partner down or
   missing with Party Required, Drive gauge n of 3 bars, MP, KH1 not letting him change this frame),
   and "the secret code broke after n of 10 presses (gap / out of order)" once it was 2+ presses in.
+- **The code waits like a Drive request (the owner, tm34: "antiform still doesnt start").** His log showed
+  "the secret code entered" and, the same frame, "not taken: KH1's move has him and he can't change now
+  (no queue)", twice. The code's last press is Cross, which is also KH1's Attack, so KH1 starts a swing
+  on the frame the code completes and the can-change test fails at once. Now the entered code waits:
+  each form's frame (`form::native_frame`) runs `form::code_anti`, which refuses at once only for what
+  waiting can't change (in a form or a change under way, i.e. another form started; Drive off; slots
+  not built; Sora down; a partner missing; not enough bars / MP), and otherwise waits while KH1's states
+  don't have him or `native_can_change` (the Drive list's test: KH1's can-act or its combo window) is
+  false. Anti is asked for on the first frame KH1 lets him change. The wait lasts up to 2 s: Sora's KH1
+  attack slots 95..117 run 38..100 frames at 60 fps (the longest, slots 113 / 116, 1.67 s; Checked
+  (files), `xa_ex_0010.mset`), and the combo window usually opens much sooner. An event starting or a
+  room change ends the wait at once (`form::code_cancel` from `takeover`). Logged: "waiting: <why>" once,
+  "asked for after n ms", or "not taken: waited 2000 ms and <why>". The last Cross still starts KH1's
+  swing (no input eaten). Assumption: the swing's combo window, or its end, comes inside 2 s for every
+  KH1 move Cross can start there (KH2 slots on KH1's requests may be longer; not checked in game).
 
 **3. No summons in Anti** (the owner's port spec, inventory row 14 / main s272: "Magic, Reflect, items,
 summons ... are all refused, with "can't", and greyed"):

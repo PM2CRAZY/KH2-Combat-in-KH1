@@ -1074,6 +1074,7 @@ unsafe fn room_watch(actor: usize, kh2: bool) {
     if seen.as_ref().is_none_or(|s| s.world != world || s.room != room) {
         // (t1059: the partners a form took, taken at once in the new room.)
         super::driveparty::room_entered(world, room, seen.as_ref().map(|s| (s.world, s.room)));
+        super::form::code_cancel("a room change");
         log!(Takeover,
             "room: world {world:#x} room {room:#x} entered; {} (KH1 state {}, flags {:08x}, script {})",
             if kh2 { "KH2 has Sora".to_string() } else { format!("KH1 has Sora ({})", LAST_WHY.try_lock().map(|w| w.clone()).unwrap_or_default()) },
@@ -1501,6 +1502,8 @@ unsafe fn takeover(actor: usize) -> bool {
     }
     if rd::<u32>(base + EVENT_RVA) != 0 {
         SCRIPTED.store(false, Ordering::Relaxed);
+        // (The secret code waiting for KH1 to let him change ends here, `form::code_cancel`.)
+        super::form::code_cancel("an event started");
         release("an event runs");
         return false;
     }

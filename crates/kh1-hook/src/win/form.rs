@@ -273,9 +273,15 @@ fn code_clock_ms() -> u64 {
     START.get_or_init(std::time::Instant::now).elapsed().as_millis() as u64
 }
 
-/// How long the code entered waits for the form's frame (`native_frame`, `code_anti`) before it is
-/// dropped with a log, so it never starts Anti later, somewhere else (the code's own gap).
-const CODE_WAIT_MS: u64 = crate::secretcode::GAP_MS;
+/// How long the code entered waits for KH1 to let Sora change (`code_anti`, on the form's frames,
+/// `native_frame`) before it is dropped with a log, so it never starts Anti much later. The code's
+/// last press is Cross, KH1's Attack too, so KH1 usually starts a swing on the frame the code
+/// completes (the owner's tm34 log: refused at once, "no queue"). Long enough to outlast KH1's longest
+/// attack: Sora's attack slots 95..117 run 38..100 frames at 60 fps (slots 113 / 116, 100 frames,
+/// 1.67 s; Checked (files), `xa_ex_0010.mset`); the change is taken earlier, at the swing's combo
+/// window (`native_can_change`). A room change, an event, a knock-out or another form starting end
+/// the wait at once (`code_cancel`, `code_anti`).
+const CODE_WAIT_MS: u64 = 2000;
 
 /// KH1's buttons as pressed, for the secret code (the user: a button sequence, "in that exact
 /// sequence, put them into final form"; since the main-branch port's row 14 it gives Anti Form, the
@@ -285,7 +291,7 @@ const CODE_WAIT_MS: u64 = crate::secretcode::GAP_MS;
 fn code_read(buttons: u16) {
     let now = code_clock_ms();
     if super::antiform::code_stale(now, CODE_WAIT_MS) {
-        log!(Forms, "Anti Form (the secret code): not taken: KH1's own states didn't have base Sora within {CODE_WAIT_MS} ms (an event or a script moving him, KH1's own move, another body, or KH2's files not loaded)");
+        log!(Forms, "Anti Form (the secret code): not taken: waited {CODE_WAIT_MS} ms and {}", super::antiform::code_wait_why());
     }
     let Ok(mut m) = CODE_STATE.try_lock() else { return };
     match m.feed(buttons, now) {
@@ -302,6 +308,13 @@ fn code_read(buttons: u16) {
 
 /// The pad as pressed, every pad record KH1 reads (`probe::pad`), on builds other than Steam (Steam:
 /// `code_frame`).
+/// The waiting code ends now (`takeover`: an event starts, a room change), logged with `why`.
+pub fn code_cancel(why: &str) {
+    if super::antiform::code_waiting() && super::antiform::code_clear() {
+        log!(Forms, "Anti Form (the secret code): not taken: {why} while it waited for KH1 to let him change");
+    }
+}
+
 pub fn pad(buttons: u16) {
     if super::addr::Build::current() != super::addr::Build::Steam {
         code_read(buttons);
@@ -929,11 +942,17 @@ pub fn native_running() -> bool {
 }
 
 /// The secret code entered (`code_read`): Anti Form asked for as the Drive list asks for a form
-/// (`choose`: KH1 letting him change on this frame, no queue; its cost by `antiform`'s rules), with
-/// its partners as KH2's Anti needs them (`0x140400740(6)`, Drive > Party Required). Every refusal is
-/// a Forms line naming its reason.
+/// (`choose`; its cost by `antiform`'s rules), with its partners as KH2's Anti needs them
+/// (`0x140400740(6)`, Drive > Party Required). Called on each form's frame while the code waits: what
+/// waiting can't change refuses at once; while KH1's move has him and he can't change
+/// (`native_can_change`, the Drive list's test) it waits, and is asked for on the first frame KH1
+/// lets him, within `CODE_WAIT_MS` (`code_read` drops it then). Every refusal is a Forms line naming
+/// its reason; the wait is logged once, and the take with how long it waited.
 unsafe fn code_anti(actor: usize) {
-    let no = |why: &str| log!(Forms, "Anti Form (the secret code): not taken: {why}");
+    let no = |why: &str| {
+        super::antiform::code_clear();
+        log!(Forms, "Anti Form (the secret code): not taken: {why}")
+    };
     if in_form() {
         return no(&format!("already in {} Form", current().map_or("a", |k| k.name())));
     }
@@ -953,8 +972,8 @@ unsafe fn code_anti(actor: usize) {
     if !super::kh2slots::form_built(Kind::Anti) {
         return no("Anti's slots didn't build (P_EX100_HTLF's motions: see the slot load's lines)");
     }
-    if !super::shared::active() {
-        return no("KH1's own states don't have base Sora this frame");
+    if hp(actor) <= 0 {
+        return no("Sora is down");
     }
     let form = super::formown::form_id(Kind::Anti);
     if !super::driveparty::ok(form) {
@@ -964,9 +983,28 @@ unsafe fn code_anti(actor: usize) {
         };
         return no(why);
     }
+    if let Err(e) = can_pay(actor, Kind::Anti) {
+        return no(&e);
+    }
+    // (Waits: what KH1 lets go of by itself.)
+    let wait = if !super::shared::active() {
+        Some((2, "KH1's own states don't have base Sora this frame"))
+    } else if !native_can_change(actor) {
+        Some((1, "KH1's move has him and he can't change yet"))
+    } else {
+        None
+    };
+    if let Some((why, words)) = wait {
+        if super::antiform::code_wait(why) {
+            log!(Forms, "Anti Form (the secret code): waiting: {words} (up to {CODE_WAIT_MS} ms)");
+        }
+        return;
+    }
+    let waited = super::antiform::code_age(code_clock_ms()).unwrap_or(0);
+    super::antiform::code_clear();
     match choose(actor, Kind::Anti) {
-        Ok(_) => log!(Forms, "Anti Form (the secret code): asked for ({} rules, Form Cost {})", if super::antiform::balance() { "Balance" } else { "KH2" }, if gauge_cost() { "Drive Gauge" } else { "MP" }),
-        Err(e) => no(&e),
+        Ok(_) => log!(Forms, "Anti Form (the secret code): asked for after {waited} ms ({} rules, Form Cost {})", if super::antiform::balance() { "Balance" } else { "KH2" }, if gauge_cost() { "Drive Gauge" } else { "MP" }),
+        Err(e) => log!(Forms, "Anti Form (the secret code): not taken: {e}"),
     }
 }
 
@@ -1041,7 +1079,7 @@ unsafe fn ask_own_then(actor: usize, motion: u16, then: Option<u16>, air: bool) 
 /// The form's frame on KH1's own states (`takeover::form_native_frame`, each physics frame of
 /// Sora's while KH1's states have him: `steps` 60 Hz frames of it, `battle` KH1's battle flag).
 pub unsafe fn native_frame(kh2: &pose::Kh2, actor: usize, battle: bool, steps: u32) {
-    if super::antiform::take_code() {
+    if super::antiform::code_waiting() {
         code_anti(actor);
     }
     if !NATIVE.load(Ordering::Relaxed) {
