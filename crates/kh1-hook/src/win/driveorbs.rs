@@ -38,10 +38,11 @@
 //!   scale. Until it is ready, or if it can't be made, the gold MP orbs above stay.
 //! - Only with Drive on (the ini's `drive`) and on Steam.
 
+use super::addr::St;
 use super::log;
 use std::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize, Ordering};
 
-const TABLE_RVA: usize = 0x528BE0;
+const TABLE_RVA: St = St(0x528BE0);
 const ROW: usize = 0x14;
 const KH1_TYPES: usize = 7;
 pub const SMALL: u16 = 7;
@@ -55,29 +56,29 @@ const TYPES: usize = 9;
 /// The reads of the row table: (site, kind, the field): kind 0 `movss xmm, [r14 + r*4 + disp32]`
 /// (disp at +6, the base-relative field), 1 `mov r32, [r14 + r*4 + disp32]` (disp at +4), 2 `lea r64,
 /// [rip + disp32]` (disp at +3, 7 long). Checked (exe).
-const SITES: [(usize, u8, usize); 6] = [(0x2AC0F3, 0, 0x0), (0x2AC3A7, 0, 0x4), (0x2AC474, 1, 0x10), (0x2AC49B, 1, 0x8), (0x2AC50D, 2, 0), (0x2AC86D, 2, 0)];
+const SITES: [(St, u8, usize); 6] = [(St(0x2AC0F3), 0, 0x0), (St(0x2AC3A7), 0, 0x4), (St(0x2AC474), 1, 0x10), (St(0x2AC49B), 1, 0x8), (St(0x2AC50D), 2, 0), (St(0x2AC86D), 2, 0)];
 
-const DRAW_RVA: usize = 0x340D10;
+const DRAW_RVA: St = St(0x340D10);
 const DRAW_BYTES: [u8; 12] = [0x48, 0x89, 0x5C, 0x24, 0x20, 0x55, 0x56, 0x57, 0x41, 0x55, 0x41, 0x56];
-const DROP_RVA: usize = 0x2ABC40;
+const DROP_RVA: St = St(0x2ABC40);
 const DROP_BYTES: [u8; 9] = [0x48, 0x8B, 0xC4, 0x48, 0x89, 0x48, 0x08, 0x41, 0x54];
-const PICKUP_RVA: usize = 0x2AC080;
+const PICKUP_RVA: St = St(0x2AC080);
 const PICKUP_BYTES: [u8; 10] = [0x48, 0x8B, 0xC4, 0x48, 0x89, 0x58, 0x18, 0x55, 0x56, 0x57];
-const MAKE_RVA: usize = 0x2AB2A0;
+const MAKE_RVA: St = St(0x2AB2A0);
 const MAKE_BYTES: [u8; 10] = [0x48, 0x89, 0x6C, 0x24, 0x10, 0x48, 0x89, 0x74, 0x24, 0x18];
 /// KH1's prizes off and its count factor (read by its drop, `0x1402ABC40`).
-const PRIZES_OFF_RVA: usize = 0x2D60FAC;
-const COUNT_FACTOR_RVA: usize = 0x2D60FA4;
+const PRIZES_OFF_RVA: St = St(0x2D60FAC);
+const COUNT_FACTOR_RVA: St = St(0x2D60FA4);
 
 /// KH2's Drive orb gold over MP's orb colour's brightest channel (main s318).
 const GOLD: [f32; 3] = [1.0, 0.66, 0.12];
 /// KH1's prize file's buffer, the call in `0x1402AE760` that makes the prize effect from it and the
 /// effect make it calls (Checked (decomp) and (exe)).
-const PRIZE_DPX_RVA: usize = 0x2DAB4B0;
-const CREATE_CALL_RVA: usize = 0x2AE77B;
-const EFFECT_MAKE_RVA: usize = 0x1E0100;
+const PRIZE_DPX_RVA: St = St(0x2DAB4B0);
+const CREATE_CALL_RVA: St = St(0x2AE77B);
+const EFFECT_MAKE_RVA: St = St(0x1E0100);
 /// KH1's DPX relocation (`0x1401E0080`, what `0x1402AE790` runs on its prize file).
-const RELOCATE_RVA: usize = 0x1E0080;
+const RELOCATE_RVA: St = St(0x1E0080);
 const RELOCATE_BYTES: [u8; 11] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x74, 0x24, 0x10, 0x57];
 
 /// The art, once built or loaded (on its thread).
@@ -118,7 +119,7 @@ fn note(line: impl FnOnce() -> String) {
 }
 
 pub unsafe fn install(base: usize) {
-    if !super::settings::get().drive || super::addr::Build::current() != super::addr::Build::Steam {
+    if !super::settings::get().drive || super::addr::Build::current() == super::addr::Build::Unknown {
         return;
     }
     BASE.store(base, Ordering::Relaxed);

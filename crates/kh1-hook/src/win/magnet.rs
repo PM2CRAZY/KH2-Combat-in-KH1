@@ -49,6 +49,7 @@
 //! `npc`); (4 a) an enemy caught in an air-class-2 state of KH1's (`0x1402B1AE0`: the states KH1
 //! never launches, its fliers; Assumption that those are KH2's 0xF enemies) goes back into that state.
 
+use super::addr::St;
 use super::addr::{Build, Rva};
 use super::{log, takeover};
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU8, Ordering};
@@ -75,15 +76,15 @@ const QUEUE_MOTION_RVA: Rva = Rva(0x29D8A0);
 const BONE_POINT_RVA: Rva = Rva(0x29C990);
 /// KH1's fall from rest `(actor, time to apex)`: state 2 with KH1's arc from where it is (Steam
 /// `0x1402AF8F0`), its first bytes `push rbx; sub rsp, 0x20; movss [rcx+0x3B8], xmm1` (Checked (exe)).
-const FALL_STEAM: usize = 0x2AF8F0;
+const FALL_STEAM: St = St(0x2AF8F0);
 const FALL_BYTES: [u8; 10] = [0x40, 0x53, 0x48, 0x83, 0xEC, 0x20, 0xF3, 0x0F, 0x11, 0x89];
 /// KH1's "under physics" test (Steam `0x140292010`): the physics step runs the state table only
 /// for these (Checked (decomp + exe)).
-const PHYSICS_STEAM: usize = 0x292010;
+const PHYSICS_STEAM: St = St(0x292010);
 const PHYSICS_BYTES: [u8; 10] = [0x40, 0x53, 0x48, 0x83, 0xEC, 0x20, 0x48, 0x8B, 0xD9, 0x8B];
 /// KH1's facing set `(actor, angle)` (Steam `0x140297E10`; leaves a held facing, `+0x374` bit
 /// `0x1000`), Checked (decomp + exe).
-const FACE_STEAM: usize = 0x297E10;
+const FACE_STEAM: St = St(0x297E10);
 const FACE_BYTES: [u8; 10] = [0x40, 0x53, 0x48, 0x83, 0xEC, 0x30, 0xF7, 0x81, 0x74, 0x03];
 /// KH1's body centre point (`0x14029EB20`'s 0x8003: the first body part's centre).
 const BODY_POINT: u32 = 0x8003;
@@ -154,14 +155,14 @@ fn note(s: impl FnOnce() -> String) {
 
 /// Steam, and KH1's functions we call have their known first bytes.
 unsafe fn ready(base: usize) -> bool {
-    if Build::current() != Build::Steam || base == 0 {
+    if Build::current() == Build::Unknown || base == 0 {
         return false;
     }
     match CHECKED.load(Ordering::Relaxed) {
         1 => true,
         2 => false,
         _ => {
-            let same = |at: usize, b: &[u8]| std::slice::from_raw_parts((base + at) as *const u8, b.len()) == b;
+            let same = |at: St, b: &[u8]| std::slice::from_raw_parts((base + at) as *const u8, b.len()) == b;
             let ok = same(FALL_STEAM, &FALL_BYTES) && same(PHYSICS_STEAM, &PHYSICS_BYTES) && same(FACE_STEAM, &FACE_BYTES);
             CHECKED.store(if ok { 1 } else { 2 }, Ordering::Relaxed);
             if !ok {

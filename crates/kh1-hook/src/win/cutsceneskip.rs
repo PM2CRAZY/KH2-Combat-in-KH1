@@ -30,6 +30,7 @@
 //! sets its own fade, Assumption: minor), that the key tells scenes apart in every room, and that the
 //! order counter restarts when a room is entered again after a game over (Assumption).
 
+use super::addr::St;
 use super::addr::Build;
 use super::log;
 use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU32, AtomicU8, AtomicUsize, Ordering};
@@ -50,18 +51,19 @@ static NTH: AtomicU32 = AtomicU32::new(0);
 
 /// Steam: the second scene flag word (bit 0 = a skippable cutscene), the flag byte the pause menu sets
 /// and the script step consumes, the room (scene triple) and the event file number (Checked (decomp)).
-const FLAGS2_STEAM: usize = 0x2382594;
-const SKIP_FLAG_STEAM: usize = 0x232DF89;
-const ROOM_STEAM: [usize; 3] = [0x233FE84, 0x233FE8C, 0x233FE90];
-const EVENT_FILE_STEAM: usize = 0x2382524;
+const FLAGS2_STEAM: St = St(0x2382594);
+const SKIP_FLAG_STEAM: St = St(0x232DF89);
+const ROOM_STEAM: [St; 3] = [St(0x233FE84), St(0x233FE8C), St(0x233FE90)];
+const EVENT_FILE_STEAM: St = St(0x2382524);
 /// KH1's skip (`sub rsp, 0x28; cmp dword [..], 0; je +5; call ..`), checked before use.
-const SKIP_FN_STEAM: usize = 0x1A22B0;
+const SKIP_FN_STEAM: St = St(0x1A22B0);
 const SKIP_FN_BYTES: [u8; 18] = [0x48, 0x83, 0xEC, 0x28, 0x83, 0x3D, 0x15, 0xE6, 0x19, 0x02, 0x00, 0x74, 0x05, 0xE8, 0xFE, 0x9F, 0xFE, 0xFF];
+const SKIP_FN_BYTES_EPIC: [u8; 18] = [0x48, 0x83, 0xEC, 0x28, 0x83, 0x3D, 0x45, 0x10, 0x1A, 0x02, 0x00, 0x74, 0x05, 0xE8, 0x1E, 0xA0, 0xFE, 0xFF];
 /// The script step's own read and clear of the flag byte (`cmp [rip+x], r12b` / `mov [rip+x], r12b`),
 /// whose targets must be the flag byte used here.
-const STEP_READ_STEAM: usize = 0x1A2871;
+const STEP_READ_STEAM: St = St(0x1A2871);
 const STEP_READ_BYTES: [u8; 3] = [0x44, 0x38, 0x25];
-const STEP_CLEAR_STEAM: usize = 0x1A287A;
+const STEP_CLEAR_STEAM: St = St(0x1A287A);
 const STEP_CLEAR_BYTES: [u8; 3] = [0x44, 0x88, 0x25];
 
 /// The scenes already watched: (room 3 numbers, event file, order in the room).
@@ -134,13 +136,13 @@ unsafe fn verify() {
     if CHECKED.swap(true, Ordering::Relaxed) {
         return;
     }
-    if Build::current() != Build::Steam {
+    if Build::current() == Build::Unknown {
         log!(Menus, "Cutscene Skip: Steam only (the addresses are the Steam build's)");
         return;
     }
     let base = super::sys::GetModuleHandleA(std::ptr::null()) as usize;
-    let at = |rva: usize, n: usize| std::slice::from_raw_parts((base + rva) as *const u8, n);
-    if at(SKIP_FN_STEAM, SKIP_FN_BYTES.len()) != SKIP_FN_BYTES {
+    let at = |rva: St, n: usize| std::slice::from_raw_parts((base + rva) as *const u8, n);
+    if at(SKIP_FN_STEAM, SKIP_FN_BYTES.len()) != *super::addr::pick(&SKIP_FN_BYTES, &SKIP_FN_BYTES_EPIC) {
         log!(Menus, "Cutscene Skip: unexpected bytes at KH1's skip {:02x?}, not used", at(SKIP_FN_STEAM, SKIP_FN_BYTES.len()));
         return;
     }
@@ -150,8 +152,8 @@ unsafe fn verify() {
             return;
         }
         let rel = rd::<i32>(base + site + 3);
-        let target = (site + 7).wrapping_add(rel as isize as usize);
-        if target != SKIP_FLAG_STEAM {
+        let target = (site.get() + 7).wrapping_add(rel as isize as usize);
+        if target != SKIP_FLAG_STEAM.get() {
             log!(Menus, "Cutscene Skip: the script step's {what} is at {target:#x}, not where expected, not used");
             return;
         }

@@ -9,6 +9,7 @@
 //! `0x1402CD5E0`). A partner "can act" while his HP is above 0 (Assumption: KH2's `0x1403C38F0`, which
 //! greys the form, is its KO test). Read when the Drive list is built (`drive::usable`), nothing per frame.
 
+use super::addr::St;
 use super::log;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU8, Ordering};
 
@@ -95,17 +96,17 @@ pub unsafe fn ok(form: u8) -> bool {
 // over), so a cutscene later in the room still brings them back. The Coliseum's rounds are event entries in
 // the same room (`ingameskip`, Checked (files) at t764), so a won round's scene is never inside a window.
 
-const PARTY_RVA: usize = 0x2D37280;
-const SCENE_RVA: usize = 0x2382594;
-const PUSH_RVA: usize = 0x292180;
+const PARTY_RVA: St = St(0x2D37280);
+const SCENE_RVA: St = St(0x2382594);
+const PUSH_RVA: St = St(0x292180);
 const PUSH_BYTES: [u8; 7] = [0x4C, 0x63, 0x81, 0x88, 0x03, 0x00, 0x00];
-const POP_RVA: usize = 0x292160;
+const POP_RVA: St = St(0x292160);
 const POP_BYTES: [u8; 7] = [0x48, 0x63, 0x91, 0x88, 0x03, 0x00, 0x00];
-const FADE_RVA: usize = 0x2A0F40;
+const FADE_RVA: St = St(0x2A0F40);
 const FADE_BYTES: [u8; 6] = [0x0F, 0x57, 0xC0, 0x0F, 0x2F, 0xD0];
-const HUD_FADE_RVA: usize = 0x268E30;
+const HUD_FADE_RVA: St = St(0x268E30);
 const HUD_FADE_BYTES: [u8; 3] = [0x48, 0x63, 0xC1];
-const HUD_SLOT_RVA: usize = 0x285030;
+const HUD_SLOT_RVA: St = St(0x285030);
 const HUD_SLOT_BYTES: [u8; 3] = [0x4C, 0x8B, 0x0D];
 /// The actor's data handle and in it the member id; the flag stack's depth (KH1 keeps 3).
 const ACTOR_DATA: usize = 0x130;
@@ -360,9 +361,9 @@ pub unsafe fn arrival_frame() {
 // doesn't end in a scene. Per frame: nothing outside KH1's motion waits; in one, a word read and a
 // compare with the two partner actors.
 
-const EVENT_TABLE_STEAM: usize = 0x4FA870;
+const EVENT_TABLE_STEAM: St = St(0x4FA870);
 const FN_WAIT_MOTION: usize = 103;
-const WAIT_MOTION_STEAM: usize = 0x1A96F0;
+const WAIT_MOTION_STEAM: St = St(0x1A96F0);
 /// A script context's actor (`ctx + 8`, what event function 103 tests; Checked (decomp), `chest.rs`).
 const CTX_ACTOR: usize = 8;
 /// After the last wait on a partner, 60 Hz frames before the form may take them again (with Sora
@@ -380,7 +381,7 @@ static SORA_WAIT_LOGGED: AtomicBool = AtomicBool::new(false);
 /// Steam only: entry 103 of KH1's event function table pointed at `wait_motion_fn`, if it holds KH1's
 /// function 103 where this exe has it.
 pub unsafe fn install(base: usize) {
-    if super::addr::Build::current() != super::addr::Build::Steam {
+    if super::addr::Build::current() == super::addr::Build::Unknown {
         return;
     }
     let at = base + EVENT_TABLE_STEAM + FN_WAIT_MOTION * 8;
@@ -456,8 +457,8 @@ fn script_waits() -> bool {
 // it, row 11; a battle's end doesn't revert, row 6); here only the cup's start: into an arena room from
 // the gates or the lobby in a form, the form ends with its bars refilled and the partners back.
 
-const WORLD_RVA: usize = 0x233FE84;
-const ROOM_RVA: usize = 0x233FE8C;
+const WORLD_RVA: St = St(0x233FE84);
+const ROOM_RVA: St = St(0x233FE8C);
 const COLISEUM: u32 = 0xB;
 const FIRST_ARENA_ROOM: u32 = 2;
 
@@ -509,7 +510,7 @@ pub fn scene() -> bool {
 // left as KH1 has it. The second Keyblade follows Sora's bit (`leftblade::put_away`, t1061).
 // Per frame: one load of `KEYBLADE_DUE` in the form's frame; the rest only once a room.
 
-const WEAPON_OUT_RVA: usize = 0x2A2E30;
+const WEAPON_OUT_RVA: St = St(0x2A2E30);
 /// `mov [rsp+8], rbx; push rdi; sub rsp, 0x20; mov rbx, rcx; mov edi, edx` (Checked (exe)).
 const WEAPON_OUT_BYTES: [u8; 15] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x57, 0x48, 0x83, 0xEC, 0x20, 0x48, 0x8B, 0xD9, 0x8B, 0xFA];
 const WEAPON_OUT_BIT: u32 = 0x4000;

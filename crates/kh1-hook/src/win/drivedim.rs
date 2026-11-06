@@ -29,36 +29,37 @@
 //! - The dim: twice a change (start, end). The blur: a few writes on the form's own frame
 //!   (`form::native_frame`) while it waits or fades. Only with Drive on and on Steam.
 
+use super::addr::St;
 use super::log;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicU8, AtomicUsize, Ordering};
 use std::sync::Mutex;
 
 use crate::drivedim as rules;
 
-const NEW_LIGHT_RVA: usize = 0x29D880;
+const NEW_LIGHT_RVA: St = St(0x29D880);
 const NEW_LIGHT_BYTES: [u8; 6] = [0x40, 0x53, 0x48, 0x83, 0xEC, 0x20];
-const FADE_RVA: usize = 0x29E0D0;
+const FADE_RVA: St = St(0x29E0D0);
 const FADE_BYTES: [u8; 10] = [0x48, 0x89, 0x6C, 0x24, 0x10, 0x48, 0x89, 0x74, 0x24, 0x18];
-const FREE_RVA: usize = 0x29DC20;
+const FREE_RVA: St = St(0x29DC20);
 const FREE_BYTES: [u8; 7] = [0xC7, 0x01, 0x00, 0x00, 0x00, 0x00, 0xC3];
 const LIGHT_AMBIENT: i32 = 1;
 const LIGHT_FREED_ON_ROOM: i32 = 8;
 /// Our light's id ("K2").
 const OUR_ID: i32 = 0x4B32;
 
-const FOG_RVA: usize = 0x233FE50;
-const FOG_FADE_RVA: usize = 0x2382A50;
-const SCENE_FLAGS_RVA: usize = 0x2382594;
+const FOG_RVA: St = St(0x233FE50);
+const FOG_FADE_RVA: St = St(0x2382A50);
+const SCENE_FLAGS_RVA: St = St(0x2382594);
 const FOG_FADE_ON: u32 = 2;
-const BLUR_MODE_RVA: usize = 0x233FBE8;
-const BLUR_COLOUR_RVA: usize = 0x233FDE0;
-const BLUR_SPIN_RVA: usize = 0x233FDF8;
-const BLUR_SPIN_FRAMES_RVA: usize = 0x233FDFC;
-const BLUR_OFFSET_RVA: usize = 0x233FE00;
+const BLUR_MODE_RVA: St = St(0x233FBE8);
+const BLUR_COLOUR_RVA: St = St(0x233FDE0);
+const BLUR_SPIN_RVA: St = St(0x233FDF8);
+const BLUR_SPIN_FRAMES_RVA: St = St(0x233FDFC);
+const BLUR_OFFSET_RVA: St = St(0x233FE00);
 /// KH1's blur mode that draws the frame back once (4 also draws a plain copy first).
 const BLUR_ON: i32 = 1;
-const WORLD_RVA: usize = 0x233FE84;
-const ROOM_RVA: usize = 0x233FE8C;
+const WORLD_RVA: St = St(0x233FE84);
+const ROOM_RVA: St = St(0x233FE8C);
 
 #[repr(C, align(16))]
 struct Colour([f32; 4]);
@@ -84,7 +85,7 @@ unsafe fn wr<T: Copy>(p: usize, v: T) {
 }
 
 fn on() -> bool {
-    super::settings::get().drive && super::addr::Build::current() == super::addr::Build::Steam
+    super::settings::get().drive && super::addr::Build::current() != super::addr::Build::Unknown
 }
 
 unsafe fn calls_ok(base: usize) -> bool {

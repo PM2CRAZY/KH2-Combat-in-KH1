@@ -18,6 +18,7 @@
 //!   KH2's own formula with Sora's max MP in place of KH2's Magic stat, which KH1 doesn't have
 //!   (t867; KH1's own magic adds max MP, Checked (decomp), `heal`).
 
+use super::addr::St;
 use super::reflect::{flip, world_now, KhWorld, SORA};
 use super::{combat, log, pose};
 use character_core::Output;
@@ -107,7 +108,7 @@ pub fn anim_kh2(spell: u8) -> bool {
 pub const KH1_CAST_FRAME: [f32; 7] = [28.0, 28.0, 30.0, 36.0, 28.0, 28.0, 30.0];
 
 /// KH1's frame scale (Steam `0x14233FBDC`: 1.0 a frame at 60 fps, 2.0 at 30; `frameadv`).
-const FRAME_SCALE_STEAM: usize = 0x233FBDC;
+const FRAME_SCALE_STEAM: St = St(0x233FBDC);
 
 pub(super) unsafe fn frame_scale() -> f32 {
     let s: f32 = rd(super::sys::GetModuleHandleA(std::ptr::null()) as usize + FRAME_SCALE_STEAM);
@@ -518,7 +519,7 @@ pub fn busy() -> bool {
 /// `0x1402B2DC0`) and pays its MP (syscall 47, `0x1402A5B60` with the attack data's `+0x30`).
 /// `docs/kh1-magic-native.md`. Its prologue: `mov [rsp+8], rbx; mov [rsp+10h], rsi; push rdi;
 /// sub rsp, 40h`.
-const SPELL_START_STEAM: usize = 0x28F140;
+const SPELL_START_STEAM: St = St(0x28F140);
 const SPELL_START_PROLOGUE: [u8; 15] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x74, 0x24, 0x10, 0x57, 0x48, 0x83, 0xEC, 0x40];
 static ORIG_SPELL_START: AtomicUsize = AtomicUsize::new(0);
 static NATIVE_HOOKED: AtomicBool = AtomicBool::new(false);
@@ -532,7 +533,7 @@ const FIRE_SECOND: [(u32, u32); 2] = [(0x36, 0x3D), (0x83, 0x8A)];
 
 /// The hook (Steam only: the address is Steam's).
 pub unsafe fn install() {
-    if super::addr::Build::current() != super::addr::Build::Steam {
+    if super::addr::Build::current() == super::addr::Build::Unknown {
         return;
     }
     let base = super::sys::GetModuleHandleA(std::ptr::null()) as usize;
@@ -554,10 +555,10 @@ pub unsafe fn install() {
 /// KH1's frame scale `0x14233FBDC` into its one argument, `movss xmm0, [rip+..]; movss [rcx],
 /// xmm0; ret`, Checked (exe)); the process the script machine is running (`0x142DB7B48`, set by
 /// `0x1402BCEC0` / `0x1402BD540` around each run of `0x1402CC620`, Checked (decomp)).
-const SCRIPT_CALLS_STEAM: usize = 0x529180;
+const SCRIPT_CALLS_STEAM: St = St(0x529180);
 const SCRIPT_CALL_SIZE: usize = 0x10;
-const SCRIPT_STEP_STEAM: usize = 0x2B98E0;
-const SCRIPT_RUNNING_STEAM: usize = 0x2DB7B48;
+const SCRIPT_STEP_STEAM: St = St(0x2B98E0);
+const SCRIPT_RUNNING_STEAM: St = St(0x2DB7B48);
 
 /// A KH1 spell cast on KH2's cast animation (the tester, m20, "vice versa"): its script process,
 /// its clock's rate (KH1's cast frame over KH2's), the 60 Hz frames run, the frames it runs for
@@ -1337,7 +1338,7 @@ pub(super) fn place(pos: Vec3, dir: Vec3) -> Mat4 {
 /// KH1's own HP add (Steam `0x1402A4920 (actor, amount)`, Checked (decomp): the stats block
 /// `+0x6C`'s HP `+0x3C` raised up to its max `+0x40`, KH1's own heal modifier for its status
 /// applied, the party's HUD copy updated), and its first bytes (Checked (exe)).
-const ADD_HP_STEAM: usize = 0x2A4920;
+const ADD_HP_STEAM: St = St(0x2A4920);
 const ADD_HP_BYTES: [u8; 8] = [0x48, 0x89, 0x74, 0x24, 0x10, 0x48, 0x89, 0x7C];
 
 /// A party member (Sora, Donald, Goofy: their stats blocks are laid out alike, Checked (decomp):
@@ -1366,7 +1367,7 @@ unsafe fn heal(actor: usize, caster: usize, kind: u8, power: u16) -> Option<(i32
     };
     let add = add.clamp(1, i32::MAX as i64) as i32;
     let at = super::takeover::game_base() + ADD_HP_STEAM;
-    if super::addr::Build::current() == super::addr::Build::Steam && std::slice::from_raw_parts(at as *const u8, 8) == ADD_HP_BYTES {
+    if super::addr::Build::current() != super::addr::Build::Unknown && std::slice::from_raw_parts(at as *const u8, 8) == ADD_HP_BYTES {
         let f: unsafe extern "system" fn(usize, i32) -> u32 = std::mem::transmute(at);
         f(actor, add);
     } else {

@@ -21,6 +21,7 @@
 //!   for) arrives at `combat::command` as magic, argument `0x10 + form`, and comes to `chosen`.
 //! KH1 rebuilds all of it each frame, so the other page is KH1's own again as soon as it flips.
 
+use super::addr::St;
 use super::addr::{Build, Rva};
 use super::{hook, log};
 use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU32, AtomicUsize, Ordering};
@@ -575,8 +576,8 @@ const TITLE_DY: i32 = 0;
 /// text draw `0x1402D2050` centres and right-aligns with; it returns its 1/16 sum `>> 4`, Checked
 /// (decomp)) and the font height it is given (Steam `[0x14054534C]`, 0x12 in some languages, its
 /// start value (14) Assumption (main's note; no exe here)). Steam only (plain Steam RVAs).
-const TEXT_WIDTH_STEAM: usize = 0x2D0E10;
-const FONT_H_STEAM: usize = 0x54534C;
+const TEXT_WIDTH_STEAM: St = St(0x2D0E10);
+const FONT_H_STEAM: St = St(0x54534C);
 /// The row count the title was last logged for.
 static TITLE_LOGGED_ROWS: AtomicI32 = AtomicI32::new(-1);
 static TITLE_TEXT: OnceLock<usize> = OnceLock::new();
@@ -674,7 +675,7 @@ unsafe extern "system" fn list_draw(kind: i32, menu: usize, a3: i32, a4: i32, la
     // languages 0 and 7 (`[0x1421AAF18] + 0x274`), so its middle at y + 7; in those two the top is
     // y itself, the middle y + 7 with the 14-high font (Checked (decomp)).
     let lx = x.wrapping_add(rd::<i32>(base + LIST_X_RVA));
-    let steam = Build::current() == Build::Steam;
+    let steam = Build::current() != Build::Unknown;
     let height = if steam { rd::<i32>(base + FONT_H_STEAM) } else { 0 };
     let text = TITLE_TEXT.get().copied().unwrap_or(0);
     let width = if steam && text != 0 && (8..=32).contains(&height) {

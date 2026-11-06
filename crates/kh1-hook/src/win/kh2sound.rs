@@ -22,6 +22,7 @@
 //! `kh2_sounds` (`abilities` the default, `all`, `off`) and `kh2_volume` (in the cut banks'
 //! records, as KH1's own volumes are).
 
+use super::addr::St;
 use super::log;
 use std::collections::HashMap;
 use std::sync::Mutex;
@@ -533,7 +534,7 @@ pub fn covers(motion: u16) -> bool {
 
 /// The return address of KH1's voice-group call in its attack row start (Steam `0x1402A3980`:
 /// the row's `+0xF` voice, `0x1402901F0 (actor, voice, 0)` at `0x1402A3AAF`, Checked (exe)).
-const ROW_VOICE_RETURN_STEAM: usize = 0x2A3AB4;
+const ROW_VOICE_RETURN_STEAM: St = St(0x2A3AB4);
 /// Where the row start keeps the row it runs: Sora's combat state (the handle at `+0x14C`)
 /// `+0x40` (byte), written just before the voice call. Checked (decomp).
 const ROW_IN_STATE: usize = 0x40;
@@ -551,7 +552,7 @@ const ROW_IN_STATE: usize = 0x40;
 /// says its own (the row's start, where KH2's quote is too: frame 0 of KH2's swings, Checked
 /// (files)). A group with no KH2 counterpart stays KH1's.
 pub unsafe fn holds_back(actor: usize, group: i32, from: usize) -> bool {
-    if from != ROW_VOICE_RETURN_STEAM || super::addr::Build::current() != super::addr::Build::Steam || !kh2_voice() {
+    if from != ROW_VOICE_RETURN_STEAM.get() || super::addr::Build::current() == super::addr::Build::Unknown || !kh2_voice() {
         return false;
     }
     if actor < 0x10000 || actor != super::takeover::sora_actor() {
@@ -592,7 +593,7 @@ pub unsafe fn holds_back(actor: usize, group: i32, from: usize) -> bool {
 /// command with bit 25 plays group `spell + 7`, `0x1402901F0` at `0x1402A3661`, Checked (exe));
 /// another command with bit 25 its command type's group (`+2` of `0x142D36D50 + type * 16`; an
 /// item's is 3, `item_line`). Checked (decomp).
-const SPELL_VOICE_RETURN_STEAM: usize = 0x2A3666;
+const SPELL_VOICE_RETURN_STEAM: St = St(0x2A3666);
 
 /// t746: KH1's spell line on Sora (its command step, a spell of KH1's: KH1's own rows, Gravity, Stop
 /// and Aero) with Battle Quotes KH2 (the user: "kh2 sora is missing his finisher grunts on magic, for
@@ -604,7 +605,7 @@ const SPELL_VOICE_RETURN_STEAM: usize = 0x2A3666;
 /// finisher swing line (voice 5); Aero KH2's Reflect finisher line on every cast (voice 25, t750).
 /// Cure: KH2's self-cure line (voice 23) on every cast. True when it was said in KH1's place.
 pub unsafe fn spell_line(actor: usize, group: i32, from: usize) -> bool {
-    if from != SPELL_VOICE_RETURN_STEAM || super::addr::Build::current() != super::addr::Build::Steam || !kh2_voice() {
+    if from != SPELL_VOICE_RETURN_STEAM.get() || super::addr::Build::current() == super::addr::Build::Unknown || !kh2_voice() {
         return false;
     }
     if actor < 0x10000 || actor != super::takeover::sora_actor() || !(7..=13).contains(&group) {
@@ -652,7 +653,7 @@ pub unsafe fn spell_line(actor: usize, group: i32, from: usize) -> bool {
 /// finisher (its KH2 finisher cast picked for the ground request, `kh2slots::finisher_picked`) the
 /// spell's own group stays. The group to play instead, if any.
 pub unsafe fn kh1_spell_group(actor: usize, group: i32, from: usize) -> Option<i32> {
-    if from != SPELL_VOICE_RETURN_STEAM || super::addr::Build::current() != super::addr::Build::Steam || kh2_voice() {
+    if from != SPELL_VOICE_RETURN_STEAM.get() || super::addr::Build::current() == super::addr::Build::Unknown || kh2_voice() {
         return None;
     }
     // (t749: not Aero, which isn't part of the combo, as Cure: it keeps KH1's line on every cast.)
@@ -884,7 +885,7 @@ pub unsafe fn item_voice() {
 /// item has started (and only then: KH1 says its line before it knows the item can run). KH1's
 /// line stays at Battle Quotes KH1, and when KH2's voice isn't loaded.
 pub unsafe fn item_line(actor: usize, group: i32, from: usize) -> bool {
-    if from != SPELL_VOICE_RETURN_STEAM || super::addr::Build::current() != super::addr::Build::Steam || !kh2_voice() {
+    if from != SPELL_VOICE_RETURN_STEAM.get() || super::addr::Build::current() == super::addr::Build::Unknown || !kh2_voice() {
         return false;
     }
     if actor < 0x10000 || actor != super::takeover::sora_actor() || super::combat::command_kind() != ITEM_COMMAND {

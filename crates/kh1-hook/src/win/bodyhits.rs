@@ -112,6 +112,7 @@
 //! KH1's keeps an attack's data past its object and its hit records. Nothing runs per frame: the
 //! scan (64 objects, 193 records) runs only when the page is full and a new key comes.
 
+use super::addr::St;
 use super::addr::{Build, Rva};
 use super::{log, pose};
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
@@ -119,21 +120,21 @@ use std::sync::Mutex;
 
 /// KH1's per-attack entry builder of the collision pass (Steam): `push rbp; push rsi; push rdi;
 /// sub rsp, 0x80` (Checked (exe)).
-const ENTRIES_STEAM: usize = 0x2B3800;
+const ENTRIES_STEAM: St = St(0x2B3800);
 const ENTRIES_PROLOGUE: [u8; 11] = [0x40, 0x55, 0x56, 0x57, 0x48, 0x81, 0xEC, 0x80, 0x00, 0x00, 0x00];
 /// KH1's entry test `(entry, entries, count) -> contacts` (Steam), its first bytes checked before
 /// the first call (Checked (exe)).
-const TEST_STEAM: usize = 0x2B3BE0;
+const TEST_STEAM: St = St(0x2B3BE0);
 const TEST_BYTES: [u8; 10] = [0x48, 0x89, 0x5C, 0x24, 0x10, 0x48, 0x89, 0x6C, 0x24, 0x18];
 /// KH1's attack constructor `(actor, hit bit, data) -> object` (Steam), which KH1's spell scripts
 /// call for their shots (through syscall `0x1402B9870`): unlike the row maker `0x1402B3270` it
 /// reads no field it doesn't write for a free-standing object (the row maker tests the bone at
 /// `+0x20`, which the constructor leaves as the pool slot's last user had it for a free-standing
 /// one, and would add the Keyblade's bonuses on a 0x30). First bytes checked (Checked (exe)).
-const MAKE_STEAM: usize = 0x2B2DC0;
+const MAKE_STEAM: St = St(0x2B2DC0);
 const MAKE_BYTES: [u8; 10] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x6C, 0x24, 0x10];
 /// KH1's attack pool (Steam), 64 objects of 0xC0.
-const POOL_STEAM: usize = 0x2DB4710;
+const POOL_STEAM: St = St(0x2DB4710);
 const POOL_COUNT: usize = 64;
 const OBJ: usize = 0xC0;
 /// KH1's row object maker, its free hit bit, its object free and its bone point (Epic RVAs, mapped).
@@ -149,16 +150,18 @@ const DATA_SLOT: usize = 0x80;
 const DATA_PAGE: usize = 0x2000;
 /// (t1045) KH1's hit records (Steam, `0x1402BF630`, Checked (decomp)): 64 and 128 of 0x40 bytes,
 /// the spare one, in use `+0` bit 1, the attack's data handle `+0x2C`.
-const RECORDS_A_STEAM: usize = 0x2DE5E10;
-const RECORDS_B_STEAM: usize = 0x2DE6E10;
-const RECORD_SPARE_STEAM: usize = 0x2DE5DD0;
+const RECORDS_A_STEAM: St = St(0x2DE5E10);
+const RECORDS_B_STEAM: St = St(0x2DE6E10);
+const RECORD_SPARE_STEAM: St = St(0x2DE5DD0);
 const RECORDS_A_COUNT: usize = 64;
 const RECORDS_B_COUNT: usize = 128;
 const RECORD: usize = 0x40;
 /// KH1's record reset `0x1402BF560`'s two `lea rax, [records]; mov ecx, count` (Steam, Checked
 /// (exe)): at `+0xA` the first pool's (64), at `+0x2E` the second's (128).
-const RECORDS_LEA_A: (usize, [u8; 12]) = (0x2BF56A, [0x48, 0x8D, 0x05, 0x9F, 0x68, 0xB2, 0x02, 0xB9, 0x40, 0x00, 0x00, 0x00]);
-const RECORDS_LEA_B: (usize, [u8; 12]) = (0x2BF58E, [0x48, 0x8D, 0x05, 0x7B, 0x78, 0xB2, 0x02, 0xB9, 0x80, 0x00, 0x00, 0x00]);
+const RECORDS_LEA_A: (St, [u8; 12]) = (St(0x2BF56A), [0x48, 0x8D, 0x05, 0x9F, 0x68, 0xB2, 0x02, 0xB9, 0x40, 0x00, 0x00, 0x00]);
+const RECORDS_LEA_A_EPIC: (St, [u8; 12]) = (St(0x2BF56A), [0x48, 0x8D, 0x05, 0x4F, 0x94, 0xB2, 0x02, 0xB9, 0x40, 0x00, 0x00, 0x00]);
+const RECORDS_LEA_B: (St, [u8; 12]) = (St(0x2BF58E), [0x48, 0x8D, 0x05, 0x7B, 0x78, 0xB2, 0x02, 0xB9, 0x80, 0x00, 0x00, 0x00]);
+const RECORDS_LEA_B_EPIC: (St, [u8; 12]) = (St(0x2BF58E), [0x48, 0x8D, 0x05, 0x2B, 0xA4, 0xB2, 0x02, 0xB9, 0x80, 0x00, 0x00, 0x00]);
 /// A freed copy's key (no key of ours has every bit).
 const FREE_KEY: u64 = u64::MAX;
 /// KH1's body centre point id (`0x14029EB20`'s 0x8003: the first body part's centre).
@@ -531,10 +534,10 @@ unsafe fn guard_entries(obj: usize, list: usize, count: i32) -> Option<i32> {
 
 /// KH1's overlap of two entries' shapes (Steam `0x1402B5EF0 (shape, shape) -> bool`, the test
 /// `0x1402B3BE0` calls on `entry + 0x20`; first bytes checked, Checked (exe)).
-const OVERLAP_STEAM: usize = 0x2B5EF0;
+const OVERLAP_STEAM: St = St(0x2B5EF0);
 const OVERLAP_BYTES: [u8; 8] = [0x48, 0x89, 0x5C, 0x24, 0x18, 0x55, 0x56, 0x57];
 /// KH1's attack meeting (Steam `0x1402B4A20`; `recoil`'s hook on it runs the barrier's rule first).
-const MEET_STEAM: usize = 0x2B4A20;
+const MEET_STEAM: St = St(0x2B4A20);
 
 /// (t814) The tester's owner: "let it meet any guard types it can't". KH1's pairing table
 /// (`0x140528CB8`, Checked (exe)) has rows of 0 for clash types 6 and 7, so KH1's test
@@ -631,7 +634,7 @@ pub fn native() -> bool {
 }
 
 pub unsafe fn install() {
-    if Build::current() != Build::Steam {
+    if Build::current() == Build::Unknown {
         return;
     }
     let base = super::sys::GetModuleHandleA(std::ptr::null()) as usize;
@@ -930,8 +933,8 @@ unsafe fn records_ok(base: usize) -> bool {
         2 => return false,
         _ => {}
     }
-    let same = |(rva, bytes): (usize, [u8; 12])| (0..bytes.len()).all(|i| rd::<u8>(base + rva + i) == bytes[i]);
-    let ok = same(RECORDS_LEA_A) && same(RECORDS_LEA_B);
+    let same = |(rva, bytes): (St, [u8; 12])| (0..bytes.len()).all(|i| rd::<u8>(base + rva + i) == bytes[i]);
+    let ok = same(*super::addr::pick(&RECORDS_LEA_A, &RECORDS_LEA_A_EPIC)) && same(*super::addr::pick(&RECORDS_LEA_B, &RECORDS_LEA_B_EPIC));
     RECORDS_OK.store(if ok { 1 } else { 2 }, Ordering::Relaxed);
     if !ok {
         log!(Combat, "KH2 body / spell hits: KH1's hit records aren't where we read them: our attack data copies aren't reused");
@@ -1500,10 +1503,10 @@ unsafe fn put_entry(obj: usize, owner: usize, bit: u32, list: usize, count: i32,
 
 /// KH1's part placement `0x1402B5E50 (actor, part, shape)` (Steam; `mov [rsp+8], rbx; mov
 /// [rsp+0x10], rsi; push rdi; sub rsp, 0x20`, Checked (exe)).
-const PLACE_STEAM: usize = 0x2B5E50;
+const PLACE_STEAM: St = St(0x2B5E50);
 const PLACE_BYTES: [u8; 15] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x74, 0x24, 0x10, 0x57, 0x48, 0x83, 0xEC, 0x20];
 /// KH1's actor pool (Steam, the pass's iterator `0x140291B20`): 96 of 0x4B0.
-const ACTORS_STEAM: usize = 0x2D372A0;
+const ACTORS_STEAM: St = St(0x2D372A0);
 const ACTOR_COUNT: usize = 96;
 const ACTOR_SIZE: usize = 0x4B0;
 const WLOG_REACH: f32 = 800.0;
@@ -1551,7 +1554,7 @@ unsafe fn place_ok(base: usize) -> bool {
         2 => return false,
         _ => {}
     }
-    let same = |at: usize, bytes: &[u8]| crash_ok(base + at, bytes.len()) && std::slice::from_raw_parts((base + at) as *const u8, bytes.len()) == bytes;
+    let same = |at: St, bytes: &[u8]| crash_ok(base + at, bytes.len()) && std::slice::from_raw_parts((base + at) as *const u8, bytes.len()) == bytes;
     let ok = same(PLACE_STEAM, &PLACE_BYTES) && same(OVERLAP_STEAM, &OVERLAP_BYTES);
     PLACE_OK.store(if ok { 1 } else { 2 }, Ordering::Relaxed);
     if !ok {

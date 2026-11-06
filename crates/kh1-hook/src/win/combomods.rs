@@ -47,6 +47,7 @@
 //! equipped (else no swing); the finisher is picked once the count reaches the stats' (`+0x6C`)
 //! `+0xD4` (ground) / `+0xD5` (air).
 
+use super::addr::St;
 use super::addr::{Build, Rva};
 use super::{log, pose, takeover};
 use character_core::ComboRow;
@@ -392,10 +393,10 @@ pub fn abilities_now() -> Option<character_core::Abilities> {
 /// its collision record has, `+0x3AC` not masking them, kind 0) and a lock point's place and size
 /// `0x1402B04C0 (target, point, out) -> radius` (KH1 world, y down). Their first bytes, checked
 /// once before the first call (Checked (exe)).
-const FOES_STEAM: usize = 0x291AB0;
+const FOES_STEAM: St = St(0x291AB0);
 const FOES_BYTES: [u8; 3] = [0x4C, 0x8B, 0xC1];
-const NEXT_POINT_STEAM: usize = 0x2B0110;
-const POINT_STEAM: usize = 0x2B04C0;
+const NEXT_POINT_STEAM: St = St(0x2B0110);
+const POINT_STEAM: St = St(0x2B04C0);
 /// `mov [rsp+8], rbx; mov [rsp+0x10], rsi; push rdi; sub rsp, 0x20` (both, Checked (exe)).
 const POINT_BYTES: [u8; 15] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x74, 0x24, 0x10, 0x57, 0x48, 0x83, 0xEC, 0x20];
 /// 0 not checked yet, 1 the three calls are KH1's code here, 2 not.
@@ -403,7 +404,7 @@ static KH1_CALLS: AtomicU8 = AtomicU8::new(0);
 
 /// The game's base when KH1's three target calls are the expected code (Steam only).
 unsafe fn kh1_calls() -> Option<usize> {
-    if Build::current() != Build::Steam {
+    if Build::current() == Build::Unknown {
         return None;
     }
     let base = takeover::game_base();
@@ -721,7 +722,7 @@ const KH1_FINISHER_WINDOW_FROM: [u16; 2] = [155, 183];
 /// picks the next finisher (KH1's, KH2's, or KH2's normal one when KH1's is the one playing).
 /// Placing KH2's window by share is an **Assumption** (KH1's finishers have none of their own).
 pub unsafe fn kh1_finisher_window(actor: usize) {
-    if Build::current() != Build::Steam || actor < 0x10000 || !super::shared::active() || super::form::in_form() {
+    if Build::current() == Build::Unknown || actor < 0x10000 || !super::shared::active() || super::form::in_form() {
         return;
     }
     let Some((_, request, true, air)) = last_step() else { return };
@@ -755,7 +756,7 @@ pub unsafe fn kh1_finisher_window(actor: usize) {
         Some(on) => (on, "our copy's level event".to_string()),
         None => {
             static MISS: AtomicU32 = AtomicU32::new(0);
-            if Build::current() == Build::Steam && super::log_on(super::LogCat::Combat) && MISS.fetch_add(1, Ordering::Relaxed) < 8 {
+            if Build::current() != Build::Unknown && super::log_on(super::LogCat::Combat) && MISS.fetch_add(1, Ordering::Relaxed) < 8 {
                 log!(Combat, "KH1's own finisher (request {:#x}) has no copy of ours: its Finishing Plus window by share", request & 0xFFFF);
             }
             let Some(clip) = pose::kh2().and_then(|k| k.character.moveset.clips.get(&from)) else { return };
@@ -1794,12 +1795,13 @@ const COLLISION_LEN: usize = 0x78;
 /// (`0x140195180 (block)`), and a map polygon's normal (`0x1401907F0 (polygon, out)`): the
 /// calls KH1's own sweep `0x1402C6E70` makes, in its order. Steam only (no Epic address); their
 /// bytes are checked before each test.
-const SETUP_STEAM: usize = 0x29A0B0;
+const SETUP_STEAM: St = St(0x29A0B0);
 const SETUP_BYTES: [u8; 10] = [0x48, 0x89, 0x74, 0x24, 0x10, 0x57, 0x48, 0x83, 0xEC, 0x20];
-const MOVER_STEAM: usize = 0x195180;
+const MOVER_STEAM: St = St(0x195180);
 const MOVER_BYTES: [u8; 10] = [0x40, 0x55, 0x53, 0x57, 0x41, 0x54, 0x48, 0x8D, 0xAC, 0x24];
-const NORMAL_STEAM: usize = 0x1907F0;
+const NORMAL_STEAM: St = St(0x1907F0);
 const NORMAL_BYTES: [u8; 11] = [0xF3, 0x0F, 0x10, 0x15, 0xC4, 0x27, 0x25, 0x00, 0x48, 0x63, 0xC1];
+const NORMAL_BYTES_EPIC: [u8; 11] = [0xF3, 0x0F, 0x10, 0x15, 0x54, 0x57, 0x25, 0x00, 0x48, 0x63, 0xC1];
 
 /// The Config row Combat > Ledge Hop (the owner, t914: "make sora's drop ahead hop a toggle in
 /// the config menu under combat"): 0 not read yet, else 1 + on. On (off by default since t1069): KH2's line ahead
@@ -1877,11 +1879,11 @@ pub struct Gone {
 /// (`shared::physics`'s ground step, `kh2slots::edge_stop`). KH1's block put back after. Steam
 /// only, the three calls' bytes checked.
 pub unsafe fn floor_gone(actor: usize, aim: [f32; 2], length: f32) -> Option<Gone> {
-    if Build::current() != Build::Steam {
+    if Build::current() == Build::Unknown {
         return None;
     }
     let base = takeover::game_base();
-    if rd::<[u8; 10]>(base + SETUP_STEAM) != SETUP_BYTES || rd::<[u8; 10]>(base + MOVER_STEAM) != MOVER_BYTES || rd::<[u8; 11]>(base + NORMAL_STEAM) != NORMAL_BYTES {
+    if rd::<[u8; 10]>(base + SETUP_STEAM) != SETUP_BYTES || rd::<[u8; 10]>(base + MOVER_STEAM) != MOVER_BYTES || rd::<[u8; 11]>(base + NORMAL_STEAM) != *super::addr::pick(&NORMAL_BYTES, &NORMAL_BYTES_EPIC) {
         note(|| "KH2's floor sweep: KH1's collision calls (0x14029A0B0 / 0x140195180 / 0x1401907F0) aren't the expected code here; not tested".to_string());
         return None;
     }
@@ -2621,11 +2623,11 @@ pub fn guard_press() -> bool {
 /// side, Checked (files)), the idle queued after it (`0x14029FA30 (actor, 0x40000000, 0)`), KH1's
 /// count `+0x41` set to 1. First bytes checked (Checked (exe)). Guard Animation KH1 (t903): KH1's
 /// guard blocks by KH1's own meeting; KH2's repel and Counterguard come with KH2's guard only.
-const KH1_FACE_STEAM: usize = 0x2A3B00;
+const KH1_FACE_STEAM: St = St(0x2A3B00);
 const KH1_FACE_BYTES: [u8; 15] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x74, 0x24, 0x10, 0x57, 0x48, 0x83, 0xEC, 0x20];
-const KH1_ROW_START_STEAM: usize = 0x2A3980;
+const KH1_ROW_START_STEAM: St = St(0x2A3980);
 const KH1_ROW_START_BYTES: [u8; 15] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x6C, 0x24, 0x10, 0x48, 0x89, 0x74, 0x24, 0x18];
-const KH1_TARGET_STEAM: usize = 0x2DB3518;
+const KH1_TARGET_STEAM: St = St(0x2DB3518);
 const KH1_GUARD_ROW: i32 = 0x3D;
 
 /// KH1's own guard object while it stands (`kh1_guard_frame`) and the game frame it was seen.
@@ -2653,7 +2655,7 @@ pub unsafe fn kh1_guard_frame(actor: usize) {
         log!(Combat, "KH1's {} request {request:#x} is playing in {} Form, which has none in KH2 (KH1 state {}, Square on the pad {})", if request == 0xD4 { "guard" } else { "roll" }, super::form::native_form().map_or("?", |k| k.name()), rd::<i32>(actor + 0x70), takeover::pad_square());
     }
     let guarding = guard_request && !super::form::in_form() && super::styles::kh1_now(super::styles::Kind::GuardAnim);
-    let now = if guarding && Build::current() == Build::Steam { super::combat::kh1_guard_object(actor) } else { None };
+    let now = if guarding && Build::current() != Build::Unknown { super::combat::kh1_guard_object(actor) } else { None };
     if had != 0 && now != Some(had) {
         super::combat::kh1_guard_forget(had);
         KH1_GUARD_OBJ.store(0, Ordering::Relaxed);
@@ -2678,7 +2680,7 @@ pub unsafe fn kh1_guard_frame(actor: usize) {
 }
 
 unsafe fn kh1_guard(actor: usize) -> bool {
-    if Build::current() != Build::Steam || rd::<i32>(actor + 0x70) != 0 {
+    if Build::current() == Build::Unknown || rd::<i32>(actor + 0x70) != 0 {
         return false;
     }
     let base = takeover::game_base();
@@ -2861,9 +2863,9 @@ pub fn repel_kh2() -> bool {
 /// -gap x btltbl `+0x1C` x his stats' `+0xC4` (`0x1402C7300`); `0x14029D5F0` the big recoil 0x6F,
 /// the same with no push. Both write `out + 0xC` = 0. Their first bytes are checked before a call
 /// (Checked (exe)).
-const CLASH_RECOIL_STEAM: usize = 0x29D720;
+const CLASH_RECOIL_STEAM: St = St(0x29D720);
 const CLASH_RECOIL_BYTES: [u8; 15] = [0x48, 0x89, 0x5C, 0x24, 0x10, 0x48, 0x89, 0x74, 0x24, 0x20, 0x57, 0x48, 0x83, 0xEC, 0x40];
-const BIG_RECOIL_STEAM: usize = 0x29D5F0;
+const BIG_RECOIL_STEAM: St = St(0x29D5F0);
 const BIG_RECOIL_BYTES: [u8; 10] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x57, 0x48, 0x83, 0xEC, 0x20];
 
 /// KH1's own block (Recoil KH1), what KH1's clash gives the owner of a guard that stopped an
@@ -2880,7 +2882,7 @@ const BIG_RECOIL_BYTES: [u8; 10] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x57, 0x48, 0x
 /// its attack data's `+0x3C`, which KH1's player rows add the weapon to but enemy attacks keep);
 /// unknown, a gap of 0 (the small recoil, no push).
 unsafe fn kh1_block(actor: usize, attacker: Option<i32>) {
-    if Build::current() != Build::Steam || rd::<i32>(actor + 0x70) != 0 || super::form::in_form() {
+    if Build::current() == Build::Unknown || rd::<i32>(actor + 0x70) != 0 || super::form::in_form() {
         note(|| "KH1's block: not run (not the Steam build, not on the ground, or a Drive Form)".to_string());
         return;
     }

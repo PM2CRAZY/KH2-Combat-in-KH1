@@ -55,36 +55,37 @@
 //!   it is turned off. KH1 then gives them as its own items; the opened flags stay KH1's.
 //! - Only with Drive on (the ini's `drive`), the Drive gauge as the form cost, and on Steam.
 
+use super::addr::St;
 use super::log;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 use std::sync::OnceLock;
 
 use crate::driveitems::{self as items, IDS, RECORD};
 
-const ITEMS_PTR_RVA: usize = 0x2D22D38;
-const WORDS_RVA: usize = 0x2D22F98;
+const ITEMS_PTR_RVA: St = St(0x2D22D38);
+const WORDS_RVA: St = St(0x2D22F98);
 const WORDS: usize = 0x200;
-const TO_HANDLE_RVA: usize = 0x38AD90;
-const CAN_USE_RVA: usize = 0x2CD3A0;
+const TO_HANDLE_RVA: St = St(0x38AD90);
+const CAN_USE_RVA: St = St(0x2CD3A0);
 const CAN_USE_BYTES: [u8; 13] = [0x48, 0x89, 0x74, 0x24, 0x20, 0x57, 0x48, 0x81, 0xEC, 0x30, 0x01, 0x00, 0x00];
-const APPLY_RVA: usize = 0x2CD780;
+const APPLY_RVA: St = St(0x2CD780);
 const APPLY_BYTES: [u8; 10] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x6C, 0x24, 0x10];
 
-const SHOP_RVA: usize = 0x3010A0;
+const SHOP_RVA: St = St(0x3010A0);
 const SHOP_BYTES: [u8; 10] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x6C, 0x24, 0x10];
 
-const RANDOM_RVA: usize = 0x31BA30;
+const RANDOM_RVA: St = St(0x31BA30);
 const RANDOM_BYTES: [u8; 10] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x57, 0x48, 0x83, 0xEC, 0x20];
-const ITEM_DROP_RVA: usize = 0x2BFF00;
+const ITEM_DROP_RVA: St = St(0x2BFF00);
 const ITEM_DROP_BYTES: [u8; 10] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x6C, 0x24, 0x10];
-const LUCKY_RVA: usize = 0x2D60FA8;
-const COUNT_FACTOR_RVA: usize = 0x2D60FA4;
-const PRIZES_OFF_RVA: usize = 0x2D60FAC;
+const LUCKY_RVA: St = St(0x2D60FA8);
+const COUNT_FACTOR_RVA: St = St(0x2D60FA4);
+const PRIZES_OFF_RVA: St = St(0x2D60FAC);
 
-const CHEST_TABLE_RVA: usize = 0x528D60;
+const CHEST_TABLE_RVA: St = St(0x528D60);
 /// KH1's command record `(id) -> table + id × 16` (Steam `0x14028F960`, Epic `0x14028D7D0`,
 /// `steam_map.in`; what `drive` / `reflect` write their records through).
-const COMMAND_RECORD_RVA: usize = 0x28F960;
+const COMMAND_RECORD_RVA: St = St(0x28F960);
 
 static ORIG_SHOP: AtomicUsize = AtomicUsize::new(0);
 /// The list handed to KH1's shop (a count, then the ids), kept while it is open.
@@ -110,7 +111,7 @@ unsafe fn wr<T: Copy>(p: usize, v: T) {
 }
 
 fn on() -> bool {
-    super::settings::get().drive && super::addr::Build::current() == super::addr::Build::Steam
+    super::settings::get().drive && super::addr::Build::current() != super::addr::Build::Unknown
 }
 
 /// Drive > Recovery in Battle (the ini's `drive_recovery_battle`, off by default: KH2's items are
@@ -330,18 +331,18 @@ unsafe fn gauge_usable() -> bool {
 }
 
 /// Sora's actor (KH1's first party slot, Steam `0x142D37280`, as `cmdmenu` / `chest` read it).
-const SORA_RVA: usize = 0x2D37280;
+const SORA_RVA: St = St(0x2D37280);
 /// KH1's chosen command word (`type | arg << 8`) and the record it came from (Steam `0x142D53A40`,
 /// `0x142D539E8`, written by the menu run `0x140293480`; Checked (decomp)).
-const CHOSEN_RVA: usize = 0x2D53A40;
-const CHOSEN_RECORD_RVA: usize = 0x2D539E8;
+const CHOSEN_RVA: St = St(0x2D53A40);
+const CHOSEN_RECORD_RVA: St = St(0x2D539E8);
 /// KH1's battle item use's effect per item (`0x1402C2B50` plays `byte [0x14052A0A7 + item]`;
 /// Checked (decomp)). Its data ends before `0x14052A130` (another table's floats), so KH1's items
 /// reach `0x88`; ours read past it (logged, an Assumption what it plays).
-const USE_EFFECT_RVA: usize = 0x52A0A7;
+const USE_EFFECT_RVA: St = St(0x52A0A7);
 /// KH1's actor lookup `0x140291D30 (id)` (as `chest` calls it; Checked (decomp + exe) there): what
 /// KH1's battle item effect (`0x1402CD5E0`) resolves the use's target id with.
-const FIND_ACTOR_RVA: usize = 0x291D30;
+const FIND_ACTOR_RVA: St = St(0x291D30);
 const FIND_ACTOR_BYTES: [u8; 10] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x6C, 0x24, 0x10];
 
 /// KH1's party target list (menu 4, Steam `0x1405289E0`: `+0xC` cursor, `+0x10` count, `+0x14` the
@@ -350,11 +351,11 @@ const FIND_ACTOR_BYTES: [u8; 10] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x
 /// level (`0x142D53A50`, a pointer into the chain `0x142D539F0`). KH1's top fill `0x140294220` makes
 /// the target list anew each frame before the menu's navigation (the party in order, Sora's row
 /// `0x38` first), Checked (decomp).
-const TARGETS_RVA: usize = 0x5289E0;
-const TARGET_ACTORS_RVA: usize = 0x2D53A60;
-const ITEMS_MENU_RVA: usize = 0x528970;
-const LEVEL_RVA: usize = 0x2D53A50;
-const CHAIN_RVA: usize = 0x2D539F0;
+const TARGETS_RVA: St = St(0x5289E0);
+const TARGET_ACTORS_RVA: St = St(0x2D53A60);
+const ITEMS_MENU_RVA: St = St(0x528970);
+const LEVEL_RVA: St = St(0x2D53A50);
+const CHAIN_RVA: St = St(0x2D539F0);
 /// Sora's row in the party target list (`0x38 + member 0`, Checked (decomp)).
 const SORA_ROW: u8 = 0x38;
 

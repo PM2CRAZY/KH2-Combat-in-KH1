@@ -32,6 +32,7 @@
 //! (`0x14029D800`, btltbl `+0x30` / `+0x34`). Through `shared::physics::kh2_hop` (KH2's arc at
 //! physics KH2, KH1's gravity at KH1).
 
+use super::addr::St;
 use super::shared::physics;
 use super::styles::{self, Kind};
 use super::{log, pose};
@@ -113,7 +114,7 @@ const KH1_AIR_HOP: f32 = 20.0;
 const QUEUE: usize = 0x178;
 /// btltbl's reaction block pointer (Steam `0x142D22D30`, `0x14029D210` reads its `+0x20` / `+0x24`;
 /// Checked (decomp)): the flinch push's cap `+0x24` and the air drift's cap `+0x34`.
-const STEAM_REACTION_BLOCK: usize = 0x2D22D30;
+const STEAM_REACTION_BLOCK: St = St(0x2D22D30);
 const KH1_PUSH_CAP: f32 = 150.0;
 const KH1_AIR_CAP: f32 = 8.0;
 
@@ -124,7 +125,7 @@ static PUSH: Mutex<Option<(f32, f32)>> = Mutex::new(None);
 static SCRIPT: AtomicBool = AtomicBool::new(false);
 /// KH1's push start (Steam `0x1402C7300 (actor, {direction, distance})`, Checked (decomp)), and its
 /// first bytes (Checked (exe)).
-const PUSH_START_STEAM: usize = 0x2C7300;
+const PUSH_START_STEAM: St = St(0x2C7300);
 const PUSH_START_BYTES: [u8; 8] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x57, 0x48, 0x83];
 
 /// A spell script pushes Sora (KH2's `trap_obj_hitback`, Blizzard's push of its caster: KH2's
@@ -137,7 +138,7 @@ const PUSH_START_BYTES: [u8; 8] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x57, 0x48, 0x8
 /// (Assumption: KH2's player bonus to the distance, its player record `+0x1C8`, is 0 for Sora; not
 /// read in KH2.)
 pub unsafe fn script_push(actor: usize, dir: [f32; 3], dist: f32) -> bool {
-    if actor < 0x10000 || !super::shared::active() || super::addr::Build::current() != super::addr::Build::Steam || !dist.is_finite() || dist <= 0.0 {
+    if actor < 0x10000 || !super::shared::active() || super::addr::Build::current() == super::addr::Build::Unknown || !dist.is_finite() || dist <= 0.0 {
         return false;
     }
     let flat = dir[0].hypot(dir[2]);
@@ -190,7 +191,7 @@ pub unsafe fn before_pass(actor: usize) -> (u32, u32) {
 
 unsafe fn caps() -> (f32, f32) {
     let base = super::takeover::game_base();
-    if super::addr::Build::current() != super::addr::Build::Steam {
+    if super::addr::Build::current() == super::addr::Build::Unknown {
         return (KH1_PUSH_CAP, KH1_AIR_CAP);
     }
     let block = rd::<u64>(base + STEAM_REACTION_BLOCK) as usize;
@@ -275,7 +276,7 @@ pub unsafe fn after_pass(actor: usize, was: (u32, u32)) {
 
 /// KH1's facing set (Steam `0x140297E10 (actor, angle)`: `+0x30..+0x3C` = sin, 0, cos, angle,
 /// skipped while `+0x374` bit `0x1000` holds his facing; Checked (decomp)), as `glide` uses it.
-const SET_FACING_STEAM: usize = 0x297E10;
+const SET_FACING_STEAM: St = St(0x297E10);
 /// His wanted facing (KH1's knock-back reaction writes it with the facing, `0x14029CEC0`).
 const FACING_WANTED: usize = 0x150;
 
@@ -290,7 +291,7 @@ const FACING_WANTED: usize = 0x150;
 /// the same as KH2's, §9). Only in KH1's air state 2 (the caller): flight and swimming keep KH1's
 /// (the tester's m2 answer 3: "(b)").
 unsafe fn air_flinch_turn(actor: usize, request: u32, dir: [f32; 2]) {
-    if super::addr::Build::current() != super::addr::Build::Steam {
+    if super::addr::Build::current() == super::addr::Build::Unknown {
         return;
     }
     let face = if request == 0x4E { [-dir[0], -dir[1]] } else { dir };

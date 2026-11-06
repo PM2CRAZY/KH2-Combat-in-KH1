@@ -24,6 +24,7 @@
 //! scripts set never happened (the owner, answer (b): a story step after the first arrival).
 //! Steam addresses only.
 
+use super::addr::St;
 use super::addr::Rva;
 use super::{hook, log};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -101,29 +102,29 @@ pub fn set(skip: bool) {
 // each step and what changed is logged (a diagnostic, only during a skip).
 // ---------------------------------------------------------------------------------------------
 
-const LOAD_SCRIPT_STEAM: usize = 0x214780;
+const LOAD_SCRIPT_STEAM: St = St(0x214780);
 /// `push rbx; sub rsp, 0x90; mov rax, [rip+..]`.
 const LOAD_SCRIPT_BYTES: [u8; 9] = [0x40, 0x53, 0x48, 0x81, 0xEC, 0x90, 0x00, 0x00, 0x00];
-const RUN_EVENT_STEAM: usize = 0x213150;
+const RUN_EVENT_STEAM: St = St(0x213150);
 /// `mov [rsp+18h], rbx; mov [rsp+20h], rbp; mov [rsp+8], ecx; push rdi`.
 const RUN_EVENT_BYTES: [u8; 15] = [0x48, 0x89, 0x5C, 0x24, 0x18, 0x48, 0x89, 0x6C, 0x24, 0x20, 0x89, 0x4C, 0x24, 0x08, 0x57];
-const SCRIPT_BUFFER_STEAM: usize = 0x268C438;
-const EVENT_40_STEAM: usize = 0x268E110;
-const EVENT_41_STEAM: usize = 0x268E118;
-const FLAGS_STEAM: usize = 0x2867364;
-const ROUTES_STEAM: usize = 0x50AF00;
+const SCRIPT_BUFFER_STEAM: St = St(0x268C438);
+const EVENT_40_STEAM: St = St(0x268E110);
+const EVENT_41_STEAM: St = St(0x268E118);
+const FLAGS_STEAM: St = St(0x2867364);
+const ROUTES_STEAM: St = St(0x50AF00);
 const ROUTE_SIZE: usize = 0x58;
 /// The route records with names (`test1` .. `route_pirate_1`, Checked (exe)).
 const ROUTES: i32 = 21;
 
 /// KH1's save block (Steam; the whole of what KH1 saves and loads, script variables and bit
 /// flags included, `docs/kh1-softreset.md`, Checked (decomp)).
-const SAVE_STEAM: usize = 0x2DE9360;
+const SAVE_STEAM: St = St(0x2DE9360);
 const SAVE_SIZE: usize = 0x16C00;
 
 /// (Diagnostic, Menus log only) a copy of the save block, to log what each step of the skip changed.
 unsafe fn save_copy(base: usize) -> Option<Vec<u8>> {
-    if !super::log_on(super::LogCat::Menus) || super::addr::Build::current() != super::addr::Build::Steam {
+    if !super::log_on(super::LogCat::Menus) || super::addr::Build::current() == super::addr::Build::Unknown {
         return None;
     }
     Some(std::slice::from_raw_parts((base + SAVE_STEAM) as *const u8, SAVE_SIZE).to_vec())
@@ -161,7 +162,7 @@ unsafe fn save_diff(base: usize, before: &mut Option<Vec<u8>>, what: &str) {
 /// arrival one sets flag word bit 8 first, as the cleared flight does, whether or not the route
 /// names a script.
 unsafe fn route_script(base: usize, route: i32, slot: usize, save: &mut Option<Vec<u8>>) {
-    if super::addr::Build::current() != super::addr::Build::Steam || !(0..ROUTES).contains(&route) {
+    if super::addr::Build::current() == super::addr::Build::Unknown || !(0..ROUTES).contains(&route) {
         return;
     }
     if !hook::prologue_is(base + LOAD_SCRIPT_STEAM, &LOAD_SCRIPT_BYTES) || !hook::prologue_is(base + RUN_EVENT_STEAM, &RUN_EVENT_BYTES) {

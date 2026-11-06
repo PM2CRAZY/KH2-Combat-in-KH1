@@ -47,6 +47,7 @@
 //! and `0x1402BD420` takes slot 32 past its 32 when none is free, Checked (decomp)), so the check
 //! stays only to keep KH1's start from writing past its pools.
 
+use super::addr::St;
 use super::addr::Build;
 use super::sys::*;
 use super::{log, pose};
@@ -56,25 +57,25 @@ use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 use std::sync::Mutex;
 
 /// KH1's script interpreter (Steam): `mov r11, rsp; mov [r11+0x20], rbx; push rbp` (Checked (exe)).
-const INTERP_STEAM: usize = 0x2CC620;
+const INTERP_STEAM: St = St(0x2CC620);
 const INTERP_PROLOGUE: [u8; 8] = [0x4C, 0x8B, 0xDC, 0x49, 0x89, 0x5B, 0x20, 0x55];
 /// KH1's spell start (Steam), its first bytes checked before a call (Checked (exe)).
-const SPELL_START_STEAM: usize = 0x28F5E0;
+const SPELL_START_STEAM: St = St(0x28F5E0);
 const SPELL_START_BYTES: [u8; 10] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x6C, 0x24, 0x10];
 /// KH1's pointer → handle (Steam `0x14038AD90`; it takes a new segment into its table when it
 /// has to), its first bytes checked (Checked (exe)).
-const TO_HANDLE_STEAM: usize = 0x38AD90;
+const TO_HANDLE_STEAM: St = St(0x38AD90);
 const TO_HANDLE_BYTES: [u8; 9] = [0x40, 0x53, 0x48, 0x83, 0xEC, 0x20, 0x48, 0x8B, 0xD9];
 /// KH1's process records, work slots and their in-use bytes, and the spell task list (Steam).
-const PROCS_STEAM: usize = 0x2DC7BE0;
+const PROCS_STEAM: St = St(0x2DC7BE0);
 const PROC_SIZE: usize = 0x758;
 const PROC_COUNT: usize = 64;
-const WORK_STEAM: usize = 0x2DB7BE0;
+const WORK_STEAM: St = St(0x2DB7BE0);
 const WORK_SIZE: usize = 0x800;
 const WORK_COUNT: usize = 32;
-const WORK_USED_STEAM: usize = 0x2DE51E0;
-const TASKS_STEAM: usize = 0x2D22D08;
-const PAUSE_STEAM: usize = 0x2867364;
+const WORK_USED_STEAM: St = St(0x2DE51E0);
+const TASKS_STEAM: St = St(0x2D22D08);
+const PAUSE_STEAM: St = St(0x2867364);
 /// A process record's fields (above).
 const R_FLAGS: usize = 0;
 const R_PROGRAM: usize = 0x10;
@@ -170,7 +171,7 @@ fn note(s: impl FnOnce() -> String) {
 
 /// Hooks KH1's interpreter (Steam only; every first byte checked).
 pub unsafe fn install() {
-    if Build::current() != Build::Steam {
+    if Build::current() == Build::Unknown {
         return;
     }
     let base = GetModuleHandleA(std::ptr::null()) as usize;
@@ -343,13 +344,13 @@ struct Kh1Machine {
 /// KH1's child process start (Steam `0x1402BD4D0 (parent, code)`: a record of its own, flag 4,
 /// the parent's program and work memory, appended to the parent's chain at `+0x740`), its first
 /// bytes checked (Checked (exe)).
-const CHILD_STEAM: usize = 0x2BD4D0;
+const CHILD_STEAM: St = St(0x2BD4D0);
 const CHILD_BYTES: [u8; 10] = [0x48, 0x83, 0xEC, 0x28, 0x48, 0x8B, 0xC2, 0x4C, 0x8B, 0xD1];
 const R_NEXT: usize = 0x740;
 /// A record's call-table list (`+0x38`), and KH1's own list that its reset (`0x1402BCFD0`) gives
 /// every record (Steam `0x140529FA0`, Checked (decomp)).
 const R_CALLS: usize = 0x38;
-const KH1_CALLS_STEAM: usize = 0x529FA0;
+const KH1_CALLS_STEAM: St = St(0x529FA0);
 
 impl NativeHost for Kh1Machine {
     fn machine(&mut self, file: &SpellFile, _spell: usize, key: i32) -> Option<(Vm, CtxId)> {

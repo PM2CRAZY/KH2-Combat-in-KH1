@@ -29,6 +29,7 @@
 //! launch: `combat::scale_record` through `kh2_atkp`; a Magic-based move's data takes KH1's
 //! own magic stat at make, `kh1_magic`).
 
+use super::addr::St;
 use super::addr::Rva;
 use super::{log, pose};
 use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
@@ -1142,9 +1143,9 @@ pub unsafe fn run_as(row: i32, n: usize, f: impl FnOnce()) -> bool {
 
 /// KH1's row start and motion queue (Steam; Checked (exe): `mov [rsp+8], rbx; mov [rsp+10h],
 /// rbp; mov [rsp+18h], rsi; push rdi` and `mov [rsp+8], rbx; push rdi; sub rsp, 20h`).
-const ROW_START_STEAM: usize = 0x2A3980;
+const ROW_START_STEAM: St = St(0x2A3980);
 const ROW_START_BYTES: [u8; 16] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x6C, 0x24, 0x10, 0x48, 0x89, 0x74, 0x24, 0x18, 0x57];
-const QUEUE_STEAM: usize = 0x29FA30;
+const QUEUE_STEAM: St = St(0x29FA30);
 const QUEUE_BYTES: [u8; 10] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x57, 0x48, 0x83, 0xEC, 0x20];
 
 /// Our row `n` started on `actor` by KH1's own row start (`0x1402A3980 (actor, row)`, Steam,
@@ -1162,7 +1163,7 @@ pub unsafe fn start_row(actor: usize, n: usize, idle: bool) -> bool {
     if base == 0 || actor < 0x10000 || n >= OURS.len() || rd::<u64>(base + ROWS_RVA + index as usize * 8) as usize != ours {
         return false;
     }
-    if super::addr::Build::current() != super::addr::Build::Steam || !super::hook::prologue_is(base + ROW_START_STEAM, &ROW_START_BYTES) || !super::hook::prologue_is(base + QUEUE_STEAM, &QUEUE_BYTES) {
+    if super::addr::Build::current() == super::addr::Build::Unknown || !super::hook::prologue_is(base + ROW_START_STEAM, &ROW_START_BYTES) || !super::hook::prologue_is(base + QUEUE_STEAM, &QUEUE_BYTES) {
         log!(Combat, "KH1's attack rows: KH1's row start or motion queue isn't as expected: row {} not started", row(n));
         return false;
     }
@@ -1294,7 +1295,7 @@ pub unsafe fn lock_actor() -> Option<usize> {
 
 /// KH1's attack pool (Steam `0x142DB4710`, 64 entries of 0xC0; in use `+0` bit `0x800`, owner
 /// handle `+0x34`, attack data handle `+0x5C`).
-const POOL_STEAM: usize = 0x2DB4710;
+const POOL_STEAM: St = St(0x2DB4710);
 const POOL_SLOTS: usize = 0x40;
 
 /// (t-rehit) A new KH2 attack on the Keyblade in our slot (`kh2slots::keyblade_rearm`): the
@@ -1302,7 +1303,7 @@ const POOL_SLOTS: usize = 0x40;
 /// `bodyhits`) re-armed as a new attack (`rehit::new_attack`: KH1's own re-arm), so it can hit
 /// what the last one hit, as KH2's new attack does. Returns how many.
 pub unsafe fn rearm_rows(sora: usize) -> usize {
-    if super::addr::Build::current() != super::addr::Build::Steam || sora < 0x10000 {
+    if super::addr::Build::current() == super::addr::Build::Unknown || sora < 0x10000 {
         return 0;
     }
     let base = super::takeover::game_base();

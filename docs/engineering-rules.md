@@ -10,6 +10,13 @@ through KH1's engine, for example, play on Steam only). Once the Steam work is d
 Steam-only hook gets its Epic address too, so the Epic build works exactly like the Steam one
 (tester's call, kh2-sounds thread, 2026-10-25).
 
+(testing-merge, tm41) Done on testing-merge: every Steam address is an `St(0x...)` (`win/addr.rs`),
+and `base + st` is the address in the running build. Epic's come from `win/epic_map.in`, made by
+`python3 tools/epic/map.py <Steam exe> <Epic exe>` from the player's own exes (a test fails when a
+`St` isn't in it). New code: write Steam addresses as `St`, rerun the script, and where KH1's bytes
+at a checked place differ between builds (a RIP-relative displacement), give the Epic bytes with
+`addr::pick`. Notes: `docs/kh1-epic-addresses.md`.
+
 ## No decompiled code in the repo
 Don't copy decompiled code or game files into the repo or the docs. Decomp findings go in as plain-language notes (address, what it does, how sure we are), never as pasted decompiler output. Ghidra databases and output stay outside the repo.
 

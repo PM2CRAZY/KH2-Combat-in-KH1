@@ -43,6 +43,7 @@
 //! - The cap is 2 + the forms Sora owns among Valor, Wisdom, Limit, Master and Final (KH2), from
 //!   the save's owned forms (`formown::owned`, t925: Valor and Wisdom, and Final once entered).
 
+use super::addr::St;
 use super::{form::Kind, log, pose};
 use crate::formlevel::{self, Record, Table};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -67,9 +68,9 @@ pub const MASTER_LEVEL_OFF: usize = 0x892;
 
 /// KH1's enemy scripts' EXP commands (Steam), their first whole instructions (`push rbx; sub
 /// rsp, 0x20; mov rbx, rcx` / `push rbx; sub rsp, 0x50`).
-const EXP_SHOWN: usize = 0x2BC9A0;
+const EXP_SHOWN: St = St(0x2BC9A0);
 const EXP_SHOWN_PROLOGUE: [u8; 9] = [0x40, 0x53, 0x48, 0x83, 0xEC, 0x20, 0x48, 0x8B, 0xD9];
-const EXP_AT: usize = 0x2BCA20;
+const EXP_AT: St = St(0x2BCA20);
 const EXP_AT_PROLOGUE: [u8; 6] = [0x40, 0x53, 0x48, 0x83, 0xEC, 0x50];
 static ORIG_SHOWN: AtomicUsize = AtomicUsize::new(0);
 static ORIG_AT: AtomicUsize = AtomicUsize::new(0);
@@ -322,7 +323,7 @@ unsafe extern "system" fn exp_at(args: usize) {
 
 /// The defeat hooks (Steam only: the addresses are the Steam build's).
 pub unsafe fn install(base: usize) {
-    if super::addr::Build::current() != super::addr::Build::Steam {
+    if super::addr::Build::current() == super::addr::Build::Unknown {
         log!(Forms, "form levels: defeats not hooked (not the Steam build)");
         return;
     }

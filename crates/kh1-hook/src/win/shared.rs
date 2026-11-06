@@ -1346,7 +1346,7 @@ pub mod physics {
         }
         // State 0's transition (`+0x28`), Steam only, checked against KH1's own function and its
         // first bytes (`ground_next`).
-        if super::super::addr::Build::current() == super::super::addr::Build::Steam {
+        if super::super::addr::Build::current() != super::super::addr::Build::Unknown {
             let slot = table + NEXT;
             let now: usize = rd(slot);
             let ours = ground_next as *const () as usize;
@@ -1366,7 +1366,7 @@ pub mod physics {
     /// State 0's (Steam `0x1402CC470`, registered by `0x1402CC410` through `0x1402B1B80(0, 0xFC, ...)`):
     /// in the air (or with flag `0x1000`) and without flag `0x100` it returns 2; else his state.
     /// Its first instructions `push rbx; sub rsp, 0x20; mov rbx, rcx` (Checked (exe)).
-    const GROUND_NEXT_STEAM: usize = 0x2CC470;
+    const GROUND_NEXT_STEAM: crate::win::addr::St = crate::win::addr::St(0x2CC470);
     const GROUND_NEXT_PROLOGUE: [u8; 9] = [0x40, 0x53, 0x48, 0x83, 0xEC, 0x20, 0x48, 0x8B, 0xD9];
     static ORIG_GROUND_NEXT: AtomicUsize = AtomicUsize::new(0);
     /// KH1's dodge roll's request (`+0x164`): state 0's transition ends it on the way to state 2.

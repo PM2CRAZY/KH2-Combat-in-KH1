@@ -13,7 +13,7 @@ Made 2026-11-05 from `testing` at t1094 (`bb3b65d`), at the owner's request (cha
 - `testing` is the base: everything main has is rebuilt natively inside testing's own systems (the same design
   philosophy and engineering rules as testing: `docs/design-philosophy-instructions.md`,
   `docs/engineering-rules.md`). Main is read for what it did and what the owner decided there, never copied
-  (no Epic addresses, no main data).
+  (Steam addresses as `St`, Epic's from `win/epic_map.in` (tm41); no main data).
 - Versions here are `tm1`, `tm2`, ... (`VERSION` in `crates/kh1-hook/src/lib.rs`), each with a
   `### <date>: Stage tm<n> (testing-merge branch: <title>)` entry at the top of `AGENTS.md`.
 - The Windows build (`.github/workflows/build-testing.yml`, on this branch) builds on every push to
@@ -40,5 +40,5 @@ Status as of tm27 (2026-11-05). Nothing is checked in game yet.
 | 8 | Combo lunges don't carry Sora through room exits / into crates | 35 | tm3 (exits); crates were already refused by KH1 |
 | 9 | KH2 effects on Counterguard, Flash Step, Retaliating Slash | 36 | tm4 |
 | 10 | Dream Shield stretching | 49 | tm5 (drawn routes fixed; a log for the baked moves) |
-| 11 | Epic Games Store support | 61 | not being built (the owner: "dont worry about epic support") |
+| 11 | Epic Games Store support | 61 | built tm41 (the owner, 2026-11-06: "Let's try to make this epic compatible as well"); `docs/kh1-epic-addresses.md` |
 | 12 | README, install notes, `mod.yml` for players | 62 | `README.md` and `mod.yml`'s text rewritten for this branch (docs). `crates/kh1-hook/openkh/` copies are stale, untouched |

@@ -68,6 +68,7 @@
 //! one is skipped too, as after the pause menu's skip; the item popup is not shown (KH1 doesn't in
 //! skip mode), the item is given.
 
+use super::addr::St;
 use super::addr::Build;
 use crate::kh1script::{read_follow_up, read_give_tail, started_entry, trinity_call, Call, Follow, CMD_TRINITY, FN_EVENT_OFF, FN_OFFER, FN_RELEASE, FN_START_ENTRY, FOLLOW_SUBS};
 use super::log;
@@ -124,16 +125,16 @@ static ORIG_SECTION_END: [AtomicUsize; 4] = [const { AtomicUsize::new(0) }; 4];
 
 /// Steam: the entry in use, the second scene flag word, the pause menu's flag byte, the runner word
 /// (bit 0 skip mode), the event contexts and their count (Checked (decomp)).
-const ENTRY_STEAM: usize = 0x2382524;
-const FLAGS2_STEAM: usize = 0x2382594;
-const SKIP_FLAG_STEAM: usize = 0x232DF89;
-const RUNNER_STEAM: usize = 0x23AB2D0;
-const CONTEXTS_STEAM: usize = 0x23902D0;
-const COUNT_STEAM: usize = 0x237F4E8;
+const ENTRY_STEAM: St = St(0x2382524);
+const FLAGS2_STEAM: St = St(0x2382594);
+const SKIP_FLAG_STEAM: St = St(0x232DF89);
+const RUNNER_STEAM: St = St(0x23AB2D0);
+const CONTEXTS_STEAM: St = St(0x23902D0);
+const COUNT_STEAM: St = St(0x237F4E8);
 /// The room's own script (entry 0): its contexts and their count (Checked (decomp): the script step
 /// `0x1401A2320` and `0x1401A4D00` take these when `0x142382524` is 0).
-const CONTEXTS0_STEAM: usize = 0x2382AD0;
-const COUNT0_STEAM: usize = 0x237F4E4;
+const CONTEXTS0_STEAM: St = St(0x2382AD0);
+const COUNT0_STEAM: St = St(0x237F4E4);
 const CTX_SIZE: usize = 0x360;
 const CTX_CODE: usize = 0x80;
 const CTX_SUBS: usize = 0x88;
@@ -145,7 +146,7 @@ const CLASS_END: u8 = 5;
 const CLASS_CALL: u8 = 0x18;
 /// Event functions 454 (offer a Triangle command) and 126 (start an event entry), where this exe has
 /// them (`crate::kh1script`).
-const TRINITY_FNS: [(u32, usize); 2] = [(FN_OFFER, 0x1AF530), (FN_START_ENTRY, 0x1A9D90)];
+const TRINITY_FNS: [(u32, St); 2] = [(FN_OFFER, St(0x1AF530)), (FN_START_ENTRY, St(0x1A9D90))];
 /// The second word's bits: skippable, event mode, a talk.
 const BIT_SKIPPABLE: u32 = 1;
 const BIT_EVENT: u32 = 0x400;
@@ -157,23 +158,24 @@ const CTX_MAX: i32 = 64;
 const SCAN_MAX: usize = 8192;
 
 /// KH1's skip (`sub rsp, 0x28; cmp dword [..], 0; je +5; call ..`), as in `cutsceneskip.rs`.
-const SKIP_FN_STEAM: usize = 0x1A22B0;
+const SKIP_FN_STEAM: St = St(0x1A22B0);
 const SKIP_FN_BYTES: [u8; 18] = [0x48, 0x83, 0xEC, 0x28, 0x83, 0x3D, 0x15, 0xE6, 0x19, 0x02, 0x00, 0x74, 0x05, 0xE8, 0xFE, 0x9F, 0xFE, 0xFF];
+const SKIP_FN_BYTES_EPIC: [u8; 18] = [0x48, 0x83, 0xEC, 0x28, 0x83, 0x3D, 0x45, 0x10, 0x1A, 0x02, 0x00, 0x74, 0x05, 0xE8, 0x1E, 0xA0, 0xFE, 0xFF];
 /// KH1's end of a skip (`0x1401A2130`: skip mode off, the message windows closed, a fade in over a
 /// second; returns 1 if skip mode was on), what KH1's own section ends call after bit 0 is off (event
 /// functions 85, 140, 490 and 624: `0x1401A8BD0`, `0x1401AA120`, `0x1401B05F0`, `0x1401A8C00`). Its first
 /// bytes (`push rbx; sub rsp, 0x40; mov rax, [rip+x]`) and event function 140's call of it (`+0x15`).
 /// Checked (decomp + exe).
-const SKIP_END_STEAM: usize = 0x1A2130;
+const SKIP_END_STEAM: St = St(0x1A2130);
 const SKIP_END_BYTES: [u8; 9] = [0x40, 0x53, 0x48, 0x83, 0xEC, 0x40, 0x48, 0x8B, 0x05];
-const FN140_STEAM: usize = 0x1AA120;
+const FN140_STEAM: St = St(0x1AA120);
 const FN140_CALL: usize = 0x15;
 /// Event functions 512 (Sora given back) and 514 (event mode off), where this exe has them (wrapped
 /// in the table, t764).
-const END_FNS: [(u32, usize); 2] = [(FN_RELEASE, 0x1A7660), (FN_EVENT_OFF, 0x1A7750)];
+const END_FNS: [(u32, St); 2] = [(FN_RELEASE, St(0x1A7660)), (FN_EVENT_OFF, St(0x1A7750))];
 /// KH1's skippable sections' ends (the pairs of 84, 139, 489 and 623), where this exe has them (wrapped
 /// in the table, t765: a scene that goes on in event mode after its section is the row's).
-const SECTION_ENDS: [(u32, usize); 4] = [(85, 0x1A8BD0), (140, 0x1AA120), (490, 0x1B05F0), (624, 0x1A8C00)];
+const SECTION_ENDS: [(u32, St); 4] = [(85, St(0x1A8BD0)), (140, St(0x1AA120)), (490, St(0x1B05F0)), (624, St(0x1A8C00))];
 /// KH1's give functions (t785, Checked (decomp + exe)): 583 a reward record (`0x1401B13E0`: the record
 /// is the u16 at `[0x142D36D58] + id * 2`; kind `& 0xF` 0 an item `>> 8` (count `>> 4 & 0xF`) into the
 /// stock, 1 an ability `>> 8` for party member `>> 4 & 0xF`), 458 a spell's level (`0x1401AF730`: the
@@ -182,23 +184,23 @@ const SECTION_ENDS: [(u32, usize); 4] = [(85, 0x1A8BD0), (140, 0x1AA120), (490, 
 /// Block (`0x1401B12A0` -> `0x14020D3F0`, the call chests' Gummi Blocks use). t794: 258, an item
 /// (`0x1401AC700`: the item one below the top, the count on top, added to save `[0x142868BA0] + 0x499 +
 /// item`, kept in 0..99; the Coliseum's Entry Pass).
-const GIVE_FNS: [(u32, usize); 5] = [(583, 0x1B13E0), (458, 0x1AF730), (444, 0x1AF190), (570, 0x1B12A0), (258, 0x1AC700)];
-const REWARDS_PTR_STEAM: usize = 0x2D36D58;
-const SPELL_SAVE_PTR_STEAM: usize = 0x2868BA0;
+const GIVE_FNS: [(u32, St); 5] = [(583, St(0x1B13E0)), (458, St(0x1AF730)), (444, St(0x1AF190)), (570, St(0x1B12A0)), (258, St(0x1AC700))];
+const REWARDS_PTR_STEAM: St = St(0x2D36D58);
+const SPELL_SAVE_PTR_STEAM: St = St(0x2868BA0);
 const SPELL_LEVELS: usize = 0x492;
-const MUNNY_PTR_STEAM: usize = 0x2E1F4D8;
+const MUNNY_PTR_STEAM: St = St(0x2E1F4D8);
 const MUNNY: usize = 0x1C;
 /// t786: KH1's start of a script in its treasure machine (`0x1401A43A0 (file, entry)`, the one event 5 uses
 /// for chests; `mov [rsp+8], rbx; mov [rsp+0x10], rbp; mov [rsp+0x18], rsi; push rdi`), the script in use
 /// and the machine's file. The icons the treasure texts put before an item and before Sora's ability.
 /// Checked (decomp + exe + files).
-const MACHINE_START_STEAM: usize = 0x1A43A0;
+const MACHINE_START_STEAM: St = St(0x1A43A0);
 const MACHINE_START_BYTES: [u8; 16] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x6C, 0x24, 0x10, 0x48, 0x89, 0x74, 0x24, 0x18, 0x57];
 /// The treasure machine's contexts and their count (as the start fills them), a context's flags and its
 /// "ended" bit (Checked (decomp)).
 /// KH1's script task list and the treasure machine's step (t792, Checked (decomp)).
-const TASKS_STEAM: usize = 0x23D3E18;
-const MACHINE_STEP_STEAM: usize = 0x1A2CF0;
+const TASKS_STEAM: St = St(0x23D3E18);
+const MACHINE_STEP_STEAM: St = St(0x1A2CF0);
 const ICON_ITEM: u8 = 0x82;
 const ICON_ABILITY: u8 = 0x86;
 /// A context's stack: its top index (`+0x194`) and the values (`+0x198`, i32 each).
@@ -217,21 +219,21 @@ const SPELLS: [[&str; 3]; 7] = [
 ];
 /// The script step's test of bit 0 (`test byte [rip+x], 1`), its read and clear of the flag byte
 /// (`cmp [rip+x], r12b` / `mov [rip+x], r12b`), and where each must point.
-const STEP_BIT_STEAM: usize = 0x1A2835;
+const STEP_BIT_STEAM: St = St(0x1A2835);
 const STEP_BIT_BYTES: [u8; 2] = [0xF6, 0x05];
-const STEP_READ_STEAM: usize = 0x1A2871;
+const STEP_READ_STEAM: St = St(0x1A2871);
 const STEP_READ_BYTES: [u8; 3] = [0x44, 0x38, 0x25];
-const STEP_CLEAR_STEAM: usize = 0x1A287A;
+const STEP_CLEAR_STEAM: St = St(0x1A287A);
 const STEP_CLEAR_BYTES: [u8; 3] = [0x44, 0x88, 0x25];
 /// The event function table, and the functions this reads scenes by (number, Steam RVA), checked
 /// against the table before use so the numbers are this exe's.
-const TABLE_STEAM: usize = 0x4FA870;
+const TABLE_STEAM: St = St(0x4FA870);
 /// The pause menu's skip turned on (the high-poly scenes, the Cutscene Skip row's). Not 27 and 317: they
 /// turn it on only under a condition (`0x1401A19B0`), and 27 is in the low-poly Traverse Town scene
 /// (Checked (decomp + trace)); 139 was in all ten high-poly scenes of the t709 / t710 logs (trace).
-const PAUSE_SKIP: [(u32, usize); 5] = [(84, 0x1A8B60), (139, 0x1AA0D0), (476, 0x1B02A0), (489, 0x1B05D0), (623, 0x1A8B90)];
+const PAUSE_SKIP: [(u32, St); 5] = [(84, St(0x1A8B60)), (139, St(0x1AA0D0)), (476, St(0x1B02A0)), (489, St(0x1B05D0)), (623, St(0x1A8B90))];
 /// A choice in a message, and the shop and menu windows: the player answers, so the scene plays.
-const PLAYS: [(u32, usize); 8] = [(88, 0x1B8EC0), (222, 0x1CA610), (268, 0x1CA730), (278, 0x1ACC00), (392, 0x1AEAD0), (628, 0x1CA340), (629, 0x1CA450), (673, 0x1CA4F0)];
+const PLAYS: [(u32, St); 8] = [(88, St(0x1B8EC0)), (222, St(0x1CA610)), (268, St(0x1CA730)), (278, St(0x1ACC00)), (392, St(0x1AEAD0)), (628, St(0x1CA340)), (629, St(0x1CA450)), (673, St(0x1CA4F0))];
 
 unsafe fn rd<T: Copy>(p: usize) -> T {
     std::ptr::read_unaligned(p as *const T)
@@ -291,37 +293,37 @@ unsafe fn verify() {
     if CHECKED.swap(true, Ordering::Relaxed) {
         return;
     }
-    if Build::current() != Build::Steam {
+    if Build::current() == Build::Unknown {
         log!(Menus, "In-game Scene Skip: Steam only (the addresses are the Steam build's)");
         return;
     }
     let base = super::sys::GetModuleHandleA(std::ptr::null()) as usize;
-    let at = |rva: usize, n: usize| std::slice::from_raw_parts((base + rva) as *const u8, n);
-    if at(SKIP_FN_STEAM, SKIP_FN_BYTES.len()) != SKIP_FN_BYTES {
+    let at = |rva: St, n: usize| std::slice::from_raw_parts((base + rva) as *const u8, n);
+    if at(SKIP_FN_STEAM, SKIP_FN_BYTES.len()) != *super::addr::pick(&SKIP_FN_BYTES, &SKIP_FN_BYTES_EPIC) {
         log!(Menus, "In-game Scene Skip: unexpected bytes at KH1's skip {:02x?}, not used", at(SKIP_FN_STEAM, SKIP_FN_BYTES.len()));
         return;
     }
     // (`test byte [rip+x], 1` is 7 bytes: the displacement counts from its end; the compares 7 too.)
-    let target = |site: usize, disp_at: usize, len: usize| (site + len).wrapping_add(rd::<i32>(base + site + disp_at) as isize as usize);
-    if at(STEP_BIT_STEAM, 2) != STEP_BIT_BYTES || rd::<u8>(base + STEP_BIT_STEAM + 6) != 1 || target(STEP_BIT_STEAM, 2, 7) != FLAGS2_STEAM {
+    let target = |site: St, disp_at: usize, len: usize| St((site.get() + len).wrapping_add(rd::<i32>(base + site + disp_at) as isize as usize));
+    if at(STEP_BIT_STEAM, 2) != STEP_BIT_BYTES || rd::<u8>(base + STEP_BIT_STEAM + 6) != 1 || target(STEP_BIT_STEAM, 2, 7).0 != FLAGS2_STEAM.get() {
         log!(Menus, "In-game Scene Skip: the script step's test of the skippable bit isn't where expected, not used");
         return;
     }
     for (site, bytes, what) in [(STEP_READ_STEAM, STEP_READ_BYTES, "read"), (STEP_CLEAR_STEAM, STEP_CLEAR_BYTES, "clear")] {
-        if at(site, 3) != bytes || target(site, 3, 7) != SKIP_FLAG_STEAM {
+        if at(site, 3) != bytes || target(site, 3, 7).0 != SKIP_FLAG_STEAM.get() {
             log!(Menus, "In-game Scene Skip: the script step's {what} of the flag byte isn't where expected, not used");
             return;
         }
     }
     for (n, rva) in PAUSE_SKIP.iter().chain(PLAYS.iter()).chain(TRINITY_FNS.iter()) {
         let entry = rd::<u64>(base + TABLE_STEAM + *n as usize * 8) as usize;
-        if entry.wrapping_sub(base) != *rva {
+        if entry.wrapping_sub(base) != rva.get() {
             log!(Menus, "In-game Scene Skip: event function {n} is at {:#x}, not {rva:#x}, not used", entry.wrapping_sub(base));
             return;
         }
     }
     // KH1's end of a skip, the way its own section end (event function 140) calls it.
-    if at(SKIP_END_STEAM, SKIP_END_BYTES.len()) != SKIP_END_BYTES || at(FN140_STEAM + FN140_CALL, 1) != [0xE8] || target(FN140_STEAM + FN140_CALL, 1, 5) != SKIP_END_STEAM {
+    if at(SKIP_END_STEAM, SKIP_END_BYTES.len()) != SKIP_END_BYTES || at(FN140_STEAM + FN140_CALL, 1) != [0xE8] || target(FN140_STEAM + FN140_CALL, 1, 5).0 != SKIP_END_STEAM.get() {
         log!(Menus, "In-game Scene Skip: KH1's end of a skip isn't as expected, not used");
         return;
     }
@@ -563,8 +565,8 @@ unsafe fn noting() -> bool {
 pub fn queue_obtained(line: String) {
     if BASE.load(Ordering::Relaxed) == 0 {
         let base = unsafe { super::sys::GetModuleHandleA(std::ptr::null()) as usize };
-        let at = |rva: usize, n: usize| unsafe { std::slice::from_raw_parts((base + rva) as *const u8, n) };
-        START_OK.store(Build::current() == Build::Steam && at(MACHINE_START_STEAM, MACHINE_START_BYTES.len()) == MACHINE_START_BYTES, Ordering::Relaxed);
+        let at = |rva: St, n: usize| unsafe { std::slice::from_raw_parts((base + rva) as *const u8, n) };
+        START_OK.store(Build::current() != Build::Unknown && at(MACHINE_START_STEAM, MACHINE_START_BYTES.len()) == MACHINE_START_BYTES, Ordering::Relaxed);
         BASE.store(base, Ordering::Relaxed);
     }
     log!(Cutscenes, "Item Pickup: \"{line}\" goes to the in-game skip's \"Obtained\" window");
@@ -1036,7 +1038,7 @@ unsafe fn trinity_entry(base: usize, entry: i32) -> bool {
 
 /// In a context array (the room's script or the event entry's), each context that offers the Trinity
 /// command, with every entry it starts: (context, entry).
-unsafe fn marks(base: usize, contexts: usize, count: usize) -> Vec<(usize, u32)> {
+unsafe fn marks(base: usize, contexts: St, count: St) -> Vec<(usize, u32)> {
     let reach = Reach::default();
     let mut out = Vec::new();
     let count = rd::<i32>(base + count);

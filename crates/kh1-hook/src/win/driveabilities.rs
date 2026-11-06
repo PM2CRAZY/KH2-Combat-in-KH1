@@ -18,13 +18,14 @@
 //! - Only with Drive on (the ini's `drive`) and on Steam. Copies are read from Sora's lists as KH1
 //!   holds them (`menu::kh1_abilities_now`), at most twice a second.
 
+use super::addr::St;
 use super::log;
 use crate::drivesupport as rules;
 use crate::growth::kh2;
 use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 use std::sync::Mutex;
 
-const HIT_HP_RVA: usize = 0x2BEEE0;
+const HIT_HP_RVA: St = St(0x2BEEE0);
 const HIT_HP_BYTES: [u8; 10] = [0x48, 0x89, 0x5C, 0x24, 0x10, 0x56, 0x48, 0x83, 0xEC, 0x20];
 /// The actor's stats handle, and in the stats HP and max HP.
 const ACTOR_STATS: usize = 0x6C;
@@ -56,7 +57,7 @@ fn note(line: impl FnOnce() -> String) {
 }
 
 fn on() -> bool {
-    super::settings::get().drive && super::addr::Build::current() == super::addr::Build::Steam
+    super::settings::get().drive && super::addr::Build::current() != super::addr::Build::Unknown
 }
 
 pub unsafe fn install(base: usize) {

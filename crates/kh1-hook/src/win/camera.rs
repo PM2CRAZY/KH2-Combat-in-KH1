@@ -30,6 +30,7 @@
 //! the event camera tasks writing the public pair, area cameras (mode 9). First person (mode 2)
 //! is KH2's when entered from KH2's follow camera (Select: `first_person_mode`), KH1's own else.
 
+use super::addr::St;
 use super::addr::Rva;
 use super::{log, pose};
 use glam::{Vec2, Vec3};
@@ -60,7 +61,7 @@ const SELECT: u32 = 0x8000;
 /// (slot 0's `+4` held, PS2 order: the pads and the keyboard merged, the stick direction bits
 /// above). R2 is `0x200` there; KH1's remap (`0x140528290`) gives R2 no bit of its own (L2 and R2
 /// both set `0x400000`).
-pub(super) const RAW_HELD_STEAM: usize = 0x298C9B4;
+pub(super) const RAW_HELD_STEAM: St = St(0x298C9B4);
 /// R2 in the PS2 order (KH2's camera hold, `r2_held`, and the R2 Camera Hold row).
 const RAW_R2: u32 = 0x200;
 /// L2 in the PS2 order (the L2 Stick Menu row, `l2_held`).
@@ -71,11 +72,11 @@ const RAW_R3: u32 = 0x4;
 /// `0x140138b30 (x*, y*, f32*, f32*, sensitivity u16*) -> moved`: the mouse record's motion this
 /// frame, each axis held to ±1 (y flipped), and the sensitivity setting (`0x1404D8614 + 0x24`).
 /// Its prologue is checked before the first call (`MOUSE_PROLOGUE`, from the Steam exe).
-const MOUSE_STEAM: usize = 0x138B30;
+const MOUSE_STEAM: St = St(0x138B30);
 const MOUSE_PROLOGUE: [u8; 10] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x74, 0x24, 0x10];
 /// Steam only: KH1's keyboard / mouse mode (`0x140139590` returns it; 1 after a key or the mouse,
 /// 0 after a pad button, `0x14013a2c0`), as KH2's `0x142b44a88`.
-const KBM_STEAM: usize = 0x22DB3E8;
+const KBM_STEAM: St = St(0x22DB3E8);
 /// 0 not checked yet, 1 KH1's mouse function is where expected, 2 it isn't.
 static MOUSE_OK: AtomicU32 = AtomicU32::new(0);
 /// KH1's config block (`+8`: field camera 0 Auto / 1 Manual; `+0x14`: camera up / down,
@@ -1025,7 +1026,7 @@ struct Mouse {
 
 unsafe fn mouse(base: usize) -> Mouse {
     let none = Mouse { tilt: 1.0, ..Default::default() };
-    if base == 0 || super::addr::Build::current() != super::addr::Build::Steam {
+    if base == 0 || super::addr::Build::current() == super::addr::Build::Unknown {
         return none;
     }
     let kbm = rd::<u32>(base + KBM_STEAM) != 0;
@@ -1078,7 +1079,7 @@ unsafe fn sticks(base: usize, free: bool, m: &Mouse) -> ([f32; 2], [f32; 2]) {
 /// the pads' own records (`takeover::RAW_BUTTONS`). Either way Frame Advance's R2 isn't seen:
 /// while it is on, `probe::pad` takes R2 off every pad record (and `RAW_BUTTONS`).
 unsafe fn r2_held(base: usize) -> bool {
-    if super::addr::Build::current() == super::addr::Build::Steam && base != 0 {
+    if super::addr::Build::current() != super::addr::Build::Unknown && base != 0 {
         rd::<u32>(base + RAW_HELD_STEAM) & RAW_R2 != 0
     } else {
         super::takeover::RAW_BUTTONS.load(Ordering::Relaxed) & RAW_R2 != 0
@@ -1089,7 +1090,7 @@ unsafe fn r2_held(base: usize) -> bool {
 /// pad word (`RAW_HELD_STEAM`, PS2 order, so the keyboard's L2 key counts the same way); else the
 /// pads' own records. Frame Advance takes only R2 off the records, so L2 is never hidden.
 unsafe fn l2_held(base: usize) -> bool {
-    if super::addr::Build::current() == super::addr::Build::Steam && base != 0 {
+    if super::addr::Build::current() != super::addr::Build::Unknown && base != 0 {
         rd::<u32>(base + RAW_HELD_STEAM) & RAW_L2 != 0
     } else {
         super::takeover::RAW_BUTTONS.load(Ordering::Relaxed) & RAW_L2 != 0

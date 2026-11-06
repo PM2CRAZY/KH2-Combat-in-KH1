@@ -5,7 +5,7 @@ description: >-
   engine: KH2's combos, finishers and combo abilities, Quick Run, Aerial Dodge, Glide, Dodge Roll,
   Guard and Counterguard, KH2's hit reactions, KH2's field camera, a fourth shortcut, Reflect and
   the Drive Forms. KH2's animations, sounds and effects are read from your own KH2 install. For the
-  Steam release of KH 1.5+2.5 only. Choose KH1 or KH2 for each setting in the game's Config menu;
+  Steam and Epic Games Store releases of KH 1.5+2.5. Choose KH1 or KH2 for each setting in the game's Config menu;
   every setting is also in kh1-kh2.ini in the game folder (made on first launch). Testing-merge
   branch: not checked in game yet.
 assets:

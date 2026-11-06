@@ -49,28 +49,29 @@
 //! **KH1's MP HP label** (answer 4 (a)): hidden while the gauge shows, as data: its sprites' size set
 //! to 0 when the gauge starts showing, put back when it stops (KH1 draws a 0-size sprite as nothing).
 
+use super::addr::St;
 use super::log;
 use crate::seqplay::{self, Player, Quad, Seq};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
 
-const BODY_RVA: usize = 0x26CF90;
+const BODY_RVA: St = St(0x26CF90);
 const BODY_BYTES: [u8; 10] = [0x48, 0x89, 0x5C, 0x24, 0x10, 0x57, 0x48, 0x83, 0xEC, 0x60];
-const SORA_RVA: usize = 0x2811A00;
-const PLACE_RVA: usize = 0x26D990;
-const RECT_RVA: usize = 0x27E430;
-const BUILD_RVA: usize = 0x27D470;
-const SUBMIT_RVA: usize = 0x2764B0;
-const REG_RVA: usize = 0x277160;
-const GIFTAG_RVA: usize = 0x277130;
-const SEND_TEX0_RVA: usize = 0x386660;
-const LOOKUP_RVA: usize = 0x10D720;
-const BIND_RVA: usize = 0x108910;
-const MAP_RVA: usize = 0x10DC50;
-const PACKET_RVA: usize = 0x2821BC0;
-const FRAME_SCALE_RVA: usize = 0x233FBDC;
+const SORA_RVA: St = St(0x2811A00);
+const PLACE_RVA: St = St(0x26D990);
+const RECT_RVA: St = St(0x27E430);
+const BUILD_RVA: St = St(0x27D470);
+const SUBMIT_RVA: St = St(0x2764B0);
+const REG_RVA: St = St(0x277160);
+const GIFTAG_RVA: St = St(0x277130);
+const SEND_TEX0_RVA: St = St(0x386660);
+const LOOKUP_RVA: St = St(0x10D720);
+const BIND_RVA: St = St(0x108910);
+const MAP_RVA: St = St(0x10DC50);
+const PACKET_RVA: St = St(0x2821BC0);
+const FRAME_SCALE_RVA: St = St(0x233FBDC);
 /// The calls' first bytes (Checked (exe)).
-const CALLS: [(usize, &[u8]); 10] = [
+const CALLS: [(St, &[u8]); 10] = [
     (PLACE_RVA, &[0x40, 0x53, 0x48, 0x83, 0xEC, 0x40]),
     (RECT_RVA, &[0x8B, 0x41, 0x60, 0x83, 0xE0, 0x14, 0x3C, 0x14]),
     (BUILD_RVA, &[0x40, 0x53, 0x48, 0x83, 0xEC, 0x20, 0x4D, 0x8B, 0x40, 0x18]),
@@ -129,7 +130,7 @@ static BASE: AtomicUsize = AtomicUsize::new(0);
 /// Steam only; installed whatever the Drive row says (the Config menu can switch it on later; the
 /// draw asks every frame, `visible`).
 pub unsafe fn install(base: usize) {
-    if super::addr::Build::current() != super::addr::Build::Steam {
+    if super::addr::Build::current() == super::addr::Build::Unknown {
         return;
     }
     BASE.store(base, Ordering::Relaxed);

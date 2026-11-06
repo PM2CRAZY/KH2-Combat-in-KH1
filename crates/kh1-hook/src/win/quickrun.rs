@@ -46,6 +46,7 @@
 //! Motions 203 / 204 are our requests of KH2's motions (`kh1rows::OURS`, request only, their
 //! `kh2slots` slots), asked through KH1's motion request (`0x14029F980`).
 
+use super::addr::St;
 use super::addr::{Build, Rva};
 use super::{log, takeover};
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
@@ -62,7 +63,7 @@ const SET_STATE_RVA: Rva = Rva(0x2AF7D0);
 const SET_MOTION_RVA: Rva = Rva(0x29D7F0);
 const QUEUE_MOTION_RVA: Rva = Rva(0x29D8A0);
 /// KH1's ground step (Steam `0x1402B1850`, state 0's `+0x20`, Checked (decomp)). Steam only.
-const GROUND_STEP_STEAM: usize = 0x2B1850;
+const GROUND_STEP_STEAM: St = St(0x2B1850);
 const ENTRY: usize = 0x40;
 /// Our state's flags: the platform carry only (see the module notes).
 const FLAGS: u32 = 0x08;
@@ -124,7 +125,7 @@ fn note(s: impl FnOnce() -> String) {
 /// down here, so KH1's own roll (motion 0xDC) took the press (their trace f17582). KH2's Wisdom
 /// (Steam KH2 `0x1403A81F0`, t689, Checked (decomp)): Square is its Quick Run.
 pub fn built() -> bool {
-    Build::current() == Build::Steam
+    Build::current() != Build::Unknown
         && (!super::form::in_form() || super::form::native_form() == Some(super::form::Kind::Wisdom))
         && super::kh1rows::installed()
         && [RUN_MOTION, STOP_MOTION].iter().all(|&m| super::kh1rows::by_motion(m).is_some_and(|n| super::kh2slots::has(super::kh1rows::request(n) as usize, m)))
@@ -133,7 +134,7 @@ pub fn built() -> bool {
 /// Puts our state in KH1's state table (each Sora physics frame: KH1 fills the table itself when
 /// it sets its states up). Only into an empty slot or ours.
 pub unsafe fn install(base: usize) {
-    if Build::current() != Build::Steam || base == 0 {
+    if Build::current() == Build::Unknown || base == 0 {
         return;
     }
     let e = base + TABLE_RVA + STATE as usize * ENTRY;

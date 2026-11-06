@@ -31,21 +31,22 @@
 //! pick stands, and the picker returns the KH1 row that plays it (`combomods::kh2_pick_in_picker`;
 //! m24: "(a)", KH2's whole pick made in KH1's picker), which the row runner runs as it is.
 
+use super::addr::St;
 use super::addr::Build;
 use super::sys::GetModuleHandleA;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 
-const GROUND_STEAM: usize = 0x2A6EE0;
+const GROUND_STEAM: St = St(0x2A6EE0);
 /// `mov r11, rsp; push rbp; push rsi; push rdi; lea rbp, [r11 - 0xB8]` (Checked (exe)).
 const GROUND_PROLOGUE: [u8; 13] = [0x4C, 0x8B, 0xDC, 0x55, 0x56, 0x57, 0x49, 0x8D, 0xAB, 0x48, 0xFF, 0xFF, 0xFF];
-const AIR_STEAM: usize = 0x2A6C70;
+const AIR_STEAM: St = St(0x2A6C70);
 /// `push rbx; push rbp; push rsi; push rdi; push r12; push r14; push r15` (Checked (exe)).
 const AIR_PROLOGUE: [u8; 11] = [0x40, 0x53, 0x55, 0x56, 0x57, 0x41, 0x54, 0x41, 0x56, 0x41, 0x57];
 
 /// Sora's ability bits (Steam `0x142D5EC10`; set from his equipped abilities by `0x1402A6380`,
 /// Checked (decomp): bit 3 Blitz (20), 25 Hurricane Blast (55), 26 Ripple Drive (56), 27 Stun
 /// Impact (57), 28 Gravity Break (58), 29 Zantetsuken (59)).
-const ABILITY_BITS_STEAM: usize = 0x2D5EC10;
+const ABILITY_BITS_STEAM: St = St(0x2D5EC10);
 /// Held back while KH1's picker runs at the combo style KH1 (the walk marks them): Ripple Drive,
 /// Stun Impact, Gravity Break, Zantetsuken on the ground (KH1's rows 7, 3, 4, 5; Zantetsuken's
 /// 30% roll is KH1's third, after the other two, so the walk rolls it the same way, with KH1
@@ -60,7 +61,7 @@ pub const HELD_AIR: u32 = 0;
 const ALL_FINISHER_BITS: u32 = 1 << 3 | 1 << 25;
 /// KH1's random number in 0..1 (`0x14031BA30`: three `rand` bytes x 2^-24; its picker's 30% rolls
 /// use it), `mov [rsp+8], rbx; push rdi; sub rsp, 0x20` (Checked (exe)).
-const RANDOM_STEAM: usize = 0x31BA30;
+const RANDOM_STEAM: St = St(0x31BA30);
 const RANDOM_PROLOGUE: [u8; 10] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x57, 0x48, 0x83, 0xEC, 0x20];
 static RANDOM: AtomicUsize = AtomicUsize::new(0);
 /// The Tweaks row "KH1 Ability Chance" (0 not read yet, 1 off, 2 on).
@@ -275,7 +276,7 @@ unsafe extern "system" fn air(actor: usize, target: usize, dir: usize) -> i32 {
 
 /// KH1's ability counter `0x140284BE0 (ability, character) -> copies equipped`: `mov r8, [rip+..]`
 /// then `mov r9d, ecx; cmp edx, 9` (Checked (exe); the first instruction's offset not compared).
-const COUNT_STEAM: usize = 0x284BE0;
+const COUNT_STEAM: St = St(0x284BE0);
 const COUNT_HEAD: [u8; 3] = [0x4C, 0x8B, 0x05];
 const COUNT_NEXT: [u8; 6] = [0x44, 0x8B, 0xC9, 0x83, 0xFA, 0x09];
 static COUNT: AtomicUsize = AtomicUsize::new(0);
@@ -285,7 +286,7 @@ static KH2_LENGTH_IN: [AtomicBool; 2] = [AtomicBool::new(false), AtomicBool::new
 /// After KH1's stats builder ran for a party member (`menu`'s party stats hook): KH2's length in
 /// Sora's own stats where it is his (`sync_length`). Steam only.
 pub unsafe fn after_stats(out: usize) {
-    if Build::current() != Build::Steam {
+    if Build::current() == Build::Unknown {
         return;
     }
     let actor = super::takeover::sora_actor();
@@ -344,7 +345,7 @@ pub fn kh2_length_in(air: bool) -> bool {
 }
 
 pub unsafe fn install() {
-    if Build::current() != Build::Steam {
+    if Build::current() == Build::Unknown {
         return;
     }
     let base = GetModuleHandleA(std::ptr::null()) as usize;

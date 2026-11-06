@@ -42,6 +42,7 @@
 //!   a whole bar; the other spells still need their whole cost (asked); no MP Charge yet (its own
 //!   thread).
 
+use super::addr::St;
 use super::pose;
 use std::ptr::read_unaligned as rd;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -207,15 +208,15 @@ pub fn decode(raw: i32) -> Option<(Cost, i32)> {
 /// KH1's MP check, payment and spell usable check (Steam; prologues Checked (exe):
 /// `mov [rsp+10h], rbp; mov [rsp+18h], rsi; push rdi; sub rsp, 20h`; `push r14; sub rsp, 30h;
 /// mov qword [rsp+20h], -2`; `mov [rsp+8], rbx; mov [rsp+10h], rsi; push rdi; sub rsp, 20h`).
-const CHECK_STEAM: usize = 0x2A4C10;
+const CHECK_STEAM: St = St(0x2A4C10);
 const CHECK_PROLOGUE: [u8; 15] = [0x48, 0x89, 0x6C, 0x24, 0x10, 0x48, 0x89, 0x74, 0x24, 0x18, 0x57, 0x48, 0x83, 0xEC, 0x20];
-const PAY_STEAM: usize = 0x2A5B60;
+const PAY_STEAM: St = St(0x2A5B60);
 const PAY_PROLOGUE: [u8; 15] = [0x41, 0x56, 0x48, 0x83, 0xEC, 0x30, 0x48, 0xC7, 0x44, 0x24, 0x20, 0xFE, 0xFF, 0xFF, 0xFF];
-const USABLE_STEAM: usize = 0x28EFD0;
+const USABLE_STEAM: St = St(0x28EFD0);
 const USABLE_PROLOGUE: [u8; 15] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x74, 0x24, 0x10, 0x57, 0x48, 0x83, 0xEC, 0x20];
 /// KH1's spell slots (0x38 bytes each; `+0x18` the spell's data, whose `+0x30` is its cost),
 /// Steam, as the usable check reads them (Checked (decomp)).
-const SPELLS_STEAM: usize = 0x2D22B80;
+const SPELLS_STEAM: St = St(0x2D22B80);
 static ORIG_CHECK: AtomicUsize = AtomicUsize::new(0);
 static ORIG_PAY: AtomicUsize = AtomicUsize::new(0);
 static ORIG_USABLE: AtomicUsize = AtomicUsize::new(0);
@@ -300,7 +301,7 @@ unsafe extern "system" fn usable_hook(actor: usize, spell: i32) -> u64 {
 /// The three hooks (Steam only: the addresses are Steam's). The KH2 kinds count as in only with
 /// both the check and the payment hooked.
 pub unsafe fn install() {
-    if super::addr::Build::current() != super::addr::Build::Steam {
+    if super::addr::Build::current() == super::addr::Build::Unknown {
         return;
     }
     let base = super::sys::GetModuleHandleA(std::ptr::null()) as usize;

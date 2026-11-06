@@ -31,6 +31,7 @@
 //! the debug menu's Logs page, KH1 Sound Calls (`LogCat::Kh1Sounds`, ini `log_kh1_sounds`, off by
 //! default); the old `sound_log` key and the Trace Recorder's Sound Log row are gone.
 
+use super::addr::St;
 use super::addr::{Build, Rva};
 use super::hook;
 use super::log;
@@ -49,16 +50,16 @@ const VOICE_CLIP_PROLOGUE: [u8; 5] = [0x48, 0x89, 0x5C, 0x24, 0x08];
 
 /// The Steam exe's (RVAs; the Epic build's differ and aren't known here): the voice call, the
 /// sound effect create / play, and the sound bank list's head.
-const STEAM_VOICE_CALL: usize = 0xDC210;
+const STEAM_VOICE_CALL: St = St(0xDC210);
 /// `push rbp; push rsi; push rdi; push r14`.
 const VOICE_CALL_PROLOGUE: [u8; 6] = [0x40, 0x55, 0x56, 0x57, 0x41, 0x56];
-const STEAM_SE_CREATE: usize = 0xDE460;
+const STEAM_SE_CREATE: St = St(0xDE460);
 /// `mov rax, rsp; push r12; push r14`.
 const SE_CREATE_PROLOGUE: [u8; 7] = [0x48, 0x8B, 0xC4, 0x41, 0x54, 0x41, 0x56];
-const STEAM_SE_PLAY: usize = 0xDECF0;
+const STEAM_SE_PLAY: St = St(0xDECF0);
 /// `push rdi; sub rsp, 0x70`.
 const SE_PLAY_PROLOGUE: [u8; 6] = [0x40, 0x57, 0x48, 0x83, 0xEC, 0x70];
-const STEAM_BANK_LIST: usize = 0x4D65D8;
+const STEAM_BANK_LIST: St = St(0x4D65D8);
 
 /// Sora's battle voice banks by bank number (the SCDs' `0x36`), the file each plays from
 /// (`voice/<file>.vsb/<file>.win32.scd` in the `kh1_*` archives).
@@ -316,7 +317,7 @@ pub unsafe fn install() {
     }
     hook::install(base + MENU_SOUND_RVA, &MENU_SOUND_PROLOGUE, menu_sound as *const () as usize, &ORIG_SOUND, "menu sound log");
     hook::install(base + VOICE_CLIP_RVA, &VOICE_CLIP_PROLOGUE, voice_clip as *const () as usize, &ORIG_CLIP, "voice clip log");
-    if Build::current() == Build::Steam {
+    if Build::current() != Build::Unknown {
         hook::install(base + STEAM_VOICE_CALL, &VOICE_CALL_PROLOGUE, voice_call as *const () as usize, &ORIG_VOICE_CALL, "voice call log");
         hook::install(base + STEAM_SE_CREATE, &SE_CREATE_PROLOGUE, se_create as *const () as usize, &ORIG_SE_CREATE, "sound effect create log");
         hook::install(base + STEAM_SE_PLAY, &SE_PLAY_PROLOGUE, se_play as *const () as usize, &ORIG_SE_PLAY, "sound effect play log");

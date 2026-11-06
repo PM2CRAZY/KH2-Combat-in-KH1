@@ -22,6 +22,7 @@
 //!   too), when there was nothing to build, and after `MAX_HOLD` whatever happens (the rest then
 //!   builds behind the title, as it did before). Steam only.
 
+use super::addr::St;
 use super::addr::Build;
 use super::log;
 use super::sys::*;
@@ -30,15 +31,15 @@ use std::sync::Mutex;
 use std::time::Instant;
 
 /// The mode machine's call site in the field frame (`E8` -> `0x140170870`), Steam.
-const MODE_CALL_STEAM: usize = 0x170E1A;
-const MODE_MACHINE_STEAM: usize = 0x170870;
+const MODE_CALL_STEAM: St = St(0x170E1A);
+const MODE_MACHINE_STEAM: St = St(0x170870);
 /// The 2D work's call site in the field frame (`E8` -> `0x14017B190`), Steam.
-const WORK_2D_CALL_STEAM: usize = 0x170FF0;
-const WORK_2D_STEAM: usize = 0x17B190;
+const WORK_2D_CALL_STEAM: St = St(0x170FF0);
+const WORK_2D_STEAM: St = St(0x17B190);
 /// The mode machine's state (i32), Steam.
-const MODE_STATE_STEAM: usize = 0x233FBC0;
+const MODE_STATE_STEAM: St = St(0x233FBC0);
 /// KH1's text routine (align, colour, x, y, text, scale), Steam.
-const TEXT_STEAM: usize = 0x2CFBF0;
+const TEXT_STEAM: St = St(0x2CFBF0);
 /// The state that loads the title.
 const LOADS_TITLE: i32 = 2;
 /// The longest hold, whatever the loader is doing.
@@ -150,7 +151,7 @@ impl Drop for Guard {
 
 /// Points KH1's mode machine and 2D work calls at ours (Steam only; each call site is checked).
 pub unsafe fn install() {
-    if Build::current() != Build::Steam {
+    if Build::current() == Build::Unknown {
         return;
     }
     let base = GetModuleHandleA(std::ptr::null()) as usize;

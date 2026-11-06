@@ -18,20 +18,21 @@ game starts. This repository has no game files, no extracted data and no decompi
 
 ## What you need
 
-1. **KINGDOM HEARTS HD 1.5+2.5 ReMIX for PC, the Steam release**, with Kingdom Hearts Final Mix
-   and Kingdom Hearts II Final Mix in the same install, as Steam installs them. The mod reads KH2
+1. **KINGDOM HEARTS HD 1.5+2.5 ReMIX for PC, the Steam or Epic Games Store release**, with
+   Kingdom Hearts Final Mix and Kingdom Hearts II Final Mix in the same install, as both stores
+   install them. The mod reads KH2
    straight from that install (`KINGDOM HEARTS II FINAL MIX.exe` next to `KINGDOM HEARTS FINAL
    MIX.exe`). You don't extract anything. If OpenKH's Mods Manager has backed up the original
    files, the mod reads the backups, so other KH2 mods don't leak in.
-   - **Steam only.** The Epic Games Store release isn't supported on this branch. This is the
-     owner's decision for now. The mod may load on Epic, but most of its features are written for
-     the Steam build alone and are switched off there.
+   - **Steam and Epic.** Both stores' July 2024 builds are supported. The mod's addresses are
+     written for Steam and looked up for Epic in a table made from both games' exes.
    - The mod checks which game build it's in. On a build it doesn't know, it changes nothing.
 2. **OpenKH Mods Manager**, set up for KH 1.5+2.5 with **Panacea** installed:
    <https://github.com/OpenKH/OpenKh/releases>. On first run, its setup wizard asks which store your
    game is from and where your game folder is, and offers to install Panacea: say yes. Panacea is
    what loads this mod into the game. Steam's folder is usually
-   `...\steamapps\common\KINGDOM HEARTS -HD 1.5+2.5 ReMIX-`.
+   `...\steamapps\common\KINGDOM HEARTS -HD 1.5+2.5 ReMIX-`; Epic's is usually
+   `...\Epic Games\KH_1.5_2.5`.
 
 ## Install
 
@@ -267,7 +268,8 @@ the secret code.
 - **Not checked in game.** Nothing on this branch has been tried in game yet. If something looks
   wrong, set `debug_menu = on`, turn on the logs you need in the debug menu's Logs page, and
   include the game folder's `kh1-kh2.log` with your report.
-- **Steam only**, as above.
+- **Epic is newer than Steam here**: the Epic build has had less testing. Its log's first lines
+  say which build was found.
 - **Not built yet:**
   - Anti Form's look, HP orbs, effects and ledge hang. Anti also still has the Keyblade and its
     trails.

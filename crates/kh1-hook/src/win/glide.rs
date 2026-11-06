@@ -20,6 +20,7 @@
 //! KH2 (Steam KH2 exe, `ACTION_GLIDE` vtable `0x1405CDBF0`, `ACTION_GLIDEHOVER` `0x1405CDB98`,
 //! Checked (decomp)): no minimum time and no re-glide wait (none in either action's functions).
 
+use super::addr::St;
 use super::addr::{Build, Rva};
 use super::styles::{self, Kind};
 use super::{log, takeover};
@@ -69,14 +70,14 @@ const BANK_DOT: f32 = 0.98;
 /// `0x1000` holds it; the glide pre-step's own call) and its water check from the glide (Steam
 /// `0x1402C12B0 (actor, input)`: water ends the glide into the swim state 0x11 with its splash, not
 /// in world 0xD room 8). Checked (decomp). Steam only.
-const SET_FACING_STEAM: usize = 0x297E10;
-const WATER_STEAM: usize = 0x2C12B0;
+const SET_FACING_STEAM: St = St(0x297E10);
+const WATER_STEAM: St = St(0x2C12B0);
 const SLOT_TIME: usize = 0x16C;
 /// KH1's fall from rest (Steam `0x1402AF8F0 (actor, rise)` with 0: `+0x3B0` / `+0x3B8` / `+0x3BC`
 /// / `+0x3D0` 0, `+0x3B4` his height, state 2, flag `0x10000` off) and Neverland's flight-room test
 /// (Steam `0x1402B1DA0 (actor)`, the glide transition's own). Checked (decomp). Steam only.
-const FALL_FROM_REST_STEAM: usize = 0x2AF8F0;
-const FLIGHT_ROOM_STEAM: usize = 0x2B1DA0;
+const FALL_FROM_REST_STEAM: St = St(0x2AF8F0);
+const FLIGHT_ROOM_STEAM: St = St(0x2B1DA0);
 /// KH1's fall request (its ground jump's base 0, + 6), with KH2's blend into its fall motion 4
 /// (16.0, `0x1404235B0`).
 const FALL_REQUEST: u32 = 0x06;
@@ -140,7 +141,7 @@ pub(crate) fn note(s: impl FnOnce() -> String) {
 /// action and growth abilities left out (Checked (decomp)): only Final's has Glide (fmlv form 5's
 /// growth, Checked (files)), so the others have level 0 and no glide (`form::form_abilities`).
 pub fn built() -> bool {
-    Build::current() == Build::Steam && (!super::form::in_form() || final_now())
+    Build::current() != Build::Unknown && (!super::form::in_form() || final_now())
 }
 
 /// Final Form on KH1's own states now (`form::native_form`).
@@ -168,7 +169,7 @@ pub unsafe fn running(actor: usize) -> bool {
 /// Puts our wrappers in KH1's state table (each Sora physics frame: KH1 fills the table itself when
 /// it sets its states up, which would drop them). Steam only.
 pub unsafe fn install(base: usize) {
-    if Build::current() != Build::Steam || base == 0 {
+    if Build::current() == Build::Unknown || base == 0 {
         return;
     }
     let table = base + TABLE_RVA;

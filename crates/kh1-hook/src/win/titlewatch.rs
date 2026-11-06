@@ -33,38 +33,39 @@
 //!
 //! Per frame: one clock store at KH1's frame end (`frame_end`), only with the debug tools.
 
+use super::addr::St;
 use super::log;
 use super::sys::*;
 use std::ffi::c_void;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 
 /// KH1's game mode (the mode machine's state, `0x14233FBC0`; `loadscreen` / `softreset` use it).
-const MODE: usize = 0x233FBC0;
+const MODE: St = St(0x233FBC0);
 /// The mode change's countdown (`0x1422EC0AC`).
-const MODE_COUNTDOWN: usize = 0x22EC0AC;
+const MODE_COUNTDOWN: St = St(0x22EC0AC);
 /// The field frame's quit / return-to-title state: 0 none, 1 quit to the launcher, 2 the request.
-const QUIT: usize = 0x22EC090;
+const QUIT: St = St(0x22EC090);
 /// A movie was playing when it came: the wait for it (`0x1422EC094`) and the movie (`0x1423408D0`).
-const MOVIE_WAIT: usize = 0x22EC094;
-const MOVIE: usize = 0x23408D0;
+const MOVIE_WAIT: St = St(0x22EC094);
+const MOVIE: St = St(0x23408D0);
 /// A save being written (the save menu's, `0x142E205BC`).
-const SAVING: usize = 0x2E205BC;
+const SAVING: St = St(0x2E205BC);
 /// KH1's job slots (two of 0x18 bytes: function, argument, done).
-const JOBS: usize = 0x234AFA8;
+const JOBS: St = St(0x234AFA8);
 /// KH1's file read job (`0x14028C390`; its argument's `+4` is the file's name) and its other one.
-const FILE_JOB: usize = 0x28C390;
+const FILE_JOB: St = St(0x28C390);
 /// The game object (`0x1421AAF18`); its `+0x1290` is the return-to-title request (below 0: none).
-const APP: usize = 0x21AAF18;
+const APP: St = St(0x21AAF18);
 const REQUEST: usize = 0x1290;
 /// 0 once the field frame's teardown has run (`0x14233FBEC`).
-const UP: usize = 0x233FBEC;
+const UP: St = St(0x233FBEC);
 /// KH1's Loading line's flags (`0x1423404EC`, a copy of the script runner's skip bit
 /// `0x1423AB2D0` & 1; `0x1423404F4`, a room's data load).
-const LOADING_A: usize = 0x23404EC;
-const LOADING_B: usize = 0x23404F4;
+const LOADING_A: St = St(0x23404EC);
+const LOADING_B: St = St(0x23404F4);
 /// KH1's bank list's count and its stream deletes pending (`0x1404D65E8`, `0x1404D6608`).
-const BANK_COUNT: usize = 0x4D65E8;
-const STREAM_DELETES: usize = 0x4D6608;
+const BANK_COUNT: St = St(0x4D65E8);
+const STREAM_DELETES: St = St(0x4D6608);
 
 #[link(name = "kernel32")]
 extern "system" {
@@ -350,7 +351,7 @@ unsafe extern "system" fn watch(_: *mut c_void) -> u32 {
     let mut listed = false;
     loop {
         Sleep(1000);
-        if !super::log_on(super::LogCat::Loading) || base == 0 || super::addr::Build::current() != super::addr::Build::Steam {
+        if !super::log_on(super::LogCat::Loading) || base == 0 || super::addr::Build::current() == super::addr::Build::Unknown {
             continue;
         }
         let now = super::frameadv::wall_ms();

@@ -32,6 +32,7 @@
 //!   and items (we step out of the page's view for it), then the page's count is set again.
 //!   The picker's cursor clamp (`0x1403119D0`, from the pause menu) clamps to the page's count.
 
+use super::addr::St;
 use super::addr::{Build, Rva};
 use super::log;
 use crate::growth::{self, Mode};
@@ -52,43 +53,46 @@ const TABLE_PTR_RVA: Rva = Rva(0x2D37748);
 // comments are with the image at 0x140000000.
 /// The page's party count (`0x1402E7EC0` sets it: slots `+0x48E..+0x490` until 0xFF, +1 for a
 /// guest in `+0x491`).
-const COUNT: usize = 0x2E941D0;
+const COUNT: St = St(0x2E941D0);
 /// The page's per-row list counts are 4 ints at Steam `0x142E9CBC8`; what follows them is another
 /// page's window pointer (set by its own init): a 5th row's count goes there for the length of
 /// our calls only.
-const ROW_COUNT_5: usize = 0x2E9CBD8;
+const ROW_COUNT_5: St = St(0x2E9CBD8);
 /// The picker's cursor row.
-const PICK_ROW: usize = 0x2E9CBA8;
+const PICK_ROW: St = St(0x2E9CBA8);
 /// Members' max AP (stats copy, 0x100 apart).
-const MAX_AP: usize = 0x2E942C4;
+const MAX_AP: St = St(0x2E942C4);
 /// The member names' text ids (u16 each) and KH1's lookup for them.
-const NAME_IDS: usize = 0x5452B8;
-const NAME_TEXT: usize = 0x2D1510;
+const NAME_IDS: St = St(0x5452B8);
+const NAME_TEXT: St = St(0x2D1510);
 
-const AP_LEFT: usize = 0x2E8660;
+const AP_LEFT: St = St(0x2E8660);
 const AP_LEFT_PROLOGUE: [u8; 15] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x6C, 0x24, 0x10, 0x48, 0x89, 0x74, 0x24, 0x18];
-const AP_USED: usize = 0x2E8710;
+const AP_USED: St = St(0x2E8710);
 const AP_USED_PROLOGUE: [u8; 15] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x74, 0x24, 0x10, 0x57, 0x48, 0x83, 0xEC, 0x20];
 /// Replaced outright (RIP-relative; the trampoline is never called).
-const MAX_AP_FN: usize = 0x2E8560;
+const MAX_AP_FN: St = St(0x2E8560);
 const MAX_AP_PROLOGUE: [u8; 10] = [0x48, 0x63, 0xC1, 0x48, 0x8D, 0x0D, 0x5A, 0xBD, 0xBA, 0x02];
-const NAME_FN: usize = 0x2E86F0;
+const MAX_AP_PROLOGUE_EPIC: [u8; 10] = [0x48, 0x63, 0xC1, 0x48, 0x8D, 0x0D, 0x7A, 0xEB, 0xBA, 0x02];
+const NAME_FN: St = St(0x2E86F0);
 const NAME_PROLOGUE: [u8; 10] = [0x48, 0x63, 0xC1, 0x48, 0x8D, 0x0D, 0xBE, 0xCB, 0x25, 0x00];
-const REFRESH: usize = 0x2E7EC0;
+const NAME_PROLOGUE_EPIC: [u8; 10] = [0x48, 0x63, 0xC1, 0x48, 0x8D, 0x0D, 0xEE, 0xFC, 0x25, 0x00];
+const REFRESH: St = St(0x2E7EC0);
 const REFRESH_PROLOGUE: [u8; 10] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x57, 0x48, 0x83, 0xEC, 0x20];
-const CLAMP: usize = 0x3119D0;
+const CLAMP: St = St(0x3119D0);
 const CLAMP_PROLOGUE: [u8; 6] = [0x8B, 0x0D, 0xD2, 0xB1, 0xB8, 0x02];
+const CLAMP_PROLOGUE_EPIC: [u8; 6] = [0x8B, 0x0D, 0xF2, 0xDF, 0xB8, 0x02];
 
 /// The page's windows (RVAs): (definition's update pointer, KH1's function, name).
-const WINDOWS: [(usize, usize, &str); 8] = [
-    (0x052ADB0, 0x0311850, "page init"),
-    (0x05490F0, 0x0310EF0, "page"),
-    (0x05490C0, 0x0310B60, "member picker"),
-    (0x0549090, 0x0310A90, "list"),
-    (0x0548FA0, 0x0310AB0, "help line"),
-    (0x0548F40, 0x03108E0, "header"),
-    (0x0549030, 0x0310400, "sort"),
-    (0x0549060, 0x0310650, "equip"),
+const WINDOWS: [(St, St, &str); 8] = [
+    (St(0x052ADB0), St(0x0311850), "page init"),
+    (St(0x05490F0), St(0x0310EF0), "page"),
+    (St(0x05490C0), St(0x0310B60), "member picker"),
+    (St(0x0549090), St(0x0310A90), "list"),
+    (St(0x0548FA0), St(0x0310AB0), "help line"),
+    (St(0x0548F40), St(0x03108E0), "header"),
+    (St(0x0549030), St(0x0310400), "sort"),
+    (St(0x0549060), St(0x0310650), "equip"),
 ];
 
 static ORIG: [AtomicUsize; 8] = [const { AtomicUsize::new(0) }; 8];
@@ -124,7 +128,7 @@ pub fn available() -> bool {
 
 /// The KH2 list's 48 bytes in the save, if the config block is there.
 pub unsafe fn list_ptr(base: usize) -> Option<usize> {
-    if Build::current() != Build::Steam {
+    if Build::current() == Build::Unknown {
         return None;
     }
     let config = rd::<u64>(base + CONFIG_PTR_RVA) as usize;
@@ -392,13 +396,13 @@ unsafe extern "system" fn clamp() {
 }
 
 pub unsafe fn install() {
-    if Build::current() != Build::Steam {
+    if Build::current() == Build::Unknown {
         log!(Menus, "KH2 list: not on this build (Steam only): KH2 abilities stay in Sora's own list");
         return;
     }
     let b = super::sys::GetModuleHandleA(std::ptr::null()) as usize;
     BASE.store(b, Ordering::Relaxed);
-    let rebase = |rva: usize| b + rva;
+    let rebase = |rva: St| b + rva;
     // Everything is checked before anything goes in.
     let mut ok = true;
     for (def, func, what) in WINDOWS {
@@ -407,13 +411,13 @@ pub unsafe fn install() {
             ok = false;
         }
     }
-    let checks: [(usize, &[u8]); 6] = [
+    let checks: [(St, &[u8]); 6] = [
         (AP_LEFT, &AP_LEFT_PROLOGUE),
         (AP_USED, &AP_USED_PROLOGUE),
-        (MAX_AP_FN, &MAX_AP_PROLOGUE),
-        (NAME_FN, &NAME_PROLOGUE),
+        (MAX_AP_FN, super::addr::pick(&MAX_AP_PROLOGUE, &MAX_AP_PROLOGUE_EPIC)),
+        (NAME_FN, super::addr::pick(&NAME_PROLOGUE, &NAME_PROLOGUE_EPIC)),
         (REFRESH, &REFRESH_PROLOGUE),
-        (CLAMP, &CLAMP_PROLOGUE),
+        (CLAMP, super::addr::pick(&CLAMP_PROLOGUE, &CLAMP_PROLOGUE_EPIC)),
     ];
     for (at, bytes) in checks {
         if std::slice::from_raw_parts(rebase(at) as *const u8, bytes.len()) != bytes {
@@ -425,13 +429,13 @@ pub unsafe fn install() {
         log!(Menus, "KH2 list: not installed: KH2 abilities stay in Sora's own list");
         return;
     }
-    let hooks: [(usize, &[u8], usize, &AtomicUsize, &str); 6] = [
+    let hooks: [(St, &[u8], usize, &AtomicUsize, &str); 6] = [
         (AP_LEFT, &AP_LEFT_PROLOGUE, ap_left as *const () as usize, &ORIG_AP_LEFT, "AP left (KH2 list)"),
         (AP_USED, &AP_USED_PROLOGUE, ap_used as *const () as usize, &ORIG_AP_USED, "AP used (KH2 list)"),
-        (MAX_AP_FN, &MAX_AP_PROLOGUE, max_ap as *const () as usize, &ORIG_MAX_AP, "max AP (KH2 list)"),
-        (NAME_FN, &NAME_PROLOGUE, name as *const () as usize, &ORIG_NAME, "member name (KH2 list)"),
+        (MAX_AP_FN, super::addr::pick(&MAX_AP_PROLOGUE, &MAX_AP_PROLOGUE_EPIC), max_ap as *const () as usize, &ORIG_MAX_AP, "max AP (KH2 list)"),
+        (NAME_FN, super::addr::pick(&NAME_PROLOGUE, &NAME_PROLOGUE_EPIC), name as *const () as usize, &ORIG_NAME, "member name (KH2 list)"),
         (REFRESH, &REFRESH_PROLOGUE, refresh as *const () as usize, &ORIG_REFRESH, "party stats refresh (KH2 list)"),
-        (CLAMP, &CLAMP_PROLOGUE, clamp as *const () as usize, &ORIG_CLAMP, "Abilities cursor clamp (KH2 list)"),
+        (CLAMP, super::addr::pick(&CLAMP_PROLOGUE, &CLAMP_PROLOGUE_EPIC), clamp as *const () as usize, &ORIG_CLAMP, "Abilities cursor clamp (KH2 list)"),
     ];
     for (at, bytes, ours, orig, what) in hooks {
         if super::hook::install(rebase(at), bytes, ours, orig, what).is_none() {

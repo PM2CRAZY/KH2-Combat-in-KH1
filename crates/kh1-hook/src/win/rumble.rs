@@ -17,6 +17,7 @@
 //!   runs per frame.
 //! - Steam only (KH1's player's address is Steam's; elsewhere the trigger does nothing).
 
+use super::addr::St;
 use super::{log, pose};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -24,10 +25,10 @@ use std::sync::Mutex;
 
 /// KH1's vibration start (Steam `0x1401E1400 (pattern, pad)`): its first bytes, `cmp byte
 /// [rcx], 0x14; mov r8, rcx` (Checked (exe)), checked before it is called.
-const PLAY_STEAM: usize = 0x1E1400;
+const PLAY_STEAM: St = St(0x1E1400);
 const PLAY_BYTES: [u8; 6] = [0x80, 0x39, 0x14, 0x4C, 0x8B, 0xC1];
 /// KH1's frame scale (Steam `0x14233FBDC`: 1.0 at 60 fps, 2.0 at 30).
-const FRAME_SCALE_STEAM: usize = 0x233FBDC;
+const FRAME_SCALE_STEAM: St = St(0x233FBDC);
 
 /// KH1 patterns made so far, by (KH2 pattern id, frame scale): KH1's player keeps a pointer to the
 /// one playing, so they live for the game's run (nine patterns × the scales seen, a few hundred
@@ -39,7 +40,7 @@ static MADE: Mutex<Option<HashMap<(i16, u32), &'static [u8]>>> = Mutex::new(None
 pub unsafe fn play(motion: u16, id: i16) {
     static N: AtomicU32 = AtomicU32::new(0);
     let said = super::log_on(super::LogCat::Animation) && N.fetch_add(1, Ordering::Relaxed) < 40;
-    if super::addr::Build::current() != super::addr::Build::Steam {
+    if super::addr::Build::current() == super::addr::Build::Unknown {
         return;
     }
     let base = super::takeover::game_base();

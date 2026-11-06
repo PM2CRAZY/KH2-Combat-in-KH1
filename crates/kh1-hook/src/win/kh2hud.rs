@@ -27,6 +27,7 @@
 //!
 //! Nothing is drawn yet (t939).
 
+use super::addr::St;
 use super::log;
 
 /// (t941) The art's and the texture's outcome, written whatever the Loading category says (the
@@ -118,10 +119,10 @@ fn load() -> Result<(crate::hudart::Built, String), String> {
 // ------------------------------------------------------------------------- the texture (t938)
 
 /// KH1's map of a texture at a GS address (Steam `0x14010DC50 (tbp, 0, texture, psm, cbp)`).
-const MAP_RVA: usize = 0x10DC50;
+const MAP_RVA: St = St(0x10DC50);
 const MAP_BYTES: [u8; 11] = [0x48, 0x8B, 0xC4, 0x56, 0x57, 0x41, 0x56, 0x48, 0x83, 0xEC, 0x70];
 /// KH1's texture map lookup (Steam `0x14010D720 (&tex0)`).
-const LOOKUP_RVA: usize = 0x10D720;
+const LOOKUP_RVA: St = St(0x10D720);
 const LOOKUP_BYTES: [u8; 15] = [0x40, 0x57, 0x48, 0x83, 0xEC, 0x30, 0x48, 0xC7, 0x44, 0x24, 0x20, 0xFE, 0xFF, 0xFF, 0xFF];
 /// KH1's texture lookup (Steam `0x14010C050`, `kh2dpx::TEXTURE_OF_STEAM`).
 const TEXTURE_OF_BYTES: [u8; 13] = [0x40, 0x53, 0x41, 0x54, 0x41, 0x55, 0x41, 0x56, 0x41, 0x57, 0x48, 0x81, 0xEC];
@@ -205,7 +206,7 @@ pub unsafe fn texture_now(base: usize) {
     if base == 0 {
         return;
     }
-    if super::addr::Build::current() != super::addr::Build::Steam {
+    if super::addr::Build::current() == super::addr::Build::Unknown {
         return fail("Steam only");
     }
     for (rva, bytes, what) in [(MAP_RVA, &MAP_BYTES[..], "the texture map"), (LOOKUP_RVA, &LOOKUP_BYTES[..], "the map lookup"), (super::kh2dpx::TEXTURE_OF_STEAM, &TEXTURE_OF_BYTES[..], "the texture lookup")] {

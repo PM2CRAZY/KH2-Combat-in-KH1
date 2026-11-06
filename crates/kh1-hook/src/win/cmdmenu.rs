@@ -33,6 +33,7 @@
 //! Steam only (`docs/engineering-rules.md`): the hooks here check the Steam build and the first
 //! bytes, and stay out otherwise (KH1's menu as it is).
 
+use super::addr::St;
 use super::addr::Build;
 use super::{hook, log};
 use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU32, AtomicUsize, Ordering};
@@ -40,29 +41,29 @@ use std::sync::Mutex;
 
 /// KH1's battle menu structs (Steam; 0x38 bytes each: `+4` greyed bits, `+8` blocked bits, `+0xC`
 /// cursor, `+0x10` count, `+0x14` command ids, `+0x34` the entry whose list is open below).
-const ROOT_STEAM: usize = 0x528900;
-const MAGIC_STEAM: usize = 0x528938;
-const ITEMS_STEAM: usize = 0x528970;
-const SUMMON_STEAM: usize = 0x5289A8;
+const ROOT_STEAM: St = St(0x528900);
+const MAGIC_STEAM: St = St(0x528938);
+const ITEMS_STEAM: St = St(0x528970);
+const SUMMON_STEAM: St = St(0x5289A8);
 /// The menu chain (eight slots, the first the top level) and the pointer to its current slot.
-const CHAIN_STEAM: usize = 0x2D539F0;
-const LEVEL_STEAM: usize = 0x2D53A50;
+const CHAIN_STEAM: St = St(0x2D539F0);
+const LEVEL_STEAM: St = St(0x2D53A50);
 /// KH1's battle buttons (`+4` held, `+8` pressed, logical bits) and the confirm button's logical
 /// bits (the button swap applied).
-const BUTTONS_STEAM: usize = 0x298CA90;
-const CONFIRM_MASK_STEAM: usize = 0x5456A0;
+const BUTTONS_STEAM: St = St(0x298CA90);
+const CONFIRM_MASK_STEAM: St = St(0x5456A0);
 /// Sora's actor (KH1's first party slot) and KH1's movement state table (0x40 bytes a state).
-const SORA_STEAM: usize = 0x2D37280;
-const STATES_STEAM: usize = 0x2DB3840;
+const SORA_STEAM: St = St(0x2D37280);
+const STATES_STEAM: St = St(0x2DB3840);
 /// KH1's top-level fill (`0x140294220`, run by the command step before navigation): Attack, the
 /// battle lists (`0x1402944C0`), the Items row, the party targets, the Triangle command.
-const TOP_FILL_STEAM: usize = 0x294220;
+const TOP_FILL_STEAM: St = St(0x294220);
 /// `mov [rsp+0x10], rbx; mov [rsp+0x18], rbp`.
 const TOP_FILL_PROLOGUE: [u8; 10] = [0x48, 0x89, 0x5C, 0x24, 0x10, 0x48, 0x89, 0x6C, 0x24, 0x18];
 /// KH1's can-act test (`0x140297870 (actor)`).
-const CAN_ACT_STEAM: usize = 0x297870;
+const CAN_ACT_STEAM: St = St(0x297870);
 /// KH1's system sound (`0x14017A040 (id)`: 1 the cursor's move).
-const SOUND_STEAM: usize = 0x17A040;
+const SOUND_STEAM: St = St(0x17A040);
 
 const SUMMON_CMD: u8 = 6;
 const SUMMON_OUT: u8 = 0x4F;
@@ -453,7 +454,7 @@ pub unsafe fn install() {
     DPAD_KH2.store(s.dpad_left_kh2, Ordering::Relaxed);
     MEMORY_KH2.store(s.cursor_memory_kh2, Ordering::Relaxed);
     LOCK_KH2.store(s.command_lock_kh2, Ordering::Relaxed);
-    if Build::current() != Build::Steam {
+    if Build::current() == Build::Unknown {
         log!(Menus, "command menu: KH1's (the Command Menu rows are Steam only for now)");
         return;
     }

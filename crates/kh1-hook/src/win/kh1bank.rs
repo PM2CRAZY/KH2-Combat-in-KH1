@@ -33,44 +33,45 @@
 //! the Steam exe's); elsewhere nothing is registered and KH2's sounds aren't heard (the mod has no
 //! player of its own: `kh2sound`).
 
+use super::addr::St;
 use super::addr::Build;
 use super::log;
 use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU32, AtomicUsize, Ordering};
 use std::sync::Mutex;
 
 /// KH1's bank registration (Steam `0x1400E0F00`): `push rdi; push r14; push r15; sub rsp, 0x40`.
-const REGISTER_STEAM: usize = 0xE0F00;
+const REGISTER_STEAM: St = St(0xE0F00);
 const REGISTER_PROLOGUE: [u8; 10] = [0x40, 0x57, 0x41, 0x56, 0x41, 0x57, 0x48, 0x83, 0xEC, 0x40];
 /// The engine's bank slots left / in use (Steam `0x14004F570` / `0x14004F5F0`): `push rbx; sub
 /// rsp, 0x30` both.
-const BANKS_LEFT_STEAM: usize = 0x4F570;
-const BANKS_USED_STEAM: usize = 0x4F5F0;
+const BANKS_LEFT_STEAM: St = St(0x4F570);
+const BANKS_USED_STEAM: St = St(0x4F5F0);
 const COUNT_PROLOGUE: [u8; 6] = [0x40, 0x53, 0x48, 0x83, 0xEC, 0x30];
 /// KH1's sound system object (Steam `0x1421AAFD8`, non-zero once up: the registration checks it
 /// too). Its `+0x18` is the semaphore KH1's bank-adding thread (`0x1400DBA40` -> "_add_scd_thread"
 /// `0x1400E0A50`) holds while it adds a room's banks (taken with `0x1400E43B0`, given back with
 /// `0x1400E42A0`); ours are added only while we can take it, so the two never add at once.
-const SOUND_UP_STEAM: usize = 0x21AAFD8;
+const SOUND_UP_STEAM: St = St(0x21AAFD8);
 /// The bank list's head and its count (Steam `0x1404D65D8`, `0x1404D65E8`).
-const BANK_LIST_STEAM: usize = 0x4D65D8;
-const BANK_COUNT_STEAM: usize = 0x4D65E8;
+const BANK_LIST_STEAM: St = St(0x4D65D8);
+const BANK_COUNT_STEAM: St = St(0x4D65E8);
 /// KH1's `_aligned_malloc` import (Steam IAT `0x1403B0778`, api-ms-win-crt-heap; its
 /// `_aligned_free`, which KH1's bank release calls, is at `0x1403B0780`).
-const ALIGNED_MALLOC_IAT_STEAM: usize = 0x3B0778;
+const ALIGNED_MALLOC_IAT_STEAM: St = St(0x3B0778);
 
 /// KH1's effect queue (Steam `0x140179AC0 (no, id, position pointer, volume)`, the one its hit,
 /// object and actor sounds use): `mov [rsp+8], rbx`.
-const QUEUE_STEAM: usize = 0x179AC0;
+const QUEUE_STEAM: St = St(0x179AC0);
 const QUEUE_PROLOGUE: [u8; 5] = [0x48, 0x89, 0x5C, 0x24, 0x08];
 /// KH1's stop of a queued sound (Steam `0x140179D90 (no, id)`: frees its slot and stops / deletes
 /// its record, `0x1400DEF50`) and its "still playing" (Steam `0x1401789F0 (no, id)`, via
 /// `0x1400DEEE0`). Both start `mov r9d, [rip+..]` (the slot count) then `xor r8d, r8d`.
-const STOP_STEAM: usize = 0x179D90;
-const PLAYING_STEAM: usize = 0x1789F0;
+const STOP_STEAM: St = St(0x179D90);
+const PLAYING_STEAM: St = St(0x1789F0);
 /// The slot table and its slot count (Steam `0x14232D560` pointer, `0x14232D554` count): 0x20
 /// bytes a slot, `+0` no, `+0x18` id, `+0x1C` state (0 free).
-const SLOTS_STEAM: usize = 0x232D560;
-const SLOT_COUNT_STEAM: usize = 0x232D554;
+const SLOTS_STEAM: St = St(0x232D560);
+const SLOT_COUNT_STEAM: St = St(0x232D554);
 
 /// Our banks' file numbers (KH1's own are under 100000).
 pub const FIRST_NO: i32 = 900_000;
@@ -116,7 +117,7 @@ static SEEN: AtomicBool = AtomicBool::new(false);
 /// `loadscreen` and `softreset` use, Checked (exe) there): 0 / 1 start-up and KH1's reset, 2 / 3
 /// the title, from 4 a game; 0xD..0xF the title's movies, 0xF and 0x10 go back to 2 (the title
 /// again) (`docs/kh1-asset-cache.md` §2.1, Checked (decomp)).
-const MODE_STEAM: usize = 0x233FBC0;
+const MODE_STEAM: St = St(0x233FBC0);
 
 /// t1079: ours are put back into KH1's lists only while a game runs, never while KH1 is going back
 /// to its title or is on it (the owner: from the save menu's return to the title, the loading
@@ -181,7 +182,7 @@ fn note(line: impl FnOnce() -> String) {
 
 /// Adds a one-sound bank (from the loader thread); its file number, or `None` off Steam.
 pub fn add(mut bytes: Vec<u8>, what: String) -> Option<i32> {
-    if Build::current() != Build::Steam {
+    if Build::current() == Build::Unknown {
         return None;
     }
     kh2_formats::scd_cut::as_loaded(&mut bytes);
@@ -321,7 +322,7 @@ unsafe fn register(base: usize, b: &mut Bank) -> bool {
 /// Once a frame, at the frame's end (`debugmenu::frame_end`): watches KH1's bank list and puts
 /// ours (back) in.
 pub unsafe fn frame_end(base: usize) {
-    if Build::current() != Build::Steam || base == 0 {
+    if Build::current() == Build::Unknown || base == 0 {
         return;
     }
     let mode: i32 = rd(base + MODE_STEAM);
@@ -473,7 +474,7 @@ pub unsafe fn play(no: i32, ms: Option<u32>) -> bool {
 
 /// `play`, with the id KH1's queue holds it by (for `fade_stop`), if played.
 pub unsafe fn play_id(no: i32, ms: Option<u32>) -> Option<i32> {
-    if Build::current() != Build::Steam {
+    if Build::current() == Build::Unknown {
         return None;
     }
     let base = super::sys::GetModuleHandleA(std::ptr::null()) as usize;
@@ -513,11 +514,11 @@ pub unsafe fn play_id(no: i32, ms: Option<u32>) -> Option<i32> {
 /// KH2 stops an effect element's sound so as its bind node goes (`0x1401DE500 (handle, 0x78)`,
 /// Checked (decomp)); Assumption: the fade's unit is the same in both (both go to the same
 /// engine call).
-const FADE_STOP_STEAM: usize = 0x179A20;
+const FADE_STOP_STEAM: St = St(0x179A20);
 const FADE_STOP_PROLOGUE: [u8; 7] = [0x48, 0x83, 0xEC, 0x38, 0x44, 0x8B, 0x15];
 
 pub unsafe fn fade_stop(no: i32, id: i32, fade: i32) {
-    if Build::current() != Build::Steam {
+    if Build::current() == Build::Unknown {
         return;
     }
     let base = super::sys::GetModuleHandleA(std::ptr::null()) as usize;
@@ -576,7 +577,7 @@ unsafe fn tend(base: usize) {
 /// which also takes the entry's name in r9, Checked (decomp / exe)): marks an entry of the same number released (0xFFFF, freed by `0x1400DC8C0`),
 /// copies the data with `_aligned_malloc`, loads it with `0x14004D530`, pushes the entry on the
 /// voice bank list): `push rdi; push r14; push r15; sub rsp, 0x40`.
-const VOICE_REGISTER_STEAM: usize = 0xE0110;
+const VOICE_REGISTER_STEAM: St = St(0xE0110);
 /// Our voice bank's entry name (the registration's fourth argument): under 0x20 bytes with its
 /// end and no `%`, in the form of KH1's own voice entries' names (`0x1400D2D10`: the file's name
 /// up to `_vsb`, then `.win32.scd`).
@@ -584,25 +585,25 @@ const VOICE_NAME: &[u8] = b"kh2_tt0_sora.win32.scd\0";
 const _: () = assert!(VOICE_NAME.len() <= 0x20);
 /// The voice bank list and its count (Steam `0x1404D65B8`, `0x1404D65C8`; `+0x10` the bank
 /// number, `+0x18` the engine handle, `+0x20` the data).
-const VOICE_LIST_STEAM: usize = 0x4D65B8;
-const VOICE_COUNT_STEAM: usize = 0x4D65C8;
+const VOICE_LIST_STEAM: St = St(0x4D65B8);
+const VOICE_COUNT_STEAM: St = St(0x4D65C8);
 /// Each party member's voice bank number (Steam `0x142D37270`, i8 by member id `< 10`): KH1's
 /// clip request `0x140290080` reads Sora's from it into his voice channel.
-const MEMBER_BANKS_STEAM: usize = 0x2D37270;
+const MEMBER_BANKS_STEAM: St = St(0x2D37270);
 /// KH1's voice channels (Steam `0x142D371D0`, 4 of 0x28 bytes: `+0` state (2 asked), `+1` kind
 /// (0 a member's bank), `+2` bank, `+3` clip, `+8` the actor); an actor's channel is its data's
 /// `+0xBD` (data = handle `+0x6C`).
-const CHANNELS_STEAM: usize = 0x2D371D0;
+const CHANNELS_STEAM: St = St(0x2D371D0);
 
 /// KH1's live sound list (Steam `0x1404D6618`, next at `+8`): each record (`Axa::SoundEntry`,
 /// 0x50 bytes) has its engine sound at `+0x10`, bank `+0x30`, clip `+0x34`, state `+0x3C` (3 a
 /// voice clip, `0x1400DBCF0`). Checked (decomp).
-const LIVE_LIST_STEAM: usize = 0x4D6618;
+const LIVE_LIST_STEAM: St = St(0x4D6618);
 /// The engine's sound stop (Steam `0x1400565A0 (sound, &fade)`: `movd xmm0, [rdx]; cvtdq2ps xmm0,
 /// xmm0`, then the stop `0x1400565D0` under the engine's lock), the call KH1's own `SslSeStop`
 /// (`0x1400DEF50`) and its frame clean-up (`0x1400DC8C0`, at `0x1400DCA9C`: `lea rdx, [rsp+0x20]`
 /// = 0; `lea rcx, [rbx+0x10]`) make on a record. Checked (exe, decomp).
-const SOUND_STOP_STEAM: usize = 0x565A0;
+const SOUND_STOP_STEAM: St = St(0x565A0);
 const SOUND_STOP_PROLOGUE: [u8; 7] = [0x66, 0x0F, 0x6E, 0x02, 0x0F, 0x5B, 0xC0];
 
 /// KH2's last quote priority taken (KH2's quote request `0x1403CE580`, its object's `+0x10`: set
@@ -645,7 +646,7 @@ static VOICE_COUNT: AtomicI32 = AtomicI32::new(-1);
 
 /// Hands over Sora's KH2 battle voice bank (from the loader thread).
 pub fn set_voice_bank(bytes: Vec<u8>) {
-    if Build::current() != Build::Steam {
+    if Build::current() == Build::Unknown {
         return;
     }
     if let Ok(mut v) = VOICE_BANK.lock() {
@@ -729,7 +730,7 @@ unsafe fn tend_voice(base: usize) {
 /// channel. A line of KH1's own on the channel (another bank or speaker) keeps KH1's rule.
 /// False if it can't go that way (not heard); true also when a rule drops it.
 pub unsafe fn voice(clip: u8, priority: i32) -> bool {
-    if Build::current() != Build::Steam || clip > 127 {
+    if Build::current() == Build::Unknown || clip > 127 {
         return false;
     }
     let base = super::sys::GetModuleHandleA(std::ptr::null()) as usize;

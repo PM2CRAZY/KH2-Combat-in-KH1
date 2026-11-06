@@ -58,66 +58,67 @@
 //!
 //! Steam only (the addresses are Steam's); elsewhere KH1's own programs stay.
 
+use super::addr::St;
 use super::log;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 // KH1 code (Steam RVAs).
-const ALLOC_STEAM: usize = 0x1EC330;
-const TO_HANDLE_STEAM: usize = 0x38AD90;
-const RAND01_STEAM: usize = 0x31BA30;
-const MUL_STEAM: usize = 0xE65E0;
-const XFORM_STEAM: usize = 0x386A40;
-const NORMALIZE_STEAM: usize = 0x386C40;
-const EULER_STEAM: usize = 0xE6730;
-const SHAPE_DRAW_STEAM: usize = 0x31E210;
-const MB_CONSTRUCT_STEAM: usize = 0x321520;
-const MB_DESTRUCT_STEAM: usize = 0x3215A0;
+const ALLOC_STEAM: St = St(0x1EC330);
+const TO_HANDLE_STEAM: St = St(0x38AD90);
+const RAND01_STEAM: St = St(0x31BA30);
+const MUL_STEAM: St = St(0xE65E0);
+const XFORM_STEAM: St = St(0x386A40);
+const NORMALIZE_STEAM: St = St(0x386C40);
+const EULER_STEAM: St = St(0xE6730);
+const SHAPE_DRAW_STEAM: St = St(0x31E210);
+const MB_CONSTRUCT_STEAM: St = St(0x321520);
+const MB_DESTRUCT_STEAM: St = St(0x3215A0);
 /// KH1's pppColor: calc (checked before plugging) and construct / reset.
-const KH1_COLOR_CALC_STEAM: usize = 0x32B940;
-const COLOR_CONSTRUCT_STEAM: usize = 0x32BAE0;
+const KH1_COLOR_CALC_STEAM: St = St(0x32B940);
+const COLOR_CONSTRUCT_STEAM: St = St(0x32BAE0);
 /// KH1's pppVtMime: calc (checked before plugging), draw, construct, reset, destruct.
-const KH1_VT_MIME_CALC_STEAM: usize = 0x32C2E0;
-const VT_MIME_DRAW_STEAM: usize = 0x32C150;
-const VT_MIME_CONSTRUCT_STEAM: usize = 0x32C380;
-const VT_MIME_RESET_STEAM: usize = 0x32C3C0;
-const VT_MIME_DESTRUCT_STEAM: usize = 0x32C3E0;
+const KH1_VT_MIME_CALC_STEAM: St = St(0x32C2E0);
+const VT_MIME_DRAW_STEAM: St = St(0x32C150);
+const VT_MIME_CONSTRUCT_STEAM: St = St(0x32C380);
+const VT_MIME_RESET_STEAM: St = St(0x32C3C0);
+const VT_MIME_DESTRUCT_STEAM: St = St(0x32C3E0);
 /// KH1's pppAngleLoop (calc checked before plugging; construct, reset) and pppKeShpTail3X (calc,
 /// draw checked before plugging, construct, reset).
-const KH1_ANGLE_LOOP_CALC_STEAM: usize = 0x32B620;
-const ANGLE_LOOP_CONSTRUCT_STEAM: usize = 0x32B6B0;
-const ANGLE_LOOP_RESET_STEAM: usize = 0x32B6E0;
-const TAIL_3X_CALC_STEAM: usize = 0x337D20;
-const KH1_TAIL_3X_DRAW_STEAM: usize = 0x338160;
-const TAIL_3X_CONSTRUCT_STEAM: usize = 0x3380B0;
-const TAIL_3X_RESET_STEAM: usize = 0x338120;
+const KH1_ANGLE_LOOP_CALC_STEAM: St = St(0x32B620);
+const ANGLE_LOOP_CONSTRUCT_STEAM: St = St(0x32B6B0);
+const ANGLE_LOOP_RESET_STEAM: St = St(0x32B6E0);
+const TAIL_3X_CALC_STEAM: St = St(0x337D20);
+const KH1_TAIL_3X_DRAW_STEAM: St = St(0x338160);
+const TAIL_3X_CONSTRUCT_STEAM: St = St(0x3380B0);
+const TAIL_3X_RESET_STEAM: St = St(0x338120);
 /// KH1's program table and the entry of its MegaBirth's calc (checked before plugging).
-const TABLE_STEAM: usize = 0x54FF00;
-const KH1_MB_CALC_STEAM: usize = 0x3212F0;
+const TABLE_STEAM: St = St(0x54FF00);
+const KH1_MB_CALC_STEAM: St = St(0x3212F0);
 // KH1's effect globals (Steam RVAs), KH2's in brackets.
 /// Effects held (`0x142B0EFC0`).
-const HELD: usize = 0x2E9D7E0;
+const HELD: St = St(0x2E9D7E0);
 /// The effect being stepped (`0x142B0EC00`): `+0xD5` paused (KH2 `+0xC1`), `+0xD8` the repeat
 /// frame of a tick (KH2 `+0xC4`).
-const EFFECT: usize = 0x2E9D420;
+const EFFECT: St = St(0x2E9D420);
 /// The effect's DPD resources (`0x142B0EC08`): the allocator first, models `+0x20` (0x38 each,
 /// vertices `+0x18`), shapes `+0x28` (0x10 each: animation, texture), vertex sets `+0x30`.
-const CTX: usize = 0x2E9D428;
+const CTX: St = St(0x2E9D428);
 /// The instance being stepped (`0x142B0EC10`): `+0x10` its matrix, `+0x90` vertex override.
-const OBJ: usize = 0x2E9D430;
+const OBJ: St = St(0x2E9D430);
 /// The effect's root (`0x142B0EC20`), view (`0x142B0EC60`), projection (`0x142B0EDE0`), root
 /// position (`0x142B0EC50`, KH1 keeps a copy) and the root's axis lengths (`0x142B0F010`).
-const ROOT: usize = 0x2E9D440;
-const VIEW: usize = 0x2E9D480;
-const PROJ: usize = 0x2E9D600;
-const ROOT_T: usize = 0x2E9D810;
-const RS: usize = 0x2E9D830;
+const ROOT: St = St(0x2E9D440);
+const VIEW: St = St(0x2E9D480);
+const PROJ: St = St(0x2E9D600);
+const ROOT_T: St = St(0x2E9D810);
+const RS: St = St(0x2E9D830);
 /// The draw packets' buffer cursor (`0x142B0EFD0`).
-const CHAIN: usize = 0x2E9D7F0;
+const CHAIN: St = St(0x2E9D7F0);
 /// Set while an instance loop fast-forwards (KH2 skips MegaBirth then: its list `0x140779990`;
 /// KH1's list `0x14054FEE0` holds KH1's MegaBirth, not ours).
-const FAST_FORWARD: usize = 0x2E9D804;
+const FAST_FORWARD: St = St(0x2E9D804);
 /// KH1's sine table (4096 entries, the same values as KH2's `0x14077E640`).
-const SINE: usize = 0x54BED0;
+const SINE: St = St(0x54BED0);
 
 /// KH2's program types ours stand in for.
 pub const MEGA_BIRTH: u32 = 201;
@@ -284,7 +285,7 @@ unsafe fn table(i: usize) -> usize {
 /// After KH1 relocated the DPX at `dpx`: each KH2-own program word (`programs`: offset in the
 /// DPX, KH2 type) that KH1 pointed at its own entry is pointed at ours. Steam only.
 pub fn plug(dpx: usize, programs: &[(usize, u32)]) {
-    if super::addr::Build::current() != super::addr::Build::Steam || programs.is_empty() {
+    if super::addr::Build::current() == super::addr::Build::Unknown || programs.is_empty() {
         return;
     }
     let b = unsafe { super::sys::GetModuleHandleA(std::ptr::null()) } as usize;
@@ -1124,32 +1125,32 @@ unsafe fn matrix(rec: usize, key: usize, st: usize, m_now: usize, vbm: usize, ma
 
 // KH1's renderer (Steam RVAs), KH2's in brackets.
 /// GIF tag with PRIM (`0x140472DA0`).
-const GS_PRIM_STEAM: usize = 0x386330;
+const GS_PRIM_STEAM: St = St(0x386330);
 /// TEST (`0x1404730A0`), ZBUF (`0x1404733D0`), TEX0 (`0x1404730D0`), ALPHA (`0x140472AD0`),
 /// CLAMP (`0x140472C80`): each (register value, context 0).
-const GS_TEST_STEAM: usize = 0x386630;
-const GS_ZBUF_STEAM: usize = 0x386960;
-const GS_TEX0_STEAM: usize = 0x386660;
-const GS_ALPHA_STEAM: usize = 0x386060;
-const GS_CLAMP_STEAM: usize = 0x386210;
+const GS_TEST_STEAM: St = St(0x386630);
+const GS_ZBUF_STEAM: St = St(0x386960);
+const GS_TEX0_STEAM: St = St(0x386660);
+const GS_ALPHA_STEAM: St = St(0x386060);
+const GS_CLAMP_STEAM: St = St(0x386210);
 /// Shader (`0x140127030`), shader constant (`0x140125F00`).
-const SHADER_STEAM: usize = 0x108700;
-const SHADER_CONST_STEAM: usize = 0x1075D0;
+const SHADER_STEAM: St = St(0x108700);
+const SHADER_CONST_STEAM: St = St(0x1075D0);
 /// The camera matrices to the renderer, inverse of projection ∘ view out (`0x1404AEB30`).
-const CAMERA_STEAM: usize = 0x31EAA0;
+const CAMERA_STEAM: St = St(0x31EAA0);
 /// A rigid matrix's inverse (`0x14013F3A0`).
-const INVERSE_STEAM: usize = 0xE5570;
+const INVERSE_STEAM: St = St(0xE5570);
 /// Vertices from the renderer (`0x140111970`: count, stride) and their draw (`0x14011A2F0`:
 /// count, primitive, flags).
-const VERTICES_STEAM: usize = 0xF3040;
-const DRAW_VERTICES_STEAM: usize = 0xFB9C0;
+const VERTICES_STEAM: St = St(0xF3040);
+const DRAW_VERTICES_STEAM: St = St(0xFB9C0);
 /// The effect allocator's free (`0x1404AF410`).
-const FREE_STEAM: usize = 0x31F2F0;
+const FREE_STEAM: St = St(0x31F2F0);
 /// Monochrome mode (`0x140B60240`) and the depth buffer's base (`0x140B60258`).
-const MONO: usize = 0x2538200;
-const ZBP: usize = 0x25381D4;
+const MONO: St = St(0x2538200);
+const ZBP: St = St(0x25381D4);
 /// View ∘ root (`0x142B0ED60`).
-const VIEW_ROOT: usize = 0x2E9D580;
+const VIEW_ROOT: St = St(0x2E9D580);
 /// The ribbon's vertex colour scale (the KH2 decomp drops the operand; as `kh2-fx` read it).
 const RIBBON_COLOUR_SCALE: f32 = 1.0 / 225.0;
 /// The scroll-draw variant (key `+8` set, `0x1404B7530`) isn't ported: logged once.
@@ -1675,7 +1676,7 @@ unsafe fn strip(model: usize, key: usize, s: usize, colour: usize, ea: &[V4], eb
         }
     }
     // GS state, as KH2 sets it (KH1's same calls).
-    let gs = |at: usize, v: u64| {
+    let gs = |at: St, v: u64| {
         let f: unsafe extern "system" fn(usize, i32) = std::mem::transmute(b + at);
         f(&v as *const u64 as usize, 0);
     };
@@ -1836,28 +1837,28 @@ unsafe fn strip(model: usize, key: usize, s: usize, colour: usize, ea: &[V4], eb
 /// the strength, its rate and acceleration, work 0 `+0..+0xC`; ours uses them: KH2's 238 has
 /// the same state, **Assumption**: its construct and reset aren't in the KH2 decomp).
 const KE_MDL_DTT: u32 = 145;
-const KE_MDL_DTT_DRAW_STEAM: usize = 0x334DF0;
-const KE_MDL_DTT_CONSTRUCT_STEAM: usize = 0x334DB0;
-const KE_MDL_DTT_RESET_STEAM: usize = 0x334DD0;
+const KE_MDL_DTT_DRAW_STEAM: St = St(0x334DF0);
+const KE_MDL_DTT_CONSTRUCT_STEAM: St = St(0x334DB0);
+const KE_MDL_DTT_RESET_STEAM: St = St(0x334DD0);
 /// PRIM from a GIF tag's PRIM field (`0x140472E90`), the first frame buffer bound as texture
 /// slot `n` (`0x140126890`) and the second ("setPrevFrameTex", `0x140126C30`).
-const GS_PRIM_FIELD_STEAM: usize = 0x386420;
-const FRAME_TEX_STEAM: usize = 0x107F60;
-const PREV_FRAME_TEX_STEAM: usize = 0x108300;
+const GS_PRIM_FIELD_STEAM: St = St(0x386420);
+const FRAME_TEX_STEAM: St = St(0x107F60);
+const PREV_FRAME_TEX_STEAM: St = St(0x108300);
 /// The renderer's size (`+0x10`, `0x14011BA10`), viewport (`+0xA0`, `0x14011C290`), scale
 /// (`+0xB0`, `0x14011CC00`) and screen (`+0x38`, `0x14011C700`).
-const REN_SIZE_STEAM: usize = 0xFD0E0;
-const REN_VIEWPORT_STEAM: usize = 0xFD960;
-const REN_SCALE_STEAM: usize = 0xFE2D0;
-const REN_SCREEN_STEAM: usize = 0xFDDD0;
+const REN_SIZE_STEAM: St = St(0xFD0E0);
+const REN_VIEWPORT_STEAM: St = St(0xFD960);
+const REN_SCALE_STEAM: St = St(0xFE2D0);
+const REN_SCREEN_STEAM: St = St(0xFDDD0);
 /// The two frame buffers (`0x140B60250` / `0x140B60248` width, `0x140B6025C` / `0x140B60260`
 /// base), the distortion's CLAMP region (`0x140B607D0`) and the effects' frame step
 /// (`0x140B60244`, 1.0 a 60 Hz frame: KH2 subtracts it from the instance's 30 Hz accumulator).
-const FB0_W: usize = 0x25381CC;
-const FB0_BP: usize = 0x25381D8;
-const FB1_W: usize = 0x25381C4;
-const FB1_BP: usize = 0x25381DC;
-const DTT_CLAMP: usize = 0x2538218;
+const FB0_W: St = St(0x25381CC);
+const FB0_BP: St = St(0x25381D8);
+const FB1_W: St = St(0x25381C4);
+const FB1_BP: St = St(0x25381DC);
+const DTT_CLAMP: St = St(0x2538218);
 /// The GIF tag of KH2's triangle packet (its PRIM field is what the PC draw sets).
 const DTT_TAG: u64 = 0xC02D_C000_0000_8001;
 /// A model's normals are 4.12 fixed point (|n| = 4096 in Sora's Drive sphere, model 5 of his
@@ -1934,7 +1935,7 @@ unsafe extern "system" fn dtt_draw(obj: usize, key: usize, prog: usize) {
         0 => 0x44,
         a => a as u64,
     };
-    let gs = |at: usize, v: u64| {
+    let gs = |at: St, v: u64| {
         let f: unsafe extern "system" fn(usize, i32) = std::mem::transmute(b + at);
         f(&v as *const u64 as usize, 0);
     };

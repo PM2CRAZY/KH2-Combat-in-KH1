@@ -24,6 +24,7 @@
 //! timer the recoil started is put back as it was before the pass (KH2 gives none, answer 4). No
 //! hook of its own: the hit pass is `hurt`'s.
 
+use super::addr::St;
 use super::addr::Build;
 use super::styles::{self, Kind};
 use super::sys::*;
@@ -181,11 +182,11 @@ pub unsafe fn after_pass(actor: usize, b: Before) {
 
 /// KH1's attack meeting (Steam `0x1402B4A20`): `push rbx; push rsi; push rdi; push r14;
 /// sub rsp, 0x78` (Checked (exe)).
-const MEET_STEAM: usize = 0x2B4A20;
+const MEET_STEAM: St = St(0x2B4A20);
 const MEET_PROLOGUE: [u8; 10] = [0x40, 0x53, 0x56, 0x57, 0x41, 0x56, 0x48, 0x83, 0xEC, 0x78];
 /// KH1's directional test (Steam `0x1402B4640 (own, other) -> 0 / 1`; it only reads; Checked
 /// (decomp)), its first bytes checked before a call (Checked (exe)).
-const FACES_STEAM: usize = 0x2B4640;
+const FACES_STEAM: St = St(0x2B4640);
 const FACES_BYTES: [u8; 8] = [0x4C, 0x8B, 0xDC, 0x49, 0x89, 0x5B, 0x20, 0x57];
 /// A KH1 guard's priority (`combat::GUARD_PRIORITY`; KH1's half `0x1402B4BC0` treats 100 as a
 /// guard).
@@ -196,7 +197,7 @@ static ORIG_MEET: AtomicUsize = AtomicUsize::new(0);
 
 /// Hooks KH1's attack meeting (Steam only; the hook checks its bytes first).
 pub unsafe fn install() {
-    if Build::current() != Build::Steam {
+    if Build::current() == Build::Unknown {
         return;
     }
     let base = GetModuleHandleA(std::ptr::null()) as usize;

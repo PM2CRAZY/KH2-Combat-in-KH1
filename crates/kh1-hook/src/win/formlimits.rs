@@ -14,10 +14,11 @@
 //!   started) is refused there as KH1 refuses an unusable command (sound 4; `combat::command_step`).
 //! - Only with Drive on (the ini's `drive`) and on Steam.
 
+use super::addr::St;
 use super::log;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 
-const OFFER_RVA: usize = 0x28D0F0;
+const OFFER_RVA: St = St(0x28D0F0);
 const OFFER_BYTES: [u8; 7] = [0x48, 0x81, 0xEC, 0x98, 0x00, 0x00, 0x00];
 const RET: u8 = 0xC3;
 
@@ -30,7 +31,7 @@ static OFF: AtomicBool = AtomicBool::new(false);
 static IN_FORM: AtomicBool = AtomicBool::new(false);
 
 fn on() -> bool {
-    super::settings::get().drive && super::addr::Build::current() == super::addr::Build::Steam
+    super::settings::get().drive && super::addr::Build::current() != super::addr::Build::Unknown
 }
 
 /// Drive > Limits in Forms on KH2 (the ini's `drive_limits = kh2`, the default).
@@ -71,9 +72,9 @@ pub fn form_changed(in_form: bool) {
 const TRINITY: u8 = 0x52;
 /// Its bit in KH1's equipped-limit bits (`0x14299C240`, by the pairs' index: Trinity's is 4).
 const TRINITY_BIT: u32 = 1 << 4;
-const EQUIPPED_RVA: usize = 0x299C240;
+const EQUIPPED_RVA: St = St(0x299C240);
 /// KH1's recount of the equipped-limit bits from Sora's abilities (`0x14028D550`).
-const RECOUNT_RVA: usize = 0x28D550;
+const RECOUNT_RVA: St = St(0x28D550);
 const RECOUNT_BYTES: [u8; 10] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x74, 0x24, 0x10];
 /// KH1's bits are masked to Trinity's (`frame`).
 static MASKED: AtomicBool = AtomicBool::new(false);

@@ -24,6 +24,7 @@
 //! The step is hooked here only when `leftblade` has not hooked it (it calls `before_step` itself),
 //! and only once Always is first on (at start from the ini, or from the menu).
 
+use super::addr::St;
 use super::addr::Build;
 use super::{hook, log};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -35,7 +36,7 @@ static OWN_HOOK: AtomicBool = AtomicBool::new(false);
 static ORIG_STEP: AtomicUsize = AtomicUsize::new(0);
 
 /// KH1's trail step `(actor)` (Steam; `push rdi; sub rsp, 0x20`, Checked (exe), as `leftblade`).
-const TRAIL_STEP_STEAM: usize = 0x2C1F20;
+const TRAIL_STEP_STEAM: St = St(0x2C1F20);
 const TRAIL_STEP_PROLOGUE: [u8; 6] = [0x40, 0x57, 0x48, 0x83, 0xEC, 0x20];
 /// Actor fields (Checked (decomp)): its flags (`0xC001`: alive and its weapon drawn), the "trail
 /// wanted" word `+0x1CC` and its bit, its weapon object handle, its alive word (bit 0 set, bit 1
@@ -89,7 +90,7 @@ unsafe fn ensure_hook() {
     if OWN_HOOK.load(Ordering::Relaxed) || super::leftblade::trail_step_hooked() {
         return;
     }
-    if Build::current() != Build::Steam {
+    if Build::current() == Build::Unknown {
         log!(Menus, "Cosmetics: the Keyblade trail setting is Steam only (KH1's trail step is where the Steam build has it)");
         return;
     }

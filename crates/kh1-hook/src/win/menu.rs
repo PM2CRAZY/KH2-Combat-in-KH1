@@ -24,6 +24,7 @@
 //! AP sums walk the 48 bytes (Steam `0x1402E8660`, `0x1402E8710`: `cmp 0x30`), which `kh2list`
 //! hooks to add the KH2 list's AP; nothing in KH1 indexes an array by ability id.
 
+use super::addr::St;
 use super::addr::Rva;
 use super::log;
 use crate::growth::{self, Kh1Sora, Mode};
@@ -555,7 +556,7 @@ pub unsafe fn growth_frame(base: usize) {
 /// KH1's game mode (Steam `0x14233FBC0`, the mode machine's state: 2 / 3 the title; the address
 /// `loadscreen`, `softreset` and `kh1bank` use, Checked (exe) there; the modes Checked (decomp),
 /// `docs/kh1-asset-cache.md` §2.1).
-const MODE_STEAM: usize = 0x233FBC0;
+const MODE_STEAM: St = St(0x233FBC0);
 /// KH1 has been on its title since the ability menu's last frame (`frame_end`).
 static TITLE_SEEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
@@ -563,7 +564,7 @@ static TITLE_SEEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool
 /// growth levels aren't compared with the last one's (the owner, the bug-list thread: a second
 /// save loaded in one session showed an "Ability Up" box for levels it already had). One read.
 pub unsafe fn frame_end(base: usize) {
-    if super::addr::Build::current() == super::addr::Build::Steam && matches!(rd::<i32>(base + MODE_STEAM), 2 | 3) {
+    if super::addr::Build::current() != super::addr::Build::Unknown && matches!(rd::<i32>(base + MODE_STEAM), 2 | 3) {
         TITLE_SEEN.store(true, std::sync::atomic::Ordering::Relaxed);
     }
 }

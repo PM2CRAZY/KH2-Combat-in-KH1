@@ -17,6 +17,7 @@
 //! Not checked in game: what is left behind by a world that was running (Assumption: KH1's reset,
 //! written for boot, clears it; the PS2's overlay loads are no-ops in this build, Checked (decomp)).
 
+use super::addr::St;
 use super::addr::Build;
 use super::log;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -41,13 +42,13 @@ const HOLD_MS: u64 = 1000;
 
 /// KH1's mode step (Steam; `sub rsp, 0x28; movsxd rax, [mode]`, then `cmp eax, 0x12`), the mode, the
 /// mode-change countdown and mode 1's timer (Checked (decomp + exe)).
-const MODE_STEP_STEAM: usize = 0x170870;
+const MODE_STEP_STEAM: St = St(0x170870);
 const MODE_STEP_PROLOGUE: [u8; 7] = [0x48, 0x83, 0xEC, 0x28, 0x48, 0x63, 0x05];
-const MODE_STEAM: usize = 0x233FBC0;
-const COUNTDOWN_STEAM: usize = 0x22EC0AC;
-const TIMER_STEAM: usize = 0x22EC0A8;
+const MODE_STEAM: St = St(0x233FBC0);
+const COUNTDOWN_STEAM: St = St(0x22EC0AC);
+const TIMER_STEAM: St = St(0x22EC0A8);
 /// KH1's full reset (`push rbx; sub rsp, 0x20`), only looked at.
-const RESET_STEAM: usize = 0x170630;
+const RESET_STEAM: St = St(0x170630);
 const RESET_PROLOGUE: [u8; 6] = [0x40, 0x53, 0x48, 0x83, 0xEC, 0x20];
 /// The modes: 0 and 1 are start-up, 2 and 3 the title screen; from 4 on a game is running.
 const FIRST_GAME_MODE: i32 = 4;
@@ -95,7 +96,7 @@ unsafe fn verify() {
     if CHECKED.swap(true, Ordering::Relaxed) {
         return;
     }
-    if Build::current() != Build::Steam {
+    if Build::current() == Build::Unknown {
         log!(Menus, "Soft Reset: Steam only (KH1's mode step is where the Steam build has it)");
         return;
     }

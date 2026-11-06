@@ -73,6 +73,7 @@
 //! ours is alive. Steam only, every function's first
 //! bytes checked before use.
 
+use super::addr::St;
 use super::log;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 
@@ -89,18 +90,18 @@ const LEFT_WRIST: u32 = 205;
 const RAW_BONE: u32 = 0x2000;
 
 // KH1 (Steam) functions, with their first bytes (Checked (exe)).
-const MAKE_STEAM: usize = 0x290D60;
+const MAKE_STEAM: St = St(0x290D60);
 const MAKE_PROLOGUE: [u8; 9] = [0x40, 0x55, 0x53, 0x56, 0x48, 0x8D, 0x6C, 0x24, 0xB9];
-const TASK_ADD_STEAM: usize = 0x28A900;
+const TASK_ADD_STEAM: St = St(0x28A900);
 const TASK_ADD_PROLOGUE: [u8; 10] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x6C, 0x24, 0x10];
-const STEP_STEAM: usize = 0x297FE0;
+const STEP_STEAM: St = St(0x297FE0);
 const STEP_PROLOGUE: [u8; 8] = [0x48, 0x8B, 0xC4, 0x57, 0x48, 0x83, 0xEC, 0x60];
-const END_STEAM: usize = 0x292390;
+const END_STEAM: St = St(0x292390);
 const END_PROLOGUE: [u8; 9] = [0x48, 0x85, 0xC9, 0x0F, 0x84, 0xC9, 0x00, 0x00, 0x00];
-const ATTACH_STEAM: usize = 0x2A06E0;
+const ATTACH_STEAM: St = St(0x2A06E0);
 const ATTACH_PROLOGUE: [u8; 11] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x74, 0x24, 0x10, 0x57];
-const TO_HANDLE_STEAM: usize = 0x38AD90;
-const REQUEST_STEAM: usize = 0x29F980;
+const TO_HANDLE_STEAM: St = St(0x38AD90);
+const REQUEST_STEAM: St = St(0x29F980);
 const REQUEST_PROLOGUE: [u8; 10] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x57, 0x48, 0x83, 0xEC, 0x20];
 /// KH1's "actors freed" task (`0x140292E40`, priority 163001, every frame): each actor with
 /// `+0x374` bit 2 (dying) and without bit 0x800000 has its model instance freed and, with a weapon
@@ -108,7 +109,7 @@ const REQUEST_PROLOGUE: [u8; 10] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x57, 0x48, 0x
 /// the row's member `+0x4C` among KH1's three (`DAT_14296B540`) and reads through null when none
 /// matches. Checked (decomp). Hooked (t837) so the holder's weapon, the left Keyblade's object of
 /// ours that no load slot of KH1's holds (our row's member is 0xFF), is off it first.
-const FREED_STEAM: usize = 0x292E40;
+const FREED_STEAM: St = St(0x292E40);
 const FREED_PROLOGUE: [u8; 5] = [0x48, 0x89, 0x5C, 0x24, 0x10];
 static ORIG_FREED: AtomicUsize = AtomicUsize::new(0);
 /// `+0x374`: kept by the freed task (not freed).
@@ -118,11 +119,11 @@ const RAW_SLOT: u32 = 0x2000_0000;
 
 // KH1 (Steam) data.
 /// The actor step task list (`+0x10` its first task) and the general object table's count / rows.
-const STEP_LIST_STEAM: usize = 0x2D5AB00;
-const TABLE_COUNT_STEAM: usize = 0x296B628;
-const TABLE_ROWS_STEAM: usize = 0x296B630;
+const STEP_LIST_STEAM: St = St(0x2D5AB00);
+const TABLE_COUNT_STEAM: St = St(0x296B628);
+const TABLE_ROWS_STEAM: St = St(0x296B630);
 /// The actor pool: 96 actors of 0x4B0 bytes.
-const POOL_STEAM: usize = 0x2D372A0;
+const POOL_STEAM: St = St(0x2D372A0);
 const POOL_COUNT: usize = 96;
 const ACTOR_SIZE: usize = 0x4B0;
 /// The holder's step priority (after Sora's pose task at 5000, before the one at 8000).
@@ -245,14 +246,14 @@ pub unsafe fn install() {
     if !super::settings::get().valor_left_blade {
         return;
     }
-    if super::addr::Build::current() != super::addr::Build::Steam {
+    if super::addr::Build::current() == super::addr::Build::Unknown {
         log!(Animation, "left Keyblade holder: not installed (Steam addresses only)");
         return;
     }
     // Our own probe hooks the motion request (log line "hooked set motion"), so its first bytes
     // are our jump by now: `prologue_is` also accepts the bytes a hook of ours moved (t834).
-    let ok = |at: usize, want: &[u8]| super::hook::prologue_is(base + at, want);
-    let checks: [(&str, usize, &[u8]); 6] = [
+    let ok = |at: St, want: &[u8]| super::hook::prologue_is(base + at, want);
+    let checks: [(&str, St, &[u8]); 6] = [
         ("motion request", REQUEST_STEAM, &REQUEST_PROLOGUE),
         ("actor maker", MAKE_STEAM, &MAKE_PROLOGUE),
         ("task maker", TASK_ADD_STEAM, &TASK_ADD_PROLOGUE),

@@ -48,17 +48,18 @@
 //!
 //! Cost: one hook, called once per hit record; a table of at most 256 u16 built per KH2 hit.
 
+use super::addr::St;
 use super::addr::Build;
 use super::log;
 use super::sys::*;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU8, AtomicUsize, Ordering};
 
 /// KH1's damage function (Steam).
-const DAMAGE_STEAM: usize = 0x2BFA80;
+const DAMAGE_STEAM: St = St(0x2BFA80);
 /// Its first three instructions (`mov [rsp+8], rbx; mov [rsp+0x10], rbp; mov [rsp+0x18], rsi`).
 const DAMAGE_PROLOGUE: [u8; 15] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x6C, 0x24, 0x10, 0x48, 0x89, 0x74, 0x24, 0x18];
 /// The pointer to KH1's damage curve (Steam).
-const CURVE_PTR_STEAM: usize = 0x2DE5DC0;
+const CURVE_PTR_STEAM: St = St(0x2DE5DC0);
 /// The attack object: owner handle, data handle, critical chance (f32).
 const ATTACK_OWNER: usize = 0x34;
 const ATTACK_DATA: usize = 0x5C;
@@ -75,7 +76,7 @@ const DATA_POWER: usize = 0x48;
 const PLAIN_SWING_ROW: usize = 13;
 /// KH1's battle data block (Steam `0x142D22D40`, `btltbl.bin`) and its spells' attack data: Fire,
 /// Blizzard, Thunder at levels 1..3 from `+0x5F28`, 0x70 apart (`combat::kh1_spell_data`).
-const BLOCK_STEAM: usize = 0x2D22D40;
+const BLOCK_STEAM: St = St(0x2D22D40);
 const KH1_SPELLS: usize = 0x5F28;
 const DATA_SIZE: usize = 0x70;
 /// KH2 Blizzard's ATKP, whose subs 0, 2, 4 are a normal cast's whole power at levels 1..3 (one
@@ -197,7 +198,7 @@ unsafe fn crits_for(owner: usize, sora: usize) -> bool {
 
 /// Hooks KH1's damage function (Steam only; the hook checks its bytes first).
 pub unsafe fn install() {
-    if Build::current() != Build::Steam {
+    if Build::current() == Build::Unknown {
         return;
     }
     let base = GetModuleHandleA(std::ptr::null()) as usize;

@@ -22,6 +22,7 @@
 //! shows KH1's own tables (its 118 slots, its request table as in the file); never over another
 //! motion set (a world's own, `+0x1E0`).
 
+use super::addr::St;
 use super::addr::Rva;
 use super::styles::Kind;
 use super::{log, pose};
@@ -1189,7 +1190,7 @@ fn make(mset: &[u8], src: &pose::Src, bake: Option<&pose::Baker>, cache: Option<
     // motion's own, which KH1's motion pass fires and KH1's sound event handler, wrapped
     // (`sound_event`), plays through `kh2sound` / `kh2fx` (`kh2_trigger_keys`).
     // (Steam only: KH1's handler is wrapped there. Elsewhere the old way, `tick` reading them.)
-    let steam = super::addr::Build::current() == super::addr::Build::Steam;
+    let steam = super::addr::Build::current() != super::addr::Build::Unknown;
     // (t880) KH2's next attacks on the Keyblade as edges of ours (`rearm_keys`), first, so the
     // edge budget never drops them.
     let mut triggers = rearm_keys(motion, clip);
@@ -1581,7 +1582,7 @@ pub unsafe fn keyblade_guard(actor: usize) -> Option<(u16, u8)> {
 /// root travel, lift-off and rise start follow it (`air_root`, `air_root_form`, `lifts_off`,
 /// `rise_start`). Off Steam (no level reader) KH2's clip is read as before t869.
 pub unsafe fn no_gravity(actor: usize) -> bool {
-    if super::addr::Build::current() == super::addr::Build::Steam {
+    if super::addr::Build::current() != super::addr::Build::Unknown {
         return kh1_level(actor, ks::KH2_RANGE, ks::RANGE_NO_GRAVITY) == Some(true);
     }
     let Some(m) = current(actor) else { return false };
@@ -1624,7 +1625,7 @@ pub unsafe fn allow_movement(actor: usize) -> Option<bool> {
     // (t872) Our level event 8.4 of the motion KH1 plays, read by KH1's own reader (`kh1_level`,
     // `Some` only while one of our slots plays); off Steam KH2's clip as before. KH2's input step
     // keeps the stick only with range 41 or a free range on (`0x1403A89A0`, Checked (decomp)).
-    if super::addr::Build::current() == super::addr::Build::Steam {
+    if super::addr::Build::current() != super::addr::Build::Unknown {
         return kh1_level(actor, ks::KH2_RANGE, ks::RANGE_ALLOW_MOVEMENT);
     }
     let m = current(actor)?;
@@ -1759,7 +1760,7 @@ pub unsafe fn edge_stop(actor: usize) -> bool {
     use character_core::WindowKind as W;
     // (t871) Our level event 8.2 of the motion KH1 plays, read by KH1's own reader (`kh1_level`);
     // off Steam KH2's clip as before.
-    if super::addr::Build::current() == super::addr::Build::Steam {
+    if super::addr::Build::current() != super::addr::Build::Unknown {
         return kh1_level(actor, ks::KH2_RANGE, ks::RANGE_EDGE_STOP) == Some(true);
     }
     let Some(m) = current(actor) else { return false };
@@ -1787,7 +1788,7 @@ pub unsafe fn ground_hold(actor: usize) -> Option<u16> {
     use character_core::WindowKind as W;
     // (t871) Our level event 8.3 of the motion KH1 plays (`ground_hold_spans`), read by KH1's own
     // reader (`kh1_level`); off Steam KH2's clip as before.
-    if super::addr::Build::current() == super::addr::Build::Steam {
+    if super::addr::Build::current() != super::addr::Build::Unknown {
         let m = current(actor)?;
         return (kh1_level(actor, ks::KH2_RANGE, ks::RANGE_GROUND_HOLD) == Some(true)).then_some(m.motion);
     }
@@ -1820,7 +1821,7 @@ pub unsafe fn turn_to_lock(actor: usize) {
     }
     // (t878) Our level event 8.5 of the motion KH1 plays, its rate in the key's `c`, read by
     // KH1's own reader (`kh1_key`); off Steam KH2's clip as before.
-    let rate = if super::addr::Build::current() == super::addr::Build::Steam {
+    let rate = if super::addr::Build::current() != super::addr::Build::Unknown {
         let Some(Some(key)) = kh1_key(actor, ks::KH2_RANGE, ks::RANGE_TURN_TO_LOCK) else { return };
         if rd::<u16>(key + 4) == 0 {
             return;
@@ -1944,7 +1945,7 @@ pub unsafe fn keyblade_rearm(actor: usize) {
     use character_core::WindowKind as W;
     // (t880) On Steam KH1's motion pass fires the re-arm from our slots' edge keys (`rearm_keys`,
     // `sound_event`); this per-frame read is only for builds without them.
-    if super::addr::Build::current() == super::addr::Build::Steam {
+    if super::addr::Build::current() != super::addr::Build::Unknown {
         return;
     }
     let now = (|| {
@@ -2410,7 +2411,7 @@ fn ground_hold_spans(clip: &character_core::Clip) -> Vec<(f32, f32)> {
 /// KH1's motion event level reader (Steam `0x140394770 (motion, type << 16 | id, time f32) -> key`,
 /// the last key of that type and id at or before the time; its pose pass reads 0.0, 1.x, 5.0 and
 /// 7.0 with it; Checked (decomp)) and its first bytes (Checked (exe), as `leftblade` checks them).
-const LEVEL_READER_STEAM: usize = 0x394770;
+const LEVEL_READER_STEAM: St = St(0x394770);
 const LEVEL_READER_PROLOGUE: [u8; 5] = [0x48, 0x89, 0x5C, 0x24, 0x10];
 /// The actor's motion table handle (`+0x1D4`; the motion of slot `+0x168` is its entry there).
 const ACTOR_MOTIONS: usize = 0x1D4;
@@ -2427,7 +2428,7 @@ static LEVEL_READER_OK: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU
 /// while `+0x48` > 0, Checked (decomp)). Only on one of our slots (`current`), whose pointers are
 /// KH1's own; `None` off Steam, off our slots, or with the reader not where expected.
 pub unsafe fn kh1_key(actor: usize, kind: u16, id: u16) -> Option<Option<usize>> {
-    if super::addr::Build::current() != super::addr::Build::Steam {
+    if super::addr::Build::current() == super::addr::Build::Unknown {
         return None;
     }
     current(actor)?;
@@ -2438,7 +2439,7 @@ pub unsafe fn kh1_key(actor: usize, kind: u16, id: u16) -> Option<Option<usize>>
 /// (`Kh1Copy`), read by KH1's own reader at KH1's time in it: whether it is on. `None` off Steam,
 /// when the motion playing isn't one of our copies, or the reader isn't where expected.
 pub unsafe fn kh1_copy_level(actor: usize, id: u16) -> Option<bool> {
-    if super::addr::Build::current() != super::addr::Build::Steam || actor < 0x10000 {
+    if super::addr::Build::current() == super::addr::Build::Unknown || actor < 0x10000 {
         return None;
     }
     let key = reader_key(actor, ks::KH2_RANGE, id, |motion| COPY_AT.try_lock().is_ok_and(|v| v.contains(&motion)))?;
@@ -2480,7 +2481,7 @@ unsafe fn reader_key(actor: usize, kind: u16, id: u16, ours: impl Fn(usize) -> b
 /// only ours, as `kh1_key`), read by KH1's own level reader at KH1's time in it: whether it is on
 /// (the key's `a`). `None` off Steam or with the reader not where expected.
 pub unsafe fn kh1_own_level(actor: usize, kind: u16, id: u16) -> Option<bool> {
-    if super::addr::Build::current() != super::addr::Build::Steam || actor < 0x10000 {
+    if super::addr::Build::current() == super::addr::Build::Unknown || actor < 0x10000 {
         return None;
     }
     Some(reader_key(actor, kind, id, |_| true)?.is_some_and(|key| rd::<u8>(key + 4) != 0))
@@ -3504,7 +3505,7 @@ pub unsafe fn install() {
     super::hook::install(base + BIND_OWN_RVA, &BIND_OWN_PROLOGUE, bind_own as *const () as usize, &ORIG_BIND_OWN, "actor motion set bind (KH2 slots)");
     super::hook::install(base + BIND_SET_RVA, &BIND_SET_PROLOGUE, bind_set as *const () as usize, &ORIG_BIND_SET, "motion set bind (KH2 slots)");
     // (KH2's swap into the fall in KH1's jump, `kh2_apex`: Steam only.)
-    if super::addr::Build::current() == super::addr::Build::Steam {
+    if super::addr::Build::current() != super::addr::Build::Unknown {
         super::hook::install(base + APEX_STEAM, &APEX_PROLOGUE, apex as *const () as usize, &ORIG_APEX, "jump apex (KH2's fall swap)");
         super::hook::install(base + SOUND_EVENT_STEAM, &SOUND_EVENT_PROLOGUE, sound_event as *const () as usize, &ORIG_SOUND_EVENT, "motion sound event (KH2's frame triggers)");
     }
@@ -3602,11 +3603,11 @@ unsafe fn loop_range(actor: usize) {
 /// `+0x3B8`, nothing queued (`+0x178`) and its takeoff request playing (`+0x164` = base `+0x3D0` +
 /// 4), it asks its apex (base + 5, blend 6.0, the constant at `0x14042F93C`) and queues its fall
 /// (base + 6, blend 0). Checked (decomp, exe).
-const APEX_STEAM: usize = 0x2AF630;
+const APEX_STEAM: St = St(0x2AF630);
 const APEX_PROLOGUE: [u8; 6] = [0x40, 0x53, 0x48, 0x83, 0xEC, 0x20];
 static ORIG_APEX: AtomicUsize = AtomicUsize::new(0);
 /// KH1's motion request (`0x14029F980 (actor, request, blend)`, Steam; a fresh queue).
-const SET_MOTION_STEAM: usize = 0x29F980;
+const SET_MOTION_STEAM: St = St(0x29F980);
 /// KH2's swap into the fall (Steam KH2 `0x1403CB680`, the jump's update; Checked (decomp)): with the
 /// arc's time `+0xF0` + 5 at or past its rise time `+0xF4`, while the jump's motion is still up
 /// (`+0x124` bit 0, cleared by the swap), it asks the fall motion (`+0x118`, which the jump's start
@@ -3643,7 +3644,7 @@ unsafe fn kh2_apex(actor: usize) -> bool {
 /// own checks (the flags `0x142867364` bit 0x200, the actor's mute bits `+0x9C` by `c`,
 /// `0x14017AF20`, the actor's side). Checked (decomp). `mov [rsp+8], rbx; mov [rsp+0x10], rsi;
 /// push rdi; sub rsp, 0x20`, Checked (exe).
-const SOUND_EVENT_STEAM: usize = 0x295420;
+const SOUND_EVENT_STEAM: St = St(0x295420);
 const SOUND_EVENT_PROLOGUE: [u8; 15] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x74, 0x24, 0x10, 0x57, 0x48, 0x83, 0xEC, 0x20];
 static ORIG_SOUND_EVENT: AtomicUsize = AtomicUsize::new(0);
 
@@ -3714,7 +3715,7 @@ unsafe extern "system" fn apex(actor: usize) {
 /// `shared::physics`), while KH1's takeoff request plays with nothing queued: KH1's fall request
 /// (base + 6) with KH2's blend. Only at Jump KH2 with our fall slot.
 pub unsafe fn fall_now(actor: usize, why: &str) {
-    if !super::shared::on() || !(super::styles::kh2(Kind::Jump) || super::form::native_now()) || !has(FALL.request, FALL.motion) || super::addr::Build::current() != super::addr::Build::Steam {
+    if !super::shared::on() || !(super::styles::kh2(Kind::Jump) || super::form::native_now()) || !has(FALL.request, FALL.motion) || super::addr::Build::current() == super::addr::Build::Unknown {
         return;
     }
     let base = rd::<i32>(actor + 0x3D0);

@@ -35,6 +35,7 @@
 //!   and KH1's weapon out (Sora, 1, as the motion start) when Anti ends if it was out (`left`). Anti's
 //!   slots carry no trail level (`kh2slots::make`). KH1's own draw and trail step do the rest.
 
+use super::addr::St;
 use super::log;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicU8, AtomicUsize, Ordering};
 
@@ -153,7 +154,7 @@ pub fn code_stale(now_ms: u64, wait_ms: u64) -> bool {
 // No Keyblade (module notes)
 
 /// KH1's weapon out (Steam `0x1402A2E30 (actor, n)`) and its first bytes (`driveparty`'s, Checked (exe)).
-const WEAPON_OUT_RVA: usize = 0x2A2E30;
+const WEAPON_OUT_RVA: St = St(0x2A2E30);
 const WEAPON_OUT_BYTES: [u8; 15] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x57, 0x48, 0x83, 0xEC, 0x20, 0x48, 0x8B, 0xD9, 0x8B, 0xFA];
 /// An actor's `+0` bit: its weapon is out (drawn, its trail kept).
 const WEAPON_BIT: u32 = 0x4000;
@@ -170,7 +171,7 @@ unsafe fn wr_u32(p: usize, v: u32) {
 
 /// KH1's weapon out wrapped (Steam only, its first bytes checked): nothing for Sora in Anti Form.
 pub unsafe fn install(base: usize) {
-    if super::addr::Build::current() != super::addr::Build::Steam {
+    if super::addr::Build::current() == super::addr::Build::Unknown {
         return;
     }
     if super::hook::install(base + WEAPON_OUT_RVA, &WEAPON_OUT_BYTES, weapon_out as *const () as usize, &ORIG_WEAPON_OUT, "weapon out (Anti Form)").is_none() {

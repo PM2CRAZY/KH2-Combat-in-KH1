@@ -8,6 +8,7 @@
 //!   the Drive gauge (MP mode keeps testing's 3 MP for every form).
 //! - **Sonic Rave's start on KH1's limit path** (t979; `docs/kh1-drive-forms-native.md` §23). Below.
 
+use super::addr::St;
 use super::log;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 
@@ -127,7 +128,7 @@ pub const FOLLOW_UPS: [(u8, u16, &str, u16); 9] = [
 pub const FOLLOW_ARG: u8 = 0x28;
 /// KH1's command slots (`0x140293000 (slot, record)`: the slot's record if no command took the slot
 /// this frame; KH1's limit offer uses slot 3, Triangle, Checked (decomp)).
-const OFFER_RVA: usize = 0x293000;
+const OFFER_RVA: St = St(0x293000);
 const TRIANGLE: u32 = 3;
 /// The top row's name in Limit Form (KH2's 0x2C3).
 pub const ROW_NAME: &str = "Limit";
@@ -181,23 +182,23 @@ pub const SONIC_RAVE: usize = 0;
 /// Infinity (t986).
 /// Strike Raid (t988).
 const FIRST_MOTION: [Option<u16>; 4] = [Some(super::kh1rows::SONIC_RAVE_MOTIONS[0]), Some(super::kh1rows::LAST_ARCANUM_MOTIONS[0]), Some(super::kh1rows::STRIKE_RAID_MOTIONS[0]), Some(super::kh1rows::INFINITY_MOTIONS[0])];
-const FLAGS_RVA: usize = 0x2867364;
+const FLAGS_RVA: St = St(0x2867364);
 const IN_LIMIT: u32 = 0x1_0000;
 const LIMIT_DONE: u32 = 0x80_0000;
-const RUNNING_RVA: usize = 0x2EFB0D0;
-const DATA_RVA: usize = 0x2EFB0E0;
-const LIGHT_RVA: usize = 0x2EFB0E8;
+const RUNNING_RVA: St = St(0x2EFB0D0);
+const DATA_RVA: St = St(0x2EFB0E0);
+const LIGHT_RVA: St = St(0x2EFB0E8);
 /// KH1's element check (`mov [rsp+8], rbx; mov [rsp+10h], rsi; push rdi; sub rsp, 20h`, Checked
 /// (exe)).
-const ALIVE_RVA: usize = 0x2AE0C0;
+const ALIVE_RVA: St = St(0x2AE0C0);
 const ALIVE_BYTES: [u8; 15] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x74, 0x24, 0x10, 0x57, 0x48, 0x83, 0xEC, 0x20];
 /// KH1's end-task adder (`lea rdx, [0x1403979E0]; mov ecx, 52000; jmp`, Checked (exe)).
-const END_TASK_RVA: usize = 0x397970;
+const END_TASK_RVA: St = St(0x397970);
 const END_TASK_BYTES: [u8; 12] = [0x48, 0x8D, 0x15, 0x69, 0x00, 0x00, 0x00, 0xB9, 0x20, 0xCB, 0x00, 0x00];
 /// KH1's light calls (as `drivedim`'s, Checked (exe)).
-const NEW_LIGHT_RVA: usize = 0x29D880;
+const NEW_LIGHT_RVA: St = St(0x29D880);
 const NEW_LIGHT_BYTES: [u8; 6] = [0x40, 0x53, 0x48, 0x83, 0xEC, 0x20];
-const FADE_RVA: usize = 0x29E0D0;
+const FADE_RVA: St = St(0x29E0D0);
 const FADE_BYTES: [u8; 10] = [0x48, 0x89, 0x6C, 0x24, 0x10, 0x48, 0x89, 0x74, 0x24, 0x18];
 /// KH1's air states (`+0x70`: 1 jump, 2 fall; 8 flight).
 const STATE: usize = 0x70;
@@ -209,8 +210,8 @@ struct Colour([f32; 4]);
 pub const ENTRY_ID: i32 = 2397;
 /// KH1's motion request (fresh queue) and queue (Checked (exe): `mov [rsp+8], rbx; push rdi; sub
 /// rsp, 20h` both), and a request's action flag and a queued one's "after the last" bit (`form`).
-const SET_MOTION_RVA: usize = 0x29F980;
-const QUEUE_RVA: usize = 0x29FA30;
+const SET_MOTION_RVA: St = St(0x29F980);
+const QUEUE_RVA: St = St(0x29FA30);
 const MOTION_BYTES: [u8; 10] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x57, 0x48, 0x83, 0xEC, 0x20];
 const ACTION: u32 = 0x0100_0000;
 const QUEUED: u32 = 0x4000_0000;
@@ -237,7 +238,7 @@ fn mark() -> usize {
 
 /// KH1's element check answering for our limit (`alive`). Only with Drive on and on Steam.
 pub unsafe fn install(base: usize) {
-    if !super::settings::get().drive || super::addr::Build::current() != super::addr::Build::Steam {
+    if !super::settings::get().drive || super::addr::Build::current() == super::addr::Build::Unknown {
         return;
     }
     super::hook::install(base + ALIVE_RVA, &ALIVE_BYTES, alive as *const () as usize, &ORIG_ALIVE, "KH1's limit element check (Limit Form's limits)");
@@ -255,11 +256,11 @@ pub unsafe fn install(base: usize) {
 /// follow-up records' range added (`FOLLOW_UPS`, contiguous ids), then back to KH1's two exits; the
 /// box still slides in as KH1 draws it. `rdi` is left as KH1's `sub` leaves it, `eax` is dead there
 /// (`0x140293B53` tests `ecx`; `0x140293BF1` reads memory; both reload `rax` before using it).
-const BOX_EXEMPT_RVA: usize = 0x293B46;
+const BOX_EXEMPT_RVA: St = St(0x293B46);
 const BOX_EXEMPT_BYTES: [u8; 13] = [0x40, 0x80, 0xEF, 0x58, 0x41, 0x3A, 0xFE, 0x0F, 0x87, 0x9E, 0x00, 0x00, 0x00];
 /// Where KH1's compare goes on: the press test (in range) and past it (not).
-const BOX_PRESS_RVA: usize = 0x293B53;
-const BOX_SKIP_RVA: usize = 0x293BF1;
+const BOX_PRESS_RVA: St = St(0x293B53);
+const BOX_SKIP_RVA: St = St(0x293BF1);
 
 unsafe fn box_takes_ours(base: usize) {
     let at = base + BOX_EXEMPT_RVA;
@@ -647,9 +648,9 @@ const KH2_FALL: u16 = 4;
 /// callback (`+0xC`, a handle made by `0x14038ADD0`) `0x14039FFB0` (`mov edx, 2; jmp 0x1402B1960`:
 /// KH1's fall state 2), which KH1's end rule `0x14029F6E0` runs as that entry starts.
 const KH1_FALL: u32 = 6;
-const HANDLE_RVA: usize = 0x38ADD0;
+const HANDLE_RVA: St = St(0x38ADD0);
 const HANDLE_BYTES: [u8; 9] = [0x40, 0x53, 0x48, 0x83, 0xEC, 0x20, 0x48, 0x8B, 0xD9];
-const TO_FALL_RVA: usize = 0x39FFB0;
+const TO_FALL_RVA: St = St(0x39FFB0);
 const TO_FALL_BYTES: [u8; 6] = [0xBA, 0x02, 0x00, 0x00, 0x00, 0xE9];
 /// KH1's fall state.
 const FALL_STATE: i32 = 2;
@@ -731,9 +732,10 @@ pub unsafe fn offer(command: u16) {
 /// The follow-up asked for (its record) and the game frame it was asked on.
 static WANT: std::sync::Mutex<Option<(u8, u64)>> = std::sync::Mutex::new(None);
 /// KH1's reaction provider setter (`mov [rip+..], rcx; ret`, Checked (exe)) and its pointer.
-const PROVIDER_SET_RVA: usize = 0x293180;
+const PROVIDER_SET_RVA: St = St(0x293180);
 const PROVIDER_SET_BYTES: [u8; 8] = [0x48, 0x89, 0x0D, 0x19, 0x09, 0xAC, 0x02, 0xC3];
-const PROVIDER_RVA: usize = 0x2D53AA0;
+const PROVIDER_SET_BYTES_EPIC: [u8; 8] = [0x48, 0x89, 0x0D, 0xA9, 0x34, 0xAC, 0x02, 0xC3];
+const PROVIDER_RVA: St = St(0x2D53AA0);
 
 /// Our reaction provider (KH1's command fill calls it each frame, `0x1402948F0`): the follow-up
 /// the script or the move asked for this frame or the last (the script steps after the fill or
@@ -806,20 +808,21 @@ static SHOWN: std::sync::Mutex<Option<u8>> = std::sync::Mutex::new(None);
 /// `quickrun` / `magnet`; Checked (decomp) and (code)).
 pub const LIMIT_STATE: i32 = 0x2D;
 const STATE_FLAGS: u32 = 4;
-const REGISTER_RVA: usize = 0x2B1B80;
+const REGISTER_RVA: St = St(0x2B1B80);
 const REGISTER_BYTES: [u8; 14] = [0x48, 0x8D, 0x05, 0xB9, 0x1C, 0xB0, 0x02, 0x4C, 0x63, 0xD1, 0x49, 0xC1, 0xE2, 0x06];
-const SET_STATE_RVA: usize = 0x2B1960;
+const REGISTER_BYTES_EPIC: [u8; 14] = [0x48, 0x8D, 0x05, 0x49, 0x48, 0xB0, 0x02, 0x4C, 0x63, 0xD1, 0x49, 0xC1, 0xE2, 0x06];
+const SET_STATE_RVA: St = St(0x2B1960);
 const SET_STATE_BYTES: [u8; 10] = [0x48, 0x89, 0x5C, 0x24, 0x10, 0x57, 0x48, 0x83, 0xEC, 0x20];
-const STAY_RVA: usize = 0x2B1840;
+const STAY_RVA: St = St(0x2B1840);
 const STAY_BYTES: [u8; 4] = [0x8B, 0x41, 0x70, 0xC3];
-const CULL_OFF_RVA: usize = 0x2A0F70;
-const CULL_ON_RVA: usize = 0x2A0F80;
+const CULL_OFF_RVA: St = St(0x2A0F70);
+const CULL_ON_RVA: St = St(0x2A0F80);
 const CULL_OFF_BYTES: [u8; 10] = [0x81, 0x89, 0x74, 0x03, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00];
 const CULL_ON_BYTES: [u8; 10] = [0x81, 0xA1, 0x74, 0x03, 0x00, 0x00, 0xFF, 0xFF, 0xFD, 0xFF];
 
 unsafe fn state_calls_ok(base: usize) -> bool {
     use super::hook::prologue_is as is;
-    is(base + REGISTER_RVA, &REGISTER_BYTES) && is(base + SET_STATE_RVA, &SET_STATE_BYTES) && is(base + STAY_RVA, &STAY_BYTES) && is(base + CULL_OFF_RVA, &CULL_OFF_BYTES) && is(base + CULL_ON_RVA, &CULL_ON_BYTES)
+    is(base + REGISTER_RVA, super::addr::pick(&REGISTER_BYTES, &REGISTER_BYTES_EPIC)) && is(base + SET_STATE_RVA, &SET_STATE_BYTES) && is(base + STAY_RVA, &STAY_BYTES) && is(base + CULL_OFF_RVA, &CULL_OFF_BYTES) && is(base + CULL_ON_RVA, &CULL_ON_BYTES)
 }
 
 /// Our state's enter (KH1's `0x1402B1960` calls it with the actor): KH1's limit states' own work,
@@ -920,7 +923,7 @@ unsafe extern "system" fn state_step(actor: usize, disp: *mut [f32; 4]) -> usize
 /// mover drops him into its fall (motion 4: the script's main loop then ends the limit) only with
 /// no floor and none of the ranges that keep him off it (no gravity, ids 3 / 24; the edge stop, 29:
 /// `kh2slots::ground_hold`, Checked (decomp) `0x1403B9090`), so the same fall, only then.
-const KH1_LEDGE_RVA: usize = 0x39EBA0;
+const KH1_LEDGE_RVA: St = St(0x39EBA0);
 const KH1_LEDGE_BYTES: [u8; 13] = [0x40, 0x53, 0x48, 0x83, 0xEC, 0x20, 0x48, 0x8B, 0xD9, 0x85, 0xD2, 0x74, 0x25];
 
 unsafe extern "system" fn state_transition(actor: usize, no_floor: i32) -> i32 {
@@ -977,7 +980,7 @@ unsafe fn enter_state(base: usize, actor: usize, k: usize) -> bool {
 /// KH2's Infinity (its command) and KH1's jump step (Steam KH1, `mov [rsp+10h], rbx; push rdi;
 /// sub rsp, 40h; test dword [rcx], 1000h`, Checked (exe)).
 const INFINITY: u16 = 683;
-const JUMP_STEP_RVA: usize = 0x2AF6A0;
+const JUMP_STEP_RVA: St = St(0x2AF6A0);
 const JUMP_STEP_BYTES: [u8; 16] = [0x48, 0x89, 0x5C, 0x24, 0x10, 0x57, 0x48, 0x83, 0xEC, 0x40, 0xF7, 0x01, 0x00, 0x10, 0x00, 0x00];
 /// The limit running steps on KH1's jump step (Infinity).
 static JUMPS: AtomicBool = AtomicBool::new(false);
@@ -996,7 +999,7 @@ unsafe fn leave_state(base: usize) {
 /// Our provider set (`on`, a limit of ours starts) or KH1's cleared (it ends), as KH1's limit states
 /// set and clear theirs; cleared only while ours is the one set.
 unsafe fn set_provider(base: usize, on: bool) {
-    if base == 0 || !super::hook::prologue_is(base + PROVIDER_SET_RVA, &PROVIDER_SET_BYTES) {
+    if base == 0 || !super::hook::prologue_is(base + PROVIDER_SET_RVA, super::addr::pick(&PROVIDER_SET_BYTES, &PROVIDER_SET_BYTES_EPIC)) {
         return;
     }
     let set: unsafe extern "system" fn(usize) = std::mem::transmute(base + PROVIDER_SET_RVA);

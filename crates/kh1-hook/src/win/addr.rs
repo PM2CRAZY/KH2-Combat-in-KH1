@@ -25,6 +25,68 @@ impl Rva {
     }
 }
 
+/// (tm41) An address in the game as its RVA in the Steam build (the mod's newer code is written
+/// against Steam); `base + st` gives it in the running build, through `EPIC` on Epic.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct St(pub usize);
+
+impl St {
+    /// This address's RVA in the running build.
+    pub fn get(self) -> usize {
+        match Build::current() {
+            Build::Epic => epic(self.0),
+            _ => self.0,
+        }
+    }
+    /// The Steam RVA itself (for logs and comparisons with Steam addresses).
+    pub const fn steam(self) -> usize {
+        self.0
+    }
+    /// `self` + `n` bytes, still a Steam RVA (inside the same function or table).
+    pub const fn add(self, n: usize) -> St {
+        St(self.0 + n)
+    }
+}
+
+impl std::ops::Add<St> for usize {
+    type Output = usize;
+    fn add(self, s: St) -> usize {
+        self + s.get()
+    }
+}
+
+/// (tm41) KH1's bytes at a place, Steam's or Epic's, where the two builds differ only in a
+/// RIP-relative displacement (each pair checked against both exes).
+pub fn pick<T: ?Sized>(steam: &'static T, epic: &'static T) -> &'static T {
+    if Build::current() == Build::Epic { epic } else { steam }
+}
+
+impl std::ops::Add<&St> for usize {
+    type Output = usize;
+    fn add(self, s: &St) -> usize {
+        self + s.get()
+    }
+}
+
+impl std::ops::Add<usize> for St {
+    type Output = St;
+    fn add(self, n: usize) -> St {
+        St(self.0 + n)
+    }
+}
+
+impl std::fmt::LowerHex for St {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::LowerHex::fmt(&self.0, f)
+    }
+}
+
+impl std::fmt::UpperHex for St {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::UpperHex::fmt(&self.0, f)
+    }
+}
+
 impl std::ops::Add<Rva> for usize {
     type Output = usize;
     fn add(self, r: Rva) -> usize {
@@ -112,6 +174,26 @@ fn steam(epic: usize) -> usize {
         }
     }
 }
+
+fn epic(steam: usize) -> usize {
+    match EPIC.binary_search_by_key(&(steam as u32), |p| p.0) {
+        Ok(i) => EPIC[i].1 as usize,
+        Err(_) => {
+            // Every `St` in the source is in the table (a test checks it), unless it is made at run
+            // time (`St + n`, a field or row of a table, a place in a function): then it is that far
+            // from the nearest address below it.
+            let i = EPIC.partition_point(|p| p.0 as usize <= steam);
+            if i > 0 && steam - EPIC[i - 1].0 as usize <= 0x4000 {
+                return EPIC[i - 1].1 as usize + (steam - EPIC[i - 1].0 as usize);
+            }
+            super::log!(General, "no Epic address for Steam RVA {steam:#x}");
+            steam
+        }
+    }
+}
+
+/// (tm41) Steam RVA -> Epic RVA, sorted by the Steam RVA (`tools/epic/map.py` from both exes).
+pub(crate) static EPIC: &[(u32, u32)] = &include!("epic_map.in");
 
 /// Epic RVA -> Steam RVA, sorted by the Epic RVA.
 pub(crate) static STEAM: &[(u32, u32)] = &include!("steam_map.in");

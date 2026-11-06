@@ -30,34 +30,35 @@
 //! fade time; a fade-out (0) is left as it is. Only runs when KH1 fades (room changes, events), never
 //! per frame. `vanilla`: not redirected.
 
+use super::addr::St;
 use super::addr::Build;
 use super::log;
 
 /// The step-to-volume table (eleven floats, then one more 0.0) and its step 1 (0.1).
-const TABLE_STEAM: usize = 0x3D8B60;
+const TABLE_STEAM: St = St(0x3D8B60);
 const STEP1_WAS: [u8; 4] = [0xCD, 0xCC, 0xCC, 0x3D];
 const STEP1_NOW: [u8; 4] = [0x00, 0x00, 0x00, 0x00];
 
 /// The step / 10.0 reads: where each starts, the settings field it reads, the register it fills
 /// (6 = `xmm6`, 1 = `xmm1`) and the 19 bytes it must have (Checked (exe), Steam).
-const SITES: [(usize, u8, u8, [u8; 19], &str); 4] = [
+const SITES: [(St, u8, u8, [u8; 19], &str); 4] = [
     // KH1's fade, bus 1 (`movsx ecx, word [rax + 0x16]; movd xmm6, ecx; cvtdq2ps xmm6, xmm6;
     // divss xmm6, [10.0]`).
-    (0xDDD5B, 0x16, 6, [0x0F, 0xBF, 0x48, 0x16, 0x66, 0x0F, 0x6E, 0xF1, 0x0F, 0x5B, 0xF6, 0xF3, 0x0F, 0x5E, 0x35, 0xE6, 0x1B, 0x35, 0x00], "fade, bus 1"),
+    (St(0xDDD5B), 0x16, 6, [0x0F, 0xBF, 0x48, 0x16, 0x66, 0x0F, 0x6E, 0xF1, 0x0F, 0x5B, 0xF6, 0xF3, 0x0F, 0x5E, 0x35, 0xE6, 0x1B, 0x35, 0x00], "fade, bus 1"),
     // KH1's fade, bus 2 (the effects step).
-    (0xDDD9C, 0x18, 6, [0x0F, 0xBF, 0x48, 0x18, 0x66, 0x0F, 0x6E, 0xF1, 0x0F, 0x5B, 0xF6, 0xF3, 0x0F, 0x5E, 0x35, 0xA5, 0x1B, 0x35, 0x00], "fade, bus 2"),
+    (St(0xDDD9C), 0x18, 6, [0x0F, 0xBF, 0x48, 0x18, 0x66, 0x0F, 0x6E, 0xF1, 0x0F, 0x5B, 0xF6, 0xF3, 0x0F, 0x5E, 0x35, 0xA5, 0x1B, 0x35, 0x00], "fade, bus 2"),
     // KH1's fade, bus 3 (the voice step).
-    (0xDDDDD, 0x1A, 6, [0x0F, 0xBF, 0x48, 0x1A, 0x66, 0x0F, 0x6E, 0xF1, 0x0F, 0x5B, 0xF6, 0xF3, 0x0F, 0x5E, 0x35, 0x64, 0x1B, 0x35, 0x00], "fade, bus 3"),
+    (St(0xDDDDD), 0x1A, 6, [0x0F, 0xBF, 0x48, 0x1A, 0x66, 0x0F, 0x6E, 0xF1, 0x0F, 0x5B, 0xF6, 0xF3, 0x0F, 0x5E, 0x35, 0x64, 0x1B, 0x35, 0x00], "fade, bus 3"),
     // A stream's start, the master step (`... xmm1 ...`).
-    (0x11CF04, 0x14, 1, [0x0F, 0xBF, 0x48, 0x14, 0x66, 0x0F, 0x6E, 0xC9, 0x0F, 0x5B, 0xC9, 0xF3, 0x0F, 0x5E, 0x0D, 0x3D, 0x2A, 0x31, 0x00], "stream start, master"),
+    (St(0x11CF04), 0x14, 1, [0x0F, 0xBF, 0x48, 0x14, 0x66, 0x0F, 0x6E, 0xC9, 0x0F, 0x5B, 0xC9, 0xF3, 0x0F, 0x5E, 0x0D, 0x3D, 0x2A, 0x31, 0x00], "stream start, master"),
 ];
 
 /// The table read that replaces a site at `rva` (19 bytes: `movzx ecx, word [rax + field]`, 4;
 /// `lea rax, [rip + table]`, 7; `movss xmm, [rax + rcx * 4]`, 5; a 3-byte nop). `movzx` keeps the
 /// index in 0..65535, inside `.rdata` past the table, so even a step out of range reads, as vanilla's
 /// divide did.
-fn table_read(rva: usize, field: u8, xmm: u8) -> [u8; 19] {
-    let disp = (TABLE_STEAM as i64 - (rva as i64 + 4 + 7)) as i32;
+fn table_read(rva: St, field: u8, xmm: u8) -> [u8; 19] {
+    let disp = (TABLE_STEAM.get() as i64 - (rva.get() as i64 + 4 + 7)) as i32;
     let d = disp.to_le_bytes();
     let modrm = (xmm << 3) | 0x04;
     [0x0F, 0xB7, 0x48, field, 0x48, 0x8D, 0x05, d[0], d[1], d[2], d[3], 0xF3, 0x0F, 0x10, modrm, 0x88, 0x0F, 0x1F, 0x00]
@@ -70,14 +71,34 @@ pub unsafe fn install() {
 
 /// KH1's bus volume set (`0x1400547F0 (bus handle, volume, time)`, Checked (decomp)) and the two calls
 /// of it in KH1's fade that set buses 5 and 6 (`call rel32`, Checked (exe)).
-const BUS_SET_STEAM: usize = 0x547F0;
-const FADE_BUS5_CALL_STEAM: usize = 0xDDEA9;
-const FADE_BUS6_CALL_STEAM: usize = 0xDDED3;
+const BUS_SET_STEAM: St = St(0x547F0);
+const FADE_BUS5_CALL_STEAM: St = St(0xDDEA9);
+const FADE_BUS6_CALL_STEAM: St = St(0xDDED3);
 /// KH1's settings block (where its sliders' steps are), as KH1's own getter returns it (`0x14012AF20`:
 /// `lea rax, [rip + rel]; ret`, Checked (exe)), and the effects step in it.
-const SETTINGS_GET_STEAM: usize = 0x12AF20;
-const SETTINGS_STEAM: usize = 0x4D8614;
+const SETTINGS_GET_STEAM: St = St(0x12AF20);
+const SETTINGS_STEAM: St = St(0x4D8614);
 const EFFECTS_STEP: usize = 0x18;
+/// (tm41) Epic's settings block has no first 4 bytes of Steam's: its getter returns 4 past where
+/// `SETTINGS_STEAM` maps (`epic_map.in`), and its code reads every field 4 lower (Checked (exe):
+/// KH1's reads after the getter, both builds).
+fn settings_head() -> usize {
+    if Build::current() == Build::Epic { 4 } else { 0 }
+}
+
+/// A site's expected bytes in the running build: Steam's, or on Epic its field 4 lower and the
+/// RIP-relative 10.0 wherever Epic's points (checked to be 10.0).
+unsafe fn site_ok(base: usize, rva: St, field: u8, want: &[u8; 19]) -> bool {
+    let have = std::slice::from_raw_parts((base + rva) as *const u8, 19);
+    if Build::current() != Build::Epic {
+        return have == want;
+    }
+    let mut w = *want;
+    w[3] = field - settings_head() as u8;
+    let disp = i32::from_le_bytes([have[15], have[16], have[17], have[18]]);
+    let ten = (base + rva + 19) as i64 + disp as i64;
+    have[..15] == w[..15] && std::ptr::read_unaligned(ten as usize as *const f32) == 10.0
+}
 
 static BUS_SET: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 static BASE: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
@@ -107,7 +128,7 @@ unsafe fn install_fade() {
         log!(Sound, "Effects after fade: vanilla (effects_after_fade = vanilla): buses 5 and 6 take the fade's level");
         return;
     }
-    if Build::current() != Build::Steam {
+    if Build::current() == Build::Unknown {
         log!(Sound, "Effects after fade: Steam only, not redirected");
         return;
     }
@@ -117,7 +138,7 @@ unsafe fn install_fade() {
     let head = std::slice::from_raw_parts(get as *const u8, 3);
     let names = head == [0x48, 0x8D, 0x05]
         && *((get + 7) as *const u8) == 0xC3
-        && (get as i64 + 7 + std::ptr::read_unaligned((get + 3) as *const i32) as i64) as usize == base + SETTINGS_STEAM;
+        && (get as i64 + 7 + std::ptr::read_unaligned((get + 3) as *const i32) as i64) as usize == base + SETTINGS_STEAM + settings_head();
     if !names {
         log!(Sound, "Effects after fade: KH1's settings getter isn't the one expected, not redirected");
         return;
@@ -139,7 +160,7 @@ unsafe fn install_mute() {
         log!(Sound, "Volume Mute: off (volume_mute = off): KH1's lowest volume step stays 0.1");
         return;
     }
-    if Build::current() != Build::Steam {
+    if Build::current() == Build::Unknown {
         log!(Sound, "Volume Mute: Steam only, not patched");
         return;
     }
@@ -147,13 +168,14 @@ unsafe fn install_mute() {
     // All or nothing: every site is checked before anything is written, so a half-patched mix of
     // step 1 = 0.0 in the setters and 0.1 after a fade can't happen.
     let table_ok = std::slice::from_raw_parts((base + TABLE_STEAM + 4) as *const u8, 4) == STEP1_WAS;
-    let sites_ok = SITES.iter().all(|(rva, _, _, want, _)| std::slice::from_raw_parts((base + rva) as *const u8, want.len()) == want);
+    let sites_ok = SITES.iter().all(|(rva, field, _, want, _)| site_ok(base, *rva, *field, want));
     if !table_ok || !sites_ok {
         log!(Sound, "Volume Mute: unexpected bytes in KH1's volume table or fade (table {table_ok}, reads {sites_ok}), not patched");
         return;
     }
-    for (rva, field, xmm, want, what) in SITES {
-        if !super::hook::patch(base + rva, &want, &table_read(rva, field, xmm), what) {
+    for (rva, field, xmm, _, what) in SITES {
+        let have: [u8; 19] = std::ptr::read_unaligned((base + rva) as *const [u8; 19]);
+        if !super::hook::patch(base + rva, &have, &table_read(rva, field - settings_head() as u8, xmm), what) {
             return;
         }
     }
@@ -192,11 +214,11 @@ mod tests {
     #[test]
     fn table_read_bytes() {
         assert_eq!(
-            table_read(0xDDD5B, 0x16, 6),
+            table_read(St(0xDDD5B), 0x16, 6),
             [0x0F, 0xB7, 0x48, 0x16, 0x48, 0x8D, 0x05, 0xFA, 0xAD, 0x2F, 0x00, 0xF3, 0x0F, 0x10, 0x34, 0x88, 0x0F, 0x1F, 0x00]
         );
         assert_eq!(
-            table_read(0x11CF04, 0x14, 1),
+            table_read(St(0x11CF04), 0x14, 1),
             [0x0F, 0xB7, 0x48, 0x14, 0x48, 0x8D, 0x05, 0x51, 0xBC, 0x2B, 0x00, 0xF3, 0x0F, 0x10, 0x0C, 0x88, 0x0F, 0x1F, 0x00]
         );
     }

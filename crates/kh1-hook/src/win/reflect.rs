@@ -37,6 +37,7 @@
 //!   package (`kh2fx::spell_start`, bound to Sora as his own effects are) with its element's sound
 //!   (`kh2sound::spell_element`).
 
+use super::addr::St;
 use super::addr::Rva;
 use super::{combat, hook, log, pose, takeover};
 use character_core::{CastMotions, EventKind, Output, StateName};
@@ -658,17 +659,17 @@ pub const AIR_MOTION: u16 = 73;
 /// `0x1402A93D0 (out, in)` (the ground cast's end, `0x1402A3DB0`), the btltbl block pointer
 /// `0x142D22D30` (`+0xE8` the air cast's hop, 30.0; `+0xF0` its sideways share, 0.5; Checked
 /// (files)) and the command record `0x142D53A40`.
-const PRE_STEP_STEAM: usize = 0x2A38E0;
-const HOP_STEAM: usize = 0x2AF960;
-const SCALE_STEAM: usize = 0x386CD0;
-const DIR_STEAM: usize = 0x2A93D0;
-const BTLTBL_STEAM: usize = 0x2D22D30;
-const COMMAND_STEAM: usize = 0x2D53A40;
+const PRE_STEP_STEAM: St = St(0x2A38E0);
+const HOP_STEAM: St = St(0x2AF960);
+const SCALE_STEAM: St = St(0x386CD0);
+const DIR_STEAM: St = St(0x2A93D0);
+const BTLTBL_STEAM: St = St(0x2D22D30);
+const COMMAND_STEAM: St = St(0x2D53A40);
 /// KH1's flight cast (`0x1402A4150`, movement state 8, Checked (decomp)): a target's lock point
 /// `0x1402B04C0 (target, point, out) -> radius`, the vector difference `0x140386D10 (out, a, b)`
 /// (a − b), and the turn rate it sets in the stats (`+0xD0` = π/16).
-const LOCK_POINT_STEAM: usize = 0x2B04C0;
-const SUB_STEAM: usize = 0x386D10;
+const LOCK_POINT_STEAM: St = St(0x2B04C0);
+const SUB_STEAM: St = St(0x386D10);
 const FLIGHT_TURN: f32 = std::f32::consts::PI / 16.0;
 /// KH1's flight motion request queued after a flight cast (`0x40000075`, blend 8.0).
 const FLIGHT_REQUEST: u32 = 0x4000_0075;
@@ -705,7 +706,7 @@ fn request_of(motion: u16) -> Option<u32> {
 /// ground cast in 0 / 6 / 0x18, its air cast in 2, `0x1402A3600`; its flight cast in 8,
 /// `0x1402A4150`, the tester's m6 answer 2 (a)), our request of the cast motion built.
 pub unsafe fn native_ok(actor: usize) -> bool {
-    if super::addr::Build::current() != super::addr::Build::Steam || !super::settings::get().reflect || !native_path() || !super::shared::active() || actor < 0x10000 {
+    if super::addr::Build::current() == super::addr::Build::Unknown || !super::settings::get().reflect || !native_path() || !super::shared::active() || actor < 0x10000 {
         return false;
     }
     match rd::<i32>(actor + 0x70) {
@@ -719,7 +720,7 @@ pub unsafe fn native_ok(actor: usize) -> bool {
 /// payable): KH2's glide is ended for it only then (`combat::command_step`, Cast from Glide), so a
 /// refused cast doesn't cut the glide.
 pub unsafe fn air_ready(actor: usize) -> bool {
-    if super::addr::Build::current() != super::addr::Build::Steam || !super::settings::get().reflect || !native_path() || !super::shared::active() || actor < 0x10000 {
+    if super::addr::Build::current() == super::addr::Build::Unknown || !super::settings::get().reflect || !native_path() || !super::shared::active() || actor < 0x10000 {
         return false;
     }
     let base = base();
@@ -1213,7 +1214,7 @@ unsafe fn kh1_floor(from: Vec3, depth: f32) -> Option<f32> {
 
 /// KH1's party table (Steam `0x142D37280`, three actors; Checked (decomp): KH1's per-frame
 /// ability pass `0x1402A6380` walks it).
-const PARTY_STEAM: usize = 0x2D37280;
+const PARTY_STEAM: St = St(0x2D37280);
 /// KH2's Leaf Bracer (ability 114, Checked (files): `03system` item 0x192) and KH1's (62).
 const KH2_LEAF_BRACER: u32 = 114;
 const KH1_LEAF_BRACER: i32 = 62;

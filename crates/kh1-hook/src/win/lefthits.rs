@@ -95,6 +95,7 @@
 //! (`rehit::again`, `kh1rows::may_crit`). Before, the object kept its first window's: Final's 153
 //! left blade (1403 first, a blow) rolled on every hit, its right one (a row of ours) too.
 
+use super::addr::St;
 use super::addr::Rva;
 use super::bodyhits::{rd, wr};
 use super::{log, pose};
@@ -104,7 +105,7 @@ use std::sync::Mutex;
 /// KH1's Keyblade bone id (data `+0x10`, object `+0x20`): the blade (`0x14029EB20`).
 const BLADE_BONE: u32 = 0x30;
 /// KH1's attack constructor (Steam), its free hit bit, its object free (Epic RVAs, mapped).
-const MAKE_STEAM: usize = 0x2B2DC0;
+const MAKE_STEAM: St = St(0x2B2DC0);
 const FREE_BIT_RVA: Rva = Rva(0x2B15D0);
 const FREE_ATTACK_RVA: Rva = Rva(0x2B13D0);
 /// An attack data entry's size; our copies' key mark (beside `bodyhits`' body windows' keys).

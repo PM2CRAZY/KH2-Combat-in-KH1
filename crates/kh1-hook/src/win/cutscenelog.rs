@@ -15,35 +15,36 @@
 //! - KH1's movie opener (`0x14011C640 (reader, wide path)`, Checked (decomp)): the file it opens.
 //!   Assumption: its second argument is the path and it is the only movie path; the log shows it.
 
+use super::addr::St;
 use super::addr::Build;
 use super::{hook, log, log_on, LogCat};
 use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 
-const SCENE_PREPARE_STEAM: usize = 0x17CB10;
+const SCENE_PREPARE_STEAM: St = St(0x17CB10);
 /// `mov [rsp+0x18], rsi`.
 const SCENE_PREPARE_PROLOGUE: [u8; 5] = [0x48, 0x89, 0x74, 0x24, 0x18];
-const RUNNER_STEAM: usize = 0x1A38A0;
+const RUNNER_STEAM: St = St(0x1A38A0);
 /// `mov [rsp+8], rbx`.
 const RUNNER_PROLOGUE: [u8; 5] = [0x48, 0x89, 0x5C, 0x24, 0x08];
-const MOVIE_STEAM: usize = 0x11C640;
+const MOVIE_STEAM: St = St(0x11C640);
 /// `mov rax, rsp; push rbp; push rdi`.
 const MOVIE_PROLOGUE: [u8; 5] = [0x48, 0x8B, 0xC4, 0x55, 0x57];
 
 /// KH1's event flag, and its scene triple (Steam RVAs, Checked (decomp)).
-const EVENT_FLAG_STEAM: usize = 0x298C9A0;
-const SCENE_TRIPLE_STEAM: [usize; 3] = [0x233FE84, 0x233FE8C, 0x233FE90];
+const EVENT_FLAG_STEAM: St = St(0x298C9A0);
+const SCENE_TRIPLE_STEAM: [St; 3] = [St(0x233FE84), St(0x233FE8C), St(0x233FE90)];
 
 /// The script contexts (Steam RVAs, Checked (decomp)): KH1's runner starts entry 0 of a script file
 /// in the first and any other entry in the second. A context: its code (4-byte instructions, the
 /// class in the last byte and a 24-bit operand), the number of sub-scripts (each ends at class 5),
 /// the finished flag and the instruction counter.
-const CONTEXT_STEAM: [usize; 2] = [0x2382AD0, 0x23902D0];
+const CONTEXT_STEAM: [St; 2] = [St(0x2382AD0), St(0x23902D0)];
 const CTX_CODE: usize = 0x80;
 const CTX_SUBS: usize = 0x88;
 const CTX_DONE: usize = 0x8C;
 const CTX_PC: usize = 0x190;
 /// KH1's scene flag words (`0x142382590`, `0x142382594`: event mode and its friends).
-const FLAGS_STEAM: [usize; 2] = [0x2382590, 0x2382594];
+const FLAGS_STEAM: [St; 2] = [St(0x2382590), St(0x2382594)];
 const CLASS_END: u8 = 5;
 /// The most instructions looked through for one script, and distinct instructions written.
 const SCAN_MAX: usize = 4096;
@@ -59,7 +60,7 @@ static LINES: AtomicU32 = AtomicU32::new(0);
 /// (the trigger type 0 of `0x1401A1xxx` sets it)), the script runner's own word (`0x1423AB2D0`), the
 /// engine word `0x142867364`, the event file in use (`0x142382524`), and the number of script
 /// contexts (`0x14237F4E4`). Assumption: what each bit means beyond those; the log is for finding out.
-const WATCH_STEAM: [usize; 6] = [0x2382590, 0x2382594, 0x23AB2D0, 0x2867364, 0x2382524, 0x237F4E4];
+const WATCH_STEAM: [St; 6] = [St(0x2382590), St(0x2382594), St(0x23AB2D0), St(0x2867364), St(0x2382524), St(0x237F4E4)];
 static LAST_WATCH: [AtomicU32; 7] = [const { AtomicU32::new(0) }; 7];
 static WATCH_SET: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
@@ -94,7 +95,7 @@ unsafe fn state() -> String {
 }
 
 pub unsafe fn install() {
-    if !super::debug_on() || Build::current() != Build::Steam {
+    if !super::debug_on() || Build::current() == Build::Unknown {
         return;
     }
     let b = base();

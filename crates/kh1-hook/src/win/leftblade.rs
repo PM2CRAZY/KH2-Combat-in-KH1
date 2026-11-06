@@ -38,6 +38,7 @@
 //! Everything is off with `valor_left_blade = off` (nothing installed). Every step is logged a
 //! few times.
 
+use super::addr::St;
 use super::addr::Rva;
 use super::log;
 use glam::Mat4;
@@ -50,7 +51,7 @@ const QUEUE_RVA: Rva = Rva(0x1D1F10);
 /// `push rbp; push rbx; push rsi; push rdi` (both builds).
 const QUEUE_PROLOGUE: [u8; 5] = [0x40, 0x55, 0x53, 0x56, 0x57];
 /// KH1's party actor draw (Steam): `push rbp; push rbx; push rsi; push rdi` (Checked (exe)).
-const ACTOR_DRAW_STEAM: usize = 0x2A1630;
+const ACTOR_DRAW_STEAM: St = St(0x2A1630);
 const ACTOR_DRAW_PROLOGUE: [u8; 5] = [0x40, 0x55, 0x53, 0x56, 0x57];
 /// The file loader `(name, buffer, callback(size, id, buffer), delay)`: queued on KH1's loader
 /// task; the callback runs on the game thread once the file is in.
@@ -82,7 +83,7 @@ const WEAPON_TABLE_OFFSETS_RVA: Rva = Rva(0x528D60);
 const TRAIL_START_RVA: Rva = Rva(0x2C0160);
 const TRAIL_START_PROLOGUE: [u8; 5] = [0x48, 0x89, 0x5C, 0x24, 0x08];
 /// KH1's trail step `(actor)` (Steam; `push rdi; sub rsp, 0x20`, Checked (exe)).
-const TRAIL_STEP_STEAM: usize = 0x2C1F20;
+const TRAIL_STEP_STEAM: St = St(0x2C1F20);
 const TRAIL_STEP_PROLOGUE: [u8; 6] = [0x40, 0x57, 0x48, 0x83, 0xEC, 0x20];
 const EFFECT_KILL_RVA: Rva = Rva(0x1DE890);
 /// Actor fields: its weapon object handle.
@@ -116,10 +117,10 @@ const OBJ_TRAIL_ID: usize = 0x38;
 /// area start `0x140286B40` clears them all), and the call that fills an object's mesh model from
 /// its container (`0x1401D6760 (container, &obj+4, &out, &out)`; a `.wpn`'s container is an `MENV`,
 /// for which it only copies the container's `+0x20`). Checked (decomp, exe).
-const POOL_STEAM: usize = 0x296B1E0;
-const POOL_BITS_STEAM: usize = 0x296B5D8;
+const POOL_STEAM: St = St(0x296B1E0);
+const POOL_BITS_STEAM: St = St(0x296B5D8);
 const POOL_COUNT: usize = 9;
-const OBJ_MODEL_STEAM: usize = 0x1D6760;
+const OBJ_MODEL_STEAM: St = St(0x1D6760);
 const OBJ_MODEL_PROLOGUE: [u8; 5] = [0x48, 0x89, 0x5C, 0x24, 0x08];
 /// A weapon row's size.
 const WEAPON_ROW_SIZE: usize = 0x58;
@@ -239,7 +240,7 @@ pub unsafe fn install() {
     let ours = (wpn_release as *const () as usize as u64).to_le_bytes();
     let left = super::settings::get().valor_left_blade;
     // (Its weapon object comes from KH1's own pool, at Steam addresses: Steam only.)
-    let steam = super::addr::Build::current() == super::addr::Build::Steam;
+    let steam = super::addr::Build::current() != super::addr::Build::Unknown;
     let patched = if !left {
         log!(Animation, "left Keyblade: off (valor_left_blade = off)");
         false

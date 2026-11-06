@@ -8,6 +8,8 @@ Logs worth turning on: General, Menus, Combat, Forms, Magic, Sound, Effects, Ani
 
 ## 0. Start-up and saves
 
+- [ ] Epic: the log's first lines say "Epic Games Store"; no "unexpected bytes" / "no Epic address" lines; then this whole list once on Epic. (tm41)
+
 - [ ] A clean install from `mod.yml` + `kh1-kh2.dll` starts; the Config button's help shows the branch's version (`tm...`). (README)
 - [ ] First start builds the caches (effects, sounds, motion slots, Anti's textures) and the second start loads them quickly. (tm4, tm20, tm22, tm23, tm27)
 - [ ] An old save from testing and one from main both load; abilities, Drive levels and Keyblades look right. (tm7, tm8)
@@ -85,4 +87,4 @@ Logs worth turning on: General, Menus, Combat, Forms, Magic, Sound, Effects, Ani
 - The second Keyblade's shadow (needs the exe's bytes).
 - Form effects after a room change on testing's question (arrival pose or not).
 
-_Last updated: tm39._
+_Last updated: tm41._

@@ -62,6 +62,7 @@
 //! script using those contexts) is KH1's as before. KH1: nothing of this is installed until the row is
 //! first set to KH2; then one flag check per Open and per message function call.
 
+use super::addr::St;
 use super::addr::Build;
 use super::{hook, log};
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicU8, AtomicUsize, Ordering};
@@ -163,7 +164,7 @@ static ORIG_EVENT: AtomicUsize = AtomicUsize::new(0);
 /// other caller queues them). Event 0 wakes the object's context's sub-script 5 (`+0x90 + 5 * 4`), event 4
 /// its sub-script 3, in the room list (`0x142382AD0`) or the event list as the pick does. First bytes
 /// `mov [rsp+0x10], rbx; mov [rsp+0x18], rbp; push rsi; sub rsp, 0x20` (Checked (exe)).
-const EVENT_STEAM: usize = 0x1A1A10;
+const EVENT_STEAM: St = St(0x1A1A10);
 const EVENT_PROLOGUE: [u8; 15] = [0x48, 0x89, 0x5C, 0x24, 0x10, 0x48, 0x89, 0x6C, 0x24, 0x18, 0x56, 0x48, 0x83, 0xEC, 0x20];
 static BOX_CTXS: AtomicUsize = AtomicUsize::new(0);
 static BOX_COUNT: AtomicUsize = AtomicUsize::new(0);
@@ -171,31 +172,31 @@ static ORIG_PICK: AtomicUsize = AtomicUsize::new(0);
 
 /// KH1's Open command handler `(sora, chest)` (Steam; `mov [rsp+8], rbx; mov [rsp+0x10], rbp`,
 /// Checked (exe)).
-const OPEN_STEAM: usize = 0x2B58E0;
+const OPEN_STEAM: St = St(0x2B58E0);
 const OPEN_PROLOGUE: [u8; 10] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x6C, 0x24, 0x10];
 /// The open's arguments as the handler leaves them (Steam, Checked (decomp)): kind, item or amount,
 /// stock full.
-const ARG_KIND_STEAM: usize = 0x2DB7B30;
-const ARG_ITEM_STEAM: usize = 0x2DB7B34;
-const ARG_FULL_STEAM: usize = 0x2DB7B38;
+const ARG_KIND_STEAM: St = St(0x2DB7B30);
+const ARG_ITEM_STEAM: St = St(0x2DB7B34);
+const ARG_FULL_STEAM: St = St(0x2DB7B38);
 /// KH1's motion request `0x14029F980 (actor, request, f32 in XMM2)` (Steam; Checked (decomp + exe): it
 /// sets the one pending request, `+0x178` count 1, `+0x17C` the request) and the call of it in the Open
 /// handler that asks for Sora's open motion (`0x1402B59CC`: `mov edx, 0x900A6; mov rcx, rdi; call`,
 /// Checked (exe)). t768: that call goes to `open_request`, which on a fast open asks for nothing.
-const REQUEST_STEAM: usize = 0x29F980;
-const OPEN_REQUEST_CALL_STEAM: usize = 0x2B59CC;
+const REQUEST_STEAM: St = St(0x29F980);
+const OPEN_REQUEST_CALL_STEAM: St = St(0x2B59CC);
 /// (t807) KH1's action step's motion request (`0x14028E6E0`, action 0x11 `push request, push blend`: its call
 /// of `0x14029F980` at `0x14028E8AC`, Checked (exe + decomp)). A room script's box asks Sora's open motion
 /// this way (not through the Open handler).
-const ACTION_REQUEST_CALL_STEAM: usize = 0x28E8AC;
+const ACTION_REQUEST_CALL_STEAM: St = St(0x28E8AC);
 /// The Open handler's stop (`0x1402B59D7`: `0x140297F30 (sora, 0.0)` clears flag 0x100000, sets 0x80 and
 /// zeroes his speed `+0xC`), Checked (exe).
-const OPEN_STOP_CALL_STEAM: usize = 0x2B59D7;
-const STOP_STEAM: usize = 0x297F30;
+const OPEN_STOP_CALL_STEAM: St = St(0x2B59D7);
+const STOP_STEAM: St = St(0x297F30);
 /// The chest's tick's first-frame call (`0x1402B5879`: `0x1402AE160 (chest, 0)`, run once, when its touch
 /// callback is registered), Checked (exe).
-const CHEST_FIRST_CALL_STEAM: usize = 0x2B5879;
-const CHEST_FIRST_STEAM: usize = 0x2AE160;
+const CHEST_FIRST_CALL_STEAM: St = St(0x2B5879);
+const CHEST_FIRST_STEAM: St = St(0x2AE160);
 /// The chest's object record (handle at actor `+0x130`): `+0x44` its offer radius, `+0x5E` the shape of
 /// the range test `0x140293FC0` (0 cylinder, 1 flat + height with no facing, 2 point, 3 flat; 0, 2 and 3
 /// also need Sora to face it: cos > 0), `+0x5F` its kind (3: its own handler decides, the chest's touch
@@ -210,7 +211,7 @@ const KH2_REACH: f32 = 185.0;
 const SHAPE_FLAT_HEIGHT: u8 = 1;
 /// The chest's touch callback (`0x1402B5A30 (chest, sora, code)`: code -1 = "offer?", it offers Open 0x37
 /// in state 0 with the height difference in (-50, 20)), `mov [rsp+8], rbx; push rdi; sub rsp, 0x20`.
-const TOUCH_STEAM: usize = 0x2B5A30;
+const TOUCH_STEAM: St = St(0x2B5A30);
 const TOUCH_PROLOGUE: [u8; 10] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x57, 0x48, 0x83, 0xEC, 0x20];
 static ORIG_TOUCH: AtomicUsize = AtomicUsize::new(0);
 /// KH2's box Open (03system `cmd` 0x20, the box's reaction shape's argument; Checked (files)) is usable only
@@ -220,9 +221,9 @@ static ORIG_TOUCH: AtomicUsize = AtomicUsize::new(0);
 /// rule is taken here, `chest_touch`.)
 /// KH1's command box: the command per slot (`0x140528914`, slot 3 the Triangle box), greyed and blocked bits
 /// (`0x140528904`, `0x140528908`); the chest's Open is command 0x37. Checked (exe).
-const MENU_SLOTS_STEAM: usize = 0x528914;
-const GREYED_STEAM: usize = 0x528904;
-const BLOCKED_STEAM: usize = 0x528908;
+const MENU_SLOTS_STEAM: St = St(0x528914);
+const GREYED_STEAM: St = St(0x528904);
+const BLOCKED_STEAM: St = St(0x528908);
 const OPEN_COMMAND: u8 = 0x37;
 const KH2_OPEN_FACING: f32 = -0.707_106_77;
 const OPEN_REQUEST: u32 = 0x900A6;
@@ -234,17 +235,17 @@ const LOCK_BIT: u32 = 2;
 /// KH1's event function table (8-byte pointers, by number) and the four message functions wrapped
 /// (Steam RVAs, Checked (exe)), with how many arguments each pops in its skip-mode branch
 /// (Checked (decomp)).
-const TABLE_STEAM: usize = 0x4FA870;
-const MESSAGE_FNS: [(usize, usize, i32); 4] = [(0, 0x1B93F0, 1), (1, 0x1B8DD0, 2), (177, 0x1B9170, 1), (605, 0x1B8AE0, 2)];
+const TABLE_STEAM: St = St(0x4FA870);
+const MESSAGE_FNS: [(usize, St, i32); 4] = [(0, St(0x1B93F0), 1), (1, St(0x1B8DD0), 2), (177, St(0x1B9170), 1), (605, St(0x1B8AE0), 2)];
 /// A script context's stack pointer (`+0x194`).
 const CTX_SP: usize = 0x194;
 
 /// The treasure script's buffer, the script in use, its contexts and their count (Steam, Checked
 /// (decomp)).
-const TREASURE_STEAM: usize = 0x23BBCB0;
-const SCRIPT_IN_USE_STEAM: usize = 0x23BBBE0;
-const CONTEXTS_STEAM: usize = 0x23BF0B0;
-const COUNT_STEAM: usize = 0x23AB2DC;
+const TREASURE_STEAM: St = St(0x23BBCB0);
+const SCRIPT_IN_USE_STEAM: St = St(0x23BBBE0);
+const CONTEXTS_STEAM: St = St(0x23BF0B0);
+const COUNT_STEAM: St = St(0x23AB2DC);
 const CTX_SIZE: usize = 0x360;
 const CTX_MAX: u32 = 64;
 /// A context's actor id (`+0`, what its actions name) and its actor (`+8`) (Checked (decomp): the action
@@ -254,26 +255,27 @@ const CTX_ACTOR: usize = 8;
 /// KH1's script machine's class handlers (`0x1404E5DB0`, by class; Steam, Checked (exe): its three users
 /// `0x1401A3517`, `0x1401A4658`, `0x1401A4917` load it by `lea`) and class `0x18`'s, the event function
 /// call `0x1401B3530 (ctx, number)` (it jumps to the event table's entry).
-const CALL_ENTRY_STEAM: usize = 0x4E5E70;
-const CALL_STEAM: usize = 0x1B3530;
+const CALL_ENTRY_STEAM: St = St(0x4E5E70);
+const CALL_STEAM: St = St(0x1B3530);
 /// KH1's actor action queue (a ring of 256 records of `0x20`: kind | argument << 8, the actor's id, the
 /// rest by kind; write index, read index; Steam, Checked (exe + decomp): pushed by `0x1401A5030`, run by
 /// `0x14028E6E0`) and its done queue's push `0x1401A4F20 (record)` (the script runner `0x1401A2CF0`
 /// clears a context's move and turn waits, `+0x33C` bits 0 and 1, from records there). An action whose
 /// actor isn't found is put straight into the done queue by KH1's own action step, which is what is done
 /// here with the treasure script's actions on Sora.
-const ACTIONS_STEAM: usize = 0x23CFE10;
-const ACTIONS_WRITE_STEAM: usize = 0x23CFE08;
-const ACTIONS_READ_STEAM: usize = 0x23CFDFC;
-const DONE_PUSH_STEAM: usize = 0x1A4F20;
+const ACTIONS_STEAM: St = St(0x23CFE10);
+const ACTIONS_WRITE_STEAM: St = St(0x23CFE08);
+const ACTIONS_READ_STEAM: St = St(0x23CFDFC);
+const DONE_PUSH_STEAM: St = St(0x1A4F20);
 const DONE_PUSH_PROLOGUE: [u8; 7] = [0x48, 0x63, 0x05, 0xE9, 0xEE, 0x22, 0x02];
+const DONE_PUSH_PROLOGUE_EPIC: [u8; 7] = [0x48, 0x63, 0x05, 0x39, 0x1A, 0x23, 0x02];
 const ACTION_SIZE: usize = 0x20;
 /// KH1's actor lookup `0x140291D30 (id)` (Steam; Checked (decomp + exe)): the actor an action names
 /// (0, 1, 2: the party's three; `0x1xxxx`: an object by its entry; else an actor's own `+4`), as KH1's
 /// action step finds it. The treasure script's context names Sora as 0 (its actor id `+0` starts at 0,
 /// `0x1401A43A0`), not by his own id, so t728's match on his `+4` never caught its actions (the tester's
 /// log: no "done at once" line at any open). `mov [rsp+8], rbx; mov [rsp+0x10], rbp`.
-const FIND_ACTOR_STEAM: usize = 0x291D30;
+const FIND_ACTOR_STEAM: St = St(0x291D30);
 const FIND_ACTOR_PROLOGUE: [u8; 10] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x6C, 0x24, 0x10];
 /// The event functions that hold the player for a script, none with arguments (Checked (exe)): 511
 /// (`0x1401A7540`, the runner's bit 1: KH1's game mode becomes "event", `0x14017EFC0`), 512 (its
@@ -296,7 +298,7 @@ const FN_MOTION_REQUEST: i32 = 58;
 const KH2_CONTACT_FRAME: f32 = 28.0;
 /// KH1's trail request (`0x1402C2310 (actor, trail id)`, Steam) and the actor's weapon object handle
 /// (`+0x14C`), Checked (exe).
-const TRAIL_REQUEST_STEAM: usize = 0x2C2310;
+const TRAIL_REQUEST_STEAM: St = St(0x2C2310);
 const ACTOR_WEAPON: usize = 0x14C;
 /// (t803) The item window after the lid opens: vanilla's comes 20 frames after its open motion ends, which is
 /// when KH1 opens the lid (the owner: "full chest animation + 20 frames of idle", 100 in all; Checked (trace
@@ -311,13 +313,13 @@ static CONTACT_LOGGED: AtomicBool = AtomicBool::new(false);
 /// sub-script 9 (`0x1401A0AF0`, its start at `+0x90 + 9 * 4`, the next instruction `+0x190`) and keeps
 /// the command at `0x142382A38`. First bytes `mov [rsp+8], rbx; mov [rsp+0x10], rbp; mov [rsp+0x18],
 /// rsi` (Checked (exe)).
-const PICK_STEAM: usize = 0x1A4D00;
+const PICK_STEAM: St = St(0x1A4D00);
 const PICK_PROLOGUE: [u8; 15] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x6C, 0x24, 0x10, 0x48, 0x89, 0x74, 0x24, 0x18];
-const ENTRY_STEAM: usize = 0x2382524;
-const ROOM_CTXS_STEAM: usize = 0x2382AD0;
-const ROOM_COUNT_STEAM: usize = 0x237F4E4;
-const EVENT_CTXS_STEAM: usize = 0x23902D0;
-const EVENT_COUNT_STEAM: usize = 0x237F4E8;
+const ENTRY_STEAM: St = St(0x2382524);
+const ROOM_CTXS_STEAM: St = St(0x2382AD0);
+const ROOM_COUNT_STEAM: St = St(0x237F4E4);
+const EVENT_CTXS_STEAM: St = St(0x23902D0);
+const EVENT_COUNT_STEAM: St = St(0x237F4E8);
 const CTX_CODE: usize = 0x80;
 const CTX_SUBS: usize = 0x88;
 const CTX_SUB_STARTS: usize = 0x90;
@@ -338,10 +340,10 @@ const BOX_COMMANDS: [i32; 2] = [0x55, 0x49];
 const BOX_PLAYS: [u32; 14] = [88, 222, 268, 278, 392, 628, 629, 673, 126, 84, 139, 476, 489, 623];
 /// KH1's reward records (`0x14028F9A0 (n)`: a u16 each from the pointer at `0x142D36D58`; low four bits
 /// the kind, 0 an item whose id is the high byte; Checked (exe)), for the notice of a box's 583.
-const REWARDS_PTR_STEAM: usize = 0x2D36D58;
+const REWARDS_PTR_STEAM: St = St(0x2D36D58);
 /// The party's first actor (Sora), the pointer KH1's actor lookup returns for id 0 (`0x142D37280`,
 /// Checked (decomp)).
-const SORA_PTR_STEAM: usize = 0x2D37280;
+const SORA_PTR_STEAM: St = St(0x2D37280);
 
 /// How long after an open its message windows are still skipped. Assumption: the treasure script
 /// reaches its window well within this (KH1's own open motion and lid take about a second).
@@ -425,7 +427,7 @@ unsafe fn pickup_hook_in() {
     if PICKUP_INSTALLED.swap(true, Ordering::Relaxed) {
         return;
     }
-    if Build::current() != Build::Steam {
+    if Build::current() == Build::Unknown {
         log!(Menus, "Item Pickup: Steam only (the addresses are the Steam build's): pickups stay KH1's");
         return;
     }
@@ -435,7 +437,7 @@ unsafe fn pickup_hook_in() {
     let done = std::slice::from_raw_parts((base + DONE_PUSH_STEAM) as *const u8, DONE_PUSH_PROLOGUE.len());
     let find = std::slice::from_raw_parts((base + FIND_ACTOR_STEAM) as *const u8, FIND_ACTOR_PROLOGUE.len());
     let ours = script_call as *const () as usize;
-    if (entry != base + CALL_STEAM && entry != ours) || done != DONE_PUSH_PROLOGUE || find != FIND_ACTOR_PROLOGUE {
+    if (entry != base + CALL_STEAM && entry != ours) || done != *super::addr::pick(&DONE_PUSH_PROLOGUE, &DONE_PUSH_PROLOGUE_EPIC) || find != FIND_ACTOR_PROLOGUE {
         log!(Cutscenes, "Item Pickup: KH1's script call handler ({entry:#x}) or done queue isn't as expected: pickups stay KH1's");
         return;
     }
@@ -702,7 +704,7 @@ unsafe fn hook_in() {
     if INSTALLED.swap(true, Ordering::Relaxed) {
         return;
     }
-    if Build::current() != Build::Steam {
+    if Build::current() == Build::Unknown {
         log!(Menus, "Chest Opening: KH2 is Steam only (the addresses are the Steam build's): chests stay KH1's");
         return;
     }
@@ -712,7 +714,7 @@ unsafe fn hook_in() {
     let entry = rd::<u64>(base + CALL_ENTRY_STEAM) as usize;
     let done = std::slice::from_raw_parts((base + DONE_PUSH_STEAM) as *const u8, DONE_PUSH_PROLOGUE.len());
     let find = std::slice::from_raw_parts((base + FIND_ACTOR_STEAM) as *const u8, FIND_ACTOR_PROLOGUE.len());
-    if entry != base + CALL_STEAM || done != DONE_PUSH_PROLOGUE || find != FIND_ACTOR_PROLOGUE {
+    if entry != base + CALL_STEAM || done != *super::addr::pick(&DONE_PUSH_PROLOGUE, &DONE_PUSH_PROLOGUE_EPIC) || find != FIND_ACTOR_PROLOGUE {
         log!(Cutscenes, "Chest Opening: KH1's script call handler ({entry:#x}) or done queue isn't as expected: the Open stays KH1's");
         return;
     }
@@ -1562,7 +1564,7 @@ unsafe extern "system" fn msg605(ctx: usize) -> u64 {
 
 /// KH1's message pointers by text id for the script in use (`0x14237C4E0`, 8 bytes each: KH1's script
 /// loader fills it from the file's text list, `0x1401A3DA6`, Checked (exe)).
-const TEXTS_STEAM: usize = 0x237C4E0;
+const TEXTS_STEAM: St = St(0x237C4E0);
 /// The treasure script's Dalmatians text (`UK_treasure.ev` text 4: "Found dalmatians." and "Puppy no. A,
 /// no. B, and no. C returned home!", two lines, centred: 365 places it at (-230, 0)), Checked (files).
 const PUPPY_TEXT: i32 = 4;

@@ -20,6 +20,7 @@
 //! sounds are KH1's. The damage is scaled by the KH2 attack's power (`POWER`, applied to the
 //! hit record in `probe::hit`).
 
+use super::addr::St;
 use super::addr::Rva;
 use super::{hook, log, pose, takeover};
 use character_core::{Character, Output, TargetInfo};
@@ -2267,7 +2268,7 @@ impl Strikes {
             // A free-standing shot is stopped as KH2's barrier stops it (the tester, m7
             // answer 2: "(a) it needs to work exactly as kh2"): KH1's own "struck, no damage"
             // result, its hit script told, the attack over (`stop_shot`), never turned back.
-            if shot.free && super::addr::Build::current() == super::addr::Build::Steam {
+            if shot.free && super::addr::Build::current() != super::addr::Build::Unknown {
                 let (h_owner, h_data) = (rd::<u32>(shot.obj + 0x34), rd::<u32>(shot.obj + 0x5C));
                 let (told, ended, kept) = stop_shot(base, sora, shot.obj);
                 self.stopped.retain(|s| s.0 != shot.obj);
@@ -2568,7 +2569,7 @@ pub unsafe fn barrier_meeting(a: usize, b: usize, sora: usize) -> bool {
     let at = [(p[0] + q[0]) * 0.5, (p[1] + q[1]) * 0.5, (p[2] + q[2]) * 0.5];
     g[i].at.push(at);
     let shot = rd::<u32>(other + 0x30) & 0x400 != 0;
-    if !shot || super::addr::Build::current() != super::addr::Build::Steam {
+    if !shot || super::addr::Build::current() == super::addr::Build::Unknown {
         drop(g);
         static MELEE: AtomicU32 = AtomicU32::new(0);
         if super::log_on(super::LogCat::Combat) && MELEE.fetch_add(1, Ordering::Relaxed) < 100 {
@@ -2729,7 +2730,7 @@ impl Strikes {
 /// (Steam `0x1402BCC00`): what KH1's attack contact `0x1402BF330` calls with an attack's hit
 /// label (`+0x38`) on its script process (`+0xA0`), the actor struck as the one argument.
 /// Checked (decomp), KH1 Steam.
-const RUN_LABEL_STEAM: usize = 0x2BCC00;
+const RUN_LABEL_STEAM: St = St(0x2BCC00);
 
 /// A free-standing enemy shot meeting a Reflect barrier, stopped as KH2 stops one (KH2's meeting
 /// `0x1403D2140`: the shot's attack marked over, flag `0x200`, and its script told, event 3; the
@@ -3671,14 +3672,14 @@ unsafe fn watched(actor: usize) -> Option<BlowWatch> {
 /// (the target state 4 / 7's step `0x1402CC000` eases `+0x3C0` toward), unless a state's enter callback
 /// does: logged before and after. Both start `mov [rsp+8], rbx; mov [rsp+0x10], rsi; push rdi;
 /// sub rsp, 0x20` (Checked (exe)).
-const SCRIPT_MOVE4_STEAM: usize = 0x2BACB0;
-const SCRIPT_MOVE7_STEAM: usize = 0x2BB030;
+const SCRIPT_MOVE4_STEAM: St = St(0x2BACB0);
+const SCRIPT_MOVE7_STEAM: St = St(0x2BB030);
 const SCRIPT_MOVE_PROLOGUE: [u8; 15] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x74, 0x24, 0x10, 0x57, 0x48, 0x83, 0xEC, 0x20];
 static ORIG_SCRIPT_MOVE4: AtomicUsize = AtomicUsize::new(0);
 static ORIG_SCRIPT_MOVE7: AtomicUsize = AtomicUsize::new(0);
 /// KH1's handle to address `0x14038ADC0 (handle) -> address` (0 for 0; Checked (decomp)): `test ecx,
 /// ecx; jnz +3; xor eax, eax; ret; jmp ...` (Checked (exe)). Checked once: 0 not yet, 1 refused, 2 matched.
-const RESOLVE_STEAM: usize = 0x38ADC0;
+const RESOLVE_STEAM: St = St(0x38ADC0);
 const RESOLVE_BYTES: [u8; 8] = [0x85, 0xC9, 0x75, 0x03, 0x33, 0xC0, 0xC3, 0xE9];
 static RESOLVE_FN: AtomicU8 = AtomicU8::new(0);
 
@@ -3813,18 +3814,18 @@ pub unsafe fn blow_watch(sora: usize) {
 /// The enemy think (`0x1402B7260`) lands an enemy whose motion is not its launch's on motion
 /// `+0x3D0` + 7, which the hop zeroes: no lying down (Checked (exe)).
 /// `push rbx; push rsi; sub rsp, 0x68` (Checked (exe), the bytes at this address in the user's Steam exe).
-const KNOCK_BACK_STEAM: usize = 0x2B77D0;
+const KNOCK_BACK_STEAM: St = St(0x2B77D0);
 const KNOCK_BACK_PROLOGUE: [u8; 7] = [0x40, 0x53, 0x56, 0x48, 0x83, 0xEC, 0x68];
 static ORIG_KNOCK_BACK: AtomicUsize = AtomicUsize::new(0);
 /// KH1's (Steam, Checked (exe)) "has this motion" `0x14029F010 (actor, motion) -> nonzero`, its
 /// class-2 state test `0x1402B1AE0 (actor)`, its in-the-air test `0x1402B1B10 (actor)` and its
 /// hop `0x1402AF960 (actor, height)` (air state 2, a fresh rise of `height` from where it is).
-const HAS_MOTION_STEAM: usize = 0x29F010;
-const CLASS2_STEAM: usize = 0x2B1AE0;
-const AIRBORNE_STEAM: usize = 0x2B1B10;
-const HOP_STEAM: usize = 0x2AF960;
+const HAS_MOTION_STEAM: St = St(0x29F010);
+const CLASS2_STEAM: St = St(0x2B1AE0);
+const AIRBORNE_STEAM: St = St(0x2B1B10);
+const HOP_STEAM: St = St(0x2AF960);
 /// KH1's movement state table, read by `0x1402B1AE0` / `0x1402B1B10` (Checked (exe)).
-const STATE_TABLE_STEAM: usize = 0x2DB3840;
+const STATE_TABLE_STEAM: St = St(0x2DB3840);
 /// Their first bytes (Checked (exe)): `mov [rsp+8], rbx` / `movsxd rax, [rcx+0x70]` /
 /// `movsxd rdx, [rcx+0x70]` / `push rbx; sub rsp, 0x30`.
 const HAS_MOTION_BYTES: [u8; 5] = [0x48, 0x89, 0x5C, 0x24, 0x08];
@@ -3846,7 +3847,7 @@ unsafe fn knock_back_fns() -> bool {
     match KNOCK_BACK_FNS.load(Ordering::Relaxed) {
         0 => {
             let base = BASE.load(Ordering::Relaxed);
-            let same = |rva: usize, b: &[u8]| base != 0 && std::slice::from_raw_parts((base + rva) as *const u8, b.len()) == b;
+            let same = |rva: St, b: &[u8]| base != 0 && std::slice::from_raw_parts((base + rva) as *const u8, b.len()) == b;
             let ok = same(HAS_MOTION_STEAM, &HAS_MOTION_BYTES) && same(CLASS2_STEAM, &CLASS2_BYTES) && same(AIRBORNE_STEAM, &AIRBORNE_BYTES) && same(HOP_STEAM, &HOP_BYTES);
             if !ok {
                 log!(Combat, "KH2 blows: KH1's motion / state / hop functions don't match the Steam exe; grounded blows stay KH1's ground knock-back");
@@ -4053,7 +4054,7 @@ unsafe extern "system" fn knocked_back(actor: usize, rec: usize) {
 
 /// KH1's scripted launch (Steam only): `mov [rsp+0x10], rbx; mov [rsp+0x18], rsi; push rdi;
 /// sub rsp, 0x40` (Checked (exe)).
-const SCRIPT_LAUNCH_STEAM: usize = 0x2B79F0;
+const SCRIPT_LAUNCH_STEAM: St = St(0x2B79F0);
 const SCRIPT_LAUNCH_PROLOGUE: [u8; 15] = [0x48, 0x89, 0x5C, 0x24, 0x10, 0x48, 0x89, 0x74, 0x24, 0x18, 0x57, 0x48, 0x83, 0xEC, 0x40];
 static ORIG_SCRIPT_LAUNCH: AtomicUsize = AtomicUsize::new(0);
 
@@ -4061,7 +4062,7 @@ pub unsafe fn install() {
     let base = super::sys::GetModuleHandleA(std::ptr::null()) as usize;
     BASE.store(base, Ordering::Relaxed);
     hook::install(base + LAUNCH_RVA, &LAUNCH_PROLOGUE, launched as *const () as usize, &ORIG_LAUNCH, "enemy launch reaction");
-    if super::addr::Build::current() == super::addr::Build::Steam {
+    if super::addr::Build::current() != super::addr::Build::Unknown {
         hook::install(base + SCRIPT_LAUNCH_STEAM, &SCRIPT_LAUNCH_PROLOGUE, script_launched as *const () as usize, &ORIG_SCRIPT_LAUNCH, "enemy scripted launch (KH2's blows)");
         hook::install(base + KNOCK_BACK_STEAM, &KNOCK_BACK_PROLOGUE, knocked_back as *const () as usize, &ORIG_KNOCK_BACK, "enemy knock-back (KH2's blows)");
         // (t1051, log only) KH1's AI-script movement natives, for the KH2 blow watch.

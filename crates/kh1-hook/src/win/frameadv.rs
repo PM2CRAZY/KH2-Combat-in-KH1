@@ -94,6 +94,7 @@
 //!   counting (`0x1425380F8`, it writes Sora's alpha step and draw bit) keeps it held that frame.
 //!   Held (the default): held as before.
 
+use super::addr::St;
 use super::addr::{Build, Rva};
 use super::log;
 use super::sys::*;
@@ -104,13 +105,13 @@ use std::time::{Duration, Instant};
 /// KH1's main task list (Steam `0x142867380`): `+0x10` the first task; a task (0x18 bytes):
 /// `+0` in use (0 free), `+2` flags (u16), `+4` priority, `+8` the next, `+0x10` its function
 /// `(task) -> u32` (bit 2: remove it, bit 3: stop the list).
-const TASK_LIST_STEAM: usize = 0x2867380;
+const TASK_LIST_STEAM: St = St(0x2867380);
 /// The tasks KH1's pause runs have this flag.
 const PAUSE_FLAG: u16 = 1;
 /// The held tasks are written to the log once (priority, function's RVA).
 static LOGGED_TASKS: AtomicBool = AtomicBool::new(false);
 /// KH1's sound pause (Steam `0x1400D2F80 (mode)`: 1 pauses, 0 resumes).
-const SOUND_PAUSE_STEAM: usize = 0xD2F80;
+const SOUND_PAUSE_STEAM: St = St(0xD2F80);
 /// The Held Sound row: sound paused while held (KH1's pause's way); we paused it.
 static HOLD_SOUND: AtomicBool = AtomicBool::new(true);
 static SOUND_PAUSED: AtomicBool = AtomicBool::new(false);
@@ -120,7 +121,7 @@ const PAUSE_STATE_RVA: Rva = Rva(0x232E9B4);
 const BUTTONS_RVA: Rva = Rva(0x298D4A0);
 /// KH1's keyboard mapping (Steam `0x1400D7E80 (input object)`): `push rsi; push r14; sub rsp, 0x48`,
 /// read in the Steam exe.
-const KEY_MAP_STEAM: usize = 0xD7E80;
+const KEY_MAP_STEAM: St = St(0xD7E80);
 const KEY_MAP_PROLOGUE: [u8; 8] = [0x40, 0x56, 0x41, 0x56, 0x48, 0x83, 0xEC, 0x48];
 static ORIG_KEY_MAP: AtomicUsize = AtomicUsize::new(0);
 /// The period key in DirectInput's key state.
@@ -162,42 +163,42 @@ static HELD_TASKS: Mutex<Vec<(usize, usize, usize)>> = Mutex::new(Vec::new());
 /// map: `0x1401829B0` / `0x1401836E0` make them, `0x1401824C0` / `0x140183460` their steps: each moves
 /// its part's animation time on by the frame scale, Checked (decomp)). Held while the game is held
 /// (held with 120000 too), each a row of the Held Tasks page.
-const SUB_LISTS: [(usize, &str); 2] = [(0x233E420, "map parts A"), (0x233E7D0, "map parts B")];
+const SUB_LISTS: [(St, &str); 2] = [(St(0x233E420), "map parts A"), (St(0x233E7D0), "map parts B")];
 
 /// The first of KH1's draw passes: tasks from here on run while held, but these updates (the
 /// decomp, `docs/kh1-frame-advance.md`): the delayed plays 145001, an effect fade 159999 (-0.1 a
 /// frame), the actors taken off freed 163001, the screen shake 190000 (its offset stays set).
 const FIRST_DRAW: i32 = 140000;
-const LIVE_HOLD: [usize; 4] = [0x290A50, 0x3970D0, 0x292E40, 0x1EB750];
+const LIVE_HOLD: [St; 4] = [St(0x290A50), St(0x3970D0), St(0x292E40), St(0x1EB750)];
 /// Tasks before 140000 that run while held by default: the models (130000) and the map (120000),
 /// the tester's t399 test; and (after t447, the decomp) what only the picture uses: the collision
 /// cache's reset 10499 (its blocks are freed every frame, so a held reset would leave the
 /// shadows' floor test on freed memory), the view set-up 110000 (matrices, the fog packet it
 /// queues; its texture scroll stands with the frame scale at 0, its zoom step is put back),
 /// 129999 (the render states it queues), the view copy 135000.
-const MODELS_RVA: usize = 0x2A23E0;
+const MODELS_RVA: St = St(0x2A23E0);
 /// KH1's field camera task (100000, `0x1401E5D90`): runs through `camera_live` while the Camera
 /// row is Free.
-const CAMERA_RVA: usize = 0x1E5D90;
+const CAMERA_RVA: St = St(0x1E5D90);
 /// The Camera row: Free (the camera task runs while held) or Held.
 static FREE_CAMERA: AtomicBool = AtomicBool::new(false);
 /// The frame scale the pacing set for the frame to come (f32 bits; read at the frame end before
 /// a held frame's is written 0): the camera's while held.
 static CAMERA_SCALE: AtomicU32 = AtomicU32::new(0);
 /// KH1's camera mode (2: first person) and its first person's fade timer (Sora faded out by it).
-const CAMERA_MODE_STEAM: usize = 0x299BB08;
-const FP_FADE_STEAM: usize = 0x25380F8;
+const CAMERA_MODE_STEAM: St = St(0x299BB08);
+const FP_FADE_STEAM: St = St(0x25380F8);
 /// In KH1's pad record's pressed word (`+8`): Select (first person in KH1's follow / lock-on
 /// cameras and KH2's), R3 (out of KH1's first person).
 const PRESSED_SELECT: u32 = 0x8000;
 const PRESSED_R3: u32 = 0x200;
-const MAP_RVA: usize = 0xD2830;
-const RUN_BY_DEFAULT: [usize; 6] = [MODELS_RVA, MAP_RVA, 0x189F80, 0x28CD50, 0x2BE500, 0x28CC10];
+const MAP_RVA: St = St(0xD2830);
+const RUN_BY_DEFAULT: [St; 6] = [MODELS_RVA, MAP_RVA, St(0x189F80), St(0x28CD50), St(0x2BE500), St(0x28CC10)];
 /// KH1's frame scale (`0x14233FBDC`) and its half (`0x14233FBE0`, the HUD's sprite animations'
 /// step), both set by the pacing `0x14018D1F0` at the end of every pass of the loop, before the
 /// frame end (`frame_end`). 0 on a held frame: every draw that runs steps by them and so stands.
-const FRAME_SCALE_STEAM: usize = 0x233FBDC;
-const HALF_SCALE_STEAM: usize = 0x233FBE0;
+const FRAME_SCALE_STEAM: St = St(0x233FBDC);
+const HALF_SCALE_STEAM: St = St(0x233FBE0);
 /// The frame scale of the last frame that ran (f32 bits), for draws that look at it while held.
 static SHOWN_SCALE: AtomicU64 = AtomicU64::new(0);
 /// What running draws step a frame without the frame scale, put back at every held frame's end
@@ -206,26 +207,37 @@ static SHOWN_SCALE: AtomicU64 = AtomicU64::new(0);
 /// the screen overlay 164004 (`0x140185360`: `0x14233E820` / `824` / `828`); the HUD's data (its
 /// parts' states, timers and sprite animations: `0x1427F13D0`..`0x142866D18`, written only by
 /// the HUD's code, the decomp's xrefs).
-const PUT_BACK: [(usize, usize); 5] = [(0x233E834, 4), (0x4DD560, 0x18), (0x233EBA0, 4), (0x233E820, 0xC), (0x27F13D0, 0x142866D18 - 0x1427F13D0)];
+const PUT_BACK: [(St, St); 5] = [
+    (St(0x233E834), St(0x233E838)),
+    (St(0x4DD560), St(0x4DD578)),
+    (St(0x233EBA0), St(0x233EBA4)),
+    (St(0x233E820), St(0x233E82C)),
+    (St(0x27F13D0), St(0x2866D18)),
+];
+/// (tm41) A `PUT_BACK` range's length in the running build (Epic's last block is shorter: its two
+/// ends moved by different amounts, `docs/kh1-epic-addresses.md`).
+fn put_back_len(r: (St, St)) -> usize {
+    r.1.get() - r.0.get()
+}
 /// 130000's model list (`0x142D5C9F0`): an object's colour (`+0x370`, stepped by 4 a frame
 /// toward `+0x350`.. by `0x1402A1320`) and its flags (`+0x374`, bit 0x4000: the colour set).
-const MODEL_LIST_STEAM: usize = 0x2D5C9F0;
+const MODEL_LIST_STEAM: St = St(0x2D5C9F0);
 /// The words saved as the hold began (`PUT_BACK` in order), and the models' (object, colour, flags).
 static SAVED: Mutex<(Vec<u8>, Vec<(usize, u32, u32)>)> = Mutex::new((Vec::new(), Vec::new()));
 /// 120000's own steps, put back after it on held frames: the sky's turn (f32), the map fades
 /// (0x20 x (timer, alpha, rate), `0x14019BE70`), their done bits (u32).
-const SKY_TURN_STEAM: usize = 0x233E174;
-const MAP_FADES_STEAM: usize = 0x2356370;
+const SKY_TURN_STEAM: St = St(0x233E174);
+const MAP_FADES_STEAM: St = St(0x2356370);
 const MAP_FADES_LEN: usize = 0x20 * 0xC;
-const MAP_FADES_DONE_STEAM: usize = 0x232DE00;
+const MAP_FADES_DONE_STEAM: St = St(0x232DE00);
 /// KH1's system stop: the status word's bit 0 and the effects' stop `0x142432130` (which task
 /// 140000 copies into the effects' held flag `0x142E9D7E0`).
-const SYSTEM_STATUS_STEAM: usize = 0x2867368;
-const SYSTEM_STOP_FX_STEAM: usize = 0x2432130;
+const SYSTEM_STATUS_STEAM: St = St(0x2867368);
+const SYSTEM_STOP_FX_STEAM: St = St(0x2432130);
 /// KH1's program table (0x50 an entry, the draw at `+0x18`) and its KeShpTail3 / 3X draws.
-const PPP_TABLE_STEAM: usize = 0x54FF00;
-const TAIL3_DRAW_STEAM: usize = 0x337450;
-const TAIL3X_DRAW_STEAM: usize = 0x338160;
+const PPP_TABLE_STEAM: St = St(0x54FF00);
+const TAIL3_DRAW_STEAM: St = St(0x337450);
+const TAIL3X_DRAW_STEAM: St = St(0x338160);
 /// What the system stop words were before our hold.
 static STOP_SAVED: Mutex<Option<(u32, u32)>> = Mutex::new(None);
 static TAILS_ON: AtomicBool = AtomicBool::new(false);
@@ -233,44 +245,44 @@ static TAILS_ON: AtomicBool = AtomicBool::new(false);
 /// What the main list's tasks are (Steam RVAs; 12 characters at most), for the Held Tasks page and
 /// the log: each read in the Steam decomp (after t447: `docs/kh1-frame-advance.md`, "The main
 /// list's tasks, read one by one"), with the tester's Held Tasks tests (t399, t426, after t447).
-const LABELS: [(usize, &str); 33] = [
-    (0x189F80, "coll. cache"),
-    (0x1E1900, "vibration"),
-    (0x28E550, "event trig."),
-    (0x28A2B0, "actor freeze"),
-    (0x1C2BA0, "event fx"),
-    (0x1A5480, "event script"),
-    (0x1A2320, "event zones"),
-    (0x28D620, "room loader"),
-    (0x2937F0, "command menu"),
-    (0x29E790, "lights"),
-    (0x28E6E0, "event cmds"),
-    (0x2AACD0, "spawner"),
-    (0x298940, "actors"),
-    (0x2B4460, "hit checks"),
-    (0x2B11B0, "lock-on"),
-    (0x2ABFF0, "prizes"),
-    (0x1BD8D0, "event camera"),
-    (0x1BF850, "event camera"),
-    (0x1E5D90, "camera"),
-    (0x289D40, "scene camera"),
-    (0x3A06B0, "scene camera"),
-    (0x2C96E0, "actor camera"),
-    (0x2CDAC0, "actor camera"),
-    (0x28CD50, "view, scroll"),
-    (0xD2830, "map draw"),
-    (0x2BE500, "draw states"),
-    (0x2A23E0, "models"),
-    (0x28CC10, "view copy"),
-    (0x28F6B0, "obj scripts"),
-    (0x2AEDA0, "fx binding"),
-    (0x290A50, "delayed play"),
-    (0x3970D0, "fx fade"),
-    (0x292E40, "actors freed"),
+const LABELS: [(St, &str); 33] = [
+    (St(0x189F80), "coll. cache"),
+    (St(0x1E1900), "vibration"),
+    (St(0x28E550), "event trig."),
+    (St(0x28A2B0), "actor freeze"),
+    (St(0x1C2BA0), "event fx"),
+    (St(0x1A5480), "event script"),
+    (St(0x1A2320), "event zones"),
+    (St(0x28D620), "room loader"),
+    (St(0x2937F0), "command menu"),
+    (St(0x29E790), "lights"),
+    (St(0x28E6E0), "event cmds"),
+    (St(0x2AACD0), "spawner"),
+    (St(0x298940), "actors"),
+    (St(0x2B4460), "hit checks"),
+    (St(0x2B11B0), "lock-on"),
+    (St(0x2ABFF0), "prizes"),
+    (St(0x1BD8D0), "event camera"),
+    (St(0x1BF850), "event camera"),
+    (St(0x1E5D90), "camera"),
+    (St(0x289D40), "scene camera"),
+    (St(0x3A06B0), "scene camera"),
+    (St(0x2C96E0), "actor camera"),
+    (St(0x2CDAC0), "actor camera"),
+    (St(0x28CD50), "view, scroll"),
+    (St(0xD2830), "map draw"),
+    (St(0x2BE500), "draw states"),
+    (St(0x2A23E0), "models"),
+    (St(0x28CC10), "view copy"),
+    (St(0x28F6B0), "obj scripts"),
+    (St(0x2AEDA0), "fx binding"),
+    (St(0x290A50), "delayed play"),
+    (St(0x3970D0), "fx fade"),
+    (St(0x292E40), "actors freed"),
 ];
 
 fn label(rva: usize) -> &'static str {
-    LABELS.iter().find(|l| l.0 == rva).map_or("", |l| l.1)
+    LABELS.iter().find(|l| l.0.get() == rva).map_or("", |l| l.1)
 }
 
 /// (t399) One of the tasks Frame Advance would hold, for the debug menu's Held Tasks page.
@@ -295,7 +307,7 @@ static RUNS: Mutex<Vec<(usize, bool)>> = Mutex::new(Vec::new());
 
 /// Whether a task runs while held when the page hasn't switched it.
 fn runs_by_default(rva: usize) -> bool {
-    RUN_BY_DEFAULT.contains(&rva) || rva == CAMERA_RVA && FREE_CAMERA.load(Ordering::Relaxed)
+    RUN_BY_DEFAULT.iter().any(|r| r.get() == rva) || rva == CAMERA_RVA.get() && FREE_CAMERA.load(Ordering::Relaxed)
 }
 
 /// KH1's frame scale as the picture shows it: while held, the last frame that ran's (KH1's own
@@ -313,7 +325,8 @@ unsafe fn save_steps(base: usize) {
     let Ok(mut saved) = SAVED.lock() else { return };
     let (words, models) = &mut *saved;
     words.clear();
-    for (rva, len) in PUT_BACK {
+    for r in PUT_BACK {
+        let (rva, len) = (r.0, put_back_len(r));
         words.extend_from_slice(std::slice::from_raw_parts((base + rva) as *const u8, len));
     }
     models.clear();
@@ -334,7 +347,8 @@ unsafe fn put_back_steps(base: usize) {
     let Ok(saved) = SAVED.lock() else { return };
     let (words, models) = &*saved;
     let mut at = 0;
-    for (rva, len) in PUT_BACK {
+    for r in PUT_BACK {
+        let (rva, len) = (r.0, put_back_len(r));
         if words.len() >= at + len {
             std::ptr::copy_nonoverlapping(words.as_ptr().add(at), (base + rva) as *mut u8, len);
         }
@@ -350,7 +364,7 @@ unsafe fn put_back_steps(base: usize) {
 
 fn runs_now(overrides: &[(usize, bool)], rva: usize) -> bool {
     // (The camera: the Camera row's alone.)
-    if rva == CAMERA_RVA {
+    if rva == CAMERA_RVA.get() {
         return runs_by_default(rva);
     }
     overrides.iter().find(|o| o.0 == rva).map_or(runs_by_default(rva), |o| o.1)
@@ -366,7 +380,7 @@ pub fn tasks() -> Vec<TaskRow> {
 pub fn toggle_task(i: usize) {
     let Some(row) = TASKS.lock().ok().and_then(|t| t.get(i).copied()) else { return };
     let runs = !row.runs;
-    if !row.sub && row.rva == CAMERA_RVA {
+    if !row.sub && row.rva == CAMERA_RVA.get() {
         // (The camera's row is the Camera row: Free runs it through `camera_live`.)
         set_free_camera(runs);
         if let Ok(mut t) = TASKS.lock() {
@@ -523,7 +537,7 @@ unsafe fn hold_tasks(base: usize) {
             let rva = own.wrapping_sub(base);
             let prio = rd::<i32>(t + 4);
             if own == 0 {
-            } else if prio >= FIRST_DRAW && !LIVE_HOLD.contains(&rva) {
+            } else if prio >= FIRST_DRAW && !LIVE_HOLD.iter().any(|r| r.get() == rva) {
                 // (A draw: not held; given back if it was.)
                 if ours(f) {
                     wr::<usize>(t + 0x10, own);
@@ -536,9 +550,9 @@ unsafe fn hold_tasks(base: usize) {
                 }
                 let want = if !runs {
                     skip_f
-                } else if rva == MAP_RVA {
+                } else if rva == MAP_RVA.get() {
                     map_f
-                } else if rva == CAMERA_RVA {
+                } else if rva == CAMERA_RVA.get() {
                     cam_f
                 } else {
                     own
@@ -563,6 +577,7 @@ unsafe fn hold_tasks(base: usize) {
     }
     // (t426) 120000's own lists: every task in them, unless the page lets that list run.
     for (list, label) in SUB_LISTS {
+        let list = list.get();
         let runs = runs_now(&overrides, list);
         seen.push(TaskRow { priority: 120000, label, sub: true, rva: list, runs });
         let mut t: usize = rd(base + list + 0x10);
@@ -659,7 +674,7 @@ pub fn age(t: Instant) -> Duration {
 
 /// Frame Advance works in this build (the Steam one).
 pub fn supported() -> bool {
-    Build::current() == Build::Steam
+    Build::current() != Build::Unknown
 }
 
 /// The debug menu's Frame Advance row.

@@ -30,15 +30,16 @@
 //!   twice with it empty).
 //! - Only with Drive on and on Steam. Both run when KH1 calls them (menus, shops), never each frame.
 
+use super::addr::St;
 use super::log;
 use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 
-const FREE_RVA: usize = 0x2E8770;
+const FREE_RVA: St = St(0x2E8770);
 const FREE_BYTES: [u8; 10] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x7C, 0x24, 0x10];
-const COMPARE_RVA: usize = 0x3050D0;
+const COMPARE_RVA: St = St(0x3050D0);
 const COMPARE_BYTES: [u8; 15] = [0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x6C, 0x24, 0x10, 0x48, 0x89, 0x74, 0x24, 0x18];
 /// The item being replaced (header, compare box).
-const CURRENT_RVA: usize = 0x2E9A07C;
+const CURRENT_RVA: St = St(0x2E9A07C);
 /// The compare window's "now" Strength and max MP.
 const WIN_STRENGTH: usize = 0x4C;
 const WIN_MAX_MP: usize = 0x50;
@@ -60,7 +61,7 @@ unsafe fn wr<T: Copy>(p: usize, v: T) {
 }
 
 fn on() -> bool {
-    super::settings::get().drive && super::addr::Build::current() == super::addr::Build::Steam
+    super::settings::get().drive && super::addr::Build::current() != super::addr::Build::Unknown
 }
 
 fn note(line: impl FnOnce() -> String) {

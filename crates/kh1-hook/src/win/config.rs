@@ -32,6 +32,7 @@
 //!
 //! Steam only (the windows' calls are Steam addresses); the text lookup is in for both builds.
 
+use super::addr::St;
 use super::addr::{Build, Rva};
 use super::styles::Kind;
 use super::{camera, hook, log, styles};
@@ -85,52 +86,52 @@ const DECOR_RVA: Rva = Rva(0x2F0740);
 /// Steam-only KH1 menu calls (Checked (decomp) and (exe)), used only when `Build::current()` is
 /// Steam.
 /// The list cursor's move (up / down, wrapping on a fresh press) and the glove's target.
-const CURSOR_MOVE_STEAM: usize = 0x2EF670;
-const GLOVE_STEAM: usize = 0x2D9920;
+const CURSOR_MOVE_STEAM: St = St(0x2EF670);
+const GLOVE_STEAM: St = St(0x2D9920);
 /// The glow's target set from a point: `(frames, x, y)` (`0x1402D9860`, Checked (decomp)): the
 /// glint `0x1402D9B40` draws (30 x 30 around the point) slides there over `frames`. The window
 /// version above (`0x1402D9920`) puts it at the selected label's top-right corner: x = window x +
 /// 11 + 142, y = window y + 71 + row x the window's row pitch (`+0xF0`, from the def's `+0x22`).
 /// KH1's Config list def has a pitch of 0 (Checked (exe): `0x1405463A0 +0x22` = 0), so in KH1
 /// itself the glint stays on the top row; ours give it the rows' pitch.
-const GLOW_AT_STEAM: usize = 0x2D9860;
+const GLOW_AT_STEAM: St = St(0x2D9860);
 /// A window def's row pitch (window `+0xF0` = it x 16).
 const DEF_PITCH: usize = 0x22;
 /// Window framework: create `(def, open type) -> window` (0 when the 24-window pool is full; it
 /// becomes the focus), close it and the windows after it (`+0x20`), the last window after it,
 /// link `a +0x20 = b` (next) / `a +0x18 = b` (parent), bring to the front.
-const CREATE_STEAM: usize = 0x2E5A40;
-const CLOSE_STEAM: usize = 0x2E3D10;
-const CHAIN_END_STEAM: usize = 0x2E5510;
-const LINK_NEXT_STEAM: usize = 0x2E2DE0;
-const LINK_PARENT_STEAM: usize = 0x2E2E40;
-const FRONT_STEAM: usize = 0x2E5E40;
+const CREATE_STEAM: St = St(0x2E5A40);
+const CLOSE_STEAM: St = St(0x2E3D10);
+const CHAIN_END_STEAM: St = St(0x2E5510);
+const LINK_NEXT_STEAM: St = St(0x2E2DE0);
+const LINK_PARENT_STEAM: St = St(0x2E2E40);
+const FRONT_STEAM: St = St(0x2E5E40);
 /// The Config title tab's update (def `0x140546190`): with the focus it creates the Config list
 /// (cursor on `ROW_RVA`) and its help line; then it draws the tab. `push rdi; sub rsp, 0x40`.
-const TITLE_STEAM: usize = 0x2FADB0;
+const TITLE_STEAM: St = St(0x2FADB0);
 const TITLE_PROLOGUE: [u8; 6] = [0x40, 0x57, 0x48, 0x83, 0xEC, 0x40];
 /// Window definitions (0x30 bytes): the Config list (copied for ours) and its help line.
-const LIST_DEF_STEAM: usize = 0x5463A0;
-const HELP_DEF_STEAM: usize = 0x546160;
+const LIST_DEF_STEAM: St = St(0x5463A0);
+const HELP_DEF_STEAM: St = St(0x546160);
 /// The Config labels (8 u32); row 7's is "Default settings".
-const LABELS_STEAM: usize = 0x546410;
+const LABELS_STEAM: St = St(0x546410);
 /// The finger: `(win, x, y, 0, 0, frame, 0, 0x80808080, 0x80808080, 0)`; its size from the
 /// object at `FINGER_INFO_STEAM` (`+0x150` width, `+0x152` height, x16).
-const FINGER_STEAM: usize = 0x2EEEE0;
-const FINGER_INFO_STEAM: usize = 0x2E91610;
+const FINGER_STEAM: St = St(0x2EEEE0);
+const FINGER_INFO_STEAM: St = St(0x2E91610);
 /// The window pool: 24 windows of 0x118 bytes, `+0xB8` the state (0 free).
-const POOL_STEAM: usize = 0x2E92780;
+const POOL_STEAM: St = St(0x2E92780);
 const POOL_LEN: usize = 24;
 const WIN_SIZE: usize = 0x118;
 
 /// KH1's text width (Steam `0x1402D0E10`, Checked (decomp)): `(text, size) -> pixels`, each glyph's
 /// width x size / 24, the size code `0C nn` inside the text switching the size from there on (the
 /// same codes the draw `0x1402EBCD0` reads; there `0E lo hi` moves the line down that many pixels).
-const MEASURE_STEAM: usize = 0x2D0E10;
+const MEASURE_STEAM: St = St(0x2D0E10);
 /// The size KH1's menu panels draw their text at (Steam `0x140545364`, 20 with the font set up,
 /// Checked (decomp)): the panel call (`0x1402F3950`) passes it to the text draw, the text's top at
 /// the row's y + (row height 26 - it) / 2.
-const TEXT_SIZE_STEAM: usize = 0x545364;
+const TEXT_SIZE_STEAM: St = St(0x545364);
 /// The room a label's text has (the owner, t923: "kh1 ability chance ... and knock-back numbers ...
 /// go off the backdrop and the text needs to be scaled down to fit it"): the label box spans x 11 ..
 /// 153 (`0x0B`, width `0x8E`) and its text starts at x 27 (`0x1B`, left-aligned, Checked (decomp));
@@ -201,7 +202,7 @@ unsafe fn scale_list(win: usize) {
 
 /// `win` drawn at `scale` (KH1's window scale, anchored at the window's top as page 1).
 unsafe fn scale_by(win: usize, scale: f32) {
-    if Build::current() != Build::Steam {
+    if Build::current() == Build::Unknown {
         return;
     }
     wr(win + WIN_SCALE_X, scale);
@@ -1011,7 +1012,7 @@ pub unsafe fn install() {
         log!(Menus, "Config menu: no rows of ours (config_row = off)");
         return;
     }
-    if Build::current() != Build::Steam {
+    if Build::current() == Build::Unknown {
         log!(Menus, "Config menu: the KH1 in KH2 menu is Steam only: no rows of ours (the ini switches)");
         return;
     }
@@ -1101,7 +1102,7 @@ static FIT: std::sync::Mutex<Vec<(u32, i32, usize)>> = std::sync::Mutex::new(Vec
 /// the line's y, and as wide as the measure has them). Worked out once per text and room; only our
 /// ids (KH1's own texts are left alone).
 unsafe fn fit(id: u32, room: i32) -> u32 {
-    if id >> 16 != 0x7F00 || Build::current() != Build::Steam || !TEXT_HOOKED.load(Ordering::Relaxed) {
+    if id >> 16 != 0x7F00 || Build::current() == Build::Unknown || !TEXT_HOOKED.load(Ordering::Relaxed) {
         return id;
     }
     let mut fits = FIT.lock().unwrap_or_else(|e| e.into_inner());
@@ -1161,7 +1162,7 @@ unsafe fn fit(id: u32, room: i32) -> u32 {
 /// our ids. The size code after each break is there in case a break resets it (**Assumption**: not
 /// seen in the decomp either way); the lines keep KH1's spacing, so the box holds as many lines.
 unsafe fn fit_help(id: u32) -> u32 {
-    if id >> 16 != 0x7F00 || Build::current() != Build::Steam || !TEXT_HOOKED.load(Ordering::Relaxed) {
+    if id >> 16 != 0x7F00 || Build::current() == Build::Unknown || !TEXT_HOOKED.load(Ordering::Relaxed) {
         return id;
     }
     let mut fits = FIT.lock().unwrap_or_else(|e| e.into_inner());
@@ -1277,11 +1278,11 @@ unsafe fn cursor(win: usize) -> i32 {
     let f: unsafe extern "system" fn(usize) -> i32 = std::mem::transmute(BASE.load(Ordering::Relaxed) + CURSOR_ROW_RVA);
     f(win)
 }
-unsafe fn call1(rva: usize, a: usize) -> usize {
+unsafe fn call1(rva: St, a: usize) -> usize {
     let f: unsafe extern "system" fn(usize) -> usize = std::mem::transmute(BASE.load(Ordering::Relaxed) + rva);
     f(a)
 }
-unsafe fn call2(rva: usize, a: usize, b: usize) -> usize {
+unsafe fn call2(rva: St, a: usize, b: usize) -> usize {
     let f: unsafe extern "system" fn(usize, usize) -> usize = std::mem::transmute(BASE.load(Ordering::Relaxed) + rva);
     f(a, b)
 }

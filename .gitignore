@@ -31,6 +31,7 @@
 !/docs/*.md
 # Helper scripts for the tester threads and versions (see docs/project-instructions.md).
 !/tools/testers/*.py
+!/tools/epic/*.py
 
 # 5. Crate sources and manifests.
 !/crates/*/Cargo.toml
@@ -39,6 +40,7 @@
 !/crates/*/tests/**/*.rs
 # The Steam address table (numbers only: Epic RVA -> Steam RVA).
 !/crates/kh1-hook/src/win/steam_map.in
+!/crates/kh1-hook/src/win/epic_map.in
 !/crates/*/examples/**/*.rs
 !/crates/*/build.rs
 !/crates/kh1-hook/openkh/mod.yml

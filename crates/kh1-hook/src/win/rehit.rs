@@ -31,6 +31,7 @@
 //! 8 frames), and the Keyblade windows had none: Aerial Sweep (909, 10), Aerial Spiral (1131, 12),
 //! Aerial Dive (1882, 8) and Retaliating Slash (1582, 10) hit once.
 
+use super::addr::St;
 use super::log;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Mutex;
@@ -162,13 +163,13 @@ pub fn forget(attack: usize) {
 /// every actor's hit-once bits (`+0x3E0`, actor iterator `0x140291B20`) and off every attack's
 /// met mask in the pool (`+0x9C`, pool `0x142DB4710`, 0xC0 each, in use `0x800`), so it can hit
 /// again. KH1 runs it each frame for motion-tied attacks (`0x1402B47A0`).
-const REARM_STEAM: usize = 0x2B3380;
+const REARM_STEAM: St = St(0x2B3380);
 
 /// A new KH2 attack on KH1's attack object `attack` (KH2's next attack of the group,
 /// `kh2slots::keyblade_rearm`): KH1's own re-arm, its interval made due for the one call and put
 /// back; the last attack's waiting re-hits dropped (the new one starts with no hits).
 pub unsafe fn new_attack(attack: usize) {
-    if super::addr::Build::current() != super::addr::Build::Steam || attack < 0x10000 {
+    if super::addr::Build::current() == super::addr::Build::Unknown || attack < 0x10000 {
         return;
     }
     if let Ok(mut g) = PENDING.lock() {

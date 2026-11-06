@@ -17,6 +17,7 @@
 //! **Assumption:** the stat's 1.0 is KH1's "full" weight (the launch's top speed, the push's full
 //! 80), so an enemy at 1.0 takes KH2's numbers as they are. Off, every enemy takes KH2's.
 
+use super::addr::St;
 use super::{log, pose};
 use std::sync::atomic::{AtomicU32, AtomicU8, Ordering};
 
@@ -26,7 +27,7 @@ unsafe fn rd<T: Copy>(p: usize) -> T {
 
 /// btltbl's reaction block pointer (Steam `0x142D22D30`; `0x1402B8530` reads its u16 `+0x14` /
 /// `+0x16`, the launch speed's two ends; Checked (decomp)).
-const REACTION_BLOCK_STEAM: usize = 0x2D22D30;
+const REACTION_BLOCK_STEAM: St = St(0x2D22D30);
 const LAUNCH_LOW: f32 = 20.0;
 const LAUNCH_HIGH: f32 = 35.0;
 /// The enemy's reaction weight in its stats block (`+0x6C`, a handle).
@@ -89,7 +90,7 @@ unsafe fn note_weight(actor: usize, w: Option<f32>) {
 
 /// KH1's launch speed ends (btltbl, read from the game; 20 / 35 if it can't be).
 unsafe fn launch_ends() -> (f32, f32) {
-    if super::addr::Build::current() != super::addr::Build::Steam {
+    if super::addr::Build::current() == super::addr::Build::Unknown {
         return (LAUNCH_LOW, LAUNCH_HIGH);
     }
     let block = rd::<u64>(super::takeover::game_base() + REACTION_BLOCK_STEAM) as usize;
@@ -346,7 +347,7 @@ fn push_distance(h: &Kh2Hit) -> Option<f32> {
 /// KH1's enemy flinch push (Steam `0x1402B7E60 (actor, record)`, Checked (decomp)): direction the
 /// record's `+0x10`, distance btltbl `+0x2C` (80) × the weight, through KH1's push `0x1402C7300`.
 /// `mov [rsp+0x18], rbx; push rdi; sub rsp, 0x40` (Checked (exe)).
-const FLINCH_PUSH_STEAM: usize = 0x2B7E60;
+const FLINCH_PUSH_STEAM: St = St(0x2B7E60);
 const FLINCH_PUSH_PROLOGUE: [u8; 10] = [0x48, 0x89, 0x5C, 0x24, 0x18, 0x57, 0x48, 0x83, 0xEC, 0x40];
 static ORIG_FLINCH_PUSH: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 
@@ -472,7 +473,7 @@ pub unsafe fn push_frame(actor: usize) {
 /// its sign picks motion 0x4E / 0x4F; Checked (decomp)): a hop of 20 (`0x1402AF960`) and
 /// `+0x3C0` = the record's direction × btltbl `+0x38` (4) × the weight. `mov [rsp+0x18], rbx;
 /// mov [rsp+0x20], rsi; push rdi; sub rsp, 0x60` (Checked (exe)).
-const AIR_FLINCH_STEAM: usize = 0x2B8B90;
+const AIR_FLINCH_STEAM: St = St(0x2B8B90);
 const AIR_FLINCH_PROLOGUE: [u8; 15] = [0x48, 0x89, 0x5C, 0x24, 0x18, 0x48, 0x89, 0x74, 0x24, 0x20, 0x57, 0x48, 0x83, 0xEC, 0x60];
 static ORIG_AIR_FLINCH: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 /// KH2's air flinch hop (Steam KH2 `0x1403D4800`: 50.0, Checked (decomp)).
@@ -526,7 +527,7 @@ unsafe extern "system" fn air_flinch(actor: usize, rec: usize, front: f32) {
 }
 
 pub unsafe fn install() {
-    if super::addr::Build::current() != super::addr::Build::Steam {
+    if super::addr::Build::current() == super::addr::Build::Unknown {
         return;
     }
     let base = super::sys::GetModuleHandleA(std::ptr::null()) as usize;

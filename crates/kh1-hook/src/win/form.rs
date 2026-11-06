@@ -36,6 +36,7 @@
 //! sets nothing anyone reads now and stays for Anti, research round 2 for Final §5.)
 //! (The main-branch port's row 14: the code asks for Anti Form, `code_anti`.)
 
+use super::addr::St;
 use super::{log, pose};
 use character_core::{Abilities, Character, EventKind};
 use kh2_formats::battle::Battle;
@@ -320,7 +321,7 @@ pub fn code_cancel(why: &str) {
 /// The pad as pressed, every pad record KH1 reads (`probe::pad`), on builds other than Steam (Steam:
 /// KH1's pad step, `pad_step`).
 pub fn pad(buttons: u16) {
-    if super::addr::Build::current() != super::addr::Build::Steam {
+    if super::addr::Build::current() == super::addr::Build::Unknown {
         code_read(buttons);
     }
 }
@@ -332,7 +333,7 @@ pub fn pad(buttons: u16) {
 /// `0x14018C790`, before anything of the frame reads the buttons; Checked (decomp)): `push rbp;
 /// sub rsp, 0x40` (6 bytes, whole instructions; the next one is rip-relative, not moved; Checked
 /// (exe), the lead's read).
-const PAD_STEP_STEAM: usize = 0x28B0B0;
+const PAD_STEP_STEAM: St = St(0x28B0B0);
 const PAD_STEP_BYTES: [u8; 6] = [0x40, 0x55, 0x48, 0x83, 0xEC, 0x40];
 static ORIG_PAD_STEP: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 static PAD_BASE: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
@@ -343,11 +344,11 @@ static PAD_BASE: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize
 /// the keyboard's keys (`0x1400D7E80`, called at the end of `0x1400DA9F0`, which the pad step calls
 /// first) are already merged; then the logical record, remapped from slot 0's held word
 /// (`secretcode::kh1_logical`), which KH1's menus and its command step read.
-const SLOT0_STEAM: usize = 0x298C9B0;
-const LOGICAL_STEAM: usize = 0x298CA90;
+const SLOT0_STEAM: St = St(0x298C9B0);
+const LOGICAL_STEAM: St = St(0x298CA90);
 /// KH1's remap table (19 `(mask, bit)` pairs) and its settings block (`+0x1E`: the confirm swap).
-const REMAP_STEAM: usize = 0x528290;
-const SETTINGS_STEAM: usize = 0x4D8614;
+const REMAP_STEAM: St = St(0x528290);
+const SETTINGS_STEAM: St = St(0x4D8614);
 /// Cross in PS2 order: the code's last press, KH1's Attack and confirm.
 const CROSS: u32 = 0x4000;
 /// The code's last Cross is being kept from KH1 (until it is let go), and the logical bits taken
@@ -360,7 +361,7 @@ static CODE_PHYS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::n
 
 /// KH1's pad step wrapped (Steam only, its first bytes checked; always in: the secret code).
 pub unsafe fn install_code(base: usize) {
-    if base == 0 || super::addr::Build::current() != super::addr::Build::Steam {
+    if base == 0 || super::addr::Build::current() == super::addr::Build::Unknown {
         return;
     }
     PAD_BASE.store(base, Ordering::Relaxed);
@@ -458,7 +459,7 @@ const HP_ADD_RVA: super::addr::Rva = super::addr::Rva(0x2A2790);
 /// KH1's MP add (Steam `0x1402A4A00 (actor, n)`: stats `+0x44` + n, kept within 0 .. max `+0x48`,
 /// the HUD's copy updated; Checked (decomp)), its first whole instructions (`mov [rsp+0x10], rsi;
 /// mov [rsp+0x18], rdi; push r14`, Checked (exe)).
-const MP_ADD_STEAM: usize = 0x2A4A00;
+const MP_ADD_STEAM: St = St(0x2A4A00);
 const MP_ADD_BYTES: [u8; 12] = [0x48, 0x89, 0x74, 0x24, 0x10, 0x48, 0x89, 0x7C, 0x24, 0x18, 0x41, 0x56];
 
 /// Drive > Form Cost: 0 not read yet, 1 MP, 2 the Drive gauge.
@@ -584,7 +585,7 @@ pub fn set_mp_refill(on: bool) {
 /// MP to full through KH1's own MP add (Drive > MP Refill on; Steam only, its bytes checked).
 unsafe fn refill_mp(sora: usize) {
     let stats = pose::ptr(rd::<u32>(sora + 0x6C));
-    if stats < 0x10000 || super::addr::Build::current() != super::addr::Build::Steam {
+    if stats < 0x10000 || super::addr::Build::current() == super::addr::Build::Unknown {
         return;
     }
     let (now, max) = (rd::<i32>(stats + 0x44), rd::<i32>(stats + 0x48));
@@ -1005,7 +1006,7 @@ const QUEUED: u32 = 0x4000_0000;
 /// slots built): its change, its moves and its revert native.
 pub fn native_enabled() -> bool {
     let s = super::settings::get();
-    s.drive && s.kh1_slots.is_some() && super::addr::Build::current() == super::addr::Build::Steam
+    s.drive && s.kh1_slots.is_some() && super::addr::Build::current() != super::addr::Build::Unknown
 }
 
 /// Form `kind` runs on KH1's own states (`Kind::native_capable`, its slots built:
@@ -1055,7 +1056,7 @@ unsafe fn code_anti(actor: usize) {
     if s.kh1_slots.is_none() {
         return no("KH2's moves on KH1's own slots are off (the ini's kh1_slots), and Anti runs only there");
     }
-    if super::addr::Build::current() != super::addr::Build::Steam {
+    if super::addr::Build::current() == super::addr::Build::Unknown {
         return no("Anti runs only on the Steam build");
     }
     if !super::kh2slots::form_built(Kind::Anti) {

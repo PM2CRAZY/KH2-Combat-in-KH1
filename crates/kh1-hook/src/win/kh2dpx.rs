@@ -84,6 +84,7 @@
 //! Keyblade's at load, before KH2 has him; a form's before the change; a spell's at load or at the
 //! level up).
 
+use super::addr::St;
 use super::addr::Rva;
 use super::log;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -234,13 +235,13 @@ fn anchor(code: u16) -> Option<Anchor> {
 /// KH1's start on a point along the weapon (Steam `0x1402ADD60 (dpx, number, actor, bone, t)`,
 /// binding mode 3: the bone's turn and the point, every frame) and its blade bone code (KH1's
 /// `0x14029EB20`: code 0x30 maps `t` into the weapon's blade range, `btltbl` `+0x28`..`+0x24`).
-const START_ON_BLADE_STEAM: usize = 0x2ADD60;
+const START_ON_BLADE_STEAM: St = St(0x2ADD60);
 /// KH1's start bound by position (Steam `0x1402ADC20 (dpx, number, actor, code, t)`, binding
 /// mode 1: every frame the point `0x14029EB20 (actor, code, t)` plus the binding's world offset
 /// `+0x10` as the effect's place; its turn is left as the start made it). A raw bone is
 /// `0x1000 | n` for the point (`0x14029FAB0`: bit 0x1000 takes the low 12 bits as the bone; the
 /// point at t = 1 is the bone's place, `0x1401D6320`), `0x2000 | n` for its matrix (`0x14029EA00`).
-const START_BY_POSITION_STEAM: usize = 0x2ADC20;
+const START_BY_POSITION_STEAM: St = St(0x2ADC20);
 const RAW_POINT: u32 = 0x1000;
 const BLADE_BONE: u32 = 0x30;
 /// KH1's object-root code: the actor's place with a frame from its matrix rows (each negated,
@@ -285,7 +286,7 @@ const BIND_UNTIL_STARTED: u32 = 0x02;
 const ELEMENT_NUMBER: u32 = 0x700;
 /// KH1's stop of an element's effect (Steam `0x1401EC470 (element)`: its sound and instances
 /// freed, the instance marked dead; what KH1's bone binding calls when its motion ends).
-const STOP_STEAM: usize = 0x1EC470;
+const STOP_STEAM: St = St(0x1EC470);
 /// KH2 element flags (`docs/kh2-effects.md` §2).
 const BIND: u32 = 0x01;
 const ENDS_WITH_MOTION: u32 = 0x20;
@@ -318,24 +319,24 @@ const EL_SERIAL: usize = 0x30;
 const EL_BOUND: u32 = 0x20;
 /// KH1's frame unit (Steam `0x14233FBCC`, 1.0, set by `0x14018C2A0`; the frame step
 /// `0x14233FBDC` is a multiple of it): a bound element starts at wait <= -2 x it.
-const FRAME_UNIT_STEAM: usize = 0x233FBCC;
+const FRAME_UNIT_STEAM: St = St(0x233FBCC);
 
 /// KH1's binding task list (Steam `0x142DB34B0`: `+0x18` the node added last; a node's `+0x10`
 /// callback, `+0x18` actor, `+0x20` element, `+0x28` its serial, `+0x30` a handle of the 0x70-byte
 /// binding record: `+4` mode, `+8` bone code, `+0xC` t, `+0x30` the matrix it applies, its
 /// place row `+0x60`), filled by `0x1402AE880`; the binding callback `0x1402AE910`.
-const BIND_LIST_STEAM: usize = 0x2DB34B0;
-const BIND_TASK_STEAM: usize = 0x2AE910;
+const BIND_LIST_STEAM: St = St(0x2DB34B0);
+const BIND_TASK_STEAM: St = St(0x2AE910);
 /// KH1's bone reads, as its binding calls them: `0x14029EA00 (actor, code, out matrix)` and
 /// `0x14029EB20 (actor, code, t, out point)` (Steam).
-const READ_BONE_STEAM: usize = 0x29EA00;
-const READ_POINT_STEAM: usize = 0x29EB20;
+const READ_BONE_STEAM: St = St(0x29EA00);
+const READ_POINT_STEAM: St = St(0x29EB20);
 /// Element flag: waiting to start (KH1's binding neither reads nor applies while it is set).
 const EL_WAITING: u32 = 0x10;
 
 /// KH1's frame unit (read on Steam; 1.0, the value KH1 sets it to, elsewhere).
 fn frame_unit() -> f32 {
-    if super::addr::Build::current() != super::addr::Build::Steam {
+    if super::addr::Build::current() == super::addr::Build::Unknown {
         return 1.0;
     }
     let base = unsafe { super::sys::GetModuleHandleA(std::ptr::null()) } as usize;
@@ -481,24 +482,24 @@ const DROP_FILE_RVA: Rva = Rva(0xE2DF0);
 /// width, height)`: the file holding the pixels, its HD entry by their offset, the texture made
 /// from it once and kept in the entry) and its texture list (Steam `*0x1422C8FA8`), as KH1's DPD
 /// texture set-up calls it (`0x14031EC10`).
-pub(super) const TEXTURE_OF_STEAM: usize = 0x10C050;
-pub(super) const TEXTURES_STEAM: usize = 0x22C8FA8;
+pub(super) const TEXTURE_OF_STEAM: St = St(0x10C050);
+pub(super) const TEXTURES_STEAM: St = St(0x22C8FA8);
 /// KH1's DPD texture set-up (Steam `0x14031EC10 (dpd, 0, 0)`, called by its effect draw
 /// `0x1401ECF30` on every draw, done once: it runs only while the DPD's first texture record's `+4`
 /// isn't negative): each TBP's first record looked up (`0x14010C050`) and its texture handed to every
 /// record of that TBP (`+8` its handle, `+4` 0xFFFE). KH2's (`0x1404AECD0`) is the same plus one case
 /// (`palette_textures`). And KH1's pointer to handle (Steam `0x14038AD90`, which registers a region
 /// it doesn't know yet), as the set-up writes `+8`.
-const TEX_SETUP_STEAM: usize = 0x31EC10;
-const TO_HANDLE_STEAM: usize = 0x38AD90;
+const TEX_SETUP_STEAM: St = St(0x31EC10);
+const TO_HANDLE_STEAM: St = St(0x38AD90);
 /// KH1's effect instances (Steam `0x142678280`, 0x100 of 0xE0 bytes: `+0x98` the DPD it plays,
 /// `+0x92` state, 1 live, 4 ending) and elements (Steam `0x142D678B0`, 0x100 of 0x3C: `+0x38` a
 /// handle of its DPX), for whether a DPX is still in use.
-const INSTANCES_STEAM: usize = 0x2678280;
+const INSTANCES_STEAM: St = St(0x2678280);
 const INSTANCES: usize = 0x100;
 const INSTANCE_SIZE: usize = 0xE0;
 const INST_DPD: usize = 0x98;
-const ELEMENTS_STEAM: usize = 0x2D678B0;
+const ELEMENTS_STEAM: St = St(0x2D678B0);
 const ELEMENTS: usize = 0x100;
 const ELEMENT_SIZE: usize = 0x3C;
 const EL_DPX: usize = 0x38;
@@ -785,7 +786,7 @@ fn desired() -> Vec<(Pkg, String)> {
         v.push((pkg, String::new()));
     }
     // (The spell packages play through KH1 on Steam only.)
-    if super::addr::Build::current() == super::addr::Build::Steam {
+    if super::addr::Build::current() != super::addr::Build::Unknown {
         if let Some(l) = unsafe { super::reflect::level_now() } {
             v.push((Pkg::Spell(l), String::new()));
         }
@@ -1758,7 +1759,7 @@ pub(super) unsafe fn add_hd(k: &Kh1Files, rec: usize, offset: u32, dds: Option<&
 /// (entered the first time), by KH1's own texture lookup (`0x14010C050 (textures, pixels, 0, 0,
 /// width, height)`, the call KH1's DPD texture set-up makes, `0x14031EC10`). 0 if it can't be.
 unsafe fn shared_texture(base: usize, k: &Kh1Files, tbp: i32) -> usize {
-    if super::addr::Build::current() != super::addr::Build::Steam {
+    if super::addr::Build::current() == super::addr::Build::Unknown {
         return 0;
     }
     let Ok(mut g) = SHARED.lock() else { return 0 };
@@ -1853,7 +1854,7 @@ unsafe fn enter(base: usize, d: &mut Dpx) {
     log!(Effects, "KH2 effects (native): {}'s DPX at {:#x} relocated by KH1", d.label, d.at);
     // (Its HD entries are in; KH1's draw would set the textures up on the first draw, without KH2's
     // per-palette case.)
-    if d.entry != 0 && !d.palettes.is_empty() && super::addr::Build::current() == super::addr::Build::Steam {
+    if d.entry != 0 && !d.palettes.is_empty() && super::addr::Build::current() != super::addr::Build::Unknown {
         let n = palette_textures(base, d);
         log!(Effects, "KH2 effects (native): {}'s DPDs at {:#x?} textured as KH2's (an HD image per palette): {n} records got their own", d.label, d.palettes);
     }
@@ -1911,7 +1912,7 @@ unsafe fn release(base: usize, d: &Dpx) -> Result<(), ()> {
     if !d.relocated {
         return Ok(());
     }
-    if super::addr::Build::current() != super::addr::Build::Steam {
+    if super::addr::Build::current() == super::addr::Build::Unknown {
         return Err(());
     }
     let inside = |p: usize| p >= d.at && p < d.at + d.len;
@@ -2000,7 +2001,7 @@ fn start_el(pkg: Pkg, motion: u16, el: i16) -> Started {
     };
     let layer = kh1_point(pkg, kh1_sized(pkg, layer));
     let (number, bone) = (layer.number, layer.anchor);
-    let steam = super::addr::Build::current() == super::addr::Build::Steam;
+    let steam = super::addr::Build::current() != super::addr::Build::Unknown;
     // KH1's blade and position bindings, and the binding list (unbound elements), are used on
     // Steam only (their addresses are Steam's).
     let position_only = layer.flags & POSITION_ONLY != 0;
@@ -2239,7 +2240,7 @@ pub fn ready(pkg: Pkg) -> bool {
 /// object root). Steam (KH1's point read).
 unsafe fn note_body_centre(base: usize, actor: usize) {
     static ONCE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-    if ONCE.swap(true, Ordering::Relaxed) || super::addr::Build::current() != super::addr::Build::Steam {
+    if ONCE.swap(true, Ordering::Relaxed) || super::addr::Build::current() == super::addr::Build::Unknown {
         return;
     }
     let point: unsafe extern "system" fn(usize, u32, f32, usize) = std::mem::transmute(base + READ_POINT_STEAM);
@@ -2519,7 +2520,7 @@ unsafe fn apply(element: usize, l: &Layer, motion: u16) -> bool {
 
 /// KH1's stop of the element (Steam); elsewhere it is left invisible and its loops ended.
 unsafe fn stop(element: usize, inst: usize) {
-    if super::addr::Build::current() == super::addr::Build::Steam {
+    if super::addr::Build::current() != super::addr::Build::Unknown {
         let base = super::sys::GetModuleHandleA(std::ptr::null()) as usize;
         let f: unsafe extern "system" fn(usize) = std::mem::transmute(base + STOP_STEAM);
         f(element);
@@ -2671,7 +2672,7 @@ static NEXT_SPELL: AtomicU32 = AtomicU32::new(1);
 pub const NATIVE_SPELL: u32 = 0x0400_0000;
 /// KH1's apply of a binding's matrix to an element (Steam `0x1402ADB40 (element, matrix)`: its
 /// turn from the matrix's rows (`0x1402A8EF0`, in 65536ths of a turn) and its place from the last).
-const APPLY_STEAM: usize = 0x2ADB40;
+const APPLY_STEAM: St = St(0x2ADB40);
 /// What KH1's apply does to a turn (`docs/kh2-effects.md` §18.19, Checked (exe)): its angles
 /// (`0x1402A8EF0`: x = atan2(−row1.z, row0.z), y = asin(−row2.z), z = atan2(row2.y, row2.x)) are
 /// not the inverse of the turn KH1 builds from them (`0x140323480`, X then Y then Z), so an
