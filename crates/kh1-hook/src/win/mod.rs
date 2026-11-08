@@ -2,6 +2,7 @@
 //! (`OnInit`, the installed route) or a `dinput8.dll` proxy (the launcher failed to start
 //! with that in the shared KH folder, so it is not used).
 
+mod addonrows;
 mod addr;
 mod bodyhits;
 mod camera;
@@ -479,6 +480,8 @@ pub unsafe extern "system" fn DllMain(_inst: *mut c_void, reason: u32, reserved:
         recoil::install();
         bodyhits::install();
         hurt::install();
+        // (tm44) Third-party add-ons' data files, before the menus that show them (`addonrows`).
+        addonrows::load();
         menu::install();
         kh2list::install();
         camera::install();

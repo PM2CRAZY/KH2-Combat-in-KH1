@@ -52,7 +52,8 @@ game before relying on it.
 | +0x2A | 2 × u8 | padding in the `12c` group, unused | | med |
 | +0x2C | i32 | Config row 6: **Mode** (Beginner / Standard / Proud), read-only in the menu (pressing it plays the buzzer) | 0..2, default 1; getter `0x1402F8BA0` (14 gameplay callers), set by the new-game screen (`0x1403095B0`, setter `0x1402F8E80`); end-of-game awards in `0x1401C7700` test it | high (storage), med (name) |
 | +0x30..+0x74 | | Journal flags and bitfields (`0x1402D90A0` clears them; `0x1402D9010` / `0x1402D92A0` bit arrays at `+0x3C`; `+0x6C` bit array; `+0x70` bit 0 = "new journal entry" marker on the pause menu; `+0x74` read by the journal) | | high |
-| +0x78..+0x3BF | | **unused, saved, zeroed at new game** | | med |
+| +0x78..+0x38F | 8 + 14 × 56 | **the mod's add-on area** (tm44, `crate::addons`, `docs/addons.md` section 4): header "K2AD", layout 1, 14; slots of key hash (u64) + 48-byte list. Written only with an add-on installed, and only when all zero or already ours | | med |
+| +0x390..+0x3BF | | unused, saved, zeroed at new game | | med |
 | +0x3C0..+0x3EF | 48 × u8 | **the mod's KH2 ability list** (`growth::KH2_LIST_OFF`, `docs/abilities.md` "The KH2 list"); Steam decomp re-checked: no access through `0x142E1F4D8` past `+0x74` | | med |
 | +0x3F0..+0x3FF | | unused, saved, zeroed at new game | | med |
 

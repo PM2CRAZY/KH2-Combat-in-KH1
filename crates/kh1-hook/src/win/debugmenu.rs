@@ -579,6 +579,8 @@ unsafe extern "system" fn frame_end(renderer: usize) {
         // KH1's title seen, for the ability menu's growth levels (`menu`).
         super::menu::frame_end(base);
     }
+    // (tm44) Add-ons' ready callbacks, outside every move of KH1's (one atomic load, `addons`).
+    crate::addons::fire_ready();
     let f: unsafe extern "system" fn(usize) = std::mem::transmute(ORIG_FRAME_END.load(Ordering::Acquire));
     f(renderer);
     DRAWN.store(false, Ordering::Relaxed);

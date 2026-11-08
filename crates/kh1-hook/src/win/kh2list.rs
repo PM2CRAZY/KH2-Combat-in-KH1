@@ -31,6 +31,16 @@
 //! - KH1's party-stats refresh (`0x1402E7EC0`, which recounts the party) runs with the real party
 //!   and items (we step out of the page's view for it), then the page's count is set again.
 //!   The picker's cursor clamp (`0x1403119D0`, from the pause menu) clamps to the page's count.
+//! - **Add-on rows** (tm44, `addonrows`, `crate::addons`): each loaded add-on's row after "KH2", the
+//!   same way: members 11, 12, 13 (`addonrows::FIRST_MEMBER`), whose lists KH1's page reads at
+//!   `save + member * 0x74 + 0x44` (`+0x540`, `+0x5B4`, `+0x628`: KH1's item counts 0xA7..0xD6 and
+//!   bytes the page doesn't read; Checked (decomp, Steam): the page's windows read a member's record
+//!   only at `+0x40`, its list, and the save's party bytes, shared list and nothing else of these;
+//!   Assumption: nothing else reads them during one of the page's calls, as for the KH2 row). The
+//!   party bytes go up to `+0x495` (KH1's spell levels from `+0x492`, which the page doesn't read:
+//!   Assumption, as the KH2 row's 5th row already wrote `+0x492`), the row counts up to row 7
+//!   (`0x142E9CBD8..+0x10`: another page's window pointer and table, kept and put back around each
+//!   call as the 5th row's was). The page sees runtime ids; the save keeps the add-on's own ids.
 
 use super::addr::St;
 use super::addr::{Build, Rva};
@@ -55,9 +65,13 @@ const TABLE_PTR_RVA: Rva = Rva(0x2D37748);
 /// guest in `+0x491`).
 const COUNT: St = St(0x2E941D0);
 /// The page's per-row list counts are 4 ints at Steam `0x142E9CBC8`; what follows them is another
-/// page's window pointer (set by its own init): a 5th row's count goes there for the length of
-/// our calls only.
+/// page's window pointer (set by its own init) and table (`0x142E9CBE0..`, Checked (decomp)): the
+/// 5th to 8th rows' counts go there for the length of our calls only.
 const ROW_COUNT_5: St = St(0x2E9CBD8);
+/// The party bytes the view may write (`+0x48E..`): 4 of KH1's, the KH2 row, the add-on rows.
+const PARTY: usize = 5 + crate::addons::MAX_ROWS;
+/// Rows past KH1's four counts.
+const EXTRA_ROWS: usize = PARTY - 4;
 /// The picker's cursor row.
 const PICK_ROW: St = St(0x2E9CBA8);
 /// Members' max AP (stats copy, 0x100 apart).
@@ -212,17 +226,31 @@ pub unsafe fn ap_left_now(base: usize) -> Option<i32> {
 
 /// What a page call changed, to put back after it.
 struct View {
-    party: [u8; 5],
+    party: [u8; PARTY],
     count: i32,
     items: [u8; LEN],
-    /// The 5th row's count was written over `ROW_COUNT_5` (its 8 bytes before).
-    fifth: Option<u64>,
+    /// Rows past KH1's four whose counts were written from `ROW_COUNT_5` on, and what was there.
+    extra: usize,
+    extra_old: [u32; EXTRA_ROWS],
+    /// Add-on rows in the view (`addonrows`) and the save's bytes under their lists.
+    addons: usize,
+    addon_old: [[u8; LEN]; crate::addons::MAX_ROWS],
 }
 
 static VIEW: std::sync::Mutex<Option<View>> = std::sync::Mutex::new(None);
 static DEPTH: AtomicU32 = AtomicU32::new(0);
-/// The 5th row's count between calls.
-static FIFTH: AtomicU32 = AtomicU32::new(0);
+/// The counts of rows past KH1's four between calls (the 5th row's was `FIFTH`).
+static EXTRA: [AtomicU32; EXTRA_ROWS] = [const { AtomicU32::new(0) }; EXTRA_ROWS];
+
+/// The add-on rows in the page's view now (`None`: not in one of its calls).
+fn view_addons() -> Option<usize> {
+    VIEW.try_lock().ok().and_then(|v| v.as_ref().map(|v| v.addons))
+}
+
+/// A member whose AP is Sora's: Sora, the KH2 row and the add-on rows.
+fn sora_pool(member: i32) -> bool {
+    member == 0 || (MEMBER as i32..super::addonrows::FIRST_MEMBER as i32 + crate::addons::MAX_ROWS as i32).contains(&member)
+}
 
 /// Puts the page's view in: the KH2 row after Sora's, its list at `save + SWAP_OFF`.
 unsafe fn enter(base: usize) {
@@ -236,14 +264,15 @@ unsafe fn enter(base: usize) {
     if !(1..=4).contains(&n) {
         return;
     }
-    let mut party = [0u8; 5];
+    let k = super::addonrows::rows_now(base);
+    let mut party = [0u8; PARTY];
     for (i, p) in party.iter_mut().enumerate() {
         *p = rd::<u8>(save + 0x48E + i);
     }
     let real = &party[..n as usize];
     let at = real.iter().position(|m| *m == 0).map_or(0, |i| i + 1);
     let mut virt: Vec<u8> = real.to_vec();
-    virt.insert(at, MEMBER);
+    virt.splice(at..at, std::iter::once(MEMBER).chain((0..k).map(|r| super::addonrows::FIRST_MEMBER + r as u8)));
     for (i, m) in virt.iter().enumerate() {
         wr(save + 0x48E + i, *m);
     }
@@ -252,18 +281,18 @@ unsafe fn enter(base: usize) {
         *b = rd::<u8>(save + SWAP_OFF + i);
         wr(save + SWAP_OFF + i, rd::<u8>(list + i));
     }
-    wr(base + COUNT, n + 1);
-    let fifth = if n + 1 >= 5 {
-        let old = rd::<u64>(base + ROW_COUNT_5);
-        wr(base + ROW_COUNT_5, FIFTH.load(Ordering::Relaxed));
-        Some(old)
-    } else {
-        None
-    };
-    *v = Some(View { party, count: n, items, fifth });
-    static SAID: AtomicBool = AtomicBool::new(false);
-    if !SAID.swap(true, Ordering::Relaxed) {
-        log!(Menus, "KH2 list: Abilities menu shows a KH2 row at row {at} (party {:?} -> {:?})", real, virt);
+    let addon_old = super::addonrows::enter_rows(base, save, k);
+    wr(base + COUNT, n + 1 + k as i32);
+    let extra = (n as usize + 1 + k).saturating_sub(4).min(EXTRA_ROWS);
+    let mut extra_old = [0u32; EXTRA_ROWS];
+    for (j, old) in extra_old.iter_mut().enumerate().take(extra) {
+        *old = rd::<u32>(base + ROW_COUNT_5 + 4 * j);
+        wr(base + ROW_COUNT_5 + 4 * j, EXTRA[j].load(Ordering::Relaxed));
+    }
+    *v = Some(View { party, count: n, items, extra, extra_old, addons: k, addon_old });
+    static SAID: AtomicU32 = AtomicU32::new(u32::MAX);
+    if SAID.swap(k as u32, Ordering::Relaxed) != k as u32 {
+        log!(Menus, "KH2 list: Abilities menu shows a KH2 row at row {at}{} (party {:?} -> {:?})", if k > 0 { format!(" and {k} add-on row(s) after it") } else { String::new() }, real, virt);
     }
 }
 
@@ -281,9 +310,10 @@ unsafe fn leave(base: usize) {
     for (i, b) in view.items.iter().enumerate() {
         wr(save + SWAP_OFF + i, *b);
     }
-    if let Some(old) = view.fifth {
-        FIFTH.store(rd::<u32>(base + ROW_COUNT_5), Ordering::Relaxed);
-        wr(base + ROW_COUNT_5, old);
+    super::addonrows::leave_rows(base, save, view.addons, &view.addon_old);
+    for j in 0..view.extra {
+        EXTRA[j].store(rd::<u32>(base + ROW_COUNT_5 + 4 * j), Ordering::Relaxed);
+        wr(base + ROW_COUNT_5 + 4 * j, view.extra_old[j]);
     }
     for (i, b) in view.party.iter().enumerate() {
         wr(save + 0x48E + i, *b);
@@ -333,26 +363,28 @@ const WRAPPERS: [unsafe extern "system" fn(usize) -> usize; 8] = [w0, w1, w2, w3
 unsafe extern "system" fn ap_left(member: i32) -> i32 {
     let f: unsafe extern "system" fn(i32) -> i32 = std::mem::transmute(ORIG_AP_LEFT.load(Ordering::Acquire));
     let base = base();
-    if (member != 0 && member != MEMBER as i32) || !active(base) {
+    if !sora_pool(member) || !active(base) {
         return f(member);
     }
     let used = ap_used(0);
     (max_ap(0) - used).max(0)
 }
 
-/// AP used (`0x1402E8710 (member)`): Sora's own 48, plus the KH2 list for Sora and our member.
+/// AP used (`0x1402E8710 (member)`): Sora's own 48, plus the KH2 list and the add-on rows'
+/// (`addonrows`) for Sora and our members.
 unsafe extern "system" fn ap_used(member: i32) -> i32 {
     let f: unsafe extern "system" fn(i32) -> i32 = std::mem::transmute(ORIG_AP_USED.load(Ordering::Acquire));
     let base = base();
-    if (member != 0 && member != MEMBER as i32) || !active(base) {
+    if !sora_pool(member) || !active(base) {
         return f(member);
     }
-    f(0) + ap_on(base)
+    let in_view = view_addons().and_then(|k| super::menu::save_block(base).map(|s| (s, k)));
+    f(0) + ap_on(base) + super::addonrows::ap_equipped(base, in_view)
 }
 
 /// Max AP (`0x1402E8560 (member)`, re-made: the stats copy's `+0xE4`); our member's is Sora's.
 unsafe extern "system" fn max_ap(member: i32) -> i32 {
-    let m = if member == MEMBER as i32 { 0 } else { member };
+    let m = if sora_pool(member) { 0 } else { member };
     rd::<i32>(base() + MAX_AP + (m as isize as usize).wrapping_mul(0x100))
 }
 
@@ -361,6 +393,11 @@ unsafe extern "system" fn max_ap(member: i32) -> i32 {
 unsafe extern "system" fn name(member: i32) -> usize {
     if member == MEMBER as i32 {
         return *KH2_TEXT.get_or_init(|| Box::leak(super::menu::encode("KH2").into_boxed_slice()).as_ptr() as usize);
+    }
+    if sora_pool(member) && member != 0 {
+        if let Some(t) = super::addonrows::title_text((member - super::addonrows::FIRST_MEMBER as i32) as usize) {
+            return t;
+        }
     }
     let id = rd::<u16>(base() + NAME_IDS + (member as isize as usize).wrapping_mul(2));
     let f: unsafe extern "system" fn(i32) -> usize = std::mem::transmute(base() + NAME_TEXT);
@@ -388,7 +425,7 @@ unsafe extern "system" fn clamp() {
     let base = base();
     let mut cap = rd::<u32>(base + COUNT);
     if DEPTH.load(Ordering::Acquire) == 0 && active(base) {
-        cap += 1;
+        cap += 1 + super::addonrows::rows_now(base) as u32;
     }
     if rd::<u32>(base + PICK_ROW) > cap {
         wr(base + PICK_ROW, cap);

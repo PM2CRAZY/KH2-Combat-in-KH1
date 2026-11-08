@@ -2383,6 +2383,7 @@ dependencies = [
  "kh2-fx",
  "kh2-magic",
  "kh2-rig",
+ "toml_edit 0.22.27",
 ]
 
 [[package]]

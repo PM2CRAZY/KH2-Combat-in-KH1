@@ -29,6 +29,8 @@ Logs worth turning on: General, Menus, Combat, Forms, Magic, Sound, Effects, Ani
 
 ## 2. Abilities, AP and growth
 
+- [ ] Add-ons: with none installed, the Abilities menu is as before. With the example (`crates/kh1-hook/addons-example/kh3d-example` copied to `<game>\kh1-kh2-addons\`), its row shows after KH2, its abilities come at their points, equip with Sora's AP, survive save/load, and removing the folder hides the row without harming the save. (tm44)
+
 - [ ] KH2 abilities come at main's points, each with a "New Ability" box: a new game has none of them; level 4 Aerial Recovery, 10 Dodge Slash, 22 Counterguard; Sabor Flash Step + Upper Slash; Clayton (or 28) Aerial Sweep; KH1's Slapshot brings KH2's. A save from tm42 or older loses the ones not due yet. (tm43)
 
 - [ ] Max AP grows by main's schedule: +2 at level 4, Dodge Slash at 10, Quick Run at 12, Damage Drive 14, ... and after Sabor (Upper Slash), Cerberus (Aerial Dive), Captain Hook (Magnet Burst), Genie Jafar (Aerial Dodge). No cap. (tm12)
@@ -89,4 +91,4 @@ Logs worth turning on: General, Menus, Combat, Forms, Magic, Sound, Effects, Ani
 - The second Keyblade's shadow (needs the exe's bytes).
 - Form effects after a room change on testing's question (arrival pose or not).
 
-_Last updated: tm43._
+_Last updated: tm44._

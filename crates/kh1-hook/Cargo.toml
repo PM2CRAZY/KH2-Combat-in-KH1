@@ -22,3 +22,5 @@ character-core = { path = "../character-core" }
 combat-core.workspace = true
 kh2-camera.workspace = true
 glam = "0.29"
+# Add-on data files (tm44, `addons`): a TOML reader already in the workspace's lock, parse only.
+toml_edit = { version = "=0.22.27", default-features = false, features = ["parse"] }

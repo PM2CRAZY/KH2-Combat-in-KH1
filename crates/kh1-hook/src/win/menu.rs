@@ -32,7 +32,7 @@ use crate::growth::{self, Kh1Sora, Mode};
 const SAVE_PTR_RVA: Rva = Rva(0x28695A0);
 const SAVE_RVA: Rva = Rva(0x2DE9D60);
 const TABLE_PTR_RVA: Rva = Rva(0x2D37748);
-const TO_HANDLE_RVA: Rva = Rva(0x38B080);
+pub(super) const TO_HANDLE_RVA: Rva = Rva(0x38B080);
 const TABLE_LOAD_RVA: Rva = Rva(0x28D840);
 const TABLE_LOAD_PROLOGUE: [u8; 9] = [0x40, 0x53, 0x57, 0x41, 0x56, 0x48, 0x83, 0xEC, 0x20];
 /// KH1's own entries.
@@ -250,6 +250,8 @@ pub unsafe fn ensure_table(base: usize) {
         std::ptr::write_unaligned((e + 8) as *mut u32, text[k].1);
     }
     // (KH1's own entries stay as KH1 has them: since the split no KH1 id is renamed.)
+    // (tm44) Each add-on ability's entry at its runtime id (`addonrows`; none without add-ons).
+    super::addonrows::table_entries(base, cur, ours);
     std::ptr::write_unaligned((base + TABLE_PTR_RVA) as *mut u64, ours as u64);
     static LOGGED: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
     if LOGGED.fetch_add(1, std::sync::atomic::Ordering::Relaxed) < 6 {
@@ -564,8 +566,9 @@ static TITLE_SEEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool
 /// growth levels aren't compared with the last one's (the owner, the bug-list thread: a second
 /// save loaded in one session showed an "Ability Up" box for levels it already had). One read.
 pub unsafe fn frame_end(base: usize) {
-    if super::addr::Build::current() != super::addr::Build::Unknown && matches!(rd::<i32>(base + MODE_STEAM), 2 | 3) {
-        TITLE_SEEN.store(true, std::sync::atomic::Ordering::Relaxed);
+    if super::addr::Build::current() != super::addr::Build::Unknown && matches!(rd::<i32>(base + MODE_STEAM), 2 | 3) && !TITLE_SEEN.swap(true, std::sync::atomic::Ordering::Relaxed) {
+        // (tm44) No save in play: the add-on API's answers are "unknown" until the next save's.
+        crate::addons::set_snapshot(None);
     }
 }
 
@@ -951,6 +954,11 @@ impl Growth {
                         }
                     }
                     n => self.prompts.push_back(("New Abilities".to_string(), format!("{n} KH2 Abilities"), String::new())),
+                }
+                // (tm44) The add-ons' abilities, each in its add-on's row, at its own point
+                // (`addonrows::grant`; nothing without add-ons).
+                if on_list {
+                    super::addonrows::grant(base, now.level, &now.progress, &mut self.prompts);
                 }
                 if let Some(again) = Self::kh1(base) {
                     now = again;

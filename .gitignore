@@ -45,6 +45,9 @@
 !/crates/*/build.rs
 !/crates/kh1-hook/openkh/mod.yml
 !/crates/kh1-hook/openkh/README.txt
+# The add-on API's C header and the example add-on's data file (text only, tm44).
+!/crates/kh1-hook/include/kh1kh2_addon.h
+!/crates/kh1-hook/addons-example/*/addon.toml
 
 # 6. Testers' folders (traces, logs and notes for their requests, testers/README.md).
 !/testers/**

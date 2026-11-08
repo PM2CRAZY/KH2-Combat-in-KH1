@@ -256,6 +256,23 @@ to sora, should be titled "KH2"". Steam only (`win/kh2list.rs`).
 - Log lines: "KH2 list: installed", "KH2 list: Abilities menu shows a KH2 row at row 1 (party
   [..] -> [..])", "KH1 Sora: ... KH2 list [..]", "Sora is given X (..., KH2 list)".
 
+## Add-on rows (testing-merge, tm44)
+
+Third-party add-ons (`docs/addons.md`, `crate::addons`, `win/addonrows.rs`): each loaded add-on's
+row after "KH2" in KH1's Abilities page, the KH2 row's way (`win/kh2list.rs`'s view). Members 11,
+12, 13 (at most 3 rows); KH1's page reads their lists at `save + member * 0x74 + 0x44` = `+0x540`,
+`+0x5B4`, `+0x628` (Checked (decomp, Steam): the page's windows `0x140311850`, `0x140310B60`,
+`0x140311C20`, `0x140310650`, `0x140310400` read a member's record only at `+0x40`, its list;
+Assumption: nothing reads those save bytes during one of the page's calls, as for `+0x4CC`). Party
+bytes up to `+0x495` (rows 6..8; `+0x492..` are KH1's spell levels, not read by the page:
+Assumption) and row counts up to row 7 (`0x142E9CBD8..0x142E9CBE7`, another page's window pointer
+and table: kept and put back around each call). Ids: runtime 93..127 in KH1's ability table (made
+from KH1's Slapshot / MP Haste entries, the add-on's AP and text), the add-on's own 1..127 in the
+save; turned one into the other as the page's call starts and ends. Saved in KH1's config block
+`+0x78..+0x38F` (14 slots: key hash + 48-byte list). AP: KH1's AP left / used for Sora and members
+10..13 add the add-on rows' equipped AP (Sora's AP). Given at their level or boss by the menu's
+once-a-second step with KH1's "New Ability" box. Not checked in game.
+
 ## The save
 
 - **Sora's abilities** stay in KH1's own lists: Sora's 48 bytes at save `+0x44`, and the shared

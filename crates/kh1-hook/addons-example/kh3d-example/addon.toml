@@ -1,0 +1,70 @@
+# An example add-on for KH2 Combat for KH1 (docs/addons.md). Text only: no motion files ship with
+# it, so the mod loads its abilities and leaves its finishers out (each noted in the log).
+# Put a folder like this one in <KH1's game folder>\kh1-kh2-addons\ (or beside kh1-kh2.dll, in a
+# kh1-kh2-addons folder of Panacea's dll folder).
+
+[addon]
+format = 1                    # the data format; format 1 never changes
+key = "kh3d.example"          # stable forever: the save finds this add-on's row by it
+name = "Dream Drop Distance moves (example)"
+row = "3D"                    # the row's title in the Abilities menu, after "KH2"
+version = "0.1.0"
+
+[[ability]]
+key = "blizzard-edge"
+id = 1                        # this ability's id in the add-on's own saved list: never change or reuse it
+name = "Blizzard Edge"
+help = "Finisher: end a combo with an icy slash."
+ap = 3
+learned = { level = 15 }
+icon = "action"
+
+[ability.finisher]
+motion = "motions/blizzard_edge.anb"   # a KH2 ANB for Sora's skeleton (docs/addons.md)
+kind = "ground"
+range = { kind = "none" }
+hits = [[14, 22], [30, 38]]            # 60 Hz frames from the motion's start
+power = 1.25
+reaction = "flinch"
+effects = [[14, 31]]                   # [frame, element of obj/P_EX100.a.us]
+sounds = [[14, 500042]]                # [frame, KH2 sound id]
+
+[[ability]]
+key = "sliding-sidewinder"
+id = 2
+name = "Sliding Sidewinder"
+help = "Finisher: a sliding sweep at a foe off to the side."
+ap = 3
+learned = { boss = "Jafar" }
+
+[ability.finisher]
+motion = "motions/sliding_sidewinder.anb"
+kind = "ground"
+range = { kind = "any", near = 0, far = 300 }
+hits = [[10, 26]]
+reaction = "launch"
+
+[[ability]]
+key = "aerial-slam-3d"
+id = 3
+name = "Strike Raid Slam"
+help = "Air finisher: hurl the Keyblade down at a foe."
+ap = 4
+learned = { boss = "Captain Hook" }
+
+[ability.finisher]
+motion = "motions/strike_raid_slam.anb"
+keyblade = "motions/strike_raid_slam_w.anb"
+kind = "air"
+range = { kind = "primary", near = 0, far = 650 }
+hits = [[18, 30]]
+power = 1.5
+
+[[ability]]
+key = "combo-boost-3d"
+id = 4
+name = "Combo Boost"
+help = "A support ability with no move of its own."
+ap = 2
+learned = "start"
+icon = "support"
