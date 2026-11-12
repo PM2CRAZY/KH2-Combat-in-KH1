@@ -109,7 +109,7 @@ const MASK_OFF: [f32; 2] = [-25.0, -60.0];
 const MASK_PIVOT: [i32; 2] = [50, 100];
 const ANGLE_PER_POINT: f32 = 0.004_014_257_3;
 /// KH1 HUD units per KH2 unit (main s322, the owner's measured size) and the place's terms.
-const KH2_UNIT: f32 = 384.0 / 448.0 * 1.34;
+pub(super) const KH2_UNIT: f32 = 384.0 / 448.0 * 1.34;
 const KH2_BAR_MIDDLE: f32 = 13.5;
 /// (tm39, the owner: "increase the size of the drive gauge just slightly so that the bottom part of
 /// the gauge is flush with the HP bar ... move it to the right a little so it's flush with the flat
@@ -423,23 +423,47 @@ fn buffers() -> (usize, usize, usize) {
     (b, b + 0x100, b + 0x200)
 }
 
-struct Kh1 {
-    base: usize,
-    alpha: f32,
-    tex0: u64,
-    blend: u32,
-    ox: f32,
-    oy: f32,
-    k: f32,
+/// (tm45) Shared with KH2's enemy HP gauge (`enemyhp`), which draws through KH1's enemy HP bar's
+/// own packet pointer (`packet`).
+pub(super) struct Kh1 {
+    pub(super) base: usize,
+    pub(super) alpha: f32,
+    pub(super) tex0: u64,
+    pub(super) blend: u32,
+    pub(super) ox: f32,
+    pub(super) oy: f32,
+    pub(super) k: f32,
+    /// The packet pointer KH1's draw at hand writes through (the HUD's `0x142821BC0` here).
+    pub(super) packet: St,
+}
+
+/// (tm45) KH1's calls the draw makes are what they should be (their first bytes, Checked (exe)).
+pub(super) unsafe fn calls_ok(base: usize) -> bool {
+    CALLS.iter().all(|(rva, bytes)| std::slice::from_raw_parts((base + *rva) as *const u8, bytes.len()) == *bytes)
+}
+
+/// (tm45) Our texture mapped and bound as KH1 maps and binds its HUD image (`draw`'s steps), and
+/// KH1's TEX0 `own` bound again (after).
+pub(super) unsafe fn bind_ours(base: usize, tex: usize, tex0: u64) {
+    let map: unsafe extern "system" fn(i32, u32, usize, u32, i32) = std::mem::transmute(base + MAP_RVA);
+    map((tex0 & 0x3FFF) as i32, 0, tex, 0, 0);
+    bind_tex0(base, tex0);
+}
+pub(super) unsafe fn bind_tex0(base: usize, tex0: u64) {
+    let send: unsafe extern "system" fn(*const u64, i32) = std::mem::transmute(base + SEND_TEX0_RVA);
+    let lookup: unsafe extern "system" fn(*const u64) -> usize = std::mem::transmute(base + LOOKUP_RVA);
+    let bind: unsafe extern "system" fn(usize) = std::mem::transmute(base + BIND_RVA);
+    send(&tex0, 0);
+    bind(lookup(&tex0));
 }
 
 impl Kh1 {
     unsafe fn packet(&self) -> usize {
-        rd::<usize>(self.base + PACKET_RVA)
+        rd::<usize>(self.base + self.packet)
     }
 
     /// KH1's ALPHA register write, as its body writes it.
-    unsafe fn blend(&mut self, b: u32) {
+    pub(super) unsafe fn blend(&mut self, b: u32) {
         if b == self.blend {
             return;
         }
@@ -483,7 +507,7 @@ impl Kh1 {
         [self.ox + x * self.k, self.oy + y * self.k]
     }
 
-    unsafe fn kh2(&mut self, q: &Quad) {
+    pub(super) unsafe fn kh2(&mut self, q: &Quad) {
         let f = |i: usize| self.kh1_at(q.at[i][0] as f32 / 16.0, q.at[i][1] as f32 / 16.0);
         let u = |i: usize| [q.uv[i][0] as f32, q.uv[i][1] as f32];
         let c = |i: usize| rgba(q.colours[i]);
@@ -565,7 +589,7 @@ unsafe fn draw(base: usize, record: usize) {
     let bind: unsafe extern "system" fn(usize) = std::mem::transmute(base + BIND_RVA);
     send(&tex0, 0);
     bind(lookup(&tex0));
-    let mut kh1 = Kh1 { base, alpha, tex0, blend: 0, ox, oy, k };
+    let mut kh1 = Kh1 { base, alpha, tex0, blend: 0, ox, oy, k, packet: PACKET_RVA };
     for q in &under {
         kh1.kh2(q);
     }

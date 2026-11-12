@@ -43,6 +43,7 @@ use std::sync::{Mutex, OnceLock};
 
 /// The art, once built or loaded (the sequence and the PS2 picture's size).
 static ART: OnceLock<Art> = OnceLock::new();
+static STARTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 /// The picture (B8G8R8A8, `w` × `h`) until it is handed to KH1 for the texture.
 static PIXELS: Mutex<Option<(Vec<u8>, u32, u32)>> = Mutex::new(None);
 
@@ -65,8 +66,13 @@ fn cache_dir() -> std::path::PathBuf {
 /// The languages KH2's field HUD comes in (the folder names), the player's first.
 const LANGS: [&str; 5] = ["us", "fr", "gr", "it", "sp"];
 
+/// (tm45) Also with Misc > Enemy HP on KH2 (KH2's enemy HP gauge is in the same `gaug` sequence,
+/// `enemyhp`), and again when that row is switched to KH2 (once: `STARTED`).
 pub fn start() {
-    if !super::settings::get().drive {
+    if !super::settings::get().drive && !super::enemyhp::kh2() {
+        return;
+    }
+    if STARTED.swap(true, Ordering::Relaxed) {
         return;
     }
     std::thread::spawn(|| {

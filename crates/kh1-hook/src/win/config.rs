@@ -298,6 +298,8 @@ enum Row {
     LimitLedges,
     /// Drive > Anti > Rules (Balance | KH2, `antiform::balance`; the main-branch port's row 14).
     AntiRules,
+    /// (tm45) Misc > Enemy HP (KH1 | KH2, `enemyhp::kh2`).
+    EnemyHp,
 }
 
 /// A row of one of our lists: a setting (label, left value, right value, help, what it switches),
@@ -638,8 +640,11 @@ const MOVEMENT: [Item; 4] = [
     // Item::Set(kh(0x7F00_0117, 0x7F00_0118), Row::Style(Kind::PlayerModel)),
 ];
 // (Gummi Routes moved to QoL, t704.)
-const MISC: [Item; 2] = [
+const MISC: [Item; 3] = [
     Item::Set(kh(0x7F00_010F, 0x7F00_0110), Row::Style(Kind::BattleQuotes)),
+    // (tm45, the owner: "an option in the config to have the choice between KH1 and KH2's enemy
+    // health bars? (Scan)"; before Debug Menu, which must stay the list's last row.)
+    Item::Set(kh(0x7F00_026C, 0x7F00_026D), Row::EnemyHp),
     Item::Set([0x7F00_011B, 0x7F00_011D, 0x7F00_011E, 0x7F00_011C], Row::Debug),
 ];
 
@@ -649,8 +654,8 @@ const BUTTON_LABEL: u32 = 0x7F00_0201;
 const BUTTON_HELP: u32 = 0x7F00_0202;
 /// Misc's help, and the same without the debug menu (its row isn't there without the debug tools).
 const MISC_HELP: u32 = 0x7F00_020C;
-const MISC_HELP_NO_DEBUG: &str = "Battle quotes.";
-const STRINGS: [(u32, &str); 183] = [
+const MISC_HELP_NO_DEBUG: &str = "Battle quotes and the enemy HP bar.";
+const STRINGS: [(u32, &str); 185] = [
     (0x7F00_0201, "KH1 in KH2"),
     (0x7F00_0202, "Choose KH1's or KH2's camera, combat, movement and more."),
     (0x7F00_0203, "Camera"),
@@ -683,7 +688,7 @@ const STRINGS: [(u32, &str); 183] = [
     (0x7F00_0209, "Movement"),
     (0x7F00_020A, "Choose KH1's or KH2's jump, glide, dodge roll and animations for Sora."),
     (0x7F00_020B, "Misc"),
-    (0x7F00_020C, "Battle quotes and the debug menu."),
+    (0x7F00_020C, "Battle quotes, the enemy HP bar and the debug menu."),
     (0x7F00_0219, "Command Menu"),
     (0x7F00_021A, "The battle menu's pages, cursor, command lock and L2 stick menu."),
     (0x7F00_0227, "Drive Page"),
@@ -742,6 +747,8 @@ const STRINGS: [(u32, &str); 183] = [
     (0x7F00_0258, "Cost"),
     (0x7F00_0267, "Anti"),
     (0x7F00_0268, "Anti Form's settings: its rules."),
+    (0x7F00_026C, "Enemy HP"),
+    (0x7F00_026D, "KH1: Kingdom Hearts' own enemy HP bar (Scan).\nKH2: Kingdom Hearts II's enemy HP gauge."),
     (0x7F00_0269, "Rules"),
     (0x7F00_026A, "Balance"),
     (0x7F00_026B, "KH2: Anti Form needs 3 Drive bars and takes 9 (all it has), and Revert\nis greyed in battle, as in KH2. Balance: free, and no Revert (main branch)."),
@@ -880,6 +887,7 @@ fn value(what: Row) -> bool {
         Row::LimitTrinity => super::limitform::trinity(),
         Row::LimitLedges => !super::limitform::ledges_kh1(),
         Row::AntiRules => !super::antiform::balance(),
+        Row::EnemyHp => super::enemyhp::kh2(),
     }
 }
 
@@ -936,6 +944,7 @@ fn set(what: Row, v: bool) {
         Row::LimitTrinity => super::limitform::set_trinity(v),
         Row::LimitLedges => super::limitform::set_ledges_kh1(!v),
         Row::AntiRules => super::antiform::set_balance(!v),
+        Row::EnemyHp => super::enemyhp::set_kh2(v),
     }
 }
 

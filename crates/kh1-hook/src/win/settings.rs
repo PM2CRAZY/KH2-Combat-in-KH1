@@ -247,6 +247,11 @@ player_model = kh1\r\n\
 ; battle_quotes: kh1 or kh2, Sora's KH1 or KH2 battle quotes (the Config menu's row; without\r\n\
 ; this line kh2_voice decides)\r\n\
 battle_quotes = kh1\r\n\
+; enemy_hp: kh1 or kh2, the enemy HP bar Scan shows: KH1's own bar, or KH2's enemy HP gauge (its\r\n\
+; look and numbers: 200 HP a bar, the bars past the first as pips, the lagging damage piece), drawn\r\n\
+; by KH1's own enemy bar draw and still shown only with Scan equipped (the Config menu's Misc > Enemy\r\n\
+; HP row switches it in game too)\r\n\
+enemy_hp = kh2\r\n\
 ; trail_always: off = Keyblade trails show on swings, as KH1 does; on = every Keyblade shows its\r\n\
 ; trail whenever it is out (the Config menu's Cosmetics > Keyblade Trail row switches it in game too)\r\n\
 trail_always = off\r\n\
@@ -516,6 +521,9 @@ pub struct Settings {
     /// KH2's line ahead (its row 1, the hop off a ledge) for base Sora's ground press (`drop_hop =
     /// on`; the owner, t914; off by default since t1069, the owner; `combomods::drop_hop`).
     pub drop_hop: bool,
+    /// (tm45) Misc > Enemy HP: KH2's enemy HP gauge in KH1's enemy HP bar's place (`enemy_hp = kh2`,
+    /// the default as the other KH1 | KH2 rows; `enemyhp::kh2`).
+    pub enemy_hp_kh2: bool,
     /// Glide on Square: always off (held off since t319; its ini line `glide` removed, t924). The
     /// Square glide code stays behind it for later.
     pub glide_on_square: bool,
@@ -822,6 +830,7 @@ fn load(first: bool) -> Option<Settings> {
         glide_cast: on(&text, "glide_cast", "on", true),
         clash_count: !experimental || on(&text, "clash_count", "kh2", true),
         drop_hop: on(&text, "drop_hop", "on", false),
+        enemy_hp_kh2: on(&text, "enemy_hp", "kh2", true),
         kh2_voice: on(&text, "kh2_voice", "on", false),
         auto_aim: on(&text, "auto_aim", "on", false),
         walls: match setting(&text, "walls").as_deref() {

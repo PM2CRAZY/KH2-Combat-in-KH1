@@ -37,6 +37,7 @@ mod frameadv;
 mod formmagic;
 mod gates;
 mod gaugehud;
+mod enemyhp;
 mod glide;
 mod fx12;
 mod hook;
@@ -527,6 +528,7 @@ pub unsafe extern "system" fn DllMain(_inst: *mut c_void, reason: u32, reserved:
         kh2sound::start();
         kh2hud::start();
         gaugehud::install(base);
+        enemyhp::install(base);
         driveorbs::install(base);
         driveitems::install(base);
         driveabilities::install(base);

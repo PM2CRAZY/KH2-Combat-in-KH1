@@ -79,6 +79,9 @@ pub struct Group {
     pub loop_start: i32,
     pub loop_end: i32,
     pub attach: [i32; 2],
+    /// (tm45) The record's `+0x18`, `+0x1C`, `+0x20` (KH2's `0x140192E20` reads `+0x18`, `0x140192E00`
+    /// `+0x20`: the enemy gauge's pip step, `0x140182DD0`).
+    pub extra: [i32; 3],
     /// Every animation has flags 0x1010: the place is held at its first key (`0x140191E80`).
     pub fixed: bool,
 }
@@ -172,6 +175,7 @@ impl Seq {
                 loop_start: i32_at(b, o + 8)?,
                 loop_end: i32_at(b, o + 0xC)?,
                 attach: [i32_at(b, o + 0x10)?, i32_at(b, o + 0x14)?],
+                extra: [i32_at(b, o + 0x18)?, i32_at(b, o + 0x1C)?, i32_at(b, o + 0x20)?],
                 fixed: count > 0 && anims.iter().all(|a| a.flags & 0x1010 == 0x1010),
             });
         }
@@ -224,11 +228,20 @@ pub struct Player {
     loop_start: i32,
     /// Where its last part group was drawn (KH2 units).
     pub origin: [i32; 2],
+    /// (tm45) The player's own x scale (`+0x17C`, set by KH2's `0x140193370`; 1 = none): the enemy
+    /// gauge's bars are its pieces at HP / 100. KH2's draw then scales every part by the animation's
+    /// scale times it, the animation's scale left out where its flag 0x40 says none (Checked (decomp)
+    /// in `0x140193880`, which does the same sum with the floats visible; `0x140192250`'s own call
+    /// `0x140196570` has its float arguments dropped by the decompiler: Assumption that it matches).
+    pub scale_x: f32,
+    /// (tm45) KH2's attach point (`+0x120` / `+0x124`, `0x140193880`, what a child piece is placed
+    /// from, `0x14016ABF0`): kept from the last frame that had an animation with flag 2.
+    pub attach_point: [i32; 2],
 }
 
 impl Default for Player {
     fn default() -> Player {
-        Player { group: None, state: 0, frame: 0.0, end: 0.0, plays_left: 0, loop_start: 0, origin: [0, 0] }
+        Player { group: None, state: 0, frame: 0.0, end: 0.0, plays_left: 0, loop_start: 0, origin: [0, 0], scale_x: 1.0, attach_point: [0, 0] }
     }
 }
 
@@ -312,10 +325,20 @@ impl Player {
             let lerp = |k: [f32; 2]| (k[1] - k[0]) * t + k[0];
             let ilerp = |k: [i32; 2]| ((k[1] - k[0]) as f32 * t) as i32 + k[0];
             let rot = (a.flags & 0x20 == 0).then(|| matrix(lerp(a.rot[0]), lerp(a.rot[1]), lerp(a.rot[2])));
-            let scale = (a.flags & 0x40 == 0).then(|| {
-                let s = lerp(a.scale);
-                (s * lerp(a.sx), s * lerp(a.sy))
-            });
+            let scale = if self.scale_x != 1.0 {
+                // (The player's scale on: KH2's flag `+0xE8` bit 2, `0x140193370`.)
+                Some(if a.flags & 0x40 != 0 {
+                    (self.scale_x, 1.0)
+                } else {
+                    let s = lerp(a.scale);
+                    (s * lerp(a.sx) * self.scale_x, s * lerp(a.sy))
+                })
+            } else {
+                (a.flags & 0x40 == 0).then(|| {
+                    let s = lerp(a.scale);
+                    (s * lerp(a.sx), s * lerp(a.sy))
+                })
+            };
             let colour = if a.flags & 0x400 != 0 {
                 None
             } else if a.flags & 0x80 != 0 {
@@ -376,6 +399,63 @@ impl Player {
                 out.push(Quad { at, uv: [[u0, v0], [u1, v0], [u0, v1], [u1, v1]], colours, blend: a.blend });
             }
         }
+    }
+
+    /// (tm45) KH2's attach point this frame (`0x140193880`): the first animation of the group with
+    /// flag 2 that the frame is in (start <= frame <= end) gives its place (keys `+0x10` / `+0x18`,
+    /// with its bounce unless flag 0x10) plus its pivot (`+0x20` / `+0x28`) times its x / y scales
+    /// (`+0x50` / `+0x58`, none with 0x40; times the overall `+0x48` and the player's scale only when
+    /// the player's scale is on), turned by its rotations unless flag 0x20. With none, the last one
+    /// stays. KH2 units.
+    pub fn attach(&mut self, seq: &Seq) -> [i32; 2] {
+        let (Some(g), true) = (self.group, self.state != 0) else { return self.attach_point };
+        let Some(gr) = seq.groups.get(g).copied() else { return self.attach_point };
+        let f = self.shown();
+        for a in &seq.anims[gr.first..gr.first + gr.count] {
+            if a.flags & 2 == 0 {
+                continue;
+            }
+            let (s, e) = (a.start as f32, a.end as f32);
+            if f < s || f > e {
+                continue;
+            }
+            let span = e - s;
+            let mut t = if span == 0.0 { 1.0 } else { (f - s) / span };
+            if a.flags & 1 == 0 {
+                t = ease(t, a.c1, a.c2);
+            }
+            let lerp = |k: [f32; 2]| (k[1] - k[0]) * t + k[0];
+            let ilerp = |k: [i32; 2]| ((k[1] - k[0]) as f32 * t) as i32 + k[0];
+            let (kx, ky) = if self.scale_x != 1.0 {
+                if a.flags & 0x40 != 0 {
+                    (self.scale_x, 1.0)
+                } else {
+                    let s = lerp(a.scale);
+                    (s * lerp(a.sx) * self.scale_x, s * lerp(a.sy))
+                }
+            } else if a.flags & 0x40 == 0 {
+                (lerp(a.sx), lerp(a.sy))
+            } else {
+                (1.0, 1.0)
+            };
+            let (mut x, mut y) = (ilerp(a.x), ilerp(a.y));
+            if a.flags & 0x10 == 0 {
+                let tp = t * PI;
+                let (ax, ay) = (a.bnx as f32 * tp, a.bny as f32 * tp);
+                let (wx, wy) = if a.flags & 8 == 0 { (ax.sin(), ay.sin()) } else { (ax.cos(), ay.cos()) };
+                x += (wx * lerp(a.bx)) as i32;
+                y += (wy * lerp(a.by)) as i32;
+            }
+            let (px, py) = (ilerp(a.px) as f32 * kx, ilerp(a.py) as f32 * ky);
+            self.attach_point = if a.flags & 0x20 != 0 {
+                [px as i32 + x, py as i32 + y]
+            } else {
+                let m = matrix(lerp(a.rot[0]), lerp(a.rot[1]), lerp(a.rot[2]));
+                [(m[0] * px + m[2] * py) as i32 + x, (m[1] * px + m[3] * py) as i32 + y]
+            };
+            return self.attach_point;
+        }
+        self.attach_point
     }
 }
 
@@ -617,6 +697,22 @@ mod tests {
         assert_eq!(q[0].uv[0], [1 * 16 + 8, 36 * 16 + 8]);
         assert_eq!(p.origin, [-74, 24]);
         assert_eq!(q[0].colours[0], 0x8040_8080);
+    }
+
+    #[test]
+    fn player_scale_and_attach() {
+        let s = Seq::parse(&seq_bytes()).unwrap();
+        let mut p = Player::default();
+        p.set(&s, 0);
+        p.step(1.0);
+        p.scale_x = 0.5;
+        let mut q = Vec::new();
+        p.draw(&s, [0, 0], &mut q);
+        // (The part's x -39..-1 halved, the place (-79, 24) not.)
+        assert_eq!(q[0].at[0][0], (-39 * 16) / 2 - 79 * 16);
+        assert_eq!(q[0].at[1][0], (-1 * 16) / 2 - 79 * 16);
+        // (No animation with flag 2: the attach point stays.)
+        assert_eq!(p.attach(&s), [0, 0]);
     }
 
     #[test]

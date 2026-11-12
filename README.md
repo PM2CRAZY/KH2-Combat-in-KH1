@@ -173,6 +173,8 @@ are a fresh ini's.
 
 **Misc**
 - Battle Quotes: KH1's or KH2's (default KH1).
+- Enemy HP: KH1's enemy HP bar or KH2's enemy HP gauge (default KH2). Both show only with Scan
+  equipped, as KH1; KH2's needs KH2's files, as the Drive gauge does (KH1's bar without them).
 - Debug Menu: only there with `debug_menu = on` in the ini.
 
 ## The ini (`kh1-kh2.ini`)
