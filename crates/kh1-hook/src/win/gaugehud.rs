@@ -435,6 +435,12 @@ pub(super) struct Kh1 {
     pub(super) k: f32,
     /// The packet pointer KH1's draw at hand writes through (the HUD's `0x142821BC0` here).
     pub(super) packet: St,
+    /// (tm46) Each corner put on a whole KH1 HUD unit, as KH1's own sprites are placed (whole
+    /// numbers, `0x14027EA50`'s callers): KH1 draws its HUD on whole units, so KH2's edges scaled by
+    /// a fraction land a unit apart unevenly (the owner, the enemy HP gauge: "the green bits arent
+    /// lined up with the actual outline"; his screenshot: the fill 3 units under the frame's top and
+    /// 2 over its bottom, KH2's 2 and 2). Rounded, edges KH2 places alike stay alike.
+    pub(super) snap: bool,
 }
 
 /// (tm45) KH1's calls the draw makes are what they should be (their first bytes, Checked (exe)).
@@ -508,7 +514,10 @@ impl Kh1 {
     }
 
     pub(super) unsafe fn kh2(&mut self, q: &Quad) {
-        let f = |i: usize| self.kh1_at(q.at[i][0] as f32 / 16.0, q.at[i][1] as f32 / 16.0);
+        let f = |i: usize| {
+            let p = self.kh1_at(q.at[i][0] as f32 / 16.0, q.at[i][1] as f32 / 16.0);
+            if self.snap { p.map(f32::round) } else { p }
+        };
         let u = |i: usize| [q.uv[i][0] as f32, q.uv[i][1] as f32];
         let c = |i: usize| rgba(q.colours[i]);
         // (KH2's top left, top right, bottom left, bottom right to KH1's TL, BL, TR, BR.)
@@ -589,7 +598,7 @@ unsafe fn draw(base: usize, record: usize) {
     let bind: unsafe extern "system" fn(usize) = std::mem::transmute(base + BIND_RVA);
     send(&tex0, 0);
     bind(lookup(&tex0));
-    let mut kh1 = Kh1 { base, alpha, tex0, blend: 0, ox, oy, k, packet: PACKET_RVA };
+    let mut kh1 = Kh1 { base, alpha, tex0, blend: 0, ox, oy, k, packet: PACKET_RVA, snap: false };
     for q in &under {
         kh1.kh2(q);
     }

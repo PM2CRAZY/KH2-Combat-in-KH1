@@ -1,6 +1,6 @@
 //! KH2's enemy HP gauge drawn by KH1's own enemy HP bar draw (tm45; the owner, chat 2026-11-11: "Can
 //! you add an option in the config to have the choice between KH1 and KH2's enemy health bars?
-//! (Scan)"; notes `docs/kh1-kh2-enemy-hp.md`). Misc > Enemy HP: KH1 | KH2 (ini `enemy_hp`).
+//! (Scan)"; notes `docs/kh1-kh2-enemy-hp.md`). Cosmetics > Enemy HP: KH1 | KH2 (ini `enemy_hp`).
 //!
 //! **KH1's bar** (Steam, Checked (decomp)): KH1's target cursor draw `0x140274B20` asks
 //! `0x1402A4D40` each frame: with Scan equipped (`0x140284BE0 (10)`), a target of kind 3 (an enemy,
@@ -68,7 +68,7 @@ const SHIFT: i32 = 0x55;
 /// KH2's screen: 512 wide for 4:3, its 16:9 right edge 85.33 further (Assumption, as `SHIFT`).
 const KH2_RIGHT: f32 = 512.0 + 512.0 / 6.0;
 
-/// Misc > Enemy HP: 0 not read, 1 KH1, 2 KH2.
+/// Cosmetics > Enemy HP: 0 not read, 1 KH1, 2 KH2.
 static MODE: AtomicU8 = AtomicU8::new(0);
 static ORIGINAL: AtomicUsize = AtomicUsize::new(0);
 static BASE: AtomicUsize = AtomicUsize::new(0);
@@ -310,7 +310,7 @@ unsafe fn ours(base: usize, hp: i32, max: i32) {
     // KH2's screen's top-right corner on KH1's HUD's, at the Drive gauge's KH2 unit (Assumption).
     let k = super::gaugehud::KH2_UNIT;
     let right = 512.0 + rd::<i32>(base + MARGIN_RVA).clamp(0, 1024) as f32;
-    let mut kh1 = super::gaugehud::Kh1 { base, alpha: 1.0, tex0, blend: 0, ox: right - KH2_RIGHT * k, oy: 0.0, k, packet: PACKET_RVA };
+    let mut kh1 = super::gaugehud::Kh1 { base, alpha: 1.0, tex0, blend: 0, ox: right - KH2_RIGHT * k, oy: 0.0, k, packet: PACKET_RVA, snap: true };
     for q in &quads {
         kh1.kh2(q);
     }

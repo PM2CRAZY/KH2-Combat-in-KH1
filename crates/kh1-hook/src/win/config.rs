@@ -298,7 +298,7 @@ enum Row {
     LimitLedges,
     /// Drive > Anti > Rules (Balance | KH2, `antiform::balance`; the main-branch port's row 14).
     AntiRules,
-    /// (tm45) Misc > Enemy HP (KH1 | KH2, `enemyhp::kh2`).
+    /// (tm45) Cosmetics > Enemy HP (KH1 | KH2, `enemyhp::kh2`).
     EnemyHp,
 }
 
@@ -555,7 +555,12 @@ const QOL: [Item; 7] = [
 const QOL_STABLE: [Item; 5] = [QOL[1], QOL[2], QOL[4], QOL[5], QOL[6]];
 // (Cosmetics: the user, t704: "a new menu called cosmetics and put a setting in there for keyblades to
 // always have their trail on".)
-const COSMETICS: [Item; 1] = [Item::Set([0x7F00_0215, 0x7F00_0217, 0x7F00_0218, 0x7F00_0216], Row::TrailAlways)];
+const COSMETICS: [Item; 2] = [
+    Item::Set([0x7F00_0215, 0x7F00_0217, 0x7F00_0218, 0x7F00_0216], Row::TrailAlways),
+    // (tm45, the owner: "an option in the config to have the choice between KH1 and KH2's enemy
+    // health bars? (Scan)"; tm46, the owner: "also, put this into the "cosmetics" tab".)
+    Item::Set(kh(0x7F00_026C, 0x7F00_026D), Row::EnemyHp),
+];
 // (Enemy Weight: the tester, kh2-knockback-on-enemies question 1: "(b) but make it a toggle in the
 // config menu".)
 // (Cast from Glide: the tester, what-is-still-missing m8: "1. (a) then make it a config in the
@@ -640,11 +645,8 @@ const MOVEMENT: [Item; 4] = [
     // Item::Set(kh(0x7F00_0117, 0x7F00_0118), Row::Style(Kind::PlayerModel)),
 ];
 // (Gummi Routes moved to QoL, t704.)
-const MISC: [Item; 3] = [
+const MISC: [Item; 2] = [
     Item::Set(kh(0x7F00_010F, 0x7F00_0110), Row::Style(Kind::BattleQuotes)),
-    // (tm45, the owner: "an option in the config to have the choice between KH1 and KH2's enemy
-    // health bars? (Scan)"; before Debug Menu, which must stay the list's last row.)
-    Item::Set(kh(0x7F00_026C, 0x7F00_026D), Row::EnemyHp),
     Item::Set([0x7F00_011B, 0x7F00_011D, 0x7F00_011E, 0x7F00_011C], Row::Debug),
 ];
 
@@ -654,7 +656,7 @@ const BUTTON_LABEL: u32 = 0x7F00_0201;
 const BUTTON_HELP: u32 = 0x7F00_0202;
 /// Misc's help, and the same without the debug menu (its row isn't there without the debug tools).
 const MISC_HELP: u32 = 0x7F00_020C;
-const MISC_HELP_NO_DEBUG: &str = "Battle quotes and the enemy HP bar.";
+const MISC_HELP_NO_DEBUG: &str = "Battle quotes.";
 const STRINGS: [(u32, &str); 185] = [
     (0x7F00_0201, "KH1 in KH2"),
     (0x7F00_0202, "Choose KH1's or KH2's camera, combat, movement and more."),
@@ -688,7 +690,7 @@ const STRINGS: [(u32, &str); 185] = [
     (0x7F00_0209, "Movement"),
     (0x7F00_020A, "Choose KH1's or KH2's jump, glide, dodge roll and animations for Sora."),
     (0x7F00_020B, "Misc"),
-    (0x7F00_020C, "Battle quotes, the enemy HP bar and the debug menu."),
+    (0x7F00_020C, "Battle quotes and the debug menu."),
     (0x7F00_0219, "Command Menu"),
     (0x7F00_021A, "The battle menu's pages, cursor, command lock and L2 stick menu."),
     (0x7F00_0227, "Drive Page"),
@@ -712,7 +714,7 @@ const STRINGS: [(u32, &str); 185] = [
     (0x7F00_0221, "In-game Scene Skip"),
     (0x7F00_0222, "On: skips the in-game dialog scenes the pause menu can't skip, with\nKH1's own skip; items and flags they give are still given. Talks,\nshops and scenes with a choice always play."),
     (0x7F00_0213, "Cosmetics"),
-    (0x7F00_0214, "How things look, not how they play: Keyblade trails."),
+    (0x7F00_0214, "How things look, not how they play: Keyblade trails and the enemy HP bar."),
     (0x7F00_0215, "Keyblade Trail"),
     (0x7F00_0216, "Normal: the trail shows on swings, as in KH1. Always: every\nKeyblade shows its trail whenever it is out."),
     (0x7F00_0217, "Normal"),

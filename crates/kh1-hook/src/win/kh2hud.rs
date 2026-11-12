@@ -66,7 +66,7 @@ fn cache_dir() -> std::path::PathBuf {
 /// The languages KH2's field HUD comes in (the folder names), the player's first.
 const LANGS: [&str; 5] = ["us", "fr", "gr", "it", "sp"];
 
-/// (tm45) Also with Misc > Enemy HP on KH2 (KH2's enemy HP gauge is in the same `gaug` sequence,
+/// (tm45) Also with Cosmetics > Enemy HP on KH2 (KH2's enemy HP gauge is in the same `gaug` sequence,
 /// `enemyhp`), and again when that row is switched to KH2 (once: `STARTED`).
 pub fn start() {
     if !super::settings::get().drive && !super::enemyhp::kh2() {

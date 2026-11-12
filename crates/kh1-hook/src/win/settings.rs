@@ -521,7 +521,7 @@ pub struct Settings {
     /// KH2's line ahead (its row 1, the hop off a ledge) for base Sora's ground press (`drop_hop =
     /// on`; the owner, t914; off by default since t1069, the owner; `combomods::drop_hop`).
     pub drop_hop: bool,
-    /// (tm45) Misc > Enemy HP: KH2's enemy HP gauge in KH1's enemy HP bar's place (`enemy_hp = kh2`,
+    /// (tm45) Cosmetics > Enemy HP: KH2's enemy HP gauge in KH1's enemy HP bar's place (`enemy_hp = kh2`,
     /// the default as the other KH1 | KH2 rows; `enemyhp::kh2`).
     pub enemy_hp_kh2: bool,
     /// Glide on Square: always off (held off since t319; its ini line `glide` removed, t924). The

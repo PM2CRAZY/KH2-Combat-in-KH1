@@ -5,7 +5,7 @@ KH2's enemy health bars? (Scan)", then "Add this to testing-merge". He picked (b
 on KH2, the gauge still needs KH1's Scan equipped. KH1's rule decides when it shows, and KH2's data
 decides how it looks.
 
-Config: Misc > Enemy HP, KH1 | KH2 (default KH2). Ini: `enemy_hp = kh1 | kh2`. The row switches
+Config: Cosmetics > Enemy HP, KH1 | KH2 (default KH2). Ini: `enemy_hp = kh1 | kh2`. The row switches
 live. Code: `crates/kh1-hook/src/enemygauge.rs` (KH2's rules, pure, tested) and
 `crates/kh1-hook/src/win/enemyhp.rs` (the hook and the draw).
 

@@ -82,7 +82,7 @@ Logs worth turning on: General, Menus, Combat, Forms, Magic, Sound, Effects, Ani
 - [ ] KH2 camera with KH1's camera up/down on Reverse: zoom and first-person pitch flip. (tm1)
 - [ ] Gummi skip (experimental): skip a route and fly the same one from the same save; story steps match. (t1089, needs the route-results write still)
 - [ ] In-game Scene Skip (experimental) still works when on. (t1086)
-- [ ] Misc > Enemy HP: KH1 shows KH1's own Scan bar exactly as before; KH2 shows KH2's gauge top right (200 HP a bar, pips for the rest, the damage piece after a hit), only with Scan, gone at once with the target; switching live works. (tm45)
+- [ ] Cosmetics > Enemy HP: KH1 shows KH1's own Scan bar exactly as before; KH2 shows KH2's gauge top right (200 HP a bar, pips for the rest, the damage piece after a hit), only with Scan, gone at once with the target; switching live works. (tm45)
 
 ## Known not built
 
